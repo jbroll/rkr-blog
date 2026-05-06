@@ -12,8 +12,10 @@ import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 
+import { runReindex } from '../cli/reindex.ts';
 import { paths } from '../lib/config.ts';
 import { ingestStream } from '../lib/originals.ts';
+import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,6 +55,53 @@ export default async function adminRoutes(
       .send(renderAdminPage({ bundleUrl: '/admin/static/main.js' }));
   });
 
+  fastify.post<{
+    Body: {
+      slug?: unknown;
+      title?: unknown;
+      status?: unknown;
+      date?: unknown;
+      body?: unknown;
+    };
+  }>('/admin/posts', async (request, reply) => {
+    const { slug, title, status, date, body } = request.body ?? {};
+
+    if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]*$/i.test(slug)) {
+      return reply.code(400).send({ error: 'slug must be a kebab-case identifier' });
+    }
+    if (typeof title !== 'string' || !title.trim()) {
+      return reply.code(400).send({ error: 'title is required' });
+    }
+    const finalStatus: 'draft' | 'published' = status === 'published' ? 'published' : 'draft';
+    const dateStr = typeof date === 'string' && date.trim() ? date : new Date().toISOString();
+    if (!body || typeof body !== 'object' || (body as ProseDoc).type !== 'doc') {
+      return reply.code(400).send({ error: 'body must be a ProseMirror doc' });
+    }
+
+    const md = proseToMarkdown(body as ProseDoc);
+    const fm = [
+      '---',
+      `title: ${yamlScalar(title)}`,
+      `slug: ${yamlScalar(slug)}`,
+      `date: ${yamlScalar(dateStr)}`,
+      `status: ${finalStatus}`,
+      '---',
+      ''
+    ].join('\n');
+    const file = `${fm}\n${md}`;
+
+    const postsDir = path.join(siteRoot, 'content', 'posts');
+    await fs.promises.mkdir(postsDir, { recursive: true });
+    const filename = `${slug}.md`;
+    const finalPath = path.join(postsDir, filename);
+    const inserted = !fs.existsSync(finalPath);
+    await fs.promises.writeFile(finalPath, file, 'utf8');
+
+    runReindex(siteRoot);
+
+    return { slug, inserted };
+  });
+
   fastify.post('/admin/upload', async (request, reply) => {
     const part = await request.file();
     if (!part) return reply.code(400).send({ error: 'no file part' });
@@ -80,4 +129,12 @@ export default async function adminRoutes(
       return reply.code(400).send({ error: (err as Error).message });
     }
   });
+}
+
+function yamlScalar(s: string): string {
+  // Quote if the string contains characters that would be ambiguous in YAML.
+  if (/[:#&*!|>'"%@`,[\]{}\n]/.test(s) || /^[?]\s/.test(s) || /^\s|\s$/.test(s)) {
+    return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  }
+  return s;
 }
