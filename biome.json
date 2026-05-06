@@ -6,7 +6,14 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["src/**/*.js", "test/**/*.js", "bin/server.js", "bin/site-admin"]
+    "includes": [
+      "src/**/*.ts",
+      "src/**/*.js",
+      "test/**/*.ts",
+      "test/**/*.js",
+      "bin/server.js",
+      "bin/site-admin"
+    ]
   },
   "formatter": {
     "enabled": true,

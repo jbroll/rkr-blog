@@ -13,13 +13,19 @@ set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-# Collect the staged files biome cares about.
-staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|json)$' || true)
+# Collect staged files Biome / tsc care about.
+staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|js|json)$' || true)
 
 if [ -n "$staged" ]; then
   echo "==> biome check (staged)"
-  # --staged narrows biome to staged content (Biome 2 supports this).
   npx --no-install biome check --staged --no-errors-on-unmatched
+fi
+
+# tsc step is wired in when the first .ts file lands; until then it errors
+# with TS18003 "No inputs were found". The migration commit re-enables it.
+if compgen -G "src/**/*.ts" > /dev/null || compgen -G "test/**/*.ts" > /dev/null; then
+  echo "==> tsc --noEmit"
+  npx --no-install tsc --noEmit
 fi
 
 echo "==> npm test"

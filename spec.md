@@ -28,7 +28,7 @@ This document is the source of truth for v1. Implementation should not introduce
 
 The following are deliberately excluded from v1 to control complexity. Adding any of them requires re-opening the spec.
 
-- **TypeScript** or any build/transpile step *in v1*. Plain ES modules, run as-is. TypeScript is a v2 goal; §6 conventions and JSDoc-typed exports are kept compatible with a future migration.
+- **Bundlers** for the runtime (Webpack, Vite, esbuild). Source runs as-is via Node's TypeScript loader (`--experimental-strip-types`); no `dist/` directory, no transpile pipeline. A `tsc` build step may be reconsidered if a future feature (decorators, const enums, downlevel target) needs it.
 - **Express, Koa, Hapi**, or any HTTP framework other than Fastify.
 - **Redis, BullMQ**, or any external job queue. The jobs table in SQLite is the queue.
 - **Any ORM** (Prisma, Drizzle, Sequelize, Knex). Hand-written SQL through the `lib/db.js` wrapper.
