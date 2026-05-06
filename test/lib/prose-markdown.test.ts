@@ -13,6 +13,22 @@ function paragraph(...texts: string[]): {
   };
 }
 
+test('proseToMarkdown: code mark serializes to inline backticks', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'use ' },
+          { type: 'text', text: 'foo()', marks: [{ type: 'code' }] }
+        ]
+      }
+    ]
+  };
+  assert.match(proseToMarkdown(doc), /use `foo\(\)`/);
+});
+
 test('proseToMarkdown: paragraph with bold/italic/link/code marks', () => {
   const doc: ProseDoc = {
     type: 'doc',

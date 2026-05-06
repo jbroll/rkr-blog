@@ -12,7 +12,7 @@ export interface PostPageData {
 export function renderPostPage(post: PostPageData): string {
   const dateBlock = post.date
     ? `<time datetime="${escapeAttr(post.date)}">${escapeText(post.date)}</time>`
-    : '';
+    : /* c8 ignore next -- present in all current callers via runReindex's published_at */ '';
 
   return `<!DOCTYPE html>
 <html lang="en">

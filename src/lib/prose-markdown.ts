@@ -97,8 +97,12 @@ function emitInline(content: ProseNode[]): string {
 function emitInlineOne(node: ProseNode): string {
   if (node.type === 'hardBreak' || node.type === 'hard_break') return '  \n';
   if (node.type !== 'text') return '';
-  let out = escapeMarkdown(node.text ?? '');
-  for (const mark of node.marks ?? []) {
+  const text = node.text ?? '';
+  const marks = node.marks ?? [];
+  // Code spans are literal: skip markdown escaping when wrapped in `code`.
+  const hasCode = marks.some((m) => m.type === 'code');
+  let out = hasCode ? text : escapeMarkdown(text);
+  for (const mark of marks) {
     out = applyMark(mark, out);
   }
   return out;
@@ -206,6 +210,7 @@ function mdBlockToProse(node: AnyMdNode): ProseNode | null {
             .filter((n): n is ProseNode => n !== null)
         }))
       };
+    /* c8 ignore next 2 -- defensive: only triggered by mdast node types our editor schema doesn't emit */
     default:
       return null;
   }
@@ -235,6 +240,7 @@ function inlineToProse(node: AnyMdNode, marks: ProseMark[]): ProseNode[] {
     }
     case 'break':
       return [{ type: 'hardBreak' }];
+    /* c8 ignore next 2 -- defensive: only triggered by inline mdast types our editor schema doesn't emit */
     default:
       return [];
   }

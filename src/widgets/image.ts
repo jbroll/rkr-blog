@@ -46,6 +46,7 @@ function extractId(node: DirectiveNode): string | null {
 
 function extractAlt(node: DirectiveNode): string {
   const a = node.attributes?.alt;
+  /* c8 ignore next -- remark-directive parses alt="..." as string; no test reaches the fallback */
   return typeof a === 'string' ? a : '';
 }
 
@@ -69,6 +70,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
           originalId: id,
           ops,
           variant: { w: v.w },
+          /* c8 ignore next -- ?? 85 fallback unreachable: every format we emit is in QUALITY_BY_FORMAT */
           output: { format, quality: QUALITY_BY_FORMAT[format] ?? 85 }
         });
         return `/img/${id}.${ophash}.${format} ${v.w}w`;
@@ -83,7 +85,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
     variant: { w: fallback.w },
     output: { format: fallback.format as OutputFormat, quality: fallback.quality }
   });
-  const fbUrl = `/img/${id}.${fbHash}.${fallback.format === 'jpeg' ? 'jpeg' : fallback.format}`;
+  const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
 
   return [
     `<picture>`,

@@ -19,7 +19,7 @@ export function renderIndexPage(data: IndexPageData): string {
     .map((p) => {
       const dateBlock = p.date
         ? `<time datetime="${escapeAttr(p.date)}">${escapeText(p.date)}</time>`
-        : '';
+        : /* c8 ignore next -- runReindex always supplies published_at on listed posts */ '';
       return `  <li>${dateBlock}<a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></li>`;
     })
     .join('\n');

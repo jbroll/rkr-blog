@@ -39,6 +39,7 @@ export default async function verifyCmd(_argv: string[]): Promise<void> {
   }
   console.log(`verify: ${result.checked} checked, ${result.mismatches.length} mismatch(es):`);
   for (const m of result.mismatches) {
+    /* c8 ignore next -- all current mismatch shapes supply detail; the empty-string fallback is defensive against future shapes */
     const detail = m.detail ? ` — ${m.detail}` : '';
     console.log(`  ${m.id}  ${m.reason}${detail}`);
   }

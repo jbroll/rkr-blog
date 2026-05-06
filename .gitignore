@@ -2,6 +2,10 @@ node_modules/
 
 # Browser bundle build artifact (built from src/admin/ via tsc -p tsconfig.browser.json)
 static/admin/
+
+# c8 coverage output (test:coverage / test:coverage:report)
+coverage/
+.nyc_output/
 *.log
 .DS_Store
 .env

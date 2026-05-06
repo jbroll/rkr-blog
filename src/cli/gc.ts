@@ -51,6 +51,7 @@ export async function runGc(siteRoot: string): Promise<{ deleted: number; kept: 
   }
 
   const cacheDir = path.join(siteRoot, 'cache', 'img');
+  /* c8 ignore next 3 -- defensive guard; site-admin init always creates cache/img */
   if (!fs.existsSync(cacheDir)) {
     return { deleted: 0, kept: 0 };
   }
