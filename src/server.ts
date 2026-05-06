@@ -10,6 +10,7 @@ import { type Db, open } from './lib/db.ts';
 import { workQueue } from './lib/jobs.ts';
 import adminRoutes from './routes/admin.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
+import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
 import publicRoutes from './routes/public.ts';
 
 const UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MiB cap on a single file
@@ -36,6 +37,15 @@ export interface BuildAppOpts {
     secureCookies?: boolean;
     /** When true, skip the requireUser preHandler so admin routes stay open (legacy tests). */
     skipGate?: boolean;
+  };
+  /**
+   * When set (and auth is wired), Google Drive picker integration routes
+   * register. Tests can inject the exchange + driveFetcher to avoid hitting
+   * Google. Production uses env vars.
+   */
+  gdrive?: {
+    exchange?: DriveTokenExchange;
+    driveFetcher?: typeof fetch;
   };
 }
 
@@ -71,6 +81,25 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       ...(opts.auth.exchange ? { exchange: opts.auth.exchange } : {}),
       secureCookies: opts.auth.secureCookies ?? true
     });
+    // Picker integration routes (gated behind auth via requireUser).
+    // Registers only when an exchange stub is supplied OR Google OAuth env
+    // vars are set — otherwise we'd fail at registration trying to read
+    // GOOGLE_CLIENT_ID. Skipping registration cleanly turns the routes
+    // into 404s for unconfigured deployments.
+    const gdriveConfigured =
+      opts.gdrive?.exchange !== undefined ||
+      (process.env.GOOGLE_CLIENT_ID &&
+        process.env.GOOGLE_CLIENT_SECRET &&
+        process.env.PUBLIC_BASE_URL);
+    if (gdriveConfigured) {
+      await app.register(integrationsGdriveRoutes, {
+        db: opts.db,
+        siteRoot,
+        ...(opts.gdrive?.exchange ? { exchange: opts.gdrive.exchange } : {}),
+        ...(opts.gdrive?.driveFetcher ? { driveFetcher: opts.gdrive.driveFetcher } : {}),
+        secureCookies: opts.auth.secureCookies ?? true
+      });
+    }
   }
 
   await app.register(adminRoutes, {
