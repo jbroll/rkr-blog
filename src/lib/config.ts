@@ -2,11 +2,32 @@
 
 import path from 'node:path';
 
-export function siteRoot(env = process.env) {
+export interface Paths {
+  root: string;
+  originals: string;
+  sidecars: string;
+  cache: string;
+  cacheImg: string;
+  content: string;
+  contentPosts: string;
+  data: string;
+  db: string;
+  static: string;
+}
+
+export interface ServerConfig {
+  port: number;
+  host: string;
+  logLevel: string;
+}
+
+type Env = NodeJS.ProcessEnv;
+
+export function siteRoot(env: Env = process.env): string {
   return env.SITE_ROOT || '/var/www/site';
 }
 
-export function paths(env = process.env) {
+export function paths(env: Env = process.env): Paths {
   const root = siteRoot(env);
   return {
     root,
@@ -22,7 +43,7 @@ export function paths(env = process.env) {
   };
 }
 
-export function serverConfig(env = process.env) {
+export function serverConfig(env: Env = process.env): ServerConfig {
   return {
     port: Number(env.PORT || 3000),
     host: env.HOST || '127.0.0.1',

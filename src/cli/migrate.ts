@@ -2,11 +2,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { paths } from '../lib/config.js';
-import { open } from '../lib/db.js';
-import { migrate } from '../lib/migrate.js';
 
-export default function runMigrate() {
+import { paths } from '../lib/config.ts';
+import { open } from '../lib/db.ts';
+import { migrate } from '../lib/migrate.ts';
+
+export default function runMigrate(): void {
   const p = paths();
   fs.mkdirSync(path.dirname(p.db), { recursive: true });
 

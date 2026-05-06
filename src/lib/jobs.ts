@@ -10,7 +10,9 @@
 import { EventEmitter } from 'node:events';
 import os from 'node:os';
 
-import { renderDerivative } from './render.js';
+import type { Db } from './db.ts';
+import type { DerivativeArgs } from './render.ts';
+import { renderDerivative } from './render.ts';
 
 // Process-local wakeup signal. workQueue() listens for 'enqueued'.
 // One emitter per process is sufficient: SQLite is the source of truth;
@@ -19,26 +21,56 @@ export const events = new EventEmitter();
 
 const POLL_INTERVAL_MS = 250;
 
+export type JobKind = 'render';
+
+export interface RenderPayload extends DerivativeArgs {}
+
+export interface EnqueueArgs<P = unknown> {
+  kind: JobKind;
+  payload: P;
+  cacheKey?: string;
+}
+
+export interface EnqueueResult {
+  id: number;
+  duplicate: boolean;
+}
+
+export interface ClaimedJob<P = unknown> {
+  id: number;
+  kind: JobKind;
+  payload: P;
+}
+
+export interface JobHandlerCtx {
+  siteRoot: string;
+  [k: string]: unknown;
+}
+
+export type JobHandler<P = unknown> = (payload: P, ctx: JobHandlerCtx) => Promise<void>;
+
+export type JobHandlerMap = Partial<Record<JobKind, JobHandler<unknown>>>;
+
+interface JobRow {
+  id: number;
+  kind: JobKind;
+  payload: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+}
+
 /**
  * Enqueue a job. The schema enforces `cache_key UNIQUE`, so when a row with
  * the same cacheKey already exists:
  *   - state queued or running → return the existing id (duplicate).
  *   - state done or failed    → reset that row back to queued and return its id.
- *
- * cacheKey is the 12-char ophash for render jobs.
- *
- * @param {Object} db
- * @param {Object} args
- * @param {string} args.kind         - 'render'
- * @param {Object} args.payload
- * @param {string} [args.cacheKey]
- * @returns {{ id: number, duplicate: boolean }}
  */
-export function enqueue(db, { kind, payload, cacheKey }) {
+export function enqueue<P>(db: Db, { kind, payload, cacheKey }: EnqueueArgs<P>): EnqueueResult {
   const now = new Date().toISOString();
 
   if (cacheKey) {
-    const existing = db.prepare('SELECT id, state FROM jobs WHERE cache_key = ?').get(cacheKey);
+    const existing = db
+      .prepare<Pick<JobRow, 'id' | 'state'>>('SELECT id, state FROM jobs WHERE cache_key = ?')
+      .get(cacheKey);
     if (existing) {
       if (existing.state === 'queued' || existing.state === 'running') {
         return { id: existing.id, duplicate: true };
@@ -64,19 +96,10 @@ export function enqueue(db, { kind, payload, cacheKey }) {
   return { id: r.lastInsertRowid, duplicate: false };
 }
 
-/**
- * Atomically claim one queued job. Returns null if none available.
- *
- * Two-step claim: SELECT a candidate, then UPDATE WHERE state='queued'
- * RETURNING id. Only the worker whose UPDATE sees the row in queued state
- * gets it; others see RETURNING with zero rows.
- *
- * @param {Object} db
- * @returns {{ id: number, kind: string, payload: Object } | null}
- */
-export function claim(db) {
+/** Atomically claim one queued job. Returns null if none available. */
+export function claim<P = unknown>(db: Db): ClaimedJob<P> | null {
   const candidate = db
-    .prepare(
+    .prepare<Pick<JobRow, 'id' | 'kind' | 'payload'>>(
       "SELECT id, kind, payload FROM jobs WHERE state='queued' ORDER BY created_at, id LIMIT 1"
     )
     .get();
@@ -84,7 +107,7 @@ export function claim(db) {
 
   const now = new Date().toISOString();
   const claimed = db
-    .prepare(
+    .prepare<{ id: number }>(
       `UPDATE jobs SET state='running', updated_at=?, attempts=attempts+1
        WHERE id=? AND state='queued'
        RETURNING id`
@@ -95,18 +118,16 @@ export function claim(db) {
   return {
     id: candidate.id,
     kind: candidate.kind,
-    payload: JSON.parse(candidate.payload)
+    payload: JSON.parse(candidate.payload) as P
   };
 }
 
-/**
- * Mark a job done (no error) or failed (with error message).
- */
-export function complete(db, id, { error } = {}) {
+/** Mark a job done (no error) or failed (with error message). */
+export function complete(db: Db, id: number, opts: { error?: string } = {}): void {
   const now = new Date().toISOString();
-  if (error) {
+  if (opts.error) {
     db.prepare("UPDATE jobs SET state='failed', error=?, updated_at=? WHERE id=?").run(
-      String(error).slice(0, 4000),
+      String(opts.error).slice(0, 4000),
       now,
       id
     );
@@ -115,34 +136,32 @@ export function complete(db, id, { error } = {}) {
   }
 }
 
-/**
- * Default handler for `kind: 'render'` jobs. Calls renderDerivative.
- */
-export async function renderHandler(payload, ctx) {
+/** Default handler for `kind: 'render'` jobs. Calls renderDerivative. */
+export const renderHandler: JobHandler<RenderPayload> = async (payload, ctx) => {
   const { originalId, ops, variant, output } = payload;
-  await renderDerivative({
-    originalId,
-    ops,
-    variant,
-    output,
-    siteRoot: ctx.siteRoot
-  });
+  await renderDerivative({ originalId, ops, variant, output, siteRoot: ctx.siteRoot });
+};
+
+const DEFAULT_HANDLERS: JobHandlerMap = { render: renderHandler as JobHandler<unknown> };
+
+export interface WorkQueueArgs {
+  db: Db;
+  ctx: JobHandlerCtx;
+  handlers?: JobHandlerMap;
+  concurrency?: number;
+  drainAndExit?: boolean;
 }
 
-const DEFAULT_HANDLERS = { render: renderHandler };
+export interface WorkQueueController {
+  /** Resolves when the loop exits (naturally on drain if drainAndExit, else after stop()). */
+  done: Promise<void>;
+  /** Force-stop: drop queued work, wait for in-flight to finish. */
+  stop(): Promise<void>;
+}
 
 /**
- * Run the worker loop. Returns a controller with stop() and drained()
- * helpers. When `drainAndExit: true`, the loop exits as soon as the
- * queue is empty (used by `site-admin render`).
- *
- * @param {Object} args
- * @param {Object} args.db
- * @param {Object} args.ctx                - passed to handlers
- * @param {Object} [args.handlers]         - { kind: async fn }
- * @param {number} [args.concurrency]
- * @param {boolean} [args.drainAndExit]
- * @returns {{ stop: () => Promise<void>, drained: () => Promise<void> }}
+ * Run the worker loop. When `drainAndExit: true`, the loop exits as soon as
+ * the queue is empty (used by `site-admin render`).
  */
 export function workQueue({
   db,
@@ -150,13 +169,13 @@ export function workQueue({
   handlers = DEFAULT_HANDLERS,
   concurrency = Math.max(1, os.cpus().length),
   drainAndExit = false
-}) {
+}: WorkQueueArgs): WorkQueueController {
   let stopped = false;
   let inflight = 0;
-  let wakeResolve = null;
-  const drainListeners = [];
+  let wakeResolve: (() => void) | null = null;
+  const drainListeners: Array<() => void> = [];
 
-  function wake() {
+  function wake(): void {
     if (wakeResolve) {
       const r = wakeResolve;
       wakeResolve = null;
@@ -164,15 +183,18 @@ export function workQueue({
     }
   }
 
-  function notifyDrain() {
+  function notifyDrain(): void {
     if (inflight === 0) {
-      while (drainListeners.length) drainListeners.shift()();
+      while (drainListeners.length) {
+        const r = drainListeners.shift();
+        r?.();
+      }
     }
   }
 
   events.on('enqueued', wake);
 
-  async function runOne(job) {
+  async function runOne(job: ClaimedJob): Promise<void> {
     inflight++;
     try {
       const handler = handlers[job.kind];
@@ -180,7 +202,7 @@ export function workQueue({
       await handler(job.payload, ctx);
       complete(db, job.id);
     } catch (err) {
-      complete(db, job.id, { error: err.message ?? String(err) });
+      complete(db, job.id, { error: (err as Error).message ?? String(err) });
     } finally {
       inflight--;
       notifyDrain();
@@ -188,13 +210,14 @@ export function workQueue({
     }
   }
 
-  async function loop() {
+  async function loop(): Promise<void> {
     while (!stopped) {
       // Fill up to concurrency.
       while (!stopped && inflight < concurrency) {
         const job = claim(db);
         if (!job) break;
-        runOne(job); // fire-and-forget; tracked by inflight
+        // Fire-and-forget; tracked by inflight.
+        void runOne(job);
       }
 
       if (drainAndExit && inflight === 0) {
@@ -203,7 +226,7 @@ export function workQueue({
       }
 
       // Wait for either a wake event or the poll timer.
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         wakeResolve = resolve;
         const timer = setTimeout(() => {
           if (wakeResolve === resolve) {
@@ -211,14 +234,13 @@ export function workQueue({
             resolve();
           }
         }, POLL_INTERVAL_MS);
-        // Ensure timer is cleared if we resolve via wake().
         timer.unref?.();
       });
     }
 
     // Drain phase: wait for in-flight jobs to finish.
     while (inflight > 0) {
-      await new Promise((r) => drainListeners.push(r));
+      await new Promise<void>((r) => drainListeners.push(r));
     }
     events.off('enqueued', wake);
   }
@@ -226,9 +248,7 @@ export function workQueue({
   const done = loop();
 
   return {
-    /** Promise that resolves when the loop exits (only resolves naturally if drainAndExit). */
     done,
-    /** Force-stop: drop queued work, wait for in-flight to finish. */
     async stop() {
       stopped = true;
       wake();

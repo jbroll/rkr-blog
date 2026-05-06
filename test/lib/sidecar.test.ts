@@ -2,19 +2,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 
-import { CURRENT_VERSION, read, sidecarPath, validate, write } from '../../src/lib/sidecar.js';
+import {
+  CURRENT_VERSION,
+  read,
+  type Sidecar,
+  sidecarPath,
+  validate,
+  write
+} from '../../src/lib/sidecar.ts';
 
 const HEX64 = 'a'.repeat(64);
 
-function freshSiteRoot(t) {
+function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-side-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
 
-function validSidecar(overrides = {}) {
+function validSidecar(overrides: Partial<Sidecar> = {}): Sidecar {
   return {
     version: CURRENT_VERSION,
     original: HEX64,
@@ -57,7 +64,7 @@ test('write() rejects mismatched id', async (t) => {
 
 test('write() rejects invalid data without leaving a temp file', async (t) => {
   const root = freshSiteRoot(t);
-  await assert.rejects(write(root, HEX64, { version: 1 }), /invalid data/);
+  await assert.rejects(write(root, HEX64, { version: 1 } as unknown as Sidecar), /invalid data/);
 
   const dir = path.join(root, 'sidecars');
   if (fs.existsSync(dir)) {
@@ -80,30 +87,34 @@ test('validate() rejects non-object input', () => {
 });
 
 test('validate() requires version === 1', () => {
-  const r = validate(validSidecar({ version: 2 }));
+  const bad = { ...validSidecar(), version: 2 } as unknown;
+  const r = validate(bad);
   assert.equal(r.ok, false);
-  assert.match(r.error, /version/);
+  if (!r.ok) assert.match(r.error, /version/);
 });
 
 test('validate() requires 64-char lowercase hex original', () => {
   for (const bad of ['', 'abc', 'A'.repeat(64), 'g'.repeat(64), 123]) {
-    const r = validate(validSidecar({ original: bad }));
+    const data = { ...validSidecar(), original: bad } as unknown;
+    const r = validate(data);
     assert.equal(r.ok, false);
-    assert.match(r.error, /original/);
+    if (!r.ok) assert.match(r.error, /original/);
   }
 });
 
 test('validate() requires source.kind string', () => {
-  assert.equal(validate(validSidecar({ source: {} })).ok, false);
-  assert.equal(validate(validSidecar({ source: null })).ok, false);
-  assert.equal(validate(validSidecar({ source: { kind: 7 } })).ok, false);
+  const base = validSidecar();
+  assert.equal(validate({ ...base, source: {} } as unknown).ok, false);
+  assert.equal(validate({ ...base, source: null } as unknown).ok, false);
+  assert.equal(validate({ ...base, source: { kind: 7 } } as unknown).ok, false);
 });
 
 test('validate() requires metadata object and array fields', () => {
-  assert.equal(validate(validSidecar({ metadata: 'no' })).ok, false);
-  assert.equal(validate(validSidecar({ ops: 'no' })).ok, false);
-  assert.equal(validate(validSidecar({ outputs: null })).ok, false);
-  assert.equal(validate(validSidecar({ variants: {} })).ok, false);
+  const base = validSidecar();
+  assert.equal(validate({ ...base, metadata: 'no' } as unknown).ok, false);
+  assert.equal(validate({ ...base, ops: 'no' } as unknown).ok, false);
+  assert.equal(validate({ ...base, outputs: null } as unknown).ok, false);
+  assert.equal(validate({ ...base, variants: {} } as unknown).ok, false);
 });
 
 test('write() is atomic: a concurrent reader sees the old or new file, never partial', async (t) => {

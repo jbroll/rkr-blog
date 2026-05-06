@@ -10,13 +10,19 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Readable } from 'node:stream';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
-import { sidecarPath, read as sidecarRead, write as sidecarWrite } from './sidecar.js';
+import {
+  type Sidecar,
+  sidecarPath,
+  read as sidecarRead,
+  write as sidecarWrite
+} from './sidecar.ts';
 
-const FORMAT_TO_EXT = {
+const FORMAT_TO_EXT: Record<string, string | undefined> = {
   jpeg: 'jpg',
   png: 'png',
   webp: 'webp',
@@ -34,24 +40,38 @@ const DEFAULT_OUTPUTS = [
 ];
 const DEFAULT_VARIANTS = [{ w: 400 }, { w: 800 }, { w: 1600 }];
 
-/**
- * Ingest a Readable byte stream into the site's originals + sidecars trees.
- *
- * @param {Object} args
- * @param {NodeJS.ReadableStream} args.stream
- * @param {string} args.siteRoot
- * @param {Object} args.source     - sidecar `source` block (e.g. {kind:'upload', originalName:'x.jpg'})
- * @param {string} [args.now]      - override timestamp for tests; default Date.now()
- * @returns {Promise<{
- *   id: string,
- *   path: string,
- *   ext: string,
- *   bytes: number,
- *   deduplicated: boolean,
- *   sidecar: Object
- * }>}
- */
-export async function ingestStream({ stream, siteRoot, source, now }) {
+export interface IngestSource {
+  kind: string;
+  originalName?: string | null;
+  // Provider-specific fields (e.g. fileId for gdrive) are allowed.
+  [k: string]: unknown;
+}
+
+export interface IngestArgs {
+  stream: Readable;
+  siteRoot: string;
+  /** Sidecar source block sans `fetched`; the caller's kind/originalName/etc. */
+  source: IngestSource;
+  /** Override timestamp for tests; default new Date().toISOString(). */
+  now?: string;
+}
+
+export interface IngestResult {
+  id: string;
+  path: string;
+  ext: string;
+  bytes: number;
+  deduplicated: boolean;
+  sidecar: Sidecar;
+}
+
+/** Ingest a Readable byte stream into the site's originals + sidecars trees. */
+export async function ingestStream({
+  stream,
+  siteRoot,
+  source,
+  now
+}: IngestArgs): Promise<IngestResult> {
   const tmpDir = path.join(siteRoot, 'originals', '.tmp');
   await fs.promises.mkdir(tmpDir, { recursive: true });
 
@@ -60,7 +80,7 @@ export async function ingestStream({ stream, siteRoot, source, now }) {
   let bytes = 0;
 
   const tap = new Transform({
-    transform(chunk, _enc, cb) {
+    transform(chunk: Buffer, _enc, cb) {
       hasher.update(chunk);
       bytes += chunk.length;
       cb(null, chunk);
@@ -76,18 +96,18 @@ export async function ingestStream({ stream, siteRoot, source, now }) {
 
   const id = hasher.digest('hex');
 
-  let meta;
+  let meta: sharp.Metadata;
   try {
     meta = await sharp(tmpPath).metadata();
   } catch (err) {
     await safeUnlink(tmpPath);
-    throw new Error(`ingestStream: not a recognized image: ${err.message}`);
+    throw new Error(`ingestStream: not a recognized image: ${(err as Error).message}`);
   }
 
-  const ext = FORMAT_TO_EXT[meta.format];
+  const ext = meta.format ? FORMAT_TO_EXT[meta.format] : undefined;
   if (!ext) {
     await safeUnlink(tmpPath);
-    throw new Error(`ingestStream: unsupported image format ${meta.format}`);
+    throw new Error(`ingestStream: unsupported image format ${String(meta.format)}`);
   }
 
   const finalDir = path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4));
@@ -106,35 +126,37 @@ export async function ingestStream({ stream, siteRoot, source, now }) {
 
   // Reuse the existing sidecar if present (dedupe path) to preserve user
   // edits to ops/outputs/variants. Only create one when none exists.
-  let sidecar = await sidecarRead(siteRoot, id);
-  if (!sidecar) {
-    sidecar = {
-      version: 1,
-      original: id,
-      source: { fetched, ...source },
-      metadata: pickMetadata(meta),
-      ops: [],
-      outputs: DEFAULT_OUTPUTS,
-      variants: DEFAULT_VARIANTS
-    };
-    await sidecarWrite(siteRoot, id, sidecar);
-  }
+  const existing = await sidecarRead(siteRoot, id);
+  const sidecar: Sidecar =
+    existing ??
+    (await (async (): Promise<Sidecar> => {
+      const fresh: Sidecar = {
+        version: 1,
+        original: id,
+        source: { ...source, fetched },
+        metadata: pickMetadata(meta),
+        ops: [],
+        outputs: DEFAULT_OUTPUTS,
+        variants: DEFAULT_VARIANTS
+      };
+      await sidecarWrite(siteRoot, id, fresh);
+      return fresh;
+    })());
 
   return { id, path: finalPath, ext, bytes, deduplicated, sidecar };
 }
 
-function pickMetadata(meta) {
-  const out = {
+function pickMetadata(meta: sharp.Metadata): Sidecar['metadata'] {
+  // Sharp returns exif as a Buffer; defer parsing until needed (Step 3+).
+  // Keep the sidecar JSON-safe by omitting raw buffers here.
+  return {
     width: meta.width,
     height: meta.height,
     format: meta.format
   };
-  // Sharp returns exif as a Buffer; defer parsing until needed (Step 3+).
-  // Keep the sidecar JSON-safe by omitting raw buffers here.
-  return out;
 }
 
-async function exists(p) {
+async function exists(p: string): Promise<boolean> {
   try {
     await fs.promises.access(p);
     return true;
@@ -143,7 +165,7 @@ async function exists(p) {
   }
 }
 
-async function safeUnlink(p) {
+async function safeUnlink(p: string): Promise<void> {
   try {
     await fs.promises.unlink(p);
   } catch {
@@ -151,7 +173,7 @@ async function safeUnlink(p) {
   }
 }
 
-export function originalPath(siteRoot, id, ext) {
+export function originalPath(siteRoot: string, id: string, ext: string): string {
   return path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4), `${id}.${ext}`);
 }
 

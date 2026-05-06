@@ -1,11 +1,12 @@
 // `site-admin init` — create $SITE_ROOT directory tree if absent, run migrations.
 
 import fs from 'node:fs';
-import { paths } from '../lib/config.js';
-import { open } from '../lib/db.js';
-import { migrate } from '../lib/migrate.js';
 
-export default function init() {
+import { paths } from '../lib/config.ts';
+import { open } from '../lib/db.ts';
+import { migrate } from '../lib/migrate.ts';
+
+export default function init(): void {
   const p = paths();
 
   const dirs = [

@@ -3,7 +3,27 @@
 
 import crypto from 'node:crypto';
 
-export function buildMultipart({ fieldName = 'file', filename, contentType, bytes }) {
+export interface BuildMultipartArgs {
+  fieldName?: string;
+  filename: string;
+  contentType: string;
+  bytes: Buffer;
+}
+
+export interface MultipartPayload {
+  payload: Buffer;
+  headers: {
+    'content-type': string;
+    'content-length': string;
+  };
+}
+
+export function buildMultipart({
+  fieldName = 'file',
+  filename,
+  contentType,
+  bytes
+}: BuildMultipartArgs): MultipartPayload {
   const boundary = `----rkrtest${crypto.randomBytes(8).toString('hex')}`;
   const head =
     `--${boundary}\r\n` +

@@ -3,25 +3,34 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import type { Readable } from 'node:stream';
 
-/**
- * Hash a file from disk. Returns sha256 hex.
- * @param {string} filePath
- * @returns {Promise<string>}
- */
-export function sha256File(filePath) {
+/** Values that have a canonical-JSON representation. */
+export type CanonicalValue =
+  | null
+  | string
+  | number
+  | boolean
+  | CanonicalValue[]
+  | { [k: string]: CanonicalValue | undefined };
+
+export interface CacheKeyArgs {
+  originalId: string;
+  ops: CanonicalValue[];
+  variant: Record<string, CanonicalValue | undefined>;
+  output: Record<string, CanonicalValue | undefined>;
+}
+
+/** Hash a file from disk. Returns sha256 hex. */
+export function sha256File(filePath: string): Promise<string> {
   return sha256Stream(fs.createReadStream(filePath));
 }
 
-/**
- * Hash a Readable stream end-to-end. Consumes the stream.
- * @param {NodeJS.ReadableStream} stream
- * @returns {Promise<string>}
- */
-export function sha256Stream(stream) {
-  return new Promise((resolve, reject) => {
+/** Hash a Readable stream end-to-end. Consumes the stream. */
+export function sha256Stream(stream: Readable): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const hash = crypto.createHash('sha256');
-    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('data', (chunk: Buffer | string) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
     stream.on('error', reject);
   });
@@ -39,23 +48,20 @@ export function sha256Stream(stream) {
  * - undefined object members are omitted (matches JSON.stringify)
  *
  * Throws on bigint, symbol, function — those have no canonical form.
- *
- * @param {*} value
- * @returns {string}
  */
-export function canonicalJson(value) {
+export function canonicalJson(value: unknown): string {
   return asciiOnly(stringifySorted(value));
 }
 
-function stringifySorted(value) {
+function stringifySorted(value: unknown): string {
   if (value === null) return 'null';
   if (value === undefined) {
     throw new TypeError('canonicalJson: undefined has no canonical form');
   }
   const t = typeof value;
   if (t === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new TypeError(`canonicalJson: non-finite number ${value}`);
+    if (!Number.isFinite(value as number)) {
+      throw new TypeError(`canonicalJson: non-finite number ${value as number}`);
     }
     return String(value);
   }
@@ -65,10 +71,11 @@ function stringifySorted(value) {
     return `[${value.map(stringifySorted).join(',')}]`;
   }
   if (t === 'object') {
-    const keys = Object.keys(value)
-      .filter((k) => value[k] !== undefined)
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj)
+      .filter((k) => obj[k] !== undefined)
       .sort();
-    const parts = keys.map((k) => `${JSON.stringify(k)}:${stringifySorted(value[k])}`);
+    const parts = keys.map((k) => `${JSON.stringify(k)}:${stringifySorted(obj[k])}`);
     return `{${parts.join(',')}}`;
   }
   throw new TypeError(`canonicalJson: unsupported type ${t}`);
@@ -76,7 +83,7 @@ function stringifySorted(value) {
 
 // JSON.stringify outputs raw non-ASCII; rewrite each code unit at or above
 // 0x80 (including unpaired surrogates) as \uXXXX so the output is pure ASCII.
-function asciiOnly(s) {
+function asciiOnly(s: string): string {
   let out = '';
   for (let i = 0; i < s.length; i++) {
     const code = s.charCodeAt(i);
@@ -92,15 +99,8 @@ function asciiOnly(s) {
 /**
  * Derive the per-derivative cache key. Returns the 12-hex-char `ophash`
  * suffix used in the on-disk filename (spec §11).
- *
- * @param {Object} args
- * @param {string} args.originalId
- * @param {Array}  args.ops
- * @param {Object} args.variant
- * @param {Object} args.output
- * @returns {string} 12-char hex
  */
-export function cacheKey({ originalId, ops, variant, output }) {
+export function cacheKey({ originalId, ops, variant, output }: CacheKeyArgs): string {
   const input = canonicalJson({ originalId, ops, variant, output });
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, 12);
 }

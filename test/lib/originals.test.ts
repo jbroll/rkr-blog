@@ -4,13 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
-import { ingestStream, originalPath } from '../../src/lib/originals.js';
-import { read as sidecarRead } from '../../src/lib/sidecar.js';
+import { ingestStream, originalPath } from '../../src/lib/originals.ts';
+import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 
-function freshSiteRoot(t) {
+function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-orig-'));
   fs.mkdirSync(path.join(root, 'sidecars'), { recursive: true });
   fs.mkdirSync(path.join(root, 'originals'), { recursive: true });
@@ -65,11 +65,12 @@ test('ingestStream writes to sharded path and produces a valid sidecar', async (
 
   // Sidecar populated with metadata + provenance.
   const sidecar = await sidecarRead(root, expectedId);
+  assert.ok(sidecar);
   assert.equal(sidecar.version, 1);
   assert.equal(sidecar.original, expectedId);
   assert.equal(sidecar.source.kind, 'upload');
   assert.equal(sidecar.source.originalName, 'sample.jpg');
-  assert.match(sidecar.source.fetched, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(sidecar.source.fetched ?? '', /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(sidecar.metadata.format, 'jpeg');
   assert.equal(sidecar.metadata.width, 64);
   assert.equal(sidecar.metadata.height, 48);
@@ -110,6 +111,7 @@ test('ingestStream dedupes byte-identical re-uploads without rewriting', async (
 
   // Sidecar must not be overwritten — first source.originalName preserved.
   const sidecar = await sidecarRead(root, first.id);
+  assert.ok(sidecar);
   assert.equal(sidecar.source.originalName, 'a.jpg');
 });
 
@@ -126,6 +128,7 @@ test('ingestStream handles PNG (alpha channel) with the right extension', async 
   assert.equal(result.ext, 'png');
   assert.ok(result.path.endsWith('.png'));
   const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
   assert.equal(sidecar.metadata.format, 'png');
 });
 

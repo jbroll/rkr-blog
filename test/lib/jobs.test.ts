@@ -1,15 +1,35 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { open } from '../../src/lib/db.js';
-import { claim, complete, enqueue, events, workQueue } from '../../src/lib/jobs.js';
-import { migrate } from '../../src/lib/migrate.js';
+import { open } from '../../src/lib/db.ts';
+import {
+  claim,
+  complete,
+  enqueue,
+  events,
+  type JobHandler,
+  type JobHandlerCtx,
+  type JobHandlerMap,
+  workQueue
+} from '../../src/lib/jobs.ts';
+import { migrate } from '../../src/lib/migrate.ts';
+
+interface JobRow {
+  id: number;
+  kind: string;
+  state: string;
+  cache_key: string | null;
+  payload: string;
+  error: string | null;
+}
 
 function freshDb() {
   const db = open(':memory:');
   migrate(db);
   return db;
 }
+
+const noopCtx: JobHandlerCtx = { siteRoot: '/tmp/rkr-jobs-test' };
 
 test('enqueue inserts a queued row and returns its id', () => {
   const db = freshDb();
@@ -18,7 +38,8 @@ test('enqueue inserts a queued row and returns its id', () => {
     assert.equal(r.duplicate, false);
     assert.ok(r.id > 0);
 
-    const row = db.prepare('SELECT kind, state, cache_key FROM jobs WHERE id=?').get(r.id);
+    const row = db.prepare<JobRow>('SELECT kind, state, cache_key FROM jobs WHERE id=?').get(r.id);
+    assert.ok(row);
     assert.equal(row.kind, 'render');
     assert.equal(row.state, 'queued');
     assert.equal(row.cache_key, 'abc');
@@ -35,8 +56,10 @@ test('enqueue dedupes by cache_key while a job is queued or running', () => {
     assert.equal(b.duplicate, true);
     assert.equal(b.id, a.id);
 
-    const count = db.prepare("SELECT COUNT(*) AS n FROM jobs WHERE cache_key='same'").get().n;
-    assert.equal(count, 1, 'only one row should exist for the same cache_key');
+    const count = db
+      .prepare<{ n: number }>("SELECT COUNT(*) AS n FROM jobs WHERE cache_key='same'")
+      .get();
+    assert.equal(count?.n, 1, 'only one row should exist for the same cache_key');
   } finally {
     db.close();
   }
@@ -48,20 +71,22 @@ test('enqueue resets a done job back to queued (same row, not duplicate)', () =>
     const a = enqueue(db, { kind: 'render', payload: { v: 1 }, cacheKey: 'k1' });
     claim(db);
     complete(db, a.id);
-    assert.equal(db.prepare('SELECT state FROM jobs WHERE id=?').get(a.id).state, 'done');
+    assert.equal(db.prepare<JobRow>('SELECT state FROM jobs WHERE id=?').get(a.id)?.state, 'done');
 
     const b = enqueue(db, { kind: 'render', payload: { v: 2 }, cacheKey: 'k1' });
     assert.equal(b.duplicate, false, 're-enqueue after done is not a duplicate');
     assert.equal(b.id, a.id, 'cache_key UNIQUE → same row, reset to queued');
 
-    const row = db.prepare('SELECT state, payload, error FROM jobs WHERE id=?').get(a.id);
+    const row = db.prepare<JobRow>('SELECT state, payload, error FROM jobs WHERE id=?').get(a.id);
+    assert.ok(row);
     assert.equal(row.state, 'queued');
-    assert.equal(JSON.parse(row.payload).v, 2, 'payload is updated to the new value');
+    assert.equal((JSON.parse(row.payload) as { v: number }).v, 2, 'payload is updated');
     assert.equal(row.error, null);
 
-    // Total row count for that cache_key remains 1 (UNIQUE constraint).
-    const count = db.prepare("SELECT COUNT(*) AS n FROM jobs WHERE cache_key='k1'").get().n;
-    assert.equal(count, 1);
+    const count = db
+      .prepare<{ n: number }>("SELECT COUNT(*) AS n FROM jobs WHERE cache_key='k1'")
+      .get();
+    assert.equal(count?.n, 1);
   } finally {
     db.close();
   }
@@ -73,18 +98,20 @@ test('claim returns jobs in FIFO order and marks them running', () => {
     const a = enqueue(db, { kind: 'render', payload: { tag: 'a' } });
     const b = enqueue(db, { kind: 'render', payload: { tag: 'b' } });
 
-    const j1 = claim(db);
+    const j1 = claim<{ tag: string }>(db);
+    assert.ok(j1);
     assert.equal(j1.id, a.id);
     assert.equal(j1.payload.tag, 'a');
 
-    const j2 = claim(db);
+    const j2 = claim<{ tag: string }>(db);
+    assert.ok(j2);
     assert.equal(j2.id, b.id);
 
     const j3 = claim(db);
     assert.equal(j3, null, 'no more queued jobs');
 
     const states = db
-      .prepare('SELECT state FROM jobs WHERE id IN (?,?) ORDER BY id')
+      .prepare<{ state: string }>('SELECT state FROM jobs WHERE id IN (?,?) ORDER BY id')
       .all(a.id, b.id)
       .map((r) => r.state);
     assert.deepEqual(states, ['running', 'running']);
@@ -98,11 +125,6 @@ test('atomic claim: parallel claim attempts on the same job → exactly one wins
   try {
     enqueue(db, { kind: 'render', payload: {} });
 
-    // Run many claim() calls in the same loop iteration. Even though
-    // node:sqlite is sync, we kick off a batch under microtasks so the
-    // SELECT/UPDATE pairs interleave at the JS level. The atomicity comes
-    // from the UPDATE … WHERE state='queued' RETURNING id pattern: only the
-    // first UPDATE sees the row in queued state.
     const results = await Promise.all(
       Array.from({ length: 20 }, () => Promise.resolve().then(() => claim(db)))
     );
@@ -122,12 +144,13 @@ test('complete marks done; complete with error marks failed and stores message',
     const ok = enqueue(db, { kind: 'render', payload: {} });
     claim(db);
     complete(db, ok.id);
-    assert.equal(db.prepare('SELECT state FROM jobs WHERE id=?').get(ok.id).state, 'done');
+    assert.equal(db.prepare<JobRow>('SELECT state FROM jobs WHERE id=?').get(ok.id)?.state, 'done');
 
     const bad = enqueue(db, { kind: 'render', payload: {} });
     claim(db);
     complete(db, bad.id, { error: 'kaboom' });
-    const row = db.prepare('SELECT state, error FROM jobs WHERE id=?').get(bad.id);
+    const row = db.prepare<JobRow>('SELECT state, error FROM jobs WHERE id=?').get(bad.id);
+    assert.ok(row);
     assert.equal(row.state, 'failed');
     assert.equal(row.error, 'kaboom');
   } finally {
@@ -138,23 +161,22 @@ test('complete marks done; complete with error marks failed and stores message',
 test('workQueue runs handlers, marks done, and exits when drainAndExit + queue empty', async () => {
   const db = freshDb();
   try {
-    const seen = [];
-    const handlers = {
-      render: async (payload) => {
-        seen.push(payload.tag);
-      }
+    const seen: string[] = [];
+    const renderHandler: JobHandler<{ tag: string }> = async (payload) => {
+      seen.push(payload.tag);
     };
+    const handlers: JobHandlerMap = { render: renderHandler as JobHandler<unknown> };
 
     enqueue(db, { kind: 'render', payload: { tag: 'a' } });
     enqueue(db, { kind: 'render', payload: { tag: 'b' } });
     enqueue(db, { kind: 'render', payload: { tag: 'c' } });
 
-    const ctrl = workQueue({ db, ctx: {}, handlers, concurrency: 2, drainAndExit: true });
-    await ctrl.done; // natural drain-and-exit; do NOT force-stop
+    const ctrl = workQueue({ db, ctx: noopCtx, handlers, concurrency: 2, drainAndExit: true });
+    await ctrl.done;
 
     assert.deepEqual([...seen].sort(), ['a', 'b', 'c']);
     const states = db
-      .prepare('SELECT state FROM jobs ORDER BY id')
+      .prepare<{ state: string }>('SELECT state FROM jobs ORDER BY id')
       .all()
       .map((r) => r.state);
     assert.deepEqual(states, ['done', 'done', 'done']);
@@ -166,19 +188,20 @@ test('workQueue runs handlers, marks done, and exits when drainAndExit + queue e
 test('workQueue: handler throw → state=failed with error message', async () => {
   const db = freshDb();
   try {
-    const handlers = {
+    const handlers: JobHandlerMap = {
       render: async () => {
         throw new Error('handler boom');
       }
     };
     const j = enqueue(db, { kind: 'render', payload: {} });
 
-    const ctrl = workQueue({ db, ctx: {}, handlers, drainAndExit: true });
+    const ctrl = workQueue({ db, ctx: noopCtx, handlers, drainAndExit: true });
     await ctrl.done;
 
-    const row = db.prepare('SELECT state, error FROM jobs WHERE id=?').get(j.id);
+    const row = db.prepare<JobRow>('SELECT state, error FROM jobs WHERE id=?').get(j.id);
+    assert.ok(row);
     assert.equal(row.state, 'failed');
-    assert.match(row.error, /handler boom/);
+    assert.match(row.error ?? '', /handler boom/);
   } finally {
     db.close();
   }
@@ -187,19 +210,16 @@ test('workQueue: handler throw → state=failed with error message', async () =>
 test('events.emit("enqueued") wakes a waiting worker faster than the poll interval', async () => {
   const db = freshDb();
   try {
-    const handlers = { render: async () => {} };
-    const ctrl = workQueue({ db, ctx: {}, handlers, drainAndExit: false });
+    const handlers: JobHandlerMap = { render: async () => {} };
+    const ctrl = workQueue({ db, ctx: noopCtx, handlers, drainAndExit: false });
 
-    // Sleep less than POLL_INTERVAL_MS to give the loop a chance to park.
     await new Promise((r) => setTimeout(r, 50));
 
     const before = Date.now();
     enqueue(db, { kind: 'render', payload: {} });
 
-    // Wait for the job to reach 'done'. If wake-on-emit works, this should
-    // be well under the 250ms poll interval.
     while (true) {
-      const row = db.prepare('SELECT state FROM jobs LIMIT 1').get();
+      const row = db.prepare<{ state: string }>('SELECT state FROM jobs LIMIT 1').get();
       if (row && row.state === 'done') break;
       await new Promise((r) => setTimeout(r, 5));
     }
@@ -213,6 +233,5 @@ test('events.emit("enqueued") wakes a waiting worker faster than the poll interv
 });
 
 test.after(() => {
-  // Ensure no listener leaks between tests when the suite re-imports.
   events.removeAllListeners('enqueued');
 });

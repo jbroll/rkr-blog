@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { open } from '../../src/lib/db.js';
-import { listMigrations, migrate } from '../../src/lib/migrate.js';
+import { open } from '../../src/lib/db.ts';
+import { listMigrations, migrate } from '../../src/lib/migrate.ts';
 
 test('migrate() applies the initial migration once', () => {
   const db = open(':memory:');
@@ -15,7 +15,7 @@ test('migrate() applies the initial migration once', () => {
 
     // Tables from 001_initial.sql must exist.
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .prepare<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all()
       .map((r) => r.name);
     for (const t of ['posts', 'jobs', 'sessions', 'oauth_tokens', 'auth', 'schema_migrations']) {

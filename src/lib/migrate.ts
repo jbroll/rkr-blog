@@ -6,19 +6,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { Db } from './db.ts';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Repo layout: src/lib/migrate.js → ../../migrations
+// Repo layout: src/lib/migrate.ts → ../../migrations
 const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', 'migrations');
 
-function parseVersion(filename) {
-  const m = filename.match(/^(\d+)/);
-  if (!m) return null;
-  return parseInt(m[1], 10);
+export interface MigrationEntry {
+  filename: string;
+  version: number;
+  full: string;
 }
 
-export function listMigrations(dir = DEFAULT_MIGRATIONS_DIR) {
-  const entries = fs
+function parseVersion(filename: string): number | null {
+  const m = filename.match(/^(\d+)/);
+  const captured = m?.[1];
+  return captured === undefined ? null : Number.parseInt(captured, 10);
+}
+
+export function listMigrations(dir: string = DEFAULT_MIGRATIONS_DIR): MigrationEntry[] {
+  return fs
     .readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .map((filename) => ({
@@ -26,37 +34,33 @@ export function listMigrations(dir = DEFAULT_MIGRATIONS_DIR) {
       version: parseVersion(filename),
       full: path.join(dir, filename)
     }))
-    .filter((m) => m.version !== null)
+    .filter((m): m is MigrationEntry => m.version !== null)
     .sort((a, b) => a.version - b.version);
-  return entries;
 }
 
-function readApplied(db) {
+function readApplied(db: Db): Set<number> {
   // Probe sqlite_master rather than CREATE-IF-NOT-EXISTS so that the
   // schema_migrations table can be created by the migration itself.
   const exists = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
+    .prepare<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+    )
     .get();
   if (!exists) return new Set();
   return new Set(
     db
-      .prepare('SELECT version FROM schema_migrations')
+      .prepare<{ version: number }>('SELECT version FROM schema_migrations')
       .all()
       .map((r) => r.version)
   );
 }
 
-/**
- * Apply pending migrations. Returns the list of versions actually applied.
- *
- * @param {Object} db   - db handle from lib/db.js
- * @param {string} [dir] - migrations directory (default: repo migrations/)
- */
-export function migrate(db, dir = DEFAULT_MIGRATIONS_DIR) {
+/** Apply pending migrations. Returns the list of versions actually applied. */
+export function migrate(db: Db, dir: string = DEFAULT_MIGRATIONS_DIR): number[] {
   const applied = readApplied(db);
 
   const todo = listMigrations(dir).filter((m) => !applied.has(m.version));
-  const ranVersions = [];
+  const ranVersions: number[] = [];
 
   for (const m of todo) {
     const sql = fs.readFileSync(m.full, 'utf8');
@@ -84,10 +88,10 @@ export function migrate(db, dir = DEFAULT_MIGRATIONS_DIR) {
 // PRAGMA journal_mode and similar statements fail inside an explicit
 // transaction. Strip leading PRAGMAs out of the migration body so they run
 // outside the transactional block.
-function splitPragmas(sql) {
+function splitPragmas(sql: string): { pragmas: string; body: string } {
   const lines = sql.split('\n');
-  const pragmas = [];
-  const body = [];
+  const pragmas: string[] = [];
+  const body: string[] = [];
   let inHeader = true;
   for (const line of lines) {
     const trimmed = line.trim();

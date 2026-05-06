@@ -94,8 +94,9 @@ Sharp on Void: prebuilt binaries cover glibc and musl on x64/arm64. If prebuild 
 ## 6. Coding conventions
 
 - **Module system**: ES modules (`import`/`export`). `package.json` declares `"type": "module"`.
-- **Language**: Plain JavaScript for v1. JSDoc type annotations on exported functions are required (they pre-document the eventual TypeScript signatures). TypeScript is a stated future goal: §6 conventions are chosen so the JS→TS migration is mechanical (named exports, no `any`-shaped interfaces, JSDoc on the public surface). No TypeScript build step in v1.
-- **Lint**: Biome (`@biomejs/biome`), configured to enforce §6 conventions and the `recommended` ruleset. `biome check` runs in the precommit hook alongside `npm test`. Biome is the only added linter; no ESLint, no Prettier.
+- **Language**: TypeScript with `strict: true`. Server-side code runs directly via Node 22's `--experimental-strip-types` (no transpile, no `dist/`). Type-checking is a separate step (`tsc --noEmit`). Internal imports use `.ts` extensions (with `allowImportingTsExtensions`) so the on-disk extension matches what's imported.
+- **Browser-bound code**: `src/admin/` and the browser-bound exports of `src/widgets/*.ts` (the `editorNode` declarations) are emitted to `static/admin/` via `tsc --emit` against `tsconfig.browser.json`. Apache serves `static/admin/` per §14. No bundler is involved — TipTap and ProseMirror are loaded as vendored ESM per §3, and our emitted modules import them by URL.
+- **Lint**: Biome (`@biomejs/biome`), configured to enforce §6 conventions and the `recommended` ruleset, applied to both `.ts` and `.js`. The precommit hook runs `biome check`, `tsc --noEmit`, and `npm test`. Biome is the only linter; no ESLint, no Prettier.
 - **Indent**: 2 spaces, no tabs.
 - **Semicolons**: yes.
 - **Quotes**: single quotes for JS strings, double quotes only when escaping.
@@ -110,9 +111,9 @@ Sharp on Void: prebuilt binaries cover glibc and musl on x64/arm64. If prebuild 
 ## 7. Test strategy
 
 - Test runner: `node:test` + `node:assert/strict`. No Jest, no Vitest, no Mocha.
-- Tests live in `test/`, mirroring `src/` layout (`src/lib/render.js` → `test/lib/render.test.js`).
-- Run with `node --test`.
-- Coverage with `node --test --experimental-test-coverage`.
+- Tests are TypeScript, live in `test/`, mirroring `src/` layout (`src/lib/render.ts` → `test/lib/render.test.ts`).
+- Run with `node --test --experimental-strip-types`.
+- Coverage with `node --test --experimental-test-coverage --experimental-strip-types`.
 - Each test file is independently runnable and uses fresh fixtures (no shared mutable state).
 - Fixture images live in `test/fixtures/images/` (small JPEGs/PNGs, committed to repo).
 - A test that needs a temporary directory creates one under `os.tmpdir()` and cleans up in a `t.after()` hook.
@@ -124,28 +125,29 @@ Sharp on Void: prebuilt binaries cover glibc and musl on x64/arm64. If prebuild 
 rkroll-cms/
 ├── bin/
 │   ├── site-admin            # CLI entry point (Node shebang)
-│   └── server.js             # Fastify entry point
+│   └── server.js             # Fastify entry point (thin .js launcher)
 ├── src/
 │   ├── lib/
-│   │   ├── db.js             # node:sqlite wrapper
-│   │   ├── hash.js           # canonical-JSON, sha256, cache-key derivation
-│   │   ├── sidecar.js        # read/write/validate sidecars
-│   │   ├── render.js         # renderDerivative + Sharp pipeline
-│   │   ├── jobs.js           # job queue operations
-│   │   ├── content.js        # post markdown read/parse/serialize
-│   │   ├── widgets.js        # widget registry, dispatch
-│   │   └── auth.js           # password, session
+│   │   ├── db.ts             # node:sqlite wrapper
+│   │   ├── hash.ts           # canonical-JSON, sha256, cache-key derivation
+│   │   ├── sidecar.ts        # read/write/validate sidecars
+│   │   ├── render.ts         # renderDerivative + Sharp pipeline
+│   │   ├── jobs.ts           # job queue operations
+│   │   ├── content.ts        # post markdown read/parse/serialize
+│   │   ├── widgets.ts        # widget registry, dispatch
+│   │   └── auth.ts           # password, session
 │   ├── widgets/
-│   │   ├── image.js
-│   │   └── gallery.js
-│   ├── admin/                # admin UI assets (HTML, JS, CSS, vendored TipTap)
+│   │   ├── image.ts
+│   │   └── gallery.ts
+│   ├── admin/                # admin UI sources (HTML, .ts → static/admin/)
 │   ├── templates/            # public-facing templates
 │   └── routes/
-│       ├── public.js         # GET /, GET /:slug, GET /img/*
-│       ├── admin.js          # admin SPA + API
-│       └── import.js         # remote import endpoints
+│       ├── public.ts         # GET /, GET /:slug, GET /img/*
+│       ├── admin.ts          # admin SPA + API
+│       └── import.ts         # remote import endpoints
 ├── test/
-│   ├── lib/
+│   ├── lib/                  # mirrors src/lib (*.test.ts)
+│   ├── routes/
 │   ├── widgets/
 │   └── fixtures/
 │       ├── images/
@@ -156,6 +158,9 @@ rkroll-cms/
 ├── deploy/
 │   ├── apache.conf           # vhost template
 │   └── systemd.service       # systemd unit for the Fastify process
+├── biome.json
+├── tsconfig.json             # server-side TS (strict, noEmit, type-strip)
+├── tsconfig.browser.json     # admin/widgets browser emit → static/admin/
 ├── package.json
 ├── package-lock.json
 ├── README.md
@@ -625,12 +630,17 @@ A handful of small JPEGs and PNGs (under 100KB each), with varied aspect ratios 
     "site-admin": "./bin/site-admin"
   },
   "scripts": {
-    "start": "node --no-warnings=ExperimentalWarning bin/server.js",
-    "test": "node --test --no-warnings=ExperimentalWarning",
-    "test:coverage": "node --test --experimental-test-coverage --no-warnings=ExperimentalWarning",
-    "migrate": "node --no-warnings=ExperimentalWarning bin/site-admin migrate",
-    "render": "node --no-warnings=ExperimentalWarning bin/site-admin render",
-    "gc": "node --no-warnings=ExperimentalWarning bin/site-admin gc"
+    "start": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/server.js",
+    "test": "node --test --no-warnings=ExperimentalWarning --experimental-strip-types",
+    "test:coverage": "node --test --experimental-test-coverage --no-warnings=ExperimentalWarning --experimental-strip-types",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check",
+    "build:admin": "tsc -p tsconfig.browser.json",
+    "check": "tsc --noEmit && biome check && npm test",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "migrate": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/site-admin migrate",
+    "render": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/site-admin render",
+    "gc": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/site-admin gc"
   },
   "dependencies": {
     "fastify": "^5.0.0",
@@ -644,11 +654,15 @@ A handful of small JPEGs and PNGs (under 100KB each), with varied aspect ratios 
     "yaml": "^2.5.0",
     "argon2": "^0.40.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
 }
 ```
 
-`fastify` (+ official plugins), `sharp`, the `remark` family, `yaml`, `argon2`. No other runtime deps. `argon2` is a native module but ships prebuilds; if it fails on Void, fallback is `crypto.scrypt` from `node:crypto`.
+Runtime deps: `fastify` (+ official plugins), `sharp`, the `remark` family, `yaml`, `argon2`. `argon2` is a native module but ships prebuilds; fallback on Void is `crypto.scrypt` from `node:crypto`. Dev deps: TypeScript (type-checking only — `--experimental-strip-types` runs sources directly), Biome (lint/format), `@types/node`. `tsconfig.browser.json` emits `src/admin/` to `static/admin/`.
 
 ## 20. Open decisions
 

@@ -4,13 +4,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
-import { ingestStream } from '../../src/lib/originals.js';
-import { derivativeFilename, derivativePath, renderDerivative } from '../../src/lib/render.js';
+import { ingestStream } from '../../src/lib/originals.ts';
+import {
+  derivativeFilename,
+  derivativePath,
+  type Op,
+  renderDerivative
+} from '../../src/lib/render.ts';
 
-function freshSiteRoot(t) {
+function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-render-'));
   fs.mkdirSync(path.join(root, 'sidecars'), { recursive: true });
   fs.mkdirSync(path.join(root, 'originals'), { recursive: true });
@@ -19,7 +24,15 @@ function freshSiteRoot(t) {
   return root;
 }
 
-async function makeJpeg({ width = 200, height = 150, color = { r: 30, g: 60, b: 120 } } = {}) {
+async function makeJpeg({
+  width = 200,
+  height = 150,
+  color = { r: 30, g: 60, b: 120 }
+}: {
+  width?: number;
+  height?: number;
+  color?: { r: number; g: number; b: number };
+} = {}) {
   return sharp({
     create: { width, height, channels: 3, background: color }
   })
@@ -27,7 +40,7 @@ async function makeJpeg({ width = 200, height = 150, color = { r: 30, g: 60, b: 
     .toBuffer();
 }
 
-async function ingest(root, bytes) {
+async function ingest(root: string, bytes: Buffer) {
   return ingestStream({
     stream: Readable.from([bytes]),
     siteRoot: root,
@@ -36,9 +49,9 @@ async function ingest(root, bytes) {
 }
 
 const baseArgs = {
-  ops: [],
-  variant: { w: 100, fit: 'inside' },
-  output: { format: 'webp', quality: 85 }
+  ops: [] as Op[],
+  variant: { w: 100, fit: 'inside' as const },
+  output: { format: 'webp' as const, quality: 85 }
 };
 
 test('renderDerivative produces deterministic bytes for identical inputs', async (t) => {

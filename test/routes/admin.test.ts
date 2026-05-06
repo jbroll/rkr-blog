@@ -3,13 +3,25 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
-import { read as sidecarRead } from '../../src/lib/sidecar.js';
-import { buildApp } from '../../src/server.js';
-import { buildMultipart } from '../helpers/multipart.js';
 
-function freshSiteRoot(t) {
+import { read as sidecarRead } from '../../src/lib/sidecar.ts';
+import { buildApp } from '../../src/server.ts';
+import { buildMultipart } from '../helpers/multipart.ts';
+
+interface UploadResponse {
+  id: string;
+  bytes: number;
+  deduplicated: boolean;
+  ext: string;
+}
+
+interface ErrorResponse {
+  error: string;
+}
+
+function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
   fs.mkdirSync(path.join(root, 'sidecars'), { recursive: true });
   fs.mkdirSync(path.join(root, 'originals'), { recursive: true });
@@ -47,7 +59,7 @@ test('POST /admin/upload writes original + sidecar', async (t) => {
   });
 
   assert.equal(res.statusCode, 200, res.body);
-  const body = res.json();
+  const body = res.json<UploadResponse>();
   assert.equal(body.id, expectedId);
   assert.equal(body.bytes, bytes.length);
   assert.equal(body.deduplicated, false);
@@ -67,6 +79,7 @@ test('POST /admin/upload writes original + sidecar', async (t) => {
 
   // Sidecar present with kind=upload.
   const sidecar = await sidecarRead(root, expectedId);
+  assert.ok(sidecar);
   assert.equal(sidecar.source.kind, 'upload');
   assert.equal(sidecar.source.originalName, 'photo.jpg');
 });
@@ -86,7 +99,7 @@ test('POST /admin/upload dedupes a byte-identical re-upload', async (t) => {
     });
     const res = await app.inject({ method: 'POST', url: '/admin/upload', payload, headers });
     assert.equal(res.statusCode, 200, res.body);
-    const body = res.json();
+    const body = res.json<UploadResponse>();
     assert.equal(body.deduplicated, i === 1);
   }
 });
@@ -104,7 +117,7 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
 
   const res = await app.inject({ method: 'POST', url: '/admin/upload', payload, headers });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json().error, /not a recognized image/);
+  assert.match(res.json<ErrorResponse>().error, /not a recognized image/);
 });
 
 test('POST /admin/upload returns 400 when no file part is present', async (t) => {

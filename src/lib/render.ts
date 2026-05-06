@@ -7,11 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 
-import { cacheKey } from './hash.js';
-import { originalPath } from './originals.js';
-import { read as sidecarRead } from './sidecar.js';
+import { cacheKey } from './hash.ts';
+import { originalPath } from './originals.ts';
+import { read as sidecarRead } from './sidecar.ts';
 
-const FORMAT_TO_EXT = {
+const FORMAT_TO_EXT: Record<string, string | undefined> = {
   jpeg: 'jpg',
   png: 'png',
   webp: 'webp',
@@ -21,32 +21,78 @@ const FORMAT_TO_EXT = {
   heif: 'heif'
 };
 
-/**
- * Compute the cache filename for a derivative.
- * Format: <originalId>.<ophash>.<format>
- */
-export function derivativeFilename({ originalId, ops, variant, output }) {
-  const oph = cacheKey({ originalId, ops, variant, output });
-  return `${originalId}.${oph}.${output.format}`;
+export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';
+
+export interface CropOp {
+  type: 'crop';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
-export function derivativePath(siteRoot, args) {
+export interface ResampleOp {
+  type: 'resample';
+  w?: number;
+  h?: number;
+  fit?: 'inside' | 'outside' | 'cover' | 'contain' | 'fill';
+}
+
+export interface RotateOp {
+  type: 'rotate';
+  degrees?: number;
+}
+
+export type Op = CropOp | ResampleOp | RotateOp;
+
+export interface Variant {
+  w?: number;
+  h?: number;
+  fit?: 'inside' | 'outside' | 'cover' | 'contain' | 'fill';
+}
+
+export interface Output {
+  format: OutputFormat;
+  quality?: number;
+  effort?: number;
+}
+
+export interface DerivativeArgs {
+  originalId: string;
+  ops: Op[];
+  variant: Variant;
+  output: Output;
+}
+
+export interface RenderResult {
+  path: string;
+  bytes: number;
+  cached: boolean;
+}
+
+/** Compute the cache filename for a derivative. */
+export function derivativeFilename(args: DerivativeArgs): string {
+  const oph = cacheKey({
+    originalId: args.originalId,
+    ops: args.ops as never,
+    variant: args.variant as never,
+    output: args.output as never
+  });
+  return `${args.originalId}.${oph}.${args.output.format}`;
+}
+
+export function derivativePath(siteRoot: string, args: DerivativeArgs): string {
   return path.join(siteRoot, 'cache', 'img', derivativeFilename(args));
 }
 
 /**
  * Render one derivative. Returns the on-disk path, byte length, and whether
  * the result was already in cache.
- *
- * @param {Object} args
- * @param {string} args.originalId
- * @param {Array}  args.ops
- * @param {Object} args.variant
- * @param {Object} args.output
- * @param {string} args.siteRoot
- * @returns {Promise<{ path: string, bytes: number, cached: boolean }>}
  */
-export async function renderDerivative({ originalId, ops, variant, output, siteRoot }) {
+export async function renderDerivative(
+  args: DerivativeArgs & { siteRoot: string }
+): Promise<RenderResult> {
+  const { originalId, ops, variant, output, siteRoot } = args;
   const finalPath = derivativePath(siteRoot, { originalId, ops, variant, output });
 
   // Cache hit fast path: stat the file. Don't even import the original.
@@ -54,7 +100,7 @@ export async function renderDerivative({ originalId, ops, variant, output, siteR
     const stat = await fs.promises.stat(finalPath);
     return { path: finalPath, bytes: stat.size, cached: true };
   } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 
   // Cache miss: locate the original via the sidecar and run the pipeline.
@@ -62,9 +108,10 @@ export async function renderDerivative({ originalId, ops, variant, output, siteR
   if (!sidecar) {
     throw new Error(`renderDerivative: no sidecar for ${originalId}`);
   }
-  const ext = FORMAT_TO_EXT[sidecar.metadata.format];
+  const fmt = sidecar.metadata.format;
+  const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
   if (!ext) {
-    throw new Error(`renderDerivative: unsupported original format ${sidecar.metadata.format}`);
+    throw new Error(`renderDerivative: unsupported original format ${String(fmt)}`);
   }
   const origPath = originalPath(siteRoot, originalId, ext);
 
@@ -98,7 +145,7 @@ export async function renderDerivative({ originalId, ops, variant, output, siteR
 
 // ---- ops & output -------------------------------------------------------
 
-function applyOp(p, op) {
+function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
   switch (op.type) {
     case 'crop':
       return p.extract({ left: op.x, top: op.y, width: op.w, height: op.h });
@@ -111,13 +158,14 @@ function applyOp(p, op) {
       });
     case 'rotate':
       return p.rotate(op.degrees ?? 0);
-    default:
-      throw new Error(`renderDerivative: unknown op type ${op.type}`);
+    default: {
+      const exhaustive: never = op;
+      throw new Error(`renderDerivative: unknown op type ${(exhaustive as Op).type}`);
+    }
   }
 }
 
-function applyVariant(p, variant) {
-  if (!variant) return p;
+function applyVariant(p: sharp.Sharp, variant: Variant): sharp.Sharp {
   if (variant.w == null && variant.h == null) return p;
   return p.resize({
     width: variant.w,
@@ -127,7 +175,7 @@ function applyVariant(p, variant) {
   });
 }
 
-function applyOutput(p, output) {
+function applyOutput(p: sharp.Sharp, output: Output): sharp.Sharp {
   switch (output.format) {
     case 'webp':
       return p.webp({ quality: output.quality ?? 85, effort: output.effort ?? 4 });
@@ -137,7 +185,9 @@ function applyOutput(p, output) {
       return p.jpeg({ quality: output.quality ?? 85, mozjpeg: false });
     case 'png':
       return p.png({ compressionLevel: 6 });
-    default:
-      throw new Error(`renderDerivative: unknown output format ${output.format}`);
+    default: {
+      const exhaustive: never = output.format;
+      throw new Error(`renderDerivative: unknown output format ${String(exhaustive)}`);
+    }
   }
 }

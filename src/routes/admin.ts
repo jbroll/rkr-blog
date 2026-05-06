@@ -1,9 +1,18 @@
 // Admin routes. Authentication is added in Step 9 — for now these are open.
 
-import { paths } from '../lib/config.js';
-import { ingestStream } from '../lib/originals.js';
+import type { FastifyInstance } from 'fastify';
 
-export default async function adminRoutes(fastify, opts) {
+import { paths } from '../lib/config.ts';
+import { ingestStream } from '../lib/originals.ts';
+
+export interface AdminRoutesOpts {
+  siteRoot?: string;
+}
+
+export default async function adminRoutes(
+  fastify: FastifyInstance,
+  opts: AdminRoutesOpts = {}
+): Promise<void> {
   const siteRoot = opts.siteRoot ?? paths().root;
 
   fastify.post('/admin/upload', async (request, reply) => {
@@ -30,7 +39,7 @@ export default async function adminRoutes(fastify, opts) {
       };
     } catch (err) {
       request.log.error({ err }, 'upload failed');
-      return reply.code(400).send({ error: err.message });
+      return reply.code(400).send({ error: (err as Error).message });
     }
   });
 }

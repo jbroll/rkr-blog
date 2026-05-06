@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { open } from '../../src/lib/db.js';
+import { open } from '../../src/lib/db.ts';
 
 test('open(:memory:) returns a working db handle', () => {
   const db = open(':memory:');
@@ -52,23 +52,20 @@ test('transaction() commits on success, rolls back on throw', () => {
   try {
     db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)');
 
-    const insertTwo = db.transaction((a, b) => {
+    const insertTwo = db.transaction((a: string, b: string) => {
       db.prepare('INSERT INTO t (v) VALUES (?)').run(a);
       db.prepare('INSERT INTO t (v) VALUES (?)').run(b);
     });
     insertTwo('a', 'b');
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM t').get().n, 2);
+    const countStmt = db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM t');
+    assert.equal(countStmt.get()?.n, 2);
 
     const failing = db.transaction(() => {
       db.prepare('INSERT INTO t (v) VALUES (?)').run('c');
       throw new Error('boom');
     });
     assert.throws(() => failing(), /boom/);
-    assert.equal(
-      db.prepare('SELECT COUNT(*) AS n FROM t').get().n,
-      2,
-      'rollback should leave the row count unchanged'
-    );
+    assert.equal(countStmt.get()?.n, 2, 'rollback should leave the row count unchanged');
   } finally {
     db.close();
   }
@@ -81,8 +78,8 @@ test('iterate() yields all rows across pages', async () => {
     const insert = db.prepare('INSERT INTO n (id) VALUES (?)');
     for (let i = 1; i <= 2500; i++) insert.run(i);
 
-    const stmt = db.prepare('SELECT id FROM n ORDER BY id');
-    const seen = [];
+    const stmt = db.prepare<{ id: number }>('SELECT id FROM n ORDER BY id');
+    const seen: number[] = [];
     for await (const row of stmt.iterate()) seen.push(row.id);
     assert.equal(seen.length, 2500);
     assert.equal(seen[0], 1);

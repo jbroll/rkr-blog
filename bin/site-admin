@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --no-warnings=ExperimentalWarning
+#!/usr/bin/env -S node --no-warnings=ExperimentalWarning --experimental-strip-types
 // site-admin — top-level CLI dispatcher.
 //
 // Usage:
@@ -9,9 +9,9 @@
 // Future subcommands (see spec §16): reindex, render, gc, verify, import, password.
 
 const COMMANDS = {
-  init:    () => import('../src/cli/init.js'),
-  migrate: () => import('../src/cli/migrate.js'),
-  server:  () => import('../src/cli/server.js')
+  init:    () => import('../src/cli/init.ts'),
+  migrate: () => import('../src/cli/migrate.ts'),
+  server:  () => import('../src/cli/server.ts')
 };
 
 const KNOWN = Object.keys(COMMANDS);
