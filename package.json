@@ -13,7 +13,7 @@
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/server.js",
     "test": "node --test --no-warnings=ExperimentalWarning --experimental-strip-types",
-    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-lines=92 --test-coverage-branches=82 --test-coverage-functions=89 --no-warnings=ExperimentalWarning --experimental-strip-types",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-lines=97 --test-coverage-branches=88 --test-coverage-functions=97 --no-warnings=ExperimentalWarning --experimental-strip-types",
     "typecheck": "tsc --noEmit",
     "lint": "biome check",
     "lint:fix": "biome check --write",
