@@ -1,0 +1,42 @@
+#!/usr/bin/env -S node --no-warnings=ExperimentalWarning
+// site-admin — top-level CLI dispatcher.
+//
+// Usage:
+//   site-admin init
+//   site-admin migrate
+//   site-admin server [--port 3000]
+//
+// Future subcommands (see spec §16): reindex, render, gc, verify, import, password.
+
+const COMMANDS = {
+  init:    () => import('../src/cli/init.js'),
+  migrate: () => import('../src/cli/migrate.js'),
+  server:  () => import('../src/cli/server.js')
+};
+
+const KNOWN = Object.keys(COMMANDS);
+
+function usage() {
+  console.error(`usage: site-admin <command> [args...]
+commands: ${KNOWN.join(', ')}`);
+}
+
+async function main() {
+  const [cmd, ...rest] = process.argv.slice(2);
+  if (!cmd) { usage(); process.exit(2); }
+
+  const loader = COMMANDS[cmd];
+  if (!loader) {
+    console.error(`unknown command: ${cmd}`);
+    usage();
+    process.exit(2);
+  }
+
+  const mod = await loader();
+  await mod.default(rest);
+}
+
+main().catch((err) => {
+  console.error(err.stack || err.message || err);
+  process.exit(1);
+});

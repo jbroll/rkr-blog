@@ -1,0 +1,34 @@
+{
+  "name": "rkroll-cms",
+  "version": "0.1.0",
+  "description": "Single-author CMS with photo-first content model.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "site-admin": "./bin/site-admin"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning bin/server.js",
+    "test": "node --test --no-warnings=ExperimentalWarning",
+    "test:coverage": "node --test --experimental-test-coverage --no-warnings=ExperimentalWarning",
+    "migrate": "node --no-warnings=ExperimentalWarning bin/site-admin migrate",
+    "render": "node --no-warnings=ExperimentalWarning bin/site-admin render",
+    "gc": "node --no-warnings=ExperimentalWarning bin/site-admin gc"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@fastify/multipart": "^8.0.0",
+    "@fastify/cookie": "^9.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "sharp": "^0.33.0",
+    "remark": "^15.0.0",
+    "remark-directive": "^3.0.0",
+    "remark-frontmatter": "^5.0.0",
+    "yaml": "^2.5.0",
+    "argon2": "^0.40.0"
+  },
+  "devDependencies": {}
+}

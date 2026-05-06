@@ -1,0 +1,26 @@
+[Unit]
+Description=rkroll-cms Fastify server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/rkroll-cms
+Environment=NODE_ENV=production
+Environment=SITE_ROOT=/var/www/site
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/node --no-warnings=ExperimentalWarning bin/server.js
+Restart=on-failure
+RestartSec=2
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/site
+
+[Install]
+WantedBy=multi-user.target

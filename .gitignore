@@ -1,0 +1,15 @@
+node_modules/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Local site root for dev (per §8: data lives outside repo, but in case anyone points SITE_ROOT inside)
+/site/
+/var/
+
+# Editor / OS noise
+*.swp
+.idea/
+.vscode/
