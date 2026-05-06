@@ -1,10 +1,24 @@
 // Bidirectional ProseMirror JSON ↔ markdown converter for the admin editor.
 // Scope: only the node + mark types our TipTap editor declares (paragraph,
-// heading, hard_break, text, bold, italic, link, our custom `image`).
-// Everything else is best-effort: unknown nodes are preserved as
-// fenced HTML, unknown marks fall through to plain text.
+// heading, hard_break, text, bold, italic, link, code, our custom `image`,
+// blockquote, code block, lists, thematic break). Unknown nodes/marks fall
+// through silently (the editor schema prevents them from being authored).
 
-import type { Root } from 'mdast';
+import type {
+  Blockquote,
+  Code,
+  Emphasis,
+  Heading,
+  InlineCode,
+  Link,
+  List,
+  Paragraph,
+  PhrasingContent,
+  Root,
+  RootContent,
+  Strong,
+  Text
+} from 'mdast';
 import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
@@ -32,7 +46,7 @@ export interface ProseDoc extends ProseNode {
 // ---- ProseMirror JSON → markdown --------------------------------------
 
 export function proseToMarkdown(doc: ProseDoc): string {
-  const blocks = (doc.content ?? []).map(emitBlock).filter((s) => s.length > 0);
+  const blocks = doc.content.map(emitBlock).filter((s) => s.length > 0);
   return `${blocks.join('\n\n')}\n`;
 }
 
@@ -73,6 +87,7 @@ function emitBlock(node: ProseNode): string {
       const altPart = typeof alt === 'string' && alt.length > 0 ? ` alt=${quote(alt)}` : '';
       return `::image{#${id}${altPart}}`;
     }
+    /* c8 ignore next 2 -- defensive: editor schema prevents unknown block node types */
     default:
       return '';
   }
@@ -96,6 +111,7 @@ function emitInline(content: ProseNode[]): string {
 
 function emitInlineOne(node: ProseNode): string {
   if (node.type === 'hardBreak' || node.type === 'hard_break') return '  \n';
+  /* c8 ignore next -- defensive: editor schema only emits text + hardBreak inline */
   if (node.type !== 'text') return '';
   const text = node.text ?? '';
   const marks = node.marks ?? [];
@@ -146,14 +162,8 @@ function clampHeadingLevel(level: unknown): number {
 
 const DIRECTIVE_TYPES = new Set(['leafDirective', 'textDirective', 'containerDirective']);
 
-interface AnyMdNode {
+interface DirectiveLike {
   type: string;
-  children?: AnyMdNode[];
-  value?: string;
-  depth?: number;
-  url?: string;
-  ordered?: boolean;
-  lang?: string | null;
   name?: string;
   attributes?: Record<string, string | null | undefined>;
 }
@@ -165,58 +175,65 @@ export function markdownToProse(body: string): ProseDoc {
   const content: ProseNode[] = [];
   for (const child of tree.children) {
     if (child.type === 'yaml') continue; // frontmatter is handled separately
-    const block = mdBlockToProse(child as unknown as AnyMdNode);
+    const block = mdBlockToProse(child);
     if (block) content.push(block);
   }
   return { type: 'doc', content };
 }
 
-function mdBlockToProse(node: AnyMdNode): ProseNode | null {
-  if (DIRECTIVE_TYPES.has(node.type) && node.name === 'image') {
-    const attrs = node.attributes ?? {};
-    return { type: 'image', attrs: { id: attrs.id ?? '', alt: attrs.alt ?? '' } };
+function mdBlockToProse(node: RootContent): ProseNode | null {
+  if (DIRECTIVE_TYPES.has(node.type)) {
+    const d = node as unknown as DirectiveLike;
+    if (d.name === 'image') {
+      const attrs = d.attributes ?? {};
+      return { type: 'image', attrs: { id: attrs.id ?? '', alt: attrs.alt ?? '' } };
+    }
+    return null;
   }
   switch (node.type) {
     case 'paragraph':
-      return { type: 'paragraph', content: inlinesToProse(node.children ?? []) };
-    case 'heading':
-      return {
-        type: 'heading',
-        attrs: { level: node.depth ?? 1 },
-        content: inlinesToProse(node.children ?? [])
-      };
+      return { type: 'paragraph', content: inlinesToProse((node as Paragraph).children) };
+    case 'heading': {
+      const h = node as Heading;
+      return { type: 'heading', attrs: { level: h.depth }, content: inlinesToProse(h.children) };
+    }
     case 'thematicBreak':
       return { type: 'horizontalRule' };
-    case 'code':
+    case 'code': {
+      const c = node as Code;
       return {
         type: 'codeBlock',
-        attrs: { language: node.lang ?? null },
-        content: node.value ? [{ type: 'text', text: node.value }] : []
+        attrs: { language: c.lang ?? null },
+        content: c.value ? [{ type: 'text', text: c.value }] : []
       };
-    case 'blockquote':
+    }
+    case 'blockquote': {
+      const bq = node as Blockquote;
       return {
         type: 'blockquote',
-        content: (node.children ?? [])
-          .map((c) => mdBlockToProse(c))
+        content: bq.children
+          .map((c) => mdBlockToProse(c as RootContent))
           .filter((n): n is ProseNode => n !== null)
       };
-    case 'list':
+    }
+    case 'list': {
+      const list = node as List;
       return {
-        type: node.ordered ? 'orderedList' : 'bulletList',
-        content: (node.children ?? []).map((item) => ({
+        type: list.ordered ? 'orderedList' : 'bulletList',
+        content: list.children.map((item) => ({
           type: 'listItem',
-          content: (item.children ?? [])
-            .map((c) => mdBlockToProse(c))
+          content: item.children
+            .map((c) => mdBlockToProse(c as RootContent))
             .filter((n): n is ProseNode => n !== null)
         }))
       };
-    /* c8 ignore next 2 -- defensive: only triggered by mdast node types our editor schema doesn't emit */
+    }
     default:
       return null;
   }
 }
 
-function inlinesToProse(nodes: AnyMdNode[]): ProseNode[] {
+function inlinesToProse(nodes: PhrasingContent[]): ProseNode[] {
   const out: ProseNode[] = [];
   for (const n of nodes) {
     out.push(...inlineToProse(n, []));
@@ -224,23 +241,29 @@ function inlinesToProse(nodes: AnyMdNode[]): ProseNode[] {
   return out;
 }
 
-function inlineToProse(node: AnyMdNode, marks: ProseMark[]): ProseNode[] {
+function inlineToProse(node: PhrasingContent, marks: ProseMark[]): ProseNode[] {
   switch (node.type) {
     case 'text':
-      return [{ type: 'text', text: node.value ?? '', ...(marks.length ? { marks } : {}) }];
+      return [{ type: 'text', text: (node as Text).value, ...(marks.length ? { marks } : {}) }];
     case 'strong':
-      return (node.children ?? []).flatMap((c) => inlineToProse(c, [...marks, { type: 'bold' }]));
+      return (node as Strong).children.flatMap((c) =>
+        inlineToProse(c, [...marks, { type: 'bold' }])
+      );
     case 'emphasis':
-      return (node.children ?? []).flatMap((c) => inlineToProse(c, [...marks, { type: 'italic' }]));
+      return (node as Emphasis).children.flatMap((c) =>
+        inlineToProse(c, [...marks, { type: 'italic' }])
+      );
     case 'inlineCode':
-      return [{ type: 'text', text: node.value ?? '', marks: [...marks, { type: 'code' }] }];
+      return [
+        { type: 'text', text: (node as InlineCode).value, marks: [...marks, { type: 'code' }] }
+      ];
     case 'link': {
-      const linkMark: ProseMark = { type: 'link', attrs: { href: node.url ?? '' } };
-      return (node.children ?? []).flatMap((c) => inlineToProse(c, [...marks, linkMark]));
+      const link = node as Link;
+      const linkMark: ProseMark = { type: 'link', attrs: { href: link.url } };
+      return link.children.flatMap((c) => inlineToProse(c, [...marks, linkMark]));
     }
     case 'break':
       return [{ type: 'hardBreak' }];
-    /* c8 ignore next 2 -- defensive: only triggered by inline mdast types our editor schema doesn't emit */
     default:
       return [];
   }
