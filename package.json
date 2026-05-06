@@ -28,10 +28,11 @@
     "gc": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/site-admin gc"
   },
   "dependencies": {
-    "@fastify/cookie": "^9.0.0",
+    "@fastify/cookie": "^10.0.1",
     "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.0.0",
     "@fastify/static": "^9.1.3",
+    "arctic": "^3.7.0",
     "argon2": "^0.40.0",
     "fastify": "^5.0.0",
     "remark": "^15.0.0",

@@ -29,8 +29,19 @@ test('startServer listens on an ephemeral port and serves /health', async (_t) =
   migrate(seedDb);
   seedDb.close();
 
-  const prevSiteRoot = process.env.SITE_ROOT;
+  const prev = {
+    SITE_ROOT: process.env.SITE_ROOT,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL
+  };
   process.env.SITE_ROOT = root;
+  // startServer wires auth in production; supply env so makeGoogleExchange
+  // can build the Google client. We don't actually call any /admin/auth
+  // endpoint in this test.
+  process.env.GOOGLE_CLIENT_ID = 'test-client-id';
+  process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
+  process.env.PUBLIC_BASE_URL = 'http://127.0.0.1:8080';
 
   // Silence the "listening on http://..." console.log produced by startServer
   // so it doesn't pollute the TAP stream during the test.
@@ -49,8 +60,10 @@ test('startServer listens on an ephemeral port and serves /health', async (_t) =
   } finally {
     console.log = originalLog;
     if (app) await app.close();
-    if (prevSiteRoot === undefined) delete process.env.SITE_ROOT;
-    else process.env.SITE_ROOT = prevSiteRoot;
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

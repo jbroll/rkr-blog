@@ -7,20 +7,34 @@ import { test } from 'node:test';
 import { open } from '../../src/lib/db.ts';
 import { listMigrations, migrate } from '../../src/lib/migrate.ts';
 
-test('migrate() applies the initial migration once', () => {
+test('migrate() applies all migrations once; second run is a no-op', () => {
   const db = open(':memory:');
   try {
     const first = migrate(db);
-    assert.deepEqual(first, [1], 'first run applies version 1');
+    // 001 (initial) + 002 (auth refactor); update assertion as new
+    // migrations land.
+    assert.deepEqual(first, [1, 2], 'first run applies all known versions');
 
-    // Tables from 001_initial.sql must exist.
+    // Final-state tables (post-002): users + sessions + oauth_accounts +
+    // allowed_emails + oauth_tokens + posts + jobs + schema_migrations.
     const tables = db
       .prepare<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all()
       .map((r) => r.name);
-    for (const t of ['posts', 'jobs', 'sessions', 'oauth_tokens', 'auth', 'schema_migrations']) {
+    for (const t of [
+      'posts',
+      'jobs',
+      'users',
+      'oauth_accounts',
+      'allowed_emails',
+      'sessions',
+      'oauth_tokens',
+      'schema_migrations'
+    ]) {
       assert.ok(tables.includes(t), `expected table ${t} in ${tables.join(',')}`);
     }
+    // 002 dropped the auth table.
+    assert.equal(tables.includes('auth'), false, 'auth table is dropped by 002');
 
     const second = migrate(db);
     assert.deepEqual(second, [], 'second run is a no-op');
@@ -38,7 +52,7 @@ test('migrate() runs against a real sqlite file', (t) => {
   try {
     migrate(db);
     const r = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    assert.deepEqual(r, [{ version: 1 }]);
+    assert.deepEqual(r, [{ version: 1 }, { version: 2 }]);
   } finally {
     db.close();
   }
