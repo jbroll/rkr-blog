@@ -4,13 +4,19 @@
 // Usage:
 //   site-admin init
 //   site-admin migrate
+//   site-admin render [--post <slug>] [--since <iso>] [--force] [--concurrency N]
+//   site-admin gc
+//   site-admin verify
 //   site-admin server [--port 3000]
 //
-// Future subcommands (see spec §16): reindex, render, gc, verify, import, password.
+// Future subcommands (see spec §16): reindex, import, password.
 
 const COMMANDS = {
   init:    () => import('../src/cli/init.ts'),
   migrate: () => import('../src/cli/migrate.ts'),
+  render:  () => import('../src/cli/render.ts'),
+  gc:      () => import('../src/cli/gc.ts'),
+  verify:  () => import('../src/cli/verify.ts'),
   server:  () => import('../src/cli/server.ts')
 };
 

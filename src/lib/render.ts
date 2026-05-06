@@ -88,19 +88,24 @@ export function derivativePath(siteRoot: string, args: DerivativeArgs): string {
 /**
  * Render one derivative. Returns the on-disk path, byte length, and whether
  * the result was already in cache.
+ *
+ * `force: true` bypasses the cache-hit fast path; the existing cache file
+ * will be atomically replaced.
  */
 export async function renderDerivative(
-  args: DerivativeArgs & { siteRoot: string }
+  args: DerivativeArgs & { siteRoot: string; force?: boolean }
 ): Promise<RenderResult> {
-  const { originalId, ops, variant, output, siteRoot } = args;
+  const { originalId, ops, variant, output, siteRoot, force = false } = args;
   const finalPath = derivativePath(siteRoot, { originalId, ops, variant, output });
 
   // Cache hit fast path: stat the file. Don't even import the original.
-  try {
-    const stat = await fs.promises.stat(finalPath);
-    return { path: finalPath, bytes: stat.size, cached: true };
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  if (!force) {
+    try {
+      const stat = await fs.promises.stat(finalPath);
+      return { path: finalPath, bytes: stat.size, cached: true };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
   }
 
   // Cache miss: locate the original via the sidecar and run the pipeline.
