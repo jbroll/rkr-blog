@@ -17,6 +17,7 @@ const COMMANDS = {
   render:  () => import('../src/cli/render.ts'),
   gc:      () => import('../src/cli/gc.ts'),
   verify:  () => import('../src/cli/verify.ts'),
+  reindex: () => import('../src/cli/reindex.ts'),
   server:  () => import('../src/cli/server.ts')
 };
 

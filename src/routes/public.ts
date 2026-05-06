@@ -1,11 +1,16 @@
-// Public routes that need to be reachable on cache miss.
+// Public routes:
+//   GET /                — paginated index of published posts
+//   GET /:slug           — rendered post page
+//   GET /img/:filename   — derivative image, on Apache cache-miss fall-through
+//
 // Apache rewrites /img/* directly to the cache file when present (spec §14);
-// only on miss does it fall through to Fastify, who renders the derivative
-// and writes it under cache/img/.
+// only on miss does it fall through here.
 
 import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-
+import { readIndexedPostBySlug, readIndexedPosts } from '../cli/reindex.ts';
+import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { enqueue } from '../lib/jobs.ts';
@@ -16,8 +21,13 @@ import {
   renderDerivative
 } from '../lib/render.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
+import { WidgetRegistry } from '../lib/widgets.ts';
+import { renderIndexPage } from '../templates/index.ts';
+import { renderPostPage } from '../templates/post.ts';
+import imageWidget from '../widgets/image.ts';
 
 const FILENAME_RE = /^([0-9a-f]{64})\.([0-9a-f]{12})\.(webp|avif|jpeg|jpg|png)$/;
+const PAGE_SIZE = 20;
 
 const MIME: Record<OutputFormat, string> = {
   webp: 'image/webp',
@@ -38,6 +48,63 @@ export default async function publicRoutes(
   opts: PublicRoutesOpts
 ): Promise<void> {
   const { siteRoot, db, renderBudgetMs = 30_000 } = opts;
+
+  const widgets = new WidgetRegistry();
+  widgets.register(imageWidget);
+
+  // ---- index: GET / -----------------------------------------------------
+
+  fastify.get<{ Querystring: { page?: string } }>('/', async (req, reply) => {
+    const requested = Number.parseInt(req.query.page ?? '1', 10);
+    const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
+    const offset = (page - 1) * PAGE_SIZE;
+
+    const total = (
+      db
+        .prepare<{ n: number }>("SELECT COUNT(*) AS n FROM posts WHERE status = 'published'")
+        .get() ?? { n: 0 }
+    ).n;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+    const rows = readIndexedPosts(db, { limit: PAGE_SIZE, offset, status: 'published' });
+    const html = renderIndexPage({
+      page,
+      totalPages,
+      posts: rows.map((r) => ({
+        slug: r.slug,
+        title: r.title,
+        ...(r.published_at ? { date: r.published_at } : {})
+      }))
+    });
+
+    return reply.type('text/html; charset=utf-8').send(html);
+  });
+
+  // ---- post: GET /:slug -------------------------------------------------
+
+  fastify.get<{ Params: { slug: string } }>('/:slug', async (req, reply) => {
+    const { slug } = req.params;
+    const row = readIndexedPostBySlug(db, slug);
+    if (!row || row.status !== 'published') {
+      return reply.code(404).type('text/html').send('<h1>not found</h1>');
+    }
+
+    const fullPath = path.join(siteRoot, row.path);
+    const raw = await fs.promises.readFile(fullPath, 'utf8');
+    const parsed = parsePost(raw);
+    const bodyHtml = await renderPostHtml(parsed.ast, { siteRoot, widgets });
+
+    const html = renderPostPage({
+      title: parsed.frontmatter.title,
+      slug: parsed.frontmatter.slug,
+      ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
+      bodyHtml
+    });
+
+    return reply.type('text/html; charset=utf-8').send(html);
+  });
+
+  // ---- derivative image: GET /img/:filename -----------------------------
 
   fastify.get<{ Params: { filename: string } }>('/img/:filename', async (req, reply) => {
     const { filename } = req.params;
@@ -81,13 +148,7 @@ export default async function publicRoutes(
     if (timer) clearTimeout(timer);
 
     if (result === 'timeout') {
-      // Make sure the worker eventually finishes the job; idempotent.
-      enqueue(db, {
-        kind: 'render',
-        payload: args,
-        cacheKey: ophash
-      });
-      // Don't leave the in-flight render unhandled.
+      enqueue(db, { kind: 'render', payload: args, cacheKey: ophash });
       renderPromise.catch((err: unknown) => {
         req.log.warn({ err, filename }, 'background render error');
       });
