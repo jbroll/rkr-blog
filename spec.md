@@ -633,7 +633,7 @@ A handful of small JPEGs and PNGs (under 100KB each), with varied aspect ratios 
   },
   "dependencies": {
     "fastify": "^5.0.0",
-    "@fastify/multipart": "^8.0.0",
+    "@fastify/multipart": "^9.0.0",
     "@fastify/cookie": "^9.0.0",
     "@fastify/rate-limit": "^10.0.0",
     "sharp": "^0.33.0",
@@ -677,8 +677,8 @@ Each step ends with a binary done-signal. Don't move to step N+1 until step N's 
 
 - [ ] `lib/hash.js` exports `sha256File`, `sha256Stream`, `canonicalJson`, `cacheKey`. All four covered by tests, including round-trip determinism.
 - [ ] `lib/sidecar.js` exports `read(siteRoot, id)`, `write(siteRoot, id, data)`, `validate(data)`. Round-trip tested.
-- [ ] `POST /admin/upload` (multipart, no auth gate yet) writes to `originals/<2-char-prefix>/<id>.<ext>`, computes hash during stream, writes sidecar with `source.kind = 'upload'`. Tested with a fixture image.
-- [ ] Re-upload of byte-identical file is detected and dedup'd (same hash, no second write).
+- [ ] `POST /admin/upload` (multipart, no auth gate yet) writes to `originals/<id[0:2]>/<id[2:4]>/<id>.<ext>` (two-level shard, matches §9), computes hash during stream, writes sidecar with `source.kind = 'upload'`. Authoritative format/extension comes from Sharp-detected bytes, not the client's filename. Tested with a fixture image.
+- [ ] Re-upload of byte-identical file is detected and dedup'd (same hash, no second write, existing sidecar preserved).
 
 ### Step 3 — Render pipeline
 

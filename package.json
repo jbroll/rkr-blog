@@ -19,16 +19,15 @@
     "gc": "node --no-warnings=ExperimentalWarning bin/site-admin gc"
   },
   "dependencies": {
-    "fastify": "^5.0.0",
-    "@fastify/multipart": "^8.0.0",
     "@fastify/cookie": "^9.0.0",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.0.0",
-    "sharp": "^0.33.0",
+    "argon2": "^0.40.0",
+    "fastify": "^5.0.0",
     "remark": "^15.0.0",
     "remark-directive": "^3.0.0",
     "remark-frontmatter": "^5.0.0",
-    "yaml": "^2.5.0",
-    "argon2": "^0.40.0"
-  },
-  "devDependencies": {}
+    "sharp": "^0.33.0",
+    "yaml": "^2.5.0"
+  }
 }
