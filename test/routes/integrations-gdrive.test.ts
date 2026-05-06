@@ -249,6 +249,75 @@ test('callback: token exchange throws → 400', async (t) => {
   assert.match(res.json<ErrorBody>().error, /token exchange failed/);
 });
 
+// ---- /picker-config --------------------------------------------------
+
+test('picker-config returns 404 when env vars are unset', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  // Make sure env vars are clear for this test (they shouldn't be set
+  // in CI; defensive cleanup).
+  const prev = {
+    GOOGLE_PICKER_API_KEY: process.env.GOOGLE_PICKER_API_KEY,
+    GOOGLE_PICKER_APP_ID: process.env.GOOGLE_PICKER_APP_ID,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID
+  };
+  delete process.env.GOOGLE_PICKER_API_KEY;
+  delete process.env.GOOGLE_PICKER_APP_ID;
+  delete process.env.GOOGLE_CLIENT_ID;
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/integrations/gdrive/picker-config',
+      headers: { cookie: sessionCookie }
+    });
+    assert.equal(res.statusCode, 404);
+    assert.match(res.json<ErrorBody>().error, /picker not configured/);
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('picker-config returns clientId/developerKey/appId when env is set', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const prev = {
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_PICKER_API_KEY: process.env.GOOGLE_PICKER_API_KEY,
+    GOOGLE_PICKER_APP_ID: process.env.GOOGLE_PICKER_APP_ID
+  };
+  process.env.GOOGLE_CLIENT_ID = 'cid';
+  process.env.GOOGLE_PICKER_API_KEY = 'devkey';
+  process.env.GOOGLE_PICKER_APP_ID = '123';
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/integrations/gdrive/picker-config',
+      headers: { cookie: sessionCookie }
+    });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json(), {
+      clientId: 'cid',
+      developerKey: 'devkey',
+      appId: '123'
+    });
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('picker-config 401s without auth', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/picker-config'
+  });
+  assert.equal(res.statusCode, 401);
+});
+
 // ---- /status, /access-token, /disconnect -----------------------------
 
 async function connectFixture(

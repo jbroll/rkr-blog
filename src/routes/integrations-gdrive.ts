@@ -145,6 +145,18 @@ export default async function integrationsGdriveRoutes(
     }
   );
 
+  fastify.get('/admin/integrations/gdrive/picker-config', { ...guard }, async (_req, reply) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const developerKey = process.env.GOOGLE_PICKER_API_KEY;
+    const appId = process.env.GOOGLE_PICKER_APP_ID;
+    if (!clientId || !developerKey || !appId) {
+      return reply
+        .code(404)
+        .send({ error: 'picker not configured (set GOOGLE_PICKER_API_KEY, GOOGLE_PICKER_APP_ID)' });
+    }
+    return { clientId, developerKey, appId };
+  });
+
   fastify.get('/admin/integrations/gdrive/status', { ...guard }, async (req) => {
     /* c8 ignore next -- requireUser preHandler */
     const user = req.user;
