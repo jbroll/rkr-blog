@@ -1,5 +1,8 @@
-// Thin wrapper over node:sqlite. The shape matches better-sqlite3 closely
-// enough that swapping the underlying driver later is a one-file change.
+// Thin wrapper over node:sqlite. Earns its keep by:
+// - normalizing rows to plain objects (node:sqlite returns null-prototype),
+// - providing a transaction() helper (node:sqlite has none),
+// - coercing bigint lastInsertRowid to Number,
+// - giving migrations a single place to handle PRAGMAs.
 //
 // Surface (per spec §15):
 //   db.prepare(sql)         -> Statement
@@ -11,11 +14,9 @@
 //   stmt.run(...params)     -> { changes, lastInsertRowid }
 //   stmt.get(...params)     -> row | undefined
 //   stmt.all(...params)     -> row[]
-//   stmt.iterate(...params) -> AsyncIterator<row>   (paged SELECT)
+//   stmt.iterate(...params) -> AsyncIterator<row>
 
 import { DatabaseSync } from 'node:sqlite';
-
-const ITERATE_PAGE_SIZE = 1000;
 
 // node:sqlite returns rows with a null prototype. Normalize to plain objects
 // so the surface matches better-sqlite3 and assert.deepEqual works as expected.
@@ -23,7 +24,7 @@ function plain(row) {
   return row == null ? row : { ...row };
 }
 
-function wrapStatement(rawStmt, sql, dbHandle) {
+function wrapStatement(rawStmt) {
   return {
     run(...params) {
       const r = rawStmt.run(...params);
@@ -42,18 +43,7 @@ function wrapStatement(rawStmt, sql, dbHandle) {
       return rawStmt.all(...params).map(plain);
     },
     async *iterate(...params) {
-      // Paged SELECT so the surface stays stable across drivers.
-      // Wrap the original SQL in a subquery with LIMIT/OFFSET parameters.
-      const pagedSql = `SELECT * FROM (${sql}) LIMIT ? OFFSET ?`;
-      const pagedStmt = dbHandle.prepare(pagedSql);
-      let offset = 0;
-      while (true) {
-        const rows = pagedStmt.all(...params, ITERATE_PAGE_SIZE, offset);
-        if (rows.length === 0) return;
-        for (const row of rows) yield plain(row);
-        if (rows.length < ITERATE_PAGE_SIZE) return;
-        offset += ITERATE_PAGE_SIZE;
-      }
+      for (const row of rawStmt.all(...params)) yield plain(row);
     }
   };
 }
@@ -74,8 +64,7 @@ export function open(path) {
 
   const db = {
     prepare(sql) {
-      const rawStmt = raw.prepare(sql);
-      return wrapStatement(rawStmt, sql, raw);
+      return wrapStatement(raw.prepare(sql));
     },
 
     exec(sql) {

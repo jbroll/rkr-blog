@@ -80,7 +80,7 @@ Apache serves cache hits directly from disk. Node is invoked only on cache miss,
 |---|---|---|
 | Runtime | Node 22 LTS or later | `node:sqlite` available; native fetch; native test runner. |
 | HTTP | Fastify 5 | Async-native, low per-request overhead, schema validation. |
-| DB | `node:sqlite` (built-in, WAL) behind a thin wrapper | Zero native deps; single-writer model fits. Wrapper allows swap to better-sqlite3 later if `iterate()` / UDFs / nested transactions become necessary. |
+| DB | `node:sqlite` (built-in, WAL) behind a thin wrapper | Zero native deps; single-writer model fits. Wrapper normalizes rows (node:sqlite returns null-prototype objects), supplies `transaction()`, and coerces bigint rowids — not for swap-out parity. |
 | Image pipeline | Sharp (libvips bindings) | Releases libuv thread pool; AVIF/WebP/EXIF/ICC handling. |
 | Markdown | `remark` + `remark-directive` + `remark-frontmatter` | Stable AST; directive syntax for widgets. |
 | Editor | TipTap (ProseMirror) | Custom node types map cleanly to widget blocks; serializes to markdown + directive syntax. Loaded via vendored ESM. |
@@ -439,10 +439,10 @@ export function open(path)
 //   run(...params)       → { changes, lastInsertRowid }
 //   get(...params)       → row | undefined
 //   all(...params)       → row[]
-//   iterate(...params)   → AsyncIterator<row>   // implemented via paged SELECT
+//   iterate(...params)   → AsyncIterator<row>
 ```
 
-The `iterate` method is implemented in the wrapper (paginated SELECT under the hood) rather than relying on the underlying driver, so the surface stays stable across a possible swap to better-sqlite3.
+`iterate` yields the result set as an async iterator, but does not stream — it calls `all()` and yields each row. If a real streaming need appears (very large result sets that don't fit in memory), revisit by either swapping the driver or implementing pagination in the caller.
 
 `node:sqlite` requires `--experimental-sqlite` on Node 22 and is unflagged on Node 24+. Server and CLI run with `--no-warnings=ExperimentalWarning` to suppress the stderr notice.
 
