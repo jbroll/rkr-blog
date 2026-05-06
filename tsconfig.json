@@ -26,5 +26,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "bin/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["node_modules", "src/admin/**", "static/**"]
+  "exclude": ["node_modules", "src/admin/**", "src/site/**", "static/**"]
 }

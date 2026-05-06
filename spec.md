@@ -390,21 +390,42 @@ export const editorNode;
 `src/lib/widgets.ts` discovers modules in `src/widgets/`, indexes by
 `name`, and exposes `dispatch(directiveName, node, ctx)` to the renderer.
 
-### Future image-display widgets (planned)
+### Image-display widgets
 
-| widget | layout | notes |
+| widget | layout | status |
 |---|---|---|
-| `gallery` | masonry (variable-height grid via CSS columns) | best for mixed-aspect photo sets |
-| `matrix` | uniform grid, fixed thumbs | contact-sheet style |
-| `carousel` | one image at a time, swipe/click to advance | narrative sequences |
-| `justified` | Flickr-style justified rows (uniform row height, variable widths) | clean default for photo blogs |
-| `diptych` / `triptych` | 2 or 3 images side by side | editorial pairs/triples |
-| `lightbox` | overlay enlargement on click; pairs with any of the above | universal "tap to enlarge" |
+| `lightbox` | overlay enlargement on click; pairs with any of the others | implemented (`src/site/lightbox.ts`) |
+| `gallery` | masonry (variable-height grid via CSS columns) | planned |
+| `matrix` | uniform grid, fixed thumbs | planned |
+| `carousel` | one image at a time, swipe/click to advance | planned |
+| `justified` | Flickr-style justified rows (uniform row height, variable widths) | planned |
+| `diptych` / `triptych` | 2 or 3 images side by side | planned |
 
-All gallery widgets share the same caption convention as the single-image
-widget (per-item `caption` attribute → `<figcaption>` per item). Position
-values apply only to single-image widgets — galleries occupy the wide
-content column by default.
+All gallery widgets will share the same `caption` convention as the
+single-image widget (per-item `caption` attribute → `<figcaption>` per
+item). Position values apply only to single-image widgets — galleries
+occupy the wide content column by default.
+
+**Lightbox** is not a directive widget — it's a small browser-side
+script (`src/site/lightbox.ts` → `static/site/lightbox.js`) loaded from
+every public post page. It binds a click handler to every
+`.rkr-figure:not(.rkr-pos-inline) img` on the page and overlays it
+fullscreen on click. ESC or click-outside dismisses. The figure's
+`<figcaption>` (if present) is reused as the lightbox caption. No-ops
+on pages without figures, so the cost of including it on the index
+template would be one HTTP request — currently omitted from the index
+since the index has no figures.
+
+### Browser TypeScript build
+
+`tsconfig.browser.json` covers both the admin SPA (`src/admin/**`) and
+public-page scripts (`src/site/**`). `npm run build:admin` invokes
+`tsc -p tsconfig.browser.json`, which emits to:
+
+- `static/admin/main.js` — the admin editor SPA bundle
+- `static/site/lightbox.js` — the public-page lightbox
+
+Both are served at `/static/*` by the same `@fastify/static` handler.
 
 ### Public theme
 

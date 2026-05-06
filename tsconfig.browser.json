@@ -12,8 +12,8 @@
     "noUnusedParameters": false,
     "noUncheckedIndexedAccess": true,
 
-    "outDir": "static/admin",
-    "rootDir": "src/admin",
+    "outDir": "static",
+    "rootDir": "src",
     "declaration": false,
     "sourceMap": true,
     "removeComments": false,
@@ -27,6 +27,6 @@
 
     "types": []
   },
-  "include": ["src/admin/**/*.ts"],
-  "exclude": ["node_modules", "src/admin/**/*.test.ts"]
+  "include": ["src/admin/**/*.ts", "src/site/**/*.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }
