@@ -1,4 +1,7 @@
 node_modules/
+
+# Browser bundle build artifact (built from src/admin/ via tsc -p tsconfig.browser.json)
+static/admin/
 *.log
 .DS_Store
 .env

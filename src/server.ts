@@ -22,6 +22,8 @@ export interface BuildAppOpts {
   renderBudgetMs?: number;
   /** Disable starting the in-process worker (e.g. in tests). Default true if db provided. */
   startWorker?: boolean;
+  /** Override the admin bundle dir (default: <repo>/static/admin). */
+  adminBundleDir?: string;
 }
 
 export interface StartServerOpts {
@@ -46,7 +48,10 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
 
   app.get('/health', async () => ({ ok: true }));
 
-  await app.register(adminRoutes, { siteRoot });
+  await app.register(adminRoutes, {
+    siteRoot,
+    ...(opts.adminBundleDir !== undefined ? { adminBundleDir: opts.adminBundleDir } : {})
+  });
 
   if (opts.db) {
     await app.register(publicRoutes, {
