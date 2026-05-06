@@ -21,6 +21,17 @@ export interface ServerConfig {
   logLevel: string;
 }
 
+export interface SiteConfig {
+  title: string;
+  tagline?: string;
+}
+
+export function siteConfig(env: Env = process.env): SiteConfig {
+  const out: SiteConfig = { title: env.SITE_TITLE || 'rkroll' };
+  if (env.SITE_TAGLINE) out.tagline = env.SITE_TAGLINE;
+  return out;
+}
+
 type Env = NodeJS.ProcessEnv;
 
 export function siteRoot(env: Env = process.env): string {

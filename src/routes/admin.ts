@@ -1,9 +1,11 @@
-// Admin routes. Authentication is added in Step 9 — for now these are open.
+// Admin routes. Authentication added in Step 7b (social login + sessions).
 //
 // Routes:
-//   GET  /admin/editor      → SPA shell (loads /admin/static/main.js)
-//   GET  /admin/static/*    → compiled admin bundle from static/admin/
-//   POST /admin/upload      → multipart image ingest (routed to ingestStream)
+//   GET  /admin/editor    → SPA shell (loads /static/admin/main.js)
+//   GET  /static/*        → public + admin static assets (CSS, admin bundle)
+//   POST /admin/posts     → save editor JSON as a markdown post + reindex
+//   POST /admin/upload    → multipart image ingest (routed to ingestStream)
+//   POST /admin/import/url → server-side fetch + ingest from a URL
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,15 +24,20 @@ import { renderAdminPage } from '../templates/admin.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Repo layout: src/routes/admin.ts → ../../static/admin
-const REPO_ADMIN_BUNDLE_DIR = path.resolve(__dirname, '..', '..', 'static', 'admin');
+// Repo layout: src/routes/admin.ts → ../../static
+const REPO_STATIC_DIR = path.resolve(__dirname, '..', '..', 'static');
 
 export interface AdminRoutesOpts {
   siteRoot?: string;
   /**
-   * Where the compiled admin bundle lives on disk. Defaults to
-   * <repo>/static/admin (the build:admin tsc output).
+   * Where the public/admin static assets live on disk. Defaults to
+   * <repo>/static, which contains both:
+   *   - admin/main.js (compiled by build:admin)
+   *   - site.css (committed source)
+   * Served at /static/* by Apache (production) or fastify-static (dev).
    */
+  staticDir?: string;
+  /** Legacy: the admin bundle directory; kept for tests that override it. */
   adminBundleDir?: string;
   /** When true, every /admin route gets the requireUser preHandler. */
   requireAuth?: boolean;
@@ -41,15 +48,20 @@ export default async function adminRoutes(
   opts: AdminRoutesOpts = {}
 ): Promise<void> {
   const siteRoot = opts.siteRoot ?? paths().root;
-  const bundleDir = opts.adminBundleDir ?? REPO_ADMIN_BUNDLE_DIR;
+  // Tests can still override just the admin bundle by passing
+  // adminBundleDir; in that case we point /static at its parent so
+  // /static/admin/main.js resolves correctly.
+  const staticDir =
+    opts.staticDir ?? (opts.adminBundleDir ? path.dirname(opts.adminBundleDir) : REPO_STATIC_DIR);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
 
-  // Static serving for the compiled admin bundle. Only registers if the
-  // build directory exists — saves tests from needing to run build:admin.
-  if (fs.existsSync(bundleDir)) {
+  // One static handler at /static/. Public CSS lives at /static/site.css;
+  // the admin bundle at /static/admin/main.js. Apache vhost (spec §14)
+  // already serves /static/* directly with cache headers in production.
+  if (fs.existsSync(staticDir)) {
     await fastify.register(fastifyStatic, {
-      root: bundleDir,
-      prefix: '/admin/static/',
+      root: staticDir,
+      prefix: '/static/',
       decorateReply: false
     });
   }
@@ -57,7 +69,7 @@ export default async function adminRoutes(
   fastify.get('/admin/editor', { ...guard }, async (_req, reply) => {
     return reply
       .type('text/html; charset=utf-8')
-      .send(renderAdminPage({ bundleUrl: '/admin/static/main.js' }));
+      .send(renderAdminPage({ bundleUrl: '/static/admin/main.js' }));
   });
 
   fastify.post<{

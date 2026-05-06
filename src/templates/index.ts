@@ -1,6 +1,7 @@
 // Index page template. Plain template-literal HTML per spec §12.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { type SiteChrome, siteFoot, siteHead } from './layout.ts';
 
 export interface IndexEntry {
   slug: string;
@@ -8,7 +9,7 @@ export interface IndexEntry {
   date?: string;
 }
 
-export interface IndexPageData {
+export interface IndexPageData extends SiteChrome {
   posts: IndexEntry[];
   page: number;
   totalPages: number;
@@ -38,15 +39,18 @@ export function renderIndexPage(data: IndexPageData): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Index</title>
+<title>${escapeText(data.site.title)}</title>
+<link rel="stylesheet" href="/static/site.css"/>
 </head>
 <body>
+${siteHead(data.site)}
 <main>
 <ul class="post-list">
 ${items}
 </ul>
 ${pager}
 </main>
+${siteFoot(data.site)}
 </body>
 </html>
 `;

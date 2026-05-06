@@ -89,7 +89,7 @@ test('GET /:slug renders the post body to HTML', async (t) => {
   const res = await app.inject({ method: 'GET', url: '/hello' });
   assert.equal(res.statusCode, 200);
   assert.match(res.headers['content-type'] as string, /text\/html/);
-  assert.match(res.body, /<title>Hello world<\/title>/);
+  assert.match(res.body, /<title>Hello world — [^<]+<\/title>/);
   assert.match(res.body, /<h1>Hello world<\/h1>/);
   assert.match(res.body, /<strong>bold<\/strong>/);
   assert.match(res.body, /<a href="https:\/\/example.com">link<\/a>/);

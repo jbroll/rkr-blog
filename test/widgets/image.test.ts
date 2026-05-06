@@ -49,8 +49,10 @@ test('image widget renders a <picture> with one <source> per format and one fall
   widgets.register(imageWidget);
   const html = await widgets.dispatch('image', directive(r.id), { siteRoot: root, widgets });
 
-  assert.match(html, /^<picture>/);
-  assert.match(html, /<\/picture>$/);
+  assert.match(html, /^<figure class="rkr-figure rkr-pos-default">/);
+  assert.match(html, /<\/figure>$/);
+  assert.match(html, /<picture>/);
+  assert.match(html, /<\/picture>/);
   // One source per declared format (webp + avif).
   assert.equal((html.match(/<source/g) ?? []).length, 2);
   assert.match(html, /<source type="image\/webp" srcset="[^"]+"/);
@@ -113,6 +115,83 @@ test('image widget emits a comment when the id is missing or invalid', async (t)
     await widgets.dispatch('image', badId, { siteRoot: root, widgets }),
     /<!-- image: missing or invalid id -->/
   );
+});
+
+test('image widget renders <figcaption> when caption attribute is set', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg()]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'pic.jpg' }
+  });
+
+  const widgets = new WidgetRegistry();
+  widgets.register(imageWidget);
+  const node: DirectiveNode = {
+    type: 'leafDirective',
+    name: 'image',
+    attributes: { id: r.id, alt: 'a photo', caption: 'A wide-angle view of the workbench' },
+    children: []
+  };
+  const html = await widgets.dispatch('image', node, { siteRoot: root, widgets });
+  assert.match(html, /<figcaption>A wide-angle view of the workbench<\/figcaption>/);
+});
+
+test('image widget skips <figcaption> when caption is absent', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg()]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'pic.jpg' }
+  });
+
+  const widgets = new WidgetRegistry();
+  widgets.register(imageWidget);
+  const html = await widgets.dispatch('image', directive(r.id), { siteRoot: root, widgets });
+  assert.equal(html.includes('<figcaption'), false);
+});
+
+test('image widget applies the position class', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg()]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'pic.jpg' }
+  });
+
+  const widgets = new WidgetRegistry();
+  widgets.register(imageWidget);
+
+  for (const position of ['default', 'full', 'left', 'right', 'inline']) {
+    const node: DirectiveNode = {
+      type: 'leafDirective',
+      name: 'image',
+      attributes: { id: r.id, position },
+      children: []
+    };
+    const html = await widgets.dispatch('image', node, { siteRoot: root, widgets });
+    assert.match(html, new RegExp(`class="rkr-figure rkr-pos-${position}"`));
+  }
+});
+
+test('image widget falls back to default position when value is invalid', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg()]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'pic.jpg' }
+  });
+
+  const widgets = new WidgetRegistry();
+  widgets.register(imageWidget);
+  const node: DirectiveNode = {
+    type: 'leafDirective',
+    name: 'image',
+    attributes: { id: r.id, position: 'sideways' /* not in the valid set */ },
+    children: []
+  };
+  const html = await widgets.dispatch('image', node, { siteRoot: root, widgets });
+  assert.match(html, /class="rkr-figure rkr-pos-default"/);
 });
 
 test('image widget emits a comment when the sidecar is missing', async (t) => {

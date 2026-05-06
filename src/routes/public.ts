@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { readIndexedPostBySlug, readIndexedPosts } from '../cli/reindex.ts';
+import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
@@ -41,6 +42,8 @@ export interface PublicRoutesOpts {
   db: Db;
   /** Wall-clock budget for synchronous render on cache miss (ms). */
   renderBudgetMs?: number;
+  /** Override site branding (title/tagline). Default reads from env. */
+  site?: SiteConfig;
 }
 
 export default async function publicRoutes(
@@ -48,6 +51,7 @@ export default async function publicRoutes(
   opts: PublicRoutesOpts
 ): Promise<void> {
   const { siteRoot, db, renderBudgetMs = 30_000 } = opts;
+  const site = opts.site ?? siteConfig();
 
   const widgets = new WidgetRegistry();
   widgets.register(imageWidget);
@@ -68,6 +72,7 @@ export default async function publicRoutes(
 
     const rows = readIndexedPosts(db, { limit: PAGE_SIZE, offset, status: 'published' });
     const html = renderIndexPage({
+      site,
       page,
       totalPages,
       posts: rows.map((r) => ({
@@ -95,6 +100,7 @@ export default async function publicRoutes(
     const bodyHtml = await renderPostHtml(parsed.ast, { siteRoot, widgets });
 
     const html = renderPostPage({
+      site,
       title: parsed.frontmatter.title,
       slug: parsed.frontmatter.slug,
       ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),

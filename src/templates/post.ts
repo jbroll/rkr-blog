@@ -1,8 +1,9 @@
 // Post page template. Plain template-literal HTML per spec §12.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { type SiteChrome, siteFoot, siteHead } from './layout.ts';
 
-export interface PostPageData {
+export interface PostPageData extends SiteChrome {
   title: string;
   slug: string;
   date?: string;
@@ -12,16 +13,18 @@ export interface PostPageData {
 export function renderPostPage(post: PostPageData): string {
   const dateBlock = post.date
     ? `<time datetime="${escapeAttr(post.date)}">${escapeText(post.date)}</time>`
-    : /* c8 ignore next -- present in all current callers via runReindex's published_at */ '';
+    : /* c8 ignore next -- runReindex always supplies published_at */ '';
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${escapeText(post.title)}</title>
+<title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
+<link rel="stylesheet" href="/static/site.css"/>
 </head>
 <body>
+${siteHead(post.site)}
 <main>
 <article>
 <header>
@@ -31,6 +34,7 @@ ${dateBlock}
 ${post.bodyHtml}
 </article>
 </main>
+${siteFoot(post.site)}
 </body>
 </html>
 `;

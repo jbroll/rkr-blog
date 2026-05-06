@@ -74,7 +74,7 @@ test('POST /admin/posts saves a new post and reindexes (visible at /:slug)', asy
   // Reindexed → /hello returns 200 (uses the public route from Step 5).
   const page = await app.inject({ method: 'GET', url: '/hello' });
   assert.equal(page.statusCode, 200);
-  assert.match(page.body, /<title>Hello world<\/title>/);
+  assert.match(page.body, /<title>Hello world — [^<]+<\/title>/);
 });
 
 test('POST /admin/posts overwrites an existing post (inserted=false)', async (t) => {

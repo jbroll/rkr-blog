@@ -16,13 +16,16 @@ function freshSiteRoot(t: TestContext): string {
 }
 
 function writeBundle(t: TestContext): string {
+  // Returns a directory laid out like the repo's static/: contains an
+  // admin/main.js subpath that maps to /static/admin/main.js.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-editor-bundle-'));
-  fs.writeFileSync(path.join(dir, 'main.js'), 'console.log("test bundle");');
+  fs.mkdirSync(path.join(dir, 'admin'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'admin', 'main.js'), 'console.log("test bundle");');
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  return dir;
+  return path.join(dir, 'admin');
 }
 
-test('GET /admin/editor returns the SPA shell HTML pointing at /admin/static/main.js', async (t) => {
+test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/main.js', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
@@ -31,16 +34,16 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /admin/static/mai
   assert.equal(res.statusCode, 200);
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<div id="rkroll-admin-root"><\/div>/);
-  assert.match(res.body, /<script type="module" src="\/admin\/static\/main\.js"><\/script>/);
+  assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js"><\/script>/);
 });
 
-test('GET /admin/static/main.js serves the compiled bundle when present', async (t) => {
+test('GET /static/admin/main.js serves the compiled bundle when present', async (t) => {
   const root = freshSiteRoot(t);
   const bundleDir = writeBundle(t);
   const app = await buildApp({ siteRoot: root, adminBundleDir: bundleDir });
   t.after(() => app.close());
 
-  const res = await app.inject({ method: 'GET', url: '/admin/static/main.js' });
+  const res = await app.inject({ method: 'GET', url: '/static/admin/main.js' });
   assert.equal(res.statusCode, 200);
   assert.match(
     res.headers['content-type'] as string,
@@ -49,12 +52,12 @@ test('GET /admin/static/main.js serves the compiled bundle when present', async 
   assert.match(res.body, /test bundle/);
 });
 
-test('GET /admin/static/main.js 404s when the bundle directory does not exist', async (t) => {
+test('GET /static/admin/main.js 404s when the bundle directory does not exist', async (t) => {
   const root = freshSiteRoot(t);
   const missing = path.join(root, 'no-such-bundle-dir');
   const app = await buildApp({ siteRoot: root, adminBundleDir: missing });
   t.after(() => app.close());
 
-  const res = await app.inject({ method: 'GET', url: '/admin/static/main.js' });
+  const res = await app.inject({ method: 'GET', url: '/static/admin/main.js' });
   assert.equal(res.statusCode, 404);
 });

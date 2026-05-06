@@ -325,41 +325,101 @@ TipTap with custom node types per widget. The user never sees `::image{...}` —
 
 Markdown → mdast → HTML, with directive nodes dispatched to widget render functions. Templates: plain template literals in v1; revisit Eta if widget rendering becomes complex enough to benefit.
 
-### Widget module shape
+### Image widget
 
-```js
-// src/widgets/image.js
+The single-image widget renders `::image{...}` directives. It owns the
+declaration of which derivative variants exist (the `variants` table is
+the source of truth for both the `<picture>` srcset and `site-admin
+render`).
+
+**Directive attributes:**
+
+| attribute | required | purpose |
+|---|---|---|
+| `id` (or `#<id>` shorthand) | yes | sha256 hex of the original (or 6+ char prefix) |
+| `alt` | recommended | screen-reader description; for accessibility |
+| `caption` | optional | editorial copy visible to all readers; renders inside `<figcaption>` |
+| `position` | optional | one of `default`, `full`, `left`, `right`, `inline`. See below. |
+
+**`alt` vs `caption` are different concerns.** `alt` describes what's
+in the image for screen readers and image-loading failures. `caption`
+is editorial text shown alongside the image. Authoring tools surface
+both fields separately.
+
+**Position values:**
+
+| value | layout |
+|---|---|
+| `default` (or omitted) | wide centered figure that breaks out of the prose column to the wider content width |
+| `full` | edge-to-edge of viewport (full bleed) |
+| `left` | float left, prose wraps right; clamped to ≤40% column width on desktop, full-width on mobile |
+| `right` | mirror of `left` |
+| `inline` | inline with text, baseline-aligned, sized to ~1.5em; caption suppressed |
+
+**HTML output:**
+
+Always wraps in `<figure class="rkr-figure rkr-pos-{position}">` so the
+position class has a single host element and CSS can style figure +
+figcaption uniformly. The `<picture>` element inside contains one
+`<source>` per format with srcset entries for each declared variant
+width, plus a JPEG fallback `<img>`. `<figcaption>` is appended only
+when `caption` is set.
+
+**Module shape (`src/widgets/image.ts`):**
+
+```ts
 export const name = 'image';
 
-// Variants this widget produces. Source of truth for both srcset and CLI render.
+// Source of truth for srcset + CLI render.
 export const variants = [
   { w: 400,  formats: ['webp', 'avif'] },
   { w: 800,  formats: ['webp', 'avif'] },
   { w: 1600, formats: ['webp', 'avif'] }
 ];
 
-// Default fallback for browsers without picture/srcset.
+// Fallback for browsers without picture/srcset.
 export const fallback = { w: 1200, format: 'jpeg', quality: 85 };
 
-/**
- * Validate directive attributes parsed from markdown.
- * @returns {{ ok: true, attrs: Object } | { ok: false, error: string }}
- */
-export function validate(rawAttrs) { /* ... */ }
-
-/**
- * Server-side render: directive AST node → HTML string.
- * @param {Object} node - mdast directive node
- * @param {Object} ctx - { siteRoot, sidecars, urlFor }
- * @returns {string} HTML
- */
-export function render(node, ctx) { /* ... */ }
+// Server-side render: directive AST node → HTML string.
+export function render(node, ctx): Promise<string>;
 
 // Editor (TipTap) node spec. Imported only by the admin bundle.
-export const editorNode = { /* ... */ };
+export const editorNode;
 ```
 
-`src/lib/widgets.js` discovers modules in `src/widgets/`, indexes by `name`, exposes `dispatch(directiveName, node, ctx)` to the renderer.
+`src/lib/widgets.ts` discovers modules in `src/widgets/`, indexes by
+`name`, and exposes `dispatch(directiveName, node, ctx)` to the renderer.
+
+### Future image-display widgets (planned)
+
+| widget | layout | notes |
+|---|---|---|
+| `gallery` | masonry (variable-height grid via CSS columns) | best for mixed-aspect photo sets |
+| `matrix` | uniform grid, fixed thumbs | contact-sheet style |
+| `carousel` | one image at a time, swipe/click to advance | narrative sequences |
+| `justified` | Flickr-style justified rows (uniform row height, variable widths) | clean default for photo blogs |
+| `diptych` / `triptych` | 2 or 3 images side by side | editorial pairs/triples |
+| `lightbox` | overlay enlargement on click; pairs with any of the above | universal "tap to enlarge" |
+
+All gallery widgets share the same caption convention as the single-image
+widget (per-item `caption` attribute → `<figcaption>` per item). Position
+values apply only to single-image widgets — galleries occupy the wide
+content column by default.
+
+### Public theme
+
+CSS lives at `static/site.css` (committed source), served at
+`/static/site.css` by Apache (production) or `@fastify/static` (dev).
+Tokens (`--rkr-*` custom properties) cover color, layout, type, and
+shadow; image-display widgets reuse them so look-and-feel stays
+consistent across single images, galleries, and lightboxes.
+
+Site branding is configured per deployment via env vars:
+
+| var | default | purpose |
+|---|---|---|
+| `SITE_TITLE` | `rkroll` | Header title + `<title>` suffix |
+| `SITE_TAGLINE` | (none) | Optional subtitle in the site header |
 
 ## 13. Remote image import
 

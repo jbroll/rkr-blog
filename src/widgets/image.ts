@@ -7,7 +7,7 @@
 // `site-admin render` warms exactly these URLs. Custom per-image variant
 // sets are a future enhancement.
 
-import { escapeAttr } from '../lib/content.ts';
+import { escapeAttr, escapeText } from '../lib/content.ts';
 import { cacheKey } from '../lib/hash.ts';
 import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
@@ -50,6 +50,20 @@ function extractAlt(node: DirectiveNode): string {
   return typeof a === 'string' ? a : '';
 }
 
+function extractCaption(node: DirectiveNode): string | null {
+  const c = node.attributes?.caption;
+  return typeof c === 'string' && c.length > 0 ? c : null;
+}
+
+const VALID_POSITIONS = new Set(['default', 'full', 'left', 'right', 'inline']);
+type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
+
+function extractPosition(node: DirectiveNode): ImagePosition {
+  const p = node.attributes?.position;
+  if (typeof p !== 'string' || !VALID_POSITIONS.has(p)) return 'default';
+  return p as ImagePosition;
+}
+
 async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const id = extractId(node);
   if (!id) return '<!-- image: missing or invalid id -->';
@@ -58,6 +72,8 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   if (!sidecar) return `<!-- image: no sidecar for ${escapeAttr(id)} -->`;
 
   const alt = escapeAttr(extractAlt(node));
+  const caption = extractCaption(node);
+  const position = extractPosition(node);
   const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
 
   // One <source> per format, srcset listing each width.
@@ -87,12 +103,19 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   });
   const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
 
-  return [
+  const pictureBlock = [
     `<picture>`,
     ...sources,
     `  <img src="${fbUrl}" alt="${alt}" loading="lazy"/>`,
     `</picture>`
   ].join('\n');
+
+  // Position class; CSS in static/site.css implements each variant.
+  // Always emit a <figure> so the position class has a single host element
+  // (also gives consistent semantics whether or not a caption is set).
+  const figureClass = `rkr-figure rkr-pos-${position}`;
+  const captionBlock = caption ? `\n  <figcaption>${escapeText(caption)}</figcaption>` : '';
+  return `<figure class="${figureClass}">\n${pictureBlock}${captionBlock}\n</figure>`;
 }
 
 function uniq<T>(arr: T[]): T[] {
