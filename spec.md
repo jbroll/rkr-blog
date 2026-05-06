@@ -392,19 +392,45 @@ export const editorNode;
 
 ### Image-display widgets
 
-| widget | layout | status |
+| widget | layout(s) | status |
 |---|---|---|
 | `lightbox` | overlay enlargement on click; pairs with any of the others | implemented (`src/site/lightbox.ts`) |
-| `gallery` | masonry (variable-height grid via CSS columns) | planned |
-| `matrix` | uniform grid, fixed thumbs | planned |
+| `gallery` | `justified` (default), `masonry`, `matrix` | implemented (`src/widgets/gallery.ts`) |
 | `carousel` | one image at a time, swipe/click to advance | planned |
-| `justified` | Flickr-style justified rows (uniform row height, variable widths) | planned |
 | `diptych` / `triptych` | 2 or 3 images side by side | planned |
 
-All gallery widgets will share the same `caption` convention as the
-single-image widget (per-item `caption` attribute → `<figcaption>` per
-item). Position values apply only to single-image widgets — galleries
-occupy the wide content column by default.
+The `gallery` directive groups multiple image ids into one of three
+layouts via the `layout=` attribute:
+
+- `justified` — Flickr-style: uniform row height (default 220px),
+  variable widths driven by per-item aspect ratio. Last row left-aligned.
+  Implemented with flexbox + a `--aspect` CSS variable computed from
+  each sidecar's `metadata.width / metadata.height`. No JavaScript.
+- `masonry` — Pinterest-style: variable-height columns via native CSS
+  `column-count`. No JavaScript.
+- `matrix` — uniform square cells via CSS Grid + `aspect-ratio: 1/1`.
+  Contact-sheet style.
+
+**Directive form (leaf, MVP):**
+
+```
+::gallery{ids="abc123,def456,012789" layout=justified caption="Optional"}
+```
+
+`ids` is a comma-separated list of 6-64 hex strings. Each is resolved
+against `$SITE_ROOT/sidecars/` — exact match preferred, otherwise unique
+prefix. Ambiguous or unmatched ids are skipped with an HTML comment.
+Per-item captions arrive with the future container form
+(`:::gallery{...}` enclosing `::image{...}` children).
+
+Per-item alt text is currently empty (galleries are decorative by
+default; alt-significant images belong as single `::image{}` directives).
+The container form will support per-item `alt`.
+
+All gallery widgets share the same `caption` convention as the
+single-image widget (gallery-level caption appears below the grid).
+Position values apply only to single-image widgets — galleries occupy
+the wide content column by default.
 
 **Lightbox** is not a directive widget — it's a small browser-side
 script (`src/site/lightbox.ts` → `static/site/lightbox.js`) loaded from

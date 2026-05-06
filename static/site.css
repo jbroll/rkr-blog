@@ -286,6 +286,87 @@ article hr {
 }
 .rkr-pos-inline figcaption { display: none; } /* inline images don't show captions */
 
+/* ---- gallery widget ----------------------------------------------- */
+/* Shared shell: galleries always live in the wide content column.
+   Individual layouts differ only in how items are arranged. */
+
+.rkr-gallery {
+  display: block;
+  width: 100%;
+  max-width: var(--rkr-content);
+  margin: 2.5rem auto;
+}
+.rkr-gallery > figcaption {
+  margin-top: .75rem;
+  text-align: center;
+  color: var(--rkr-muted);
+  font-size: 0.9rem;
+  font-style: italic;
+  max-width: var(--rkr-prose);
+  margin-left: auto;
+  margin-right: auto;
+}
+.rkr-gallery-item {
+  margin: 0;
+  overflow: hidden;
+}
+.rkr-gallery-item picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.rkr-gallery-item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--rkr-radius);
+  box-shadow: 0 1px 3px var(--rkr-shadow);
+}
+
+/* Justified (Flickr-style): items keep their aspect ratio, fill rows
+   uniformly via flex-grow weighted by --aspect, last row left-aligned. */
+.rkr-gallery-justified {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.rkr-gallery-justified .rkr-gallery-item {
+  --row-h: 220px;
+  flex-grow: 1;
+  flex-basis: calc(var(--aspect, 1) * var(--row-h));
+  height: var(--row-h);
+  /* Cap any single item at the content width so a panoramic shot doesn't
+     dominate a row. */
+  max-width: 100%;
+}
+
+/* Masonry (Pinterest-style): variable-height columns via CSS columns.
+   No JS, no library. break-inside avoids items splitting across columns. */
+.rkr-gallery-masonry {
+  column-count: 3;
+  column-gap: 0.5rem;
+}
+.rkr-gallery-masonry .rkr-gallery-item {
+  break-inside: avoid;
+  margin-bottom: 0.5rem;
+  height: auto;
+}
+.rkr-gallery-masonry .rkr-gallery-item img {
+  height: auto;       /* let the natural aspect drive height in masonry */
+  object-fit: contain;
+}
+
+/* Matrix (uniform grid): equal-sized cells. Good for contact-sheet style. */
+.rkr-gallery-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+.rkr-gallery-matrix .rkr-gallery-item {
+  aspect-ratio: 1 / 1;
+}
+
 /* ---- index page --------------------------------------------------- */
 
 .post-list {
@@ -356,4 +437,17 @@ nav[aria-label="pagination"] a {
     margin: 1.5rem auto;
   }
   /* Full-bleed clamps to viewport (already 100vw); keep as-is. */
+
+  /* Galleries: shrink to one or two columns on narrow screens. */
+  .rkr-gallery-masonry { column-count: 2; }
+  .rkr-gallery-matrix {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  }
+  .rkr-gallery-justified .rkr-gallery-item {
+    --row-h: 140px;
+  }
+}
+
+@media (max-width: 400px) {
+  .rkr-gallery-masonry { column-count: 1; }
 }

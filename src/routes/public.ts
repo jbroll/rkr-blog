@@ -25,6 +25,7 @@ import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderIndexPage } from '../templates/index.ts';
 import { renderPostPage } from '../templates/post.ts';
+import galleryWidget from '../widgets/gallery.ts';
 import imageWidget from '../widgets/image.ts';
 
 const FILENAME_RE = /^([0-9a-f]{64})\.([0-9a-f]{12})\.(webp|avif|jpeg|jpg|png)$/;
@@ -55,6 +56,7 @@ export default async function publicRoutes(
 
   const widgets = new WidgetRegistry();
   widgets.register(imageWidget);
+  widgets.register(galleryWidget);
 
   // ---- index: GET / -----------------------------------------------------
 
