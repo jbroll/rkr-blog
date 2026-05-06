@@ -396,7 +396,7 @@ export const editorNode;
 |---|---|---|
 | `lightbox` | overlay enlargement on click; pairs with any of the others | implemented (`src/site/lightbox.ts`) |
 | `gallery` | `justified` (default), `masonry`, `matrix` | implemented (`src/widgets/gallery.ts`) |
-| `carousel` | one image at a time, swipe/click to advance | planned |
+| `carousel` | one image at a time, swipe/click to advance, optional autoplay | implemented (`src/widgets/carousel.ts` + `src/site/carousel.ts`) |
 | `diptych` / `triptych` | 2 or 3 images side by side | planned |
 
 The `gallery` directive groups multiple image ids into one of three
@@ -432,6 +432,28 @@ single-image widget (gallery-level caption appears below the grid).
 Position values apply only to single-image widgets — galleries occupy
 the wide content column by default.
 
+The `carousel` directive groups multiple image ids into a one-at-a-time
+slideshow:
+
+```
+::carousel{ids="abc123,def456,012789" caption="Optional" autoplay=5}
+```
+
+- Slides are laid out horizontally inside a `scroll-snap` track, so
+  native touch swipe works for free on mobile — no JS swipe handler.
+- `src/site/carousel.ts` wires prev/next buttons, dot indicators
+  (driven by `IntersectionObserver` so swipe also updates the active
+  dot), and keyboard arrow navigation when the carousel has focus.
+- `autoplay=N` advances every `N` seconds (capped at 60). When
+  autoplay is set, an accessible play/pause button is rendered
+  (WCAG 2.2.2 — auto-advancing carousels must be pauseable). Autoplay
+  defaults to NOT-running when the user prefers reduced motion.
+- Autoplay pauses on hover, focus, page-hidden, and any user
+  interaction with prev/next/dots; resume is opt-in via the play
+  button (no surprise re-starts).
+- Same id-resolution rules as `gallery` (prefix matching, comments
+  for unmatched ids).
+
 **Lightbox** is not a directive widget — it's a small browser-side
 script (`src/site/lightbox.ts` → `static/site/lightbox.js`) loaded from
 every public post page. It binds a click handler to every
@@ -450,6 +472,7 @@ public-page scripts (`src/site/**`). `npm run build:admin` invokes
 
 - `static/admin/main.js` — the admin editor SPA bundle
 - `static/site/lightbox.js` — the public-page lightbox
+- `static/site/carousel.js` — the public-page carousel runtime
 
 Both are served at `/static/*` by the same `@fastify/static` handler.
 

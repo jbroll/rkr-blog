@@ -367,6 +367,113 @@ article hr {
   aspect-ratio: 1 / 1;
 }
 
+/* ---- carousel widget ---------------------------------------------- */
+/* Scroll-snap drives the actual slide motion: native touch swipe works
+   for free, no JS swipe handler needed. Buttons + dots are wired by
+   src/site/carousel.ts. */
+
+.rkr-carousel {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: var(--rkr-content);
+  margin: 2.5rem auto;
+  outline: none;
+}
+.rkr-carousel:focus-visible {
+  box-shadow: 0 0 0 3px var(--rkr-link);
+  border-radius: var(--rkr-radius);
+}
+.rkr-carousel > figcaption {
+  margin-top: .75rem;
+  text-align: center;
+  color: var(--rkr-muted);
+  font-size: 0.9rem;
+  font-style: italic;
+  max-width: var(--rkr-prose);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.rkr-carousel-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;             /* Firefox */
+  -webkit-overflow-scrolling: touch; /* iOS momentum */
+  border-radius: var(--rkr-radius);
+}
+.rkr-carousel-track::-webkit-scrollbar { display: none; }
+
+.rkr-carousel-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Reserve height from --aspect set by the renderer. */
+  aspect-ratio: var(--aspect, 1.5);
+  background: var(--rkr-rule);
+}
+.rkr-carousel-slide picture,
+.rkr-carousel-slide img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Nav row sits below the track; on hover, prev/next overlay the image. */
+.rkr-carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+.rkr-carousel-prev,
+.rkr-carousel-next,
+.rkr-carousel-play {
+  background: transparent;
+  border: 1px solid var(--rkr-rule);
+  color: var(--rkr-text);
+  border-radius: 999px;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rkr-carousel-prev:hover,
+.rkr-carousel-next:hover,
+.rkr-carousel-play:hover {
+  background: var(--rkr-rule);
+}
+
+.rkr-carousel-dots {
+  display: inline-flex;
+  gap: .35rem;
+  align-items: center;
+}
+.rkr-carousel-dot {
+  width: .55rem;
+  height: .55rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--rkr-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.rkr-carousel-dot.is-active {
+  background: var(--rkr-text);
+  border-color: var(--rkr-text);
+}
+
 /* ---- index page --------------------------------------------------- */
 
 .post-list {
@@ -445,6 +552,14 @@ nav[aria-label="pagination"] a {
   }
   .rkr-gallery-justified .rkr-gallery-item {
     --row-h: 140px;
+  }
+  /* Carousel: keep slides full-width; shrink nav buttons. */
+  .rkr-carousel-prev,
+  .rkr-carousel-next,
+  .rkr-carousel-play {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.9rem;
   }
 }
 

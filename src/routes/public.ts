@@ -25,6 +25,7 @@ import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderIndexPage } from '../templates/index.ts';
 import { renderPostPage } from '../templates/post.ts';
+import carouselWidget from '../widgets/carousel.ts';
 import galleryWidget from '../widgets/gallery.ts';
 import imageWidget from '../widgets/image.ts';
 
@@ -57,6 +58,7 @@ export default async function publicRoutes(
   const widgets = new WidgetRegistry();
   widgets.register(imageWidget);
   widgets.register(galleryWidget);
+  widgets.register(carouselWidget);
 
   // ---- index: GET / -----------------------------------------------------
 

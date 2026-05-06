@@ -5,6 +5,8 @@
 // Loaded by post.ts and index.ts via <script type="module" defer>.
 // No-ops on pages with no figures, so it's safe to include globally.
 
+export {};
+
 const STYLE = `
 .rkr-lightbox-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.92);

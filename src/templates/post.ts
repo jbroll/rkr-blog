@@ -23,6 +23,7 @@ export function renderPostPage(post: PostPageData): string {
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
 <link rel="stylesheet" href="/static/site.css"/>
 <script type="module" src="/static/site/lightbox.js" defer></script>
+<script type="module" src="/static/site/carousel.js" defer></script>
 </head>
 <body>
 ${siteHead(post.site)}
