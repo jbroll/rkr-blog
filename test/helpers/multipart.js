@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 
 export function buildMultipart({ fieldName = 'file', filename, contentType, bytes }) {
-  const boundary = '----rkrtest' + crypto.randomBytes(8).toString('hex');
+  const boundary = `----rkrtest${crypto.randomBytes(8).toString('hex')}`;
   const head =
     `--${boundary}\r\n` +
     `Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
@@ -12,11 +12,7 @@ export function buildMultipart({ fieldName = 'file', filename, contentType, byte
     `\r\n`;
   const tail = `\r\n--${boundary}--\r\n`;
 
-  const payload = Buffer.concat([
-    Buffer.from(head, 'utf8'),
-    bytes,
-    Buffer.from(tail, 'utf8')
-  ]);
+  const payload = Buffer.concat([Buffer.from(head, 'utf8'), bytes, Buffer.from(tail, 'utf8')]);
 
   return {
     payload,

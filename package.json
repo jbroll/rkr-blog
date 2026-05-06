@@ -14,6 +14,11 @@
     "start": "node --no-warnings=ExperimentalWarning bin/server.js",
     "test": "node --test --no-warnings=ExperimentalWarning",
     "test:coverage": "node --test --experimental-test-coverage --no-warnings=ExperimentalWarning",
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "format": "biome format --write",
+    "check": "biome check && node --test --no-warnings=ExperimentalWarning",
+    "hooks:install": "git config core.hooksPath .githooks",
     "migrate": "node --no-warnings=ExperimentalWarning bin/site-admin migrate",
     "render": "node --no-warnings=ExperimentalWarning bin/site-admin render",
     "gc": "node --no-warnings=ExperimentalWarning bin/site-admin gc"
@@ -29,5 +34,8 @@
     "remark-frontmatter": "^5.0.0",
     "sharp": "^0.33.0",
     "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.14"
   }
 }

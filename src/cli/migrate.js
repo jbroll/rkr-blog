@@ -2,9 +2,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { paths } from '../lib/config.js';
 import { open } from '../lib/db.js';
 import { migrate } from '../lib/migrate.js';
-import { paths } from '../lib/config.js';
 
 export default function runMigrate() {
   const p = paths();

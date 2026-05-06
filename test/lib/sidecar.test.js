@@ -1,10 +1,10 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { test } from 'node:test';
 
-import { read, write, validate, sidecarPath, CURRENT_VERSION } from '../../src/lib/sidecar.js';
+import { CURRENT_VERSION, read, sidecarPath, validate, write } from '../../src/lib/sidecar.js';
 
 const HEX64 = 'a'.repeat(64);
 
@@ -52,10 +52,7 @@ test('write() places file under sidecars/<id>.json', async (t) => {
 
 test('write() rejects mismatched id', async (t) => {
   const root = freshSiteRoot(t);
-  await assert.rejects(
-    write(root, 'b'.repeat(64), validSidecar()),
-    /id mismatch/
-  );
+  await assert.rejects(write(root, 'b'.repeat(64), validSidecar()), /id mismatch/);
 });
 
 test('write() rejects invalid data without leaving a temp file', async (t) => {
@@ -114,7 +111,9 @@ test('write() is atomic: a concurrent reader sees the old or new file, never par
   // never observes partial JSON. Hard to race deterministically, but we can
   // at least confirm there are no .tmp files after a successful write.
   const root = freshSiteRoot(t);
-  const big = validSidecar({ metadata: { width: 1, height: 1, format: 'jpeg', note: 'x'.repeat(100000) } });
+  const big = validSidecar({
+    metadata: { width: 1, height: 1, format: 'jpeg', note: 'x'.repeat(100000) }
+  });
   await write(root, HEX64, big);
 
   const files = fs.readdirSync(path.join(root, 'sidecars'));

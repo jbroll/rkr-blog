@@ -18,7 +18,8 @@ function parseVersion(filename) {
 }
 
 export function listMigrations(dir = DEFAULT_MIGRATIONS_DIR) {
-  const entries = fs.readdirSync(dir)
+  const entries = fs
+    .readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .map((filename) => ({
       filename,
@@ -33,12 +34,15 @@ export function listMigrations(dir = DEFAULT_MIGRATIONS_DIR) {
 function readApplied(db) {
   // Probe sqlite_master rather than CREATE-IF-NOT-EXISTS so that the
   // schema_migrations table can be created by the migration itself.
-  const exists = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
-  ).get();
+  const exists = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
+    .get();
   if (!exists) return new Set();
   return new Set(
-    db.prepare('SELECT version FROM schema_migrations').all().map((r) => r.version)
+    db
+      .prepare('SELECT version FROM schema_migrations')
+      .all()
+      .map((r) => r.version)
   );
 }
 
@@ -64,8 +68,10 @@ export function migrate(db, dir = DEFAULT_MIGRATIONS_DIR) {
 
     const runBody = db.transaction(() => {
       if (body.trim()) db.exec(body);
-      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
-        .run(m.version, new Date().toISOString());
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+        m.version,
+        new Date().toISOString()
+      );
     });
     runBody();
 

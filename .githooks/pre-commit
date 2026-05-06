@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Tracked pre-commit hook. Enable with: npm run hooks:install
+# (which sets `git config core.hooksPath .githooks`).
+#
+# Runs:
+#   1. biome check on staged JS files (formatting + lint).
+#   2. full test suite (`npm test`).
+#
+# Failures abort the commit. To bypass deliberately, use `git commit --no-verify`.
+
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+# Collect the staged files biome cares about.
+staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|json)$' || true)
+
+if [ -n "$staged" ]; then
+  echo "==> biome check (staged)"
+  # --staged narrows biome to staged content (Biome 2 supports this).
+  npx --no-install biome check --staged --no-errors-on-unmatched
+fi
+
+echo "==> npm test"
+npm test --silent
+
+echo "==> precommit OK"

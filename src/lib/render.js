@@ -2,14 +2,14 @@
 // same args → same on-disk path → same bytes (assuming a stable libvips).
 // See spec §11.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.js';
-import { read as sidecarRead } from './sidecar.js';
 import { originalPath } from './originals.js';
+import { read as sidecarRead } from './sidecar.js';
 
 const FORMAT_TO_EXT = {
   jpeg: 'jpg',
@@ -84,7 +84,11 @@ export async function renderDerivative({ originalId, ops, variant, output, siteR
     await pipeline.toFile(tmp);
     await fs.promises.rename(tmp, finalPath);
   } catch (err) {
-    try { await fs.promises.unlink(tmp); } catch { /* already gone */ }
+    try {
+      await fs.promises.unlink(tmp);
+    } catch {
+      /* already gone */
+    }
     throw err;
   }
 

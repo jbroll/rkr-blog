@@ -1,12 +1,12 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import crypto from 'node:crypto';
+import { test } from 'node:test';
 
-import { sha256File, sha256Stream, canonicalJson, cacheKey } from '../../src/lib/hash.js';
+import { cacheKey, canonicalJson, sha256File, sha256Stream } from '../../src/lib/hash.js';
 
 // ---- canonicalJson -----------------------------------------------------
 
@@ -23,15 +23,12 @@ test('canonicalJson: scalars', () => {
 test('canonicalJson: numbers strip trailing zeros (Number.prototype.toString)', () => {
   // Numbers with trailing zeros after the decimal are normalized by JS.
   assert.equal(canonicalJson(1.0), '1');
-  assert.equal(canonicalJson(1.50), '1.5');
-  assert.equal(canonicalJson(2.500), '2.5');
+  assert.equal(canonicalJson(1.5), '1.5');
+  assert.equal(canonicalJson(2.5), '2.5');
 });
 
 test('canonicalJson: object keys sorted, no whitespace', () => {
-  assert.equal(
-    canonicalJson({ b: 1, a: 2 }),
-    '{"a":2,"b":1}'
-  );
+  assert.equal(canonicalJson({ b: 1, a: 2 }), '{"a":2,"b":1}');
   // Nested.
   assert.equal(
     canonicalJson({ z: { y: 1, x: 2 }, a: [3, { c: 4, b: 5 }] }),

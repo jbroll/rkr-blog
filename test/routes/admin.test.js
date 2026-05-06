@@ -1,13 +1,12 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
+import { test } from 'node:test';
 import sharp from 'sharp';
-
-import { buildApp } from '../../src/server.js';
 import { read as sidecarRead } from '../../src/lib/sidecar.js';
+import { buildApp } from '../../src/server.js';
 import { buildMultipart } from '../helpers/multipart.js';
 
 function freshSiteRoot(t) {
@@ -21,7 +20,9 @@ function freshSiteRoot(t) {
 async function makeJpeg() {
   return sharp({
     create: { width: 80, height: 60, channels: 3, background: { r: 100, g: 50, b: 25 } }
-  }).jpeg({ quality: 80 }).toBuffer();
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
 }
 
 test('POST /admin/upload writes original + sidecar', async (t) => {
@@ -54,7 +55,13 @@ test('POST /admin/upload writes original + sidecar', async (t) => {
 
   // Original on disk matches input bytes.
   const onDisk = fs.readFileSync(
-    path.join(root, 'originals', expectedId.slice(0, 2), expectedId.slice(2, 4), `${expectedId}.jpg`)
+    path.join(
+      root,
+      'originals',
+      expectedId.slice(0, 2),
+      expectedId.slice(2, 4),
+      `${expectedId}.jpg`
+    )
   );
   assert.deepEqual(onDisk, bytes);
 

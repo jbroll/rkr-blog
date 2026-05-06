@@ -4,14 +4,11 @@ Single-author CMS with photo-first content model. See [spec.md](./spec.md) for t
 
 ## Status
 
-Step 1 (skeleton) of the build order in spec §21:
+Working through the build order in spec §21:
 
-- repo layout per §8
-- `lib/db.js` wrapper over `node:sqlite`
-- `migrations/001_initial.sql` per §15
-- `bin/site-admin` with `init` / `migrate` / `server` subcommands
-- `bin/server.js` Fastify entry point with `GET /health`
-- `deploy/apache.conf` and `deploy/systemd.service`
+- Step 1 (skeleton) — done.
+- Step 2 (originals + sidecars + `POST /admin/upload`) — done.
+- Step 3 (render pipeline + jobs + `GET /img`) — `renderDerivative` landed; jobs + route still in progress.
 
 ## Dev quickstart
 
@@ -19,12 +16,19 @@ Requires Node 22.
 
 ```bash
 npm install
+npm run hooks:install                          # one-time: enable .githooks/
+
 SITE_ROOT=$HOME/site bin/site-admin init       # create dirs + run migrations
 SITE_ROOT=$HOME/site PORT=3000 npm start       # boot Fastify
 curl http://127.0.0.1:3000/health              # → {"ok":true}
 
 npm test                                       # node --test
+npm run lint                                   # biome check
+npm run lint:fix                               # biome check --write
+npm run check                                  # biome check + tests
 ```
+
+The pre-commit hook (after `npm run hooks:install`) runs `biome check --staged` then the full test suite. Bypass with `git commit --no-verify` only when you know what you're doing.
 
 ## Layout
 

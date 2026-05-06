@@ -28,7 +28,7 @@ This document is the source of truth for v1. Implementation should not introduce
 
 The following are deliberately excluded from v1 to control complexity. Adding any of them requires re-opening the spec.
 
-- **TypeScript** or any build/transpile step. Plain ES modules, run as-is.
+- **TypeScript** or any build/transpile step *in v1*. Plain ES modules, run as-is. TypeScript is a v2 goal; §6 conventions and JSDoc-typed exports are kept compatible with a future migration.
 - **Express, Koa, Hapi**, or any HTTP framework other than Fastify.
 - **Redis, BullMQ**, or any external job queue. The jobs table in SQLite is the queue.
 - **Any ORM** (Prisma, Drizzle, Sequelize, Knex). Hand-written SQL through the `lib/db.js` wrapper.
@@ -94,7 +94,8 @@ Sharp on Void: prebuilt binaries cover glibc and musl on x64/arm64. If prebuild 
 ## 6. Coding conventions
 
 - **Module system**: ES modules (`import`/`export`). `package.json` declares `"type": "module"`.
-- **Language**: Plain JavaScript. No TypeScript build step. JSDoc type annotations on exported functions are welcome for editor support.
+- **Language**: Plain JavaScript for v1. JSDoc type annotations on exported functions are required (they pre-document the eventual TypeScript signatures). TypeScript is a stated future goal: §6 conventions are chosen so the JS→TS migration is mechanical (named exports, no `any`-shaped interfaces, JSDoc on the public surface). No TypeScript build step in v1.
+- **Lint**: Biome (`@biomejs/biome`), configured to enforce §6 conventions and the `recommended` ruleset. `biome check` runs in the precommit hook alongside `npm test`. Biome is the only added linter; no ESLint, no Prettier.
 - **Indent**: 2 spaces, no tabs.
 - **Semicolons**: yes.
 - **Quotes**: single quotes for JS strings, double quotes only when escaping.

@@ -62,14 +62,14 @@ function stringifySorted(value) {
   if (t === 'boolean') return value ? 'true' : 'false';
   if (t === 'string') return JSON.stringify(value);
   if (Array.isArray(value)) {
-    return '[' + value.map(stringifySorted).join(',') + ']';
+    return `[${value.map(stringifySorted).join(',')}]`;
   }
   if (t === 'object') {
     const keys = Object.keys(value)
       .filter((k) => value[k] !== undefined)
       .sort();
-    const parts = keys.map((k) => JSON.stringify(k) + ':' + stringifySorted(value[k]));
-    return '{' + parts.join(',') + '}';
+    const parts = keys.map((k) => `${JSON.stringify(k)}:${stringifySorted(value[k])}`);
+    return `{${parts.join(',')}}`;
   }
   throw new TypeError(`canonicalJson: unsupported type ${t}`);
 }
@@ -83,7 +83,7 @@ function asciiOnly(s) {
     if (code < 0x80) {
       out += s[i];
     } else {
-      out += '\\u' + code.toString(16).padStart(4, '0');
+      out += `\\u${code.toString(16).padStart(4, '0')}`;
     }
   }
   return out;

@@ -1,9 +1,9 @@
 // Sidecar JSON read/write/validate. One file per logical image at
 // $SITE_ROOT/sidecars/<id>.json (spec §10).
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 
 export const CURRENT_VERSION = 1;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -45,7 +45,7 @@ export async function write(siteRoot, id, data) {
 
   const final = sidecarPath(siteRoot, id);
   const tmp = `${final}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  await fs.promises.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  await fs.promises.writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   await fs.promises.rename(tmp, final);
 }
 

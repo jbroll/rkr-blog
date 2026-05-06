@@ -1,7 +1,7 @@
 // Admin routes. Authentication is added in Step 9 — for now these are open.
 
-import { ingestStream } from '../lib/originals.js';
 import { paths } from '../lib/config.js';
+import { ingestStream } from '../lib/originals.js';
 
 export default async function adminRoutes(fastify, opts) {
   const siteRoot = opts.siteRoot ?? paths().root;

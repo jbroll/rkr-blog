@@ -1,11 +1,11 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { test } from 'node:test';
 
 import { open } from '../../src/lib/db.js';
-import { migrate, listMigrations } from '../../src/lib/migrate.js';
+import { listMigrations, migrate } from '../../src/lib/migrate.js';
 
 test('migrate() applies the initial migration once', () => {
   const db = open(':memory:');
@@ -14,9 +14,10 @@ test('migrate() applies the initial migration once', () => {
     assert.deepEqual(first, [1], 'first run applies version 1');
 
     // Tables from 001_initial.sql must exist.
-    const tables = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    ).all().map((r) => r.name);
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all()
+      .map((r) => r.name);
     for (const t of ['posts', 'jobs', 'sessions', 'oauth_tokens', 'auth', 'schema_migrations']) {
       assert.ok(tables.includes(t), `expected table ${t} in ${tables.join(',')}`);
     }

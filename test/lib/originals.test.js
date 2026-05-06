@@ -1,10 +1,10 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
+import { test } from 'node:test';
 import sharp from 'sharp';
 
 import { ingestStream, originalPath } from '../../src/lib/originals.js';
@@ -21,13 +21,21 @@ function freshSiteRoot(t) {
 async function makeJpeg({ width = 64, height = 48, color = { r: 30, g: 60, b: 120 } } = {}) {
   return sharp({
     create: { width, height, channels: 3, background: color }
-  }).jpeg({ quality: 80 }).toBuffer();
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
 }
 
-async function makePng({ width = 32, height = 32, color = { r: 200, g: 30, b: 30, alpha: 1 } } = {}) {
+async function makePng({
+  width = 32,
+  height = 32,
+  color = { r: 200, g: 30, b: 30, alpha: 1 }
+} = {}) {
   return sharp({
     create: { width, height, channels: 4, background: color }
-  }).png().toBuffer();
+  })
+    .png()
+    .toBuffer();
 }
 
 test('ingestStream writes to sharded path and produces a valid sidecar', async (t) => {

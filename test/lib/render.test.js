@@ -1,18 +1,14 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
+import { test } from 'node:test';
 import sharp from 'sharp';
 
 import { ingestStream } from '../../src/lib/originals.js';
-import {
-  renderDerivative,
-  derivativeFilename,
-  derivativePath
-} from '../../src/lib/render.js';
+import { derivativeFilename, derivativePath, renderDerivative } from '../../src/lib/render.js';
 
 function freshSiteRoot(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-render-'));
@@ -26,7 +22,9 @@ function freshSiteRoot(t) {
 async function makeJpeg({ width = 200, height = 150, color = { r: 30, g: 60, b: 120 } } = {}) {
   return sharp({
     create: { width, height, channels: 3, background: color }
-  }).jpeg({ quality: 80 }).toBuffer();
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
 }
 
 async function ingest(root, bytes) {
@@ -81,8 +79,11 @@ test('renderDerivative second call hits the cache (does not invoke Sharp)', asyn
   const second = await renderDerivative(args);
   assert.equal(second.cached, true);
   assert.equal(second.path, first.path);
-  assert.equal(fs.statSync(first.path).mtimeMs, mtimeBefore,
-    'cache hit must not rewrite the file (Sharp must not be invoked)');
+  assert.equal(
+    fs.statSync(first.path).mtimeMs,
+    mtimeBefore,
+    'cache hit must not rewrite the file (Sharp must not be invoked)'
+  );
 });
 
 test('ophash and filename change when ops change', async (t) => {

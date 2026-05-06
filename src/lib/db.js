@@ -30,9 +30,10 @@ function wrapStatement(rawStmt) {
       const r = rawStmt.run(...params);
       return {
         changes: Number(r.changes ?? 0),
-        lastInsertRowid: typeof r.lastInsertRowid === 'bigint'
-          ? Number(r.lastInsertRowid)
-          : (r.lastInsertRowid ?? 0)
+        lastInsertRowid:
+          typeof r.lastInsertRowid === 'bigint'
+            ? Number(r.lastInsertRowid)
+            : (r.lastInsertRowid ?? 0)
       };
     },
     get(...params) {
@@ -79,7 +80,11 @@ export function open(path) {
           raw.exec('COMMIT');
           return result;
         } catch (err) {
-          try { raw.exec('ROLLBACK'); } catch { /* swallow rollback failure */ }
+          try {
+            raw.exec('ROLLBACK');
+          } catch {
+            /* swallow rollback failure */
+          }
           throw err;
         }
       };

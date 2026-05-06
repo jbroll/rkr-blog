@@ -7,14 +7,14 @@
 // Sharp determines the authoritative format from bytes (not the client's
 // claimed filename), and supplies width/height for the sidecar metadata.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
-import { write as sidecarWrite, read as sidecarRead, sidecarPath } from './sidecar.js';
+import { sidecarPath, read as sidecarRead, write as sidecarWrite } from './sidecar.js';
 
 const FORMAT_TO_EXT = {
   jpeg: 'jpg',
@@ -32,9 +32,7 @@ const DEFAULT_OUTPUTS = [
   { format: 'webp', quality: 85 },
   { format: 'avif', quality: 70 }
 ];
-const DEFAULT_VARIANTS = [
-  { w: 400 }, { w: 800 }, { w: 1600 }
-];
+const DEFAULT_VARIANTS = [{ w: 400 }, { w: 800 }, { w: 1600 }];
 
 /**
  * Ingest a Readable byte stream into the site's originals + sidecars trees.
@@ -146,7 +144,11 @@ async function exists(p) {
 }
 
 async function safeUnlink(p) {
-  try { await fs.promises.unlink(p); } catch { /* already gone */ }
+  try {
+    await fs.promises.unlink(p);
+  } catch {
+    /* already gone */
+  }
 }
 
 export function originalPath(siteRoot, id, ext) {

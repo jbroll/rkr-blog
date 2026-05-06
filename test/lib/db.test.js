@@ -1,8 +1,8 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { test } from 'node:test';
 
 import { open } from '../../src/lib/db.js';
 
@@ -65,7 +65,8 @@ test('transaction() commits on success, rolls back on throw', () => {
     });
     assert.throws(() => failing(), /boom/);
     assert.equal(
-      db.prepare('SELECT COUNT(*) AS n FROM t').get().n, 2,
+      db.prepare('SELECT COUNT(*) AS n FROM t').get().n,
+      2,
       'rollback should leave the row count unchanged'
     );
   } finally {
