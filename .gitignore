@@ -1,7 +1,8 @@
 node_modules/
 
-# Browser bundle build artifact (built from src/admin/ via tsc -p tsconfig.browser.json)
+# Browser bundle build artifacts (built from src/admin/ + src/site/ via tsc -p tsconfig.browser.json)
 static/admin/
+static/site/
 
 # c8 coverage output (test:coverage / test:coverage:report)
 coverage/
