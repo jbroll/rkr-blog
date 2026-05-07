@@ -23,7 +23,10 @@ import {
   write as sidecarWrite
 } from './sidecar.ts';
 
-const FORMAT_TO_EXT: Record<string, string | undefined> = {
+/** Map Sharp/libvips format names to on-disk file extensions. Exported
+ * so route handlers that resolve `originalPath` from a sidecar's
+ * recorded format don't have to duplicate this table. */
+export const FORMAT_TO_EXT: Record<string, string | undefined> = {
   jpeg: 'jpg',
   png: 'png',
   webp: 'webp',

@@ -4,6 +4,7 @@
 //   GET  /admin/editor       → SPA shell (loads /static/admin/main.js)
 //   GET  /static/*           → public + admin static assets (CSS, admin bundle)
 //   GET  /admin/preview/:id  → 302 to a derivative URL the editor can <img src>
+//   GET  /admin/original/:id → streams the original (master) bytes for client-side ops
 //   POST /admin/posts        → save editor JSON as a markdown post + reindex
 //   POST /admin/upload       → multipart image ingest (routed to ingestStream)
 //   POST /admin/import/url   → server-side fetch + ingest from a URL
@@ -20,7 +21,7 @@ import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { ingestStream } from '../lib/originals.ts';
+import { FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import type { OutputFormat } from '../lib/render.ts';
@@ -144,6 +145,50 @@ export default async function adminRoutes(
         }
       });
       return reply.redirect(`/img/${fullId}.${ophash}.${imageFallback.format}`, 302);
+    }
+  );
+
+  // Stream the master original bytes. The editor's client-side canvas
+  // pipeline downloads this once per editing session and re-applies ops
+  // locally so live preview is round-trip-free. Browsers can't decode
+  // every format Sharp can ingest (notably HEIC on most browsers); the
+  // client falls back to /admin/preview/:id when decoding fails.
+  fastify.get<{ Params: { id: string } }>(
+    '/admin/original/:id',
+    { ...guard },
+    async (req, reply) => {
+      const { id } = req.params;
+      if (!/^[0-9a-f]{64}$/.test(id)) {
+        return reply.code(400).send({ error: 'invalid id' });
+      }
+      const sidecar = await sidecarRead(siteRoot, id);
+      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+      const fmt = sidecar.metadata.format;
+      const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
+      if (!fmt || !ext) {
+        return reply.code(500).send({ error: 'sidecar has no recognized format' });
+      }
+
+      const filePath = originalPath(siteRoot, id, ext);
+      let stat: fs.Stats;
+      try {
+        stat = await fs.promises.stat(filePath);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          return reply.code(404).send({ error: 'original missing' });
+        }
+        throw err;
+      }
+
+      // Originals are immutable (content-addressable by sha256). The 1y
+      // cache + immutable directive lets the browser keep the bytes
+      // across edits in the same session without revalidating.
+      reply
+        .header('Content-Type', formatContentType(fmt))
+        .header('Content-Length', String(stat.size))
+        .header('Cache-Control', 'private, max-age=31536000, immutable');
+      return reply.send(fs.createReadStream(filePath));
     }
   );
 
@@ -422,6 +467,29 @@ const MAX_SLUG_LENGTH = 100;
  * prefix within a few seconds; long enough that a post with many
  * images doesn't scan the directory once per request. */
 const SIDECAR_LIST_TTL_MS = 5_000;
+
+/** Map a Sharp/libvips format name to an HTTP Content-Type for serving
+ * the original file. Limited to formats the ingest accepts. */
+function formatContentType(fmt: string): string {
+  switch (fmt) {
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'avif':
+      return 'image/avif';
+    case 'gif':
+      return 'image/gif';
+    case 'tiff':
+      return 'image/tiff';
+    case 'heif':
+      return 'image/heif';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 /** Maximum ops in a sidecar. Caps the chain depth a single editor save
  * can install — defends against a malicious / runaway client building

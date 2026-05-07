@@ -182,6 +182,77 @@ test('GET /admin/preview/:id 404s on an ambiguous short prefix', async (t) => {
   assert.match(res.json<{ error: string }>().error, /ambiguous/);
 });
 
+// ---- /admin/original/:id -----------------------------------------------
+// Streams the master original. Powers the editor's client-side canvas
+// pipeline — preview-after-edit no longer needs a server round-trip
+// (the client downloads this once, decodes, applies ops in-browser).
+
+test('GET /admin/original/:id streams the original bytes with the right Content-Type', async (t) => {
+  const root = freshSiteRoot(t);
+  const bytes = await sharp({
+    create: { width: 200, height: 150, channels: 3, background: { r: 80, g: 120, b: 200 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  const ingest = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: `/admin/original/${ingest.id}` });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers['content-type'], 'image/jpeg');
+  // Content-addressable bytes; immutable so the browser can keep the
+  // decoded buffer alive across the editing session without
+  // revalidating.
+  assert.match(res.headers['cache-control'] as string, /immutable/);
+  // The body matches what we ingested.
+  assert.equal(res.rawPayload.length, bytes.length);
+  assert.equal(Buffer.compare(res.rawPayload, bytes), 0);
+});
+
+test('GET /admin/original/:id 400s on malformed id and 404s on unknown id', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const bad = await app.inject({ method: 'GET', url: '/admin/original/short' });
+  assert.equal(bad.statusCode, 400);
+
+  const missing = await app.inject({
+    method: 'GET',
+    url: `/admin/original/${'a'.repeat(64)}`
+  });
+  assert.equal(missing.statusCode, 404);
+});
+
+test('GET /admin/original/:id 404s when sidecar exists but original file is missing', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = 'e'.repeat(64);
+  // Plant a sidecar with no matching file on disk.
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${id}.json`),
+    JSON.stringify({
+      version: 1,
+      original: id,
+      source: { kind: 'upload', fetched: '2030-01-01T00:00:00Z' },
+      metadata: { width: 100, height: 75, format: 'jpeg' },
+      ops: [],
+      outputs: [{ format: 'jpeg', quality: 85 }],
+      variants: [{ w: 1200 }]
+    })
+  );
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: `/admin/original/${id}` });
+  assert.equal(res.statusCode, 404);
+  assert.match(res.json<{ error: string }>().error, /missing/);
+});
+
 // ---- /admin/sidecar/:id/meta + /admin/sidecar/:id/ops -----------------
 // Backing endpoints for the crop UI: meta supplies original-pixel
 // dimensions so the cropper can scale display coords; ops replaces the

@@ -9,6 +9,8 @@ import Cropper from 'cropperjs';
 // into static/admin/main.js (no separate CSS file at runtime).
 import 'cropperjs/dist/cropper.css';
 
+import { applyOps, type SidecarOp } from './canvas';
+
 type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
 
 interface ImageAttrs {
@@ -292,8 +294,6 @@ function pickMany(): Promise<File[]> {
 // returns them in the IMG element's natural-pixel space) back to
 // original-pixel space using the sidecar's recorded width/height.
 
-type SidecarOp = { type: string; [k: string]: unknown };
-
 interface SidecarMeta {
   width: number | null;
   height: number | null;
@@ -387,15 +387,89 @@ function describeOp(op: SidecarOp): string {
   }
 }
 
-/** Force the editor's <img> to refetch /admin/preview/<id> after a crop
- * change. The 302 target's URL changes (different ophash) so the browser
- * cache won't return the stale derivative — but the <img>'s already-set
- * src is unchanged, so without busting it the DOM keeps the old visual. */
-function bustImagePreview(editor: Editor, id: string): void {
+// Client-side preview pipeline: download the master once, decode it,
+// apply ops in-browser via canvas, swap the <img src> to a Blob URL.
+// Avoids a server round-trip per click. Falls back to the server-baked
+// preview when the browser can't decode the format (notably HEIC).
+
+const originalCache = new Map<string, Promise<HTMLImageElement>>();
+const previewBlobUrls = new Map<string, string>();
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = (): void => resolve(img);
+    img.onerror = (): void => reject(new Error(`decode failed for ${src}`));
+    img.src = src;
+  });
+}
+
+/** Fetch + decode the original master image. Cached per session per
+ * id; cache is keyed on the Promise so concurrent callers share the
+ * single in-flight fetch. */
+function loadOriginal(id: string): Promise<HTMLImageElement> {
+  const cached = originalCache.get(id);
+  if (cached) return cached;
+  const p = (async (): Promise<HTMLImageElement> => {
+    const res = await fetch(`/admin/original/${id}`);
+    if (!res.ok) throw new Error(`original: ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      return await loadImageElement(url);
+    } finally {
+      // Image element keeps its decoded buffer; we don't need the
+      // blob URL alive past this point.
+      URL.revokeObjectURL(url);
+    }
+  })();
+  originalCache.set(id, p);
+  // Don't cache failures — a transient 5xx shouldn't poison the
+  // session.
+  p.catch(() => originalCache.delete(id));
+  return p;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b): void => (b ? resolve(b) : reject(new Error('toBlob: empty result'))), mime);
+  });
+}
+
+function setEditorImageSrc(editor: Editor, id: string, src: string): void {
   const dom = editor.view.dom as HTMLElement;
   for (const img of dom.querySelectorAll<HTMLImageElement>(`img.rkr-image[data-id="${id}"]`)) {
-    const base = `/admin/preview/${id}`;
-    img.src = `${base}?v=${Date.now()}`;
+    img.src = src;
+  }
+}
+
+/** Re-render the editor preview for one image. Tries client-side bake
+ * first (canvas pipeline against the master); on any failure (decode
+ * unsupported format, fetch error) falls back to the server-baked
+ * /admin/preview/<id> with a cache-buster. */
+async function refreshImagePreview(editor: Editor, id: string, ops: SidecarOp[]): Promise<void> {
+  try {
+    const original = await loadOriginal(id);
+    const canvas = applyOps(
+      {
+        drawable: original,
+        width: original.naturalWidth,
+        height: original.naturalHeight
+      },
+      ops
+    );
+    const blob = await canvasToBlob(canvas, 'image/png');
+    const url = URL.createObjectURL(blob);
+    const old = previewBlobUrls.get(id);
+    if (old) URL.revokeObjectURL(old);
+    previewBlobUrls.set(id, url);
+    setEditorImageSrc(editor, id, url);
+  } catch {
+    // Fallback: ask the server. The cache-buster query forces a 302
+    // re-resolve so a stale derivative URL isn't reused. The new ops
+    // are already on the sidecar, so the server's /admin/preview will
+    // resolve to a fresh derivative.
+    setEditorImageSrc(editor, id, `/admin/preview/${id}?v=${Date.now()}`);
   }
 }
 
@@ -914,9 +988,8 @@ function mount(): void {
       del.addEventListener('click', () => {
         void deleteOpAt(id, idx).then(
           () => {
-            bustImagePreview(editor, id);
             setStatus(`deleted step ${idx + 1}`);
-            void refreshEdits(id);
+            void refreshAfterEdit(id);
           },
           (err: unknown) => setStatus(`delete failed: ${(err as Error).message}`)
         );
@@ -927,13 +1000,16 @@ function mount(): void {
     attrEditsList.replaceChildren(...items);
   }
 
-  /** Re-fetch sidecar meta and re-render the edits list / reset state.
+  /** Re-fetch sidecar meta, re-render the edits list / reset state,
+   * and repaint the editor's <img> via the client-side canvas pipeline.
+   * One round-trip + one canvas bake per call.
    * Best-effort: on failure we leave whatever was on screen. */
-  async function refreshEdits(id: string): Promise<void> {
+  async function refreshAfterEdit(id: string): Promise<void> {
     try {
       const meta = await fetchSidecarMeta(id);
       attrResetBtn.hidden = meta.ops.length === 0;
       renderEditsPanel(id, meta);
+      await refreshImagePreview(editor, id, meta.ops);
     } catch {
       /* best-effort */
     }
@@ -946,9 +1022,8 @@ function mount(): void {
     if (!id) return;
     void mutateSidecarOps(id, mutator).then(
       () => {
-        bustImagePreview(editor, id);
         setStatus(`${label} ${id.slice(0, 8)}…`);
-        void refreshEdits(id);
+        void refreshAfterEdit(id);
       },
       (err: unknown) => setStatus(`${label} failed: ${(err as Error).message}`)
     );
@@ -958,8 +1033,7 @@ function mount(): void {
     const id = activeImageId();
     if (id)
       void openCropper(id, () => {
-        bustImagePreview(editor, id);
-        void refreshEdits(id);
+        void refreshAfterEdit(id);
       });
   });
   attrRotateLBtn.addEventListener('click', () =>
@@ -979,9 +1053,8 @@ function mount(): void {
     if (!id) return;
     void undoLastOp(id).then(
       () => {
-        bustImagePreview(editor, id);
         setStatus(`undo ${id.slice(0, 8)}…`);
-        void refreshEdits(id);
+        void refreshAfterEdit(id);
       },
       (err: unknown) => setStatus(`undo failed: ${(err as Error).message}`)
     );
@@ -991,9 +1064,8 @@ function mount(): void {
     if (!id) return;
     void redoLastOp(id).then(
       () => {
-        bustImagePreview(editor, id);
         setStatus(`redo ${id.slice(0, 8)}…`);
-        void refreshEdits(id);
+        void refreshAfterEdit(id);
       },
       (err: unknown) => setStatus(`redo failed: ${(err as Error).message}`)
     );
@@ -1015,10 +1087,9 @@ function mount(): void {
     if (!id) return;
     void replaceSidecarOps(id, []).then(
       () => {
-        bustImagePreview(editor, id);
         attrResampleInput.value = '';
         setStatus('edits reset');
-        void refreshEdits(id);
+        void refreshAfterEdit(id);
       },
       (err: unknown) => setStatus(`reset failed: ${(err as Error).message}`)
     );
