@@ -594,6 +594,12 @@ const MAX_OPS = 8;
  * the SHARP_PIXEL_LIMIT from the original axis. */
 const MAX_RESAMPLE_PX = 8000;
 
+/** Cap on any single perspective corner coord. Practical pipeline
+ * canvases top out around 50 Mpx (the SHARP_PIXEL_LIMIT) so a coord
+ * 100k pixels on a side is well past anything legitimate; this exists
+ * to refuse runaway values from a buggy or malicious client up front. */
+const MAX_PERSPECTIVE_COORD = 100_000;
+
 const VALID_FITS = new Set(['inside', 'outside', 'cover', 'contain', 'fill']);
 
 type SidecarOp = { type: string; [k: string]: unknown };
@@ -735,6 +741,12 @@ function validateOps(raw: unknown, metadata: { width?: number; height?: number }
           return {
             ok: false,
             error: `ops[${i}] perspective corners[${k}] must be non-negative`
+          };
+        }
+        if (x > MAX_PERSPECTIVE_COORD || y > MAX_PERSPECTIVE_COORD) {
+          return {
+            ok: false,
+            error: `ops[${i}] perspective corners[${k}] must be <= ${MAX_PERSPECTIVE_COORD}`
           };
         }
         normCorners.push([Math.round(x), Math.round(y)]);

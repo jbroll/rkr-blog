@@ -354,3 +354,47 @@ test('renderDerivative falls back to original + applyOp when bake is absent', as
     `expected blue-dominant pixel, got rgb(${r0},${g0},${b0})`
   );
 });
+
+test('renderDerivative throws on perspective op when bake is absent', async (t) => {
+  // The architecture relies on the bake being present whenever ops
+  // contains 'perspective' — sharp can't apply a homography. If a
+  // render request slips through without the bake (e.g. /bake POST
+  // failed during Save), the renderer must refuse rather than silently
+  // produce a derivative that ignores the perspective op.
+  const root = freshSiteRoot(t);
+  const r = await ingest(root, await makeJpeg({ width: 200, height: 200 }));
+  // Manually plant a perspective op in the sidecar (the validateOps
+  // server-side path also accepts this; here we go direct so the
+  // render unit doesn't depend on the route).
+  const sidecarPath = path.join(root, 'sidecars', `${r.id}.json`);
+  const sidecar = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')) as {
+    ops: unknown[];
+    [k: string]: unknown;
+  };
+  sidecar.ops = [
+    {
+      type: 'perspective',
+      corners: [
+        [0, 0],
+        [200, 0],
+        [200, 200],
+        [0, 200]
+      ]
+    }
+  ];
+  fs.writeFileSync(sidecarPath, JSON.stringify(sidecar));
+  // No bake on disk for this id → render falls into the original +
+  // applyOp path → applyOp's switch hits the default branch.
+  assert.equal(fs.existsSync(bakePath(root, r.id)), false);
+
+  await assert.rejects(
+    renderDerivative({
+      originalId: r.id,
+      ops: sidecar.ops as unknown as Op[],
+      variant: { w: 100, fit: 'inside' },
+      output: { format: 'webp', quality: 85 },
+      siteRoot: root
+    }),
+    /unknown op type/
+  );
+});

@@ -10,6 +10,7 @@ import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 
 import { PipelineCache, type SidecarOp } from './canvas';
+import { computeHomography, perspectiveOutputSize } from './canvas-math';
 
 type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
 
@@ -404,6 +405,57 @@ async function postOpsToServer(
   if (!res.ok) throw new Error(`ops: ${res.status} ${await res.text()}`);
 }
 
+/** Commit one image's local edits to the server: POST ops + redoStack
+ * (which unlinks any prior bake), then if there's still ops to bake,
+ * apply them on the master and POST the WebP to /bake. Update baseline
+ * only after both calls land — partial commits stay dirty so a retry
+ * picks them up. */
+async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
+  await postOpsToServer(id, s.ops, s.redoStack);
+  if (s.ops.length > 0) {
+    const original = await loadOriginal(id);
+    const canvas = getPipelineCache(id).apply(
+      {
+        drawable: original,
+        width: original.naturalWidth,
+        height: original.naturalHeight
+      },
+      s.ops
+    );
+    const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
+    await uploadBake(id, blob);
+  }
+  s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+}
+
+/** Snapshot the in-memory edit state for every image whose local ops
+ * differ from server baseline. The post-Save flow auto-commits these
+ * before writing the markdown, and `beforeunload` blocks reload while
+ * any are present. */
+function dirtyImageStates(): Array<[string, LocalEditState]> {
+  const out: Array<[string, LocalEditState]> = [];
+  for (const [id, s] of localEditState) {
+    if (isDirty(s)) out.push([id, s]);
+  }
+  return out;
+}
+
+/** Save every dirty image's edits in parallel via Promise.allSettled.
+ * Returns counts so the caller can surface progress; rejected promises
+ * leave `baseline` untouched (image stays dirty). */
+async function flushDirtyImageEdits(): Promise<{ ok: number; failed: number }> {
+  const dirty = dirtyImageStates();
+  if (dirty.length === 0) return { ok: 0, failed: 0 };
+  const results = await Promise.allSettled(dirty.map(([id, s]) => saveImageEdits(id, s)));
+  let ok = 0;
+  let failed = 0;
+  for (const r of results) {
+    if (r.status === 'fulfilled') ok++;
+    else failed++;
+  }
+  return { ok, failed };
+}
+
 /** Human-readable label for one op, used in the edits list under the
  * image-attributes panel. Tries to format coords / dimensions in a way
  * the author can scan ("crop 400×300 @ 100,50"); falls back to the raw
@@ -438,6 +490,46 @@ function describeOp(op: SidecarOp): string {
 // Avoids a server round-trip per click. Falls back to the server-baked
 // preview when the browser can't decode the format (notably HEIC).
 
+/** Per-image cache cap. A 24-MP decoded HTMLImageElement is ~100 MB;
+ * a PipelineCache canvas is similarly heavy. Cap session-resident
+ * images so a long edit session that touches many photos doesn't
+ * grow without bound. localEditState is intentionally NOT capped —
+ * its entries are tiny JSON and evicting a dirty entry would silently
+ * drop the user's unsaved work. */
+const IMAGE_CACHE_CAP = 16;
+
+/** Read with LRU bump: re-inserts the entry so it becomes the
+ * most-recently-used. Map preserves insertion order, so the oldest
+ * entry is `keys().next().value`. */
+function lruGet<K, V>(map: Map<K, V>, key: K): V | undefined {
+  const value = map.get(key);
+  if (value !== undefined) {
+    map.delete(key);
+    map.set(key, value);
+  }
+  return value;
+}
+
+/** Insert (or move-to-most-recent), then evict the oldest entries
+ * until size is at or below `cap`. `onEvict` runs for each evicted
+ * pair — used to revoke Blob URLs so the underlying Blob is freed. */
+function lruSet<K, V>(
+  map: Map<K, V>,
+  key: K,
+  value: V,
+  cap: number,
+  onEvict?: (k: K, v: V) => void
+): void {
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > cap) {
+    const oldest = map.keys().next().value as K;
+    const oldValue = map.get(oldest) as V;
+    map.delete(oldest);
+    onEvict?.(oldest, oldValue);
+  }
+}
+
 const originalCache = new Map<string, Promise<HTMLImageElement>>();
 const previewBlobUrls = new Map<string, string>();
 // One pipeline cache per image id. On the common "added one op" case
@@ -447,10 +539,10 @@ const previewBlobUrls = new Map<string, string>();
 const pipelineCaches = new Map<string, PipelineCache>();
 
 function getPipelineCache(id: string): PipelineCache {
-  let c = pipelineCaches.get(id);
+  let c = lruGet(pipelineCaches, id);
   if (!c) {
     c = new PipelineCache();
-    pipelineCaches.set(id, c);
+    lruSet(pipelineCaches, id, c, IMAGE_CACHE_CAP);
   }
   return c;
 }
@@ -468,7 +560,7 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
  * id; cache is keyed on the Promise so concurrent callers share the
  * single in-flight fetch. */
 function loadOriginal(id: string): Promise<HTMLImageElement> {
-  const cached = originalCache.get(id);
+  const cached = lruGet(originalCache, id);
   if (cached) return cached;
   const p = (async (): Promise<HTMLImageElement> => {
     const res = await fetch(`/admin/original/${id}`);
@@ -483,7 +575,7 @@ function loadOriginal(id: string): Promise<HTMLImageElement> {
       URL.revokeObjectURL(url);
     }
   })();
-  originalCache.set(id, p);
+  lruSet(originalCache, id, p, IMAGE_CACHE_CAP);
   // Don't cache failures — a transient 5xx shouldn't poison the
   // session.
   p.catch(() => originalCache.delete(id));
@@ -536,9 +628,12 @@ async function refreshImagePreview(
     // WebP at q=0.95 with no perceptible quality loss.
     const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
     const url = URL.createObjectURL(blob);
+    // Revoke the prior URL for this id (if any) plus any URLs evicted
+    // by the LRU cap — without this the underlying Blobs would stay
+    // pinned in memory across the session.
     const old = previewBlobUrls.get(id);
     if (old) URL.revokeObjectURL(old);
-    previewBlobUrls.set(id, url);
+    lruSet(previewBlobUrls, id, url, IMAGE_CACHE_CAP, (_k, v) => URL.revokeObjectURL(v));
     setEditorImageSrc(editor, id, url);
     return blob;
   } catch {
@@ -839,6 +934,22 @@ async function openPerspective(id: string, s: LocalEditState, onSaved: () => voi
   window.addEventListener('resize', onResize);
 
   saveBtn.onclick = (): void => {
+    // Validate the quad is non-degenerate (no three colinear points)
+    // before committing: computeHomography returns null on a singular
+    // linear system, applyPerspective would then no-op, and the user
+    // would see no preview update with no explanation. Catch it here
+    // and tell them why.
+    const { w: outW, h: outH } = perspectiveOutputSize(corners);
+    const dst: [Point, Point, Point, Point] = [
+      [0, 0],
+      [outW, 0],
+      [outW, outH],
+      [0, outH]
+    ];
+    if (!computeHomography(corners, dst)) {
+      status.textContent = 'corners are degenerate (three colinear points?); adjust them';
+      return;
+    }
     const op: SidecarOp = {
       type: 'perspective',
       corners: corners.map((c) => [Math.round(c[0]), Math.round(c[1])])
@@ -1432,30 +1543,6 @@ function mount(): void {
     );
   });
 
-  /** POST the local ops + redoStack to the server, then bake the
-   * canvas and POST the WebP. Update baseline on success so isDirty
-   * flips back to false. Failures are surfaced; baseline only moves
-   * forward when both calls land. */
-  async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
-    await postOpsToServer(id, s.ops, s.redoStack);
-    if (s.ops.length > 0) {
-      // Build a fresh canvas from the ops we just committed (the
-      // pipeline cache likely already has it from the last preview).
-      const original = await loadOriginal(id);
-      const canvas = getPipelineCache(id).apply(
-        {
-          drawable: original,
-          width: original.naturalWidth,
-          height: original.naturalHeight
-        },
-        s.ops
-      );
-      const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
-      await uploadBake(id, blob);
-    }
-    s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
-  }
-
   function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay' | 'alts', value: string): void {
     if (populating) return;
     const activeKind: MultiImageKind | null = MULTI_KINDS.find((k) => editor.isActive(k)) ?? null;
@@ -1512,6 +1599,20 @@ async function handleSave(editor: Editor): Promise<void> {
     setStatus('slug and title are required');
     return;
   }
+  // Flush any dirty image edits BEFORE writing the post. Without this,
+  // the saved markdown would reference image ids whose server-side ops
+  // are stale relative to what the user just edited — silent data loss.
+  // Uses the same code path the per-image Save button uses, so failures
+  // leave the image state dirty and the user can retry.
+  const dirtyCount = dirtyImageStates().length;
+  if (dirtyCount > 0) {
+    setStatus(`saving ${dirtyCount} image edit${dirtyCount === 1 ? '' : 's'}…`);
+    const { ok, failed } = await flushDirtyImageEdits();
+    if (failed > 0) {
+      setStatus(`save aborted: ${failed}/${ok + failed} image edits failed to upload`);
+      return;
+    }
+  }
   setStatus('saving…');
   try {
     const json = editor.getJSON();
@@ -1521,6 +1622,15 @@ async function handleSave(editor: Editor): Promise<void> {
     setStatus(`save error: ${(err as Error).message}`);
   }
 }
+
+// Warn on reload / close while any image has unsaved local edits.
+// Modern browsers ignore the returned string and show a fixed prompt;
+// preventDefault + a non-empty returnValue is the cross-browser idiom.
+window.addEventListener('beforeunload', (ev) => {
+  if (dirtyImageStates().length === 0) return;
+  ev.preventDefault();
+  ev.returnValue = '';
+});
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', mount, { once: true });

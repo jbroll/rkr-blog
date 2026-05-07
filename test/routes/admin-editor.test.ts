@@ -1126,6 +1126,28 @@ test('POST /admin/sidecar/:id/ops rejects perspective with non-numeric / malform
   });
   assert.equal(neg.statusCode, 400);
   assert.match(neg.json<{ error: string }>().error, /non-negative/);
+
+  // Way-too-large coord: refuse runaway values up front instead of
+  // letting them flow into the sidecar and downstream renderer.
+  const huge = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [
+        {
+          type: 'perspective',
+          corners: [
+            [0, 0],
+            [200_000, 0],
+            [100, 100],
+            [0, 100]
+          ]
+        }
+      ]
+    }
+  });
+  assert.equal(huge.statusCode, 400);
+  assert.match(huge.json<{ error: string }>().error, /<= 100000/);
 });
 
 test('POST /admin/sidecar/:id/ops 400s when body.redoStack is not an array', async (t) => {
