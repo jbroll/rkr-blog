@@ -298,21 +298,59 @@ async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
   return (await res.json()) as SidecarMeta;
 }
 
-async function hasSidecarOps(id: string): Promise<boolean> {
-  const meta = await fetchSidecarMeta(id);
-  return meta.ops.length > 0;
-}
+type SidecarOp = { type: string; [k: string]: unknown };
 
-async function replaceSidecarOps(
-  id: string,
-  ops: Array<{ type: string; [k: string]: unknown }>
-): Promise<void> {
+async function replaceSidecarOps(id: string, ops: SidecarOp[]): Promise<void> {
   const res = await fetch(`/admin/sidecar/${id}/ops`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ops })
   });
   if (!res.ok) throw new Error(`save: ${res.status} ${await res.text()}`);
+}
+
+/** Fetch current sidecar ops, run them through `mutator`, normalize the
+ * result into canonical order, and save back. The canonical order is
+ * [crop, rotate, flip, resample]; only one of crop/resample is kept
+ * (latest wins), rotates are summed mod 360, flips are toggled per
+ * axis. This keeps the chain small and deterministic regardless of
+ * click order. */
+async function mutateSidecarOps(
+  id: string,
+  mutator: (ops: SidecarOp[]) => SidecarOp[]
+): Promise<void> {
+  const meta = await fetchSidecarMeta(id);
+  const next = canonicalizeOps(mutator(meta.ops));
+  await replaceSidecarOps(id, next);
+}
+
+const OP_ORDER: Record<string, number> = { crop: 0, rotate: 1, flip: 2, resample: 3 };
+
+function canonicalizeOps(ops: SidecarOp[]): SidecarOp[] {
+  // Coalesce: keep at most one crop / resample (last wins), sum rotate
+  // degrees mod 360, dedupe flip axes (each toggle cancels the previous
+  // for that axis).
+  let crop: SidecarOp | null = null;
+  let resample: SidecarOp | null = null;
+  let totalDegrees = 0;
+  const flipAxes = new Set<string>();
+  for (const op of ops) {
+    if (op.type === 'crop') crop = op;
+    else if (op.type === 'resample') resample = op;
+    else if (op.type === 'rotate') totalDegrees += Number(op.degrees ?? 0);
+    else if (op.type === 'flip') {
+      const a = String(op.axis);
+      if (flipAxes.has(a)) flipAxes.delete(a);
+      else flipAxes.add(a);
+    }
+  }
+  const out: SidecarOp[] = [];
+  if (crop) out.push(crop);
+  const norm = ((totalDegrees % 360) + 360) % 360;
+  if (norm !== 0) out.push({ type: 'rotate', degrees: norm });
+  for (const axis of flipAxes) out.push({ type: 'flip', axis });
+  if (resample) out.push(resample);
+  return out.sort((a, b) => (OP_ORDER[a.type] ?? 99) - (OP_ORDER[b.type] ?? 99));
 }
 
 /** Force the editor's <img> to refetch /admin/preview/<id> after a crop
@@ -548,7 +586,13 @@ function mount(): void {
   const attrCaption = $<HTMLInputElement>('rkr-image-caption');
   const attrPosition = $<HTMLSelectElement>('rkr-image-position');
   const attrCropBtn = $<HTMLButtonElement>('rkr-image-crop-btn');
-  const attrUncropBtn = $<HTMLButtonElement>('rkr-image-uncrop-btn');
+  const attrRotateLBtn = $<HTMLButtonElement>('rkr-image-rotate-l-btn');
+  const attrRotateRBtn = $<HTMLButtonElement>('rkr-image-rotate-r-btn');
+  const attrFlipHBtn = $<HTMLButtonElement>('rkr-image-flip-h-btn');
+  const attrFlipVBtn = $<HTMLButtonElement>('rkr-image-flip-v-btn');
+  const attrResampleInput = $<HTMLInputElement>('rkr-image-resample');
+  const attrResampleBtn = $<HTMLButtonElement>('rkr-image-resample-btn');
+  const attrResetBtn = $<HTMLButtonElement>('rkr-image-reset-btn');
 
   const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
   const multiLabel = $<HTMLHeadingElement>('rkr-multi-attrs-label');
@@ -646,20 +690,24 @@ function mount(): void {
       attrPosition.value = a.position ?? 'default';
       populating = false;
       attrPanel.hidden = false;
-      // Async: ask the server whether this sidecar has any ops; toggle
-      // the "Remove crop" button accordingly. Best-effort — failures
-      // just leave the button hidden.
+      // Async: load sidecar ops, toggle the Reset button, and populate
+      // the resample-width input from any existing resample op so the
+      // author sees the current value rather than an empty placeholder.
+      attrResetBtn.hidden = true;
+      attrResampleInput.value = '';
       if (a.id) {
-        void hasSidecarOps(a.id).then(
-          (has) => {
-            attrUncropBtn.hidden = !has;
+        void fetchSidecarMeta(a.id).then(
+          (meta) => {
+            attrResetBtn.hidden = meta.ops.length === 0;
+            const resample = meta.ops.find((o) => o.type === 'resample');
+            if (resample && typeof resample.w === 'number') {
+              attrResampleInput.value = String(resample.w);
+            }
           },
           () => {
-            attrUncropBtn.hidden = true;
+            /* best-effort */
           }
         );
-      } else {
-        attrUncropBtn.hidden = true;
       }
     } else {
       attrPanel.hidden = true;
@@ -699,22 +747,66 @@ function mount(): void {
   attrCaption.addEventListener('input', () => commitAttr('caption', attrCaption.value));
   attrPosition.addEventListener('change', () => commitAttr('position', attrPosition.value));
 
-  attrCropBtn.addEventListener('click', () => {
-    if (!editor.isActive('image')) return;
+  function activeImageId(): string | null {
+    if (!editor.isActive('image')) return null;
     const a = editor.getAttributes('image') as Partial<ImageAttrs>;
-    if (a.id) void openCropper(a.id, () => bustImagePreview(editor, a.id ?? ''));
-  });
-  attrUncropBtn.addEventListener('click', () => {
-    if (!editor.isActive('image')) return;
-    const a = editor.getAttributes('image') as Partial<ImageAttrs>;
-    if (!a.id) return;
-    void replaceSidecarOps(a.id, []).then(
+    return a.id ?? null;
+  }
+
+  /** Wrap a sidecar mutation: refuse if no image is selected, refresh
+   * the editor preview on success, surface errors to the status bar. */
+  function runEdit(label: string, mutator: (ops: SidecarOp[]) => SidecarOp[]): void {
+    const id = activeImageId();
+    if (!id) return;
+    void mutateSidecarOps(id, mutator).then(
       () => {
-        bustImagePreview(editor, a.id ?? '');
-        attrUncropBtn.hidden = true;
-        setStatus('crop removed');
+        bustImagePreview(editor, id);
+        attrResetBtn.hidden = false;
+        setStatus(`${label} ${id.slice(0, 8)}…`);
       },
-      (err: unknown) => setStatus(`uncrop failed: ${(err as Error).message}`)
+      (err: unknown) => setStatus(`${label} failed: ${(err as Error).message}`)
+    );
+  }
+
+  attrCropBtn.addEventListener('click', () => {
+    const id = activeImageId();
+    if (id) void openCropper(id, () => bustImagePreview(editor, id));
+  });
+  attrRotateLBtn.addEventListener('click', () =>
+    runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: -90 }])
+  );
+  attrRotateRBtn.addEventListener('click', () =>
+    runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: 90 }])
+  );
+  attrFlipHBtn.addEventListener('click', () =>
+    runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'horizontal' }])
+  );
+  attrFlipVBtn.addEventListener('click', () =>
+    runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'vertical' }])
+  );
+  attrResampleBtn.addEventListener('click', () => {
+    const w = Math.floor(Number(attrResampleInput.value) || 0);
+    if (w <= 0) {
+      // Empty input clears any existing resample op.
+      runEdit('resample cleared', (ops) => ops.filter((o) => o.type !== 'resample'));
+      return;
+    }
+    runEdit('resample', (ops) => [
+      ...ops.filter((o) => o.type !== 'resample'),
+      { type: 'resample', w, fit: 'inside' }
+    ]);
+  });
+  attrResetBtn.addEventListener('click', () => {
+    const id = activeImageId();
+    if (!id) return;
+    void replaceSidecarOps(id, []).then(
+      () => {
+        bustImagePreview(editor, id);
+        attrResetBtn.hidden = true;
+        attrResampleInput.value = '';
+        setStatus('edits reset');
+      },
+      (err: unknown) => setStatus(`reset failed: ${(err as Error).message}`)
     );
   });
 

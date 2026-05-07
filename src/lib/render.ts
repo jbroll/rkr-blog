@@ -48,7 +48,15 @@ export interface RotateOp {
   degrees?: number;
 }
 
-export type Op = CropOp | ResampleOp | RotateOp;
+/** Mirror across an axis. `horizontal` flips left↔right (sharp.flop),
+ * `vertical` flips top↔bottom (sharp.flip). We normalise the naming
+ * because sharp's flip/flop API is famously easy to confuse. */
+export interface FlipOp {
+  type: 'flip';
+  axis: 'horizontal' | 'vertical';
+}
+
+export type Op = CropOp | ResampleOp | RotateOp | FlipOp;
 
 export interface Variant {
   w?: number;
@@ -172,6 +180,11 @@ function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
       });
     case 'rotate':
       return p.rotate(op.degrees ?? 0);
+    case 'flip':
+      // sharp.flip is vertical (top↔bottom); sharp.flop is horizontal
+      // (left↔right). We expose `axis` instead of the flip/flop
+      // shorthand to spare every reader the same five-second confusion.
+      return op.axis === 'horizontal' ? p.flop() : p.flip();
     default: {
       const exhaustive: never = op;
       throw new Error(`renderDerivative: unknown op type ${(exhaustive as Op).type}`);

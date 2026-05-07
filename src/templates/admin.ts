@@ -162,7 +162,16 @@ export function renderAdminPage(data: AdminPageData): string {
   <span></span>
   <span class="rkr-image-actions">
     <button type="button" id="rkr-image-crop-btn">Crop…</button>
-    <button type="button" id="rkr-image-uncrop-btn" hidden>Remove crop</button>
+    <button type="button" id="rkr-image-rotate-l-btn" title="Rotate 90° counter-clockwise">↺</button>
+    <button type="button" id="rkr-image-rotate-r-btn" title="Rotate 90° clockwise">↻</button>
+    <button type="button" id="rkr-image-flip-h-btn" title="Flip horizontally">⇋</button>
+    <button type="button" id="rkr-image-flip-v-btn" title="Flip vertically">⇕</button>
+    <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
+  </span>
+  <label for="rkr-image-resample">Max width (px)</label>
+  <span class="rkr-image-actions">
+    <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
+    <button type="button" id="rkr-image-resample-btn">Apply</button>
   </span>
 </div>
 <dialog id="rkr-crop-modal" aria-label="Crop image">

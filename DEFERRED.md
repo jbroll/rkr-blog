@@ -94,17 +94,6 @@ change.
 **Trigger.** First time an author wants the same source image cropped
 differently in two posts.
 
-### Other crop ops (rotate, flip, resample) lack UI
-**What.** The render pipeline supports `resample` and `rotate` ops; the
-editor only emits `crop`. validateOps in src/routes/admin.ts also only
-accepts `crop`.
-
-**Why deferred.** Crop is the 80% case; rotate/resample need their own
-UIs.
-
-**Trigger.** When an author wants to rotate or resize without leaving
-the editor.
-
 ## Step 8 follow-up
 
 ### Per-image alt text in galleries (container directive form)

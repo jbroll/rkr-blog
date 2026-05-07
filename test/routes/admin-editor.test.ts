@@ -315,10 +315,13 @@ test('POST /admin/sidecar/:id/ops rejects unknown op types', async (t) => {
   const res = await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'flip-horizontal' }] }
+    payload: { ops: [{ type: 'invert' }] }
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json<{ error: string }>().error, /must be 'crop'/);
+  assert.match(
+    res.json<{ error: string }>().error,
+    /must be 'crop' \| 'rotate' \| 'flip' \| 'resample'/
+  );
 });
 
 test('POST /admin/sidecar/:id/ops rejects too-many ops', async (t) => {
@@ -420,6 +423,135 @@ test('POST /admin/sidecar/:id/ops unlinks stale derivatives so previously-shared
   assert.equal(fs.existsSync(stale2), false);
   // …but a derivative for a DIFFERENT id is untouched.
   assert.equal(fs.existsSync(path.join(cacheImg, otherId)), true);
+});
+
+test('POST /admin/sidecar/:id/ops accepts rotate / flip / resample shapes', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [
+        { type: 'crop', x: 0, y: 0, w: 400, h: 400 },
+        { type: 'rotate', degrees: 90 },
+        { type: 'flip', axis: 'horizontal' },
+        { type: 'resample', w: 200, fit: 'inside' }
+      ]
+    }
+  });
+  assert.equal(res.statusCode, 200);
+  const ops = res.json<OpsResponse>().ops;
+  assert.equal(ops.length, 4);
+  assert.equal(ops[1]?.type, 'rotate');
+  assert.equal(ops[2]?.type, 'flip');
+  assert.equal(ops[3]?.type, 'resample');
+});
+
+test('POST /admin/sidecar/:id/ops normalizes rotate degrees mod 360 and drops zero-angle', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // 450° → 90° after mod 360. -90 → 270.
+  const big = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: 450 }] }
+  });
+  assert.equal(big.json<OpsResponse>().ops[0]?.degrees, 90);
+
+  const neg = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: -90 }] }
+  });
+  assert.equal(neg.json<OpsResponse>().ops[0]?.degrees, 270);
+
+  // 360° normalizes to 0 → silently dropped.
+  const zero = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: 360 }] }
+  });
+  assert.deepEqual(zero.json<OpsResponse>().ops, []);
+});
+
+test('POST /admin/sidecar/:id/ops rejects rotate degrees that are not multiples of 90', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: 45 }] }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /multiple of 90/);
+});
+
+test('POST /admin/sidecar/:id/ops rejects flip with bad axis', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'flip', axis: 'diagonal' }] }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /horizontal.*vertical/);
+});
+
+test('POST /admin/sidecar/:id/ops rejects resample with no dimension or out-of-range dimension', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const empty = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'resample' }] }
+  });
+  assert.equal(empty.statusCode, 400);
+  assert.match(empty.json<{ error: string }>().error, /needs at least w or h/);
+
+  const huge = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'resample', w: 99999 }] }
+  });
+  assert.equal(huge.statusCode, 400);
+  assert.match(huge.json<{ error: string }>().error, /<= 8000/);
 });
 
 test('POST /admin/sidecar/:id/ops refuses non-empty ops when source has no recorded dimensions', async (t) => {

@@ -177,3 +177,81 @@ test('renderDerivative cleans up its temp file on failure', async (t) => {
     : [];
   assert.deepEqual(leftovers, [], 'no .tmp file should be left behind');
 });
+
+// ---- rotate / flip / resample end-to-end ------------------------------
+
+test('renderDerivative honours rotate (90° swaps width/height)', async (t) => {
+  const root = freshSiteRoot(t);
+  // 200x100 source rotated 90° → 100x200 derivative.
+  const r = await ingest(root, await makeJpeg({ width: 200, height: 100 }));
+  const result = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [{ type: 'rotate', degrees: 90 }],
+    variant: {}, // skip the resize so dims match the rotated source exactly
+    siteRoot: root
+  });
+  const meta = await sharp(result.path).metadata();
+  assert.equal(meta.width, 100);
+  assert.equal(meta.height, 200);
+});
+
+test('renderDerivative honours flip vertical and flip horizontal', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingest(root, await makeJpeg({ width: 100, height: 100 }));
+
+  const horizontal = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [{ type: 'flip', axis: 'horizontal' }],
+    siteRoot: root
+  });
+  const vertical = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [{ type: 'flip', axis: 'vertical' }],
+    siteRoot: root
+  });
+  // Different ops → different cacheKeys → different on-disk files.
+  assert.notEqual(horizontal.path, vertical.path);
+  // Both succeed — solid-color source so we can't usefully compare
+  // pixels, but file existence + non-zero bytes confirms sharp ran.
+  assert.ok(horizontal.bytes > 0 && vertical.bytes > 0);
+});
+
+test('renderDerivative honours resample with explicit dimensions', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingest(root, await makeJpeg({ width: 800, height: 600 }));
+  const result = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [{ type: 'resample', w: 200, fit: 'inside' }],
+    variant: {},
+    siteRoot: root
+  });
+  const meta = await sharp(result.path).metadata();
+  assert.equal(meta.width, 200);
+  assert.equal(meta.height, 150); // aspect preserved by 'inside' fit
+});
+
+test('renderDerivative composes crop + rotate + flip + resample in order', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingest(root, await makeJpeg({ width: 800, height: 600 }));
+  // crop to 400x400, rotate 90 (→400x400 still), flip horizontal,
+  // resample to 100 wide. Final: 100x100.
+  const result = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [
+      { type: 'crop', x: 100, y: 100, w: 400, h: 400 },
+      { type: 'rotate', degrees: 90 },
+      { type: 'flip', axis: 'horizontal' },
+      { type: 'resample', w: 100, fit: 'inside' }
+    ],
+    variant: {},
+    siteRoot: root
+  });
+  const meta = await sharp(result.path).metadata();
+  assert.equal(meta.width, 100);
+  assert.equal(meta.height, 100);
+});

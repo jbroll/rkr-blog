@@ -169,9 +169,9 @@ export default async function adminRoutes(
     }
   );
 
-  // Replace a sidecar's ops array. Used by the crop UI; future image-
-  // edit ops (resample, rotate) extend the same endpoint.
-  // Crops live on the SIDECAR, not per-instance: changing a sidecar's
+  // Replace a sidecar's ops array. Used by the crop / rotate / flip /
+  // resample buttons in the image attribute panel.
+  // Edit ops live on the SIDECAR, not per-instance: changing a sidecar's
   // ops affects every post that references this image. That's the
   // existing render-pipeline design (sidecar.ops is the source of truth).
   fastify.post<{ Params: { id: string }; Body: { ops?: unknown } }>(
@@ -405,6 +405,13 @@ const SIDECAR_LIST_TTL_MS = 5_000;
  * a million-step pipeline that the renderer would have to execute. */
 const MAX_OPS = 8;
 
+/** Cap on a resample target dimension. Above this we'd be asking sharp
+ * to bake a derivative larger than any realistic display, and approach
+ * the SHARP_PIXEL_LIMIT from the original axis. */
+const MAX_RESAMPLE_PX = 8000;
+
+const VALID_FITS = new Set(['inside', 'outside', 'cover', 'contain', 'fill']);
+
 interface ValidatedOps {
   ok: true;
   ops: { type: string; [k: string]: unknown }[];
@@ -413,9 +420,8 @@ type OpsValidation = ValidatedOps | { ok: false; error: string };
 
 /**
  * Validate the body's `ops` array and clamp it against the source's
- * actual pixel bounds. Currently supports only the `crop` op shape
- * (the only op the editor's crop UI emits today); resample/rotate land
- * here when their UIs ship.
+ * actual pixel bounds. Supports the four edit ops the renderer knows
+ * about: crop, rotate, flip, resample.
  */
 function validateOps(raw: unknown, metadata: { width?: number; height?: number }): OpsValidation {
   if (!Array.isArray(raw)) return { ok: false, error: 'ops must be an array' };
@@ -438,32 +444,86 @@ function validateOps(raw: unknown, metadata: { width?: number; height?: number }
       return { ok: false, error: `ops[${i}] must be an object` };
     }
     const op = opRaw as Record<string, unknown>;
-    if (op.type !== 'crop') {
-      return { ok: false, error: `ops[${i}].type must be 'crop' (got ${String(op.type)})` };
-    }
-    const x = Number(op.x);
-    const y = Number(op.y);
-    const w = Number(op.w);
-    const h = Number(op.h);
-    if (![x, y, w, h].every(Number.isFinite)) {
-      return { ok: false, error: `ops[${i}] crop must have numeric x/y/w/h` };
-    }
-    if (x < 0 || y < 0 || w <= 0 || h <= 0) {
-      return { ok: false, error: `ops[${i}] crop must have x/y >= 0 and w/h > 0` };
-    }
-    if (W > 0 && H > 0 && (x + w > W || y + h > H)) {
+    const type = op.type;
+    if (type === 'crop') {
+      const x = Number(op.x);
+      const y = Number(op.y);
+      const w = Number(op.w);
+      const h = Number(op.h);
+      if (![x, y, w, h].every(Number.isFinite)) {
+        return { ok: false, error: `ops[${i}] crop must have numeric x/y/w/h` };
+      }
+      if (x < 0 || y < 0 || w <= 0 || h <= 0) {
+        return { ok: false, error: `ops[${i}] crop must have x/y >= 0 and w/h > 0` };
+      }
+      if (W > 0 && H > 0 && (x + w > W || y + h > H)) {
+        return {
+          ok: false,
+          error: `ops[${i}] crop ${x},${y} ${w}x${h} exceeds source ${W}x${H}`
+        };
+      }
+      out.push({
+        type: 'crop',
+        x: Math.floor(x),
+        y: Math.floor(y),
+        w: Math.floor(w),
+        h: Math.floor(h)
+      });
+    } else if (type === 'rotate') {
+      const degrees = Number(op.degrees ?? 0);
+      // Only orthogonal rotations make sense in our flow (the editor
+      // emits ±90 multiples). Sharp accepts arbitrary angles, which
+      // would force libvips to fill the corners — reject as
+      // probably-wrong rather than render unexpectedly.
+      if (!Number.isFinite(degrees) || degrees % 90 !== 0) {
+        return { ok: false, error: `ops[${i}] rotate degrees must be a multiple of 90` };
+      }
+      const norm = ((degrees % 360) + 360) % 360;
+      if (norm === 0) continue; // no-op rotation; drop silently
+      out.push({ type: 'rotate', degrees: norm });
+    } else if (type === 'flip') {
+      const axis = op.axis;
+      if (axis !== 'horizontal' && axis !== 'vertical') {
+        return { ok: false, error: `ops[${i}] flip axis must be 'horizontal' or 'vertical'` };
+      }
+      out.push({ type: 'flip', axis });
+    } else if (type === 'resample') {
+      const w = op.w !== undefined ? Number(op.w) : undefined;
+      const h = op.h !== undefined ? Number(op.h) : undefined;
+      if (w === undefined && h === undefined) {
+        return { ok: false, error: `ops[${i}] resample needs at least w or h` };
+      }
+      for (const [name, v] of [
+        ['w', w],
+        ['h', h]
+      ] as const) {
+        if (v === undefined) continue;
+        if (!Number.isFinite(v) || v <= 0) {
+          return { ok: false, error: `ops[${i}] resample ${name} must be > 0` };
+        }
+        if (v > MAX_RESAMPLE_PX) {
+          return {
+            ok: false,
+            error: `ops[${i}] resample ${name} must be <= ${MAX_RESAMPLE_PX}`
+          };
+        }
+      }
+      const fitRaw = op.fit;
+      const fit =
+        typeof fitRaw === 'string' && VALID_FITS.has(fitRaw) ? (fitRaw as string) : 'inside';
+      const norm: { type: 'resample'; w?: number; h?: number; fit: string } = {
+        type: 'resample',
+        fit
+      };
+      if (w !== undefined) norm.w = Math.floor(w);
+      if (h !== undefined) norm.h = Math.floor(h);
+      out.push(norm);
+    } else {
       return {
         ok: false,
-        error: `ops[${i}] crop ${x},${y} ${w}x${h} exceeds source ${W}x${H}`
+        error: `ops[${i}].type must be 'crop' | 'rotate' | 'flip' | 'resample' (got ${String(type)})`
       };
     }
-    out.push({
-      type: 'crop',
-      x: Math.floor(x),
-      y: Math.floor(y),
-      w: Math.floor(w),
-      h: Math.floor(h)
-    });
   }
   return { ok: true, ops: out };
 }
