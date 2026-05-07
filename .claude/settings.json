@@ -2,5 +2,18 @@
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -c 'if (.tool_input.command // \"\" | test(\"git commit\")) then {hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:\"Commit landed. Pause before the next task and consider running /review-step (or note what you reviewed about this commit and adjacent code).\"}} else empty end'"
+          }
+        ]
+      }
+    ]
   }
 }
