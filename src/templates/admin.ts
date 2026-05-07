@@ -103,6 +103,22 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-root .rkr-multi-caption {
     margin-top: .35rem; color: #666; font-size: .85rem; font-style: italic;
   }
+  /* Site.css's image positioning rules (rkr-pos-default, rkr-pos-full,
+     rkr-pos-left, rkr-pos-right) target the public-page <figure> wrapper
+     and assume the post is rendered inside the page's outer column. The
+     editor's ImageNode emits a bare <img class="rkr-image rkr-pos-X">
+     without that wrapper, so a user picking position=full would otherwise
+     trigger width:100vw + negative-margin breakout that escapes the
+     editor frame entirely. Clamp every editor image to the editable box;
+     the actual breakout/float behavior takes effect only on the published
+     page. Higher specificity than .rkr-pos-* so this wins without !important. */
+  #rkroll-admin-root img.rkr-image {
+    display: block;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    margin: .5rem 0;
+  }
 </style>
 </head>
 <body>
