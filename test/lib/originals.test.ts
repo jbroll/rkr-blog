@@ -150,3 +150,27 @@ test('ingestStream rejects non-image bytes', async (t) => {
     assert.deepEqual(fs.readdirSync(tmpDir), []);
   }
 });
+
+test('ingestStream rejects oversized images (decompression-bomb defense)', async (t) => {
+  const root = freshSiteRoot(t);
+  // 8000 x 8000 = 64 Mpx > 50 Mpx cap. Sharp's limitInputPixels throws
+  // when the metadata pipeline tries to decode pixel-count guards.
+  const big = await sharp({
+    create: { width: 8000, height: 8000, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  })
+    .jpeg({ quality: 50 })
+    .toBuffer();
+  await assert.rejects(
+    ingestStream({
+      stream: Readable.from([big]),
+      siteRoot: root,
+      source: { kind: 'upload', originalName: 'huge.jpg' }
+    }),
+    /(too large|exceeds|recognized image)/
+  );
+  // No leftover temp file.
+  const tmpDir = path.join(root, 'originals', '.tmp');
+  if (fs.existsSync(tmpDir)) {
+    assert.deepEqual(fs.readdirSync(tmpDir), []);
+  }
+});

@@ -15,6 +15,7 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
+import { SHARP_PIXEL_LIMIT } from './render.ts';
 import {
   type Sidecar,
   sidecarPath,
@@ -98,10 +99,20 @@ export async function ingestStream({
 
   let meta: sharp.Metadata;
   try {
-    meta = await sharp(tmpPath).metadata();
+    meta = await sharp(tmpPath, { limitInputPixels: SHARP_PIXEL_LIMIT }).metadata();
   } catch (err) {
     await safeUnlink(tmpPath);
     throw new Error(`ingestStream: not a recognized image: ${(err as Error).message}`);
+  }
+
+  // Reject decompression-bomb inputs early. Sharp's limitInputPixels
+  // throws on actual decode but metadata() may return dimensions without
+  // decoding; cross-check.
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  if (w * h > SHARP_PIXEL_LIMIT) {
+    await safeUnlink(tmpPath);
+    throw new Error(`ingestStream: image too large (${w}x${h} pixels exceeds limit)`);
   }
 
   const ext = meta.format ? FORMAT_TO_EXT[meta.format] : undefined;

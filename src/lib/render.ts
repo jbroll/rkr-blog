@@ -11,6 +11,11 @@ import { cacheKey } from './hash.ts';
 import { originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
+/** Maximum pixel count any sharp pipeline will decode. Anti-DoS: caps
+ * memory and CPU on a single render. 50 Mpx is comfortably above any
+ * realistic camera sensor. */
+export const SHARP_PIXEL_LIMIT = 50_000_000;
+
 const FORMAT_TO_EXT: Record<string, string | undefined> = {
   jpeg: 'jpg',
   png: 'png',
@@ -123,7 +128,11 @@ export async function renderDerivative(
   // Per spec §11: keep libvips threads from multiplying with job concurrency.
   sharp.concurrency(1);
 
-  let pipeline = sharp(origPath, { failOn: 'error' });
+  // Cap decoded pixel count to defend against decompression bombs — a
+  // malicious 64Kpx-square WebP can decompress to gigabytes of memory.
+  // 50 Mpx covers any realistic camera sensor; reject larger originals
+  // up front. Mirror the same cap in originals.ingestStream.
+  let pipeline = sharp(origPath, { failOn: 'error', limitInputPixels: SHARP_PIXEL_LIMIT });
   for (const op of ops) {
     pipeline = applyOp(pipeline, op);
   }

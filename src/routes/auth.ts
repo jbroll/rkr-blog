@@ -69,17 +69,26 @@ export default async function authRoutes(
     await fastify.register(cookiePlugin);
   }
 
-  fastify.get('/admin/auth/google/start', async (_req, reply) => {
-    const state = generateState();
-    const codeVerifier = generateCodeVerifier();
-    const url = exchange.authorizationUrl(state, codeVerifier, ['openid', 'profile', 'email']);
+  fastify.get(
+    '/admin/auth/google/start',
+    {
+      // Cap login-start bursts per IP — defense against probing /admin
+      // paths or churning OAuth state cookies. 30/min is very generous
+      // for a real user.
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+    },
+    async (_req, reply) => {
+      const state = generateState();
+      const codeVerifier = generateCodeVerifier();
+      const url = exchange.authorizationUrl(state, codeVerifier, ['openid', 'profile', 'email']);
 
-    setCookie(reply, OAUTH_STATE_COOKIE, JSON.stringify({ state, codeVerifier }), {
-      maxAge: OAUTH_STATE_TTL_S,
-      secure: secureCookies
-    });
-    return reply.redirect(url.toString(), 302);
-  });
+      setCookie(reply, OAUTH_STATE_COOKIE, JSON.stringify({ state, codeVerifier }), {
+        maxAge: OAUTH_STATE_TTL_S,
+        secure: secureCookies
+      });
+      return reply.redirect(url.toString(), 302);
+    }
+  );
 
   fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     '/admin/auth/google/callback',

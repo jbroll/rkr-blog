@@ -2,6 +2,7 @@
 // without binding a port, and startServer() for the bin entry point.
 
 import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import Fastify from 'fastify';
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
@@ -80,6 +81,12 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       files: 1
     }
   });
+
+  // Rate limiter: register globally with no default, individual routes
+  // opt in via `config.rateLimit`. /img/:filename is gated to defend
+  // against derivative-render DoS (sharp pipelines are expensive even
+  // when they fail). Login start is gated against credential probing.
+  await app.register(rateLimit, { global: false });
 
   app.get('/health', async () => ({ ok: true }));
 

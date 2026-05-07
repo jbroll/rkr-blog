@@ -119,60 +119,70 @@ export default async function publicRoutes(
 
   // ---- derivative image: GET /img/:filename -----------------------------
 
-  fastify.get<{ Params: { filename: string } }>('/img/:filename', async (req, reply) => {
-    const { filename } = req.params;
-    const m = FILENAME_RE.exec(filename);
-    if (!m) {
-      return reply.code(404).send({ error: 'bad filename' });
-    }
-    const originalId = m[1] as string;
-    const ophash = m[2] as string;
-    const fmtRaw = m[3] as string;
-    const format: OutputFormat = fmtRaw === 'jpg' ? 'jpeg' : (fmtRaw as OutputFormat);
+  fastify.get<{ Params: { filename: string } }>(
+    '/img/:filename',
+    {
+      // Anti-DoS: cap derivative renders per IP. Apache serves cache hits
+      // directly (spec §14), so this only bites on cache-miss requests
+      // hitting Fastify — exactly the expensive path. 120 req/min/IP is
+      // very generous for normal browsing; abusive bursts get 429.
+      config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+    },
+    async (req, reply) => {
+      const { filename } = req.params;
+      const m = FILENAME_RE.exec(filename);
+      if (!m) {
+        return reply.code(404).send({ error: 'bad filename' });
+      }
+      const originalId = m[1] as string;
+      const ophash = m[2] as string;
+      const fmtRaw = m[3] as string;
+      const format: OutputFormat = fmtRaw === 'jpg' ? 'jpeg' : (fmtRaw as OutputFormat);
 
-    const sidecar = await sidecarRead(siteRoot, originalId);
-    if (!sidecar) return reply.code(404).send({ error: 'unknown original' });
+      const sidecar = await sidecarRead(siteRoot, originalId);
+      if (!sidecar) return reply.code(404).send({ error: 'unknown original' });
 
-    const match = findVariantOutput(sidecar, ophash);
-    if (!match) return reply.code(404).send({ error: 'no matching variant' });
+      const match = findVariantOutput(sidecar, ophash);
+      if (!match) return reply.code(404).send({ error: 'no matching variant' });
 
-    const args: DerivativeArgs & { siteRoot: string } = {
-      originalId,
-      ops: sidecar.ops as Op[],
-      variant: match.variant,
-      output: { ...match.output, format },
-      siteRoot
-    };
+      const args: DerivativeArgs & { siteRoot: string } = {
+        originalId,
+        ops: sidecar.ops as Op[],
+        variant: match.variant,
+        output: { ...match.output, format },
+        siteRoot
+      };
 
-    const renderPromise = renderDerivative(args);
-    let timer: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<'timeout'>((resolve) => {
-      timer = setTimeout(() => resolve('timeout'), renderBudgetMs);
-    });
-
-    let result: Awaited<typeof renderPromise> | 'timeout';
-    try {
-      result = await Promise.race([renderPromise, timeoutPromise]);
-    } catch (err) {
-      if (timer) clearTimeout(timer);
-      req.log.error({ err, filename }, 'render failed');
-      return reply.code(500).send({ error: 'render failed' });
-    }
-    if (timer) clearTimeout(timer);
-
-    if (result === 'timeout') {
-      enqueue(db, { kind: 'render', payload: args, cacheKey: ophash });
-      renderPromise.catch((err: unknown) => {
-        req.log.warn({ err, filename }, 'background render error');
+      const renderPromise = renderDerivative(args);
+      let timer: NodeJS.Timeout | undefined;
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), renderBudgetMs);
       });
-      return reply.code(202).send({ status: 'rendering' });
-    }
 
-    return reply
-      .type(MIME[format])
-      .header('content-length', String(result.bytes))
-      .send(fs.createReadStream(result.path));
-  });
+      let result: Awaited<typeof renderPromise> | 'timeout';
+      try {
+        result = await Promise.race([renderPromise, timeoutPromise]);
+      } catch (err) {
+        if (timer) clearTimeout(timer);
+        req.log.error({ err, filename }, 'render failed');
+        return reply.code(500).send({ error: 'render failed' });
+      }
+      if (timer) clearTimeout(timer);
+
+      if (result === 'timeout') {
+        enqueue(db, { kind: 'render', payload: args, cacheKey: ophash });
+        renderPromise.catch((err: unknown) => {
+          req.log.warn({ err, filename }, 'background render error');
+        });
+        return reply.code(202).send({ status: 'rendering' });
+      }
+
+      return reply
+        .type(MIME[format])
+        .header('content-length', String(result.bytes))
+        .send(fs.createReadStream(result.path));
+    }
+  );
 }
 
 interface VariantOutputMatch {
