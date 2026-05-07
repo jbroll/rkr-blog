@@ -212,6 +212,22 @@ function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
 
   const parts: string[] = [`ids=${quote(ids)}`];
 
+  // Per-image alts (parallel array, comma-separated). Only emit when at
+  // least one slot has non-empty alt text — bare `alts=",,,"` is noise.
+  // Each alt's commas would break this format; the spec's
+  // `:::gallery{...}` container directive form is the path for that
+  // case (DEFERRED.md).
+  const altsRaw = attrs.alts;
+  const altsList: string[] =
+    typeof altsRaw === 'string'
+      ? altsRaw.split(',').map((s) => s.trim())
+      : Array.isArray(altsRaw)
+        ? altsRaw.map((s) => (typeof s === 'string' ? s.trim() : ''))
+        : [];
+  if (altsList.some((a) => a.length > 0)) {
+    parts.push(`alts=${quote(altsList.join(','))}`);
+  }
+
   if (kind === 'gallery') {
     const layout = attrs.layout;
     // Only emit when set to a non-default value; the public renderer's
@@ -293,6 +309,9 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
         type: d.name,
         attrs: {
           ids: attrs.ids ?? '',
+          // Parallel alt-text array, same comma-separated convention as
+          // ids. Empty string means "no alts authored".
+          alts: attrs.alts ?? '',
           caption: attrs.caption ?? ''
         }
       };

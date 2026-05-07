@@ -13,22 +13,42 @@ import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
 
+export interface IdAndAlt {
+  id: string;
+  /** Raw alt text, NOT escaped — caller passes through escapeAttr
+   * before interpolating into HTML. Empty string means "no alt
+   * authored", which renders as `alt=""` (decorative default). */
+  alt: string;
+}
+
 /**
- * Parse the `ids="abc,def,012"` attribute. Returns an order-preserving,
- * deduplicated list of lowercased ids that pass the 6-64 hex regex.
- * Duplicate inputs (e.g. `ids="abc,abc"`) are coalesced to a single
- * entry so the same image isn't rendered twice and so the diptych /
- * triptych slot count guard can't be bypassed by repeating an id.
+ * Parse the `ids="abc,def,012"` attribute alongside the optional
+ * parallel `alts="…"` attribute. Returns an order-preserving,
+ * deduplicated list of {id, alt} pairs:
+ *
+ * - Each id is trimmed, lowercased, and must match the 6-64 hex regex.
+ * - Duplicate ids (`ids="abc,abc"`) coalesce to a single entry; the
+ *   first occurrence wins, so the same image isn't rendered twice and
+ *   the diptych/triptych slot count guard can't be bypassed.
+ * - Each surviving id is paired with the alt at its original comma-
+ *   separated position. Whitespace-trimmed; empty entries map to
+ *   empty alts (the safe-decorative default).
+ *
+ * Caveat: this format can't carry a comma inside any individual alt.
+ * The spec's `:::gallery{...}` container directive form is the path
+ * for that case (DEFERRED.md → "Per-image alt for galleries").
  */
-export function extractImageIds(raw: unknown): string[] {
-  if (typeof raw !== 'string') return [];
+export function extractImageIdsAndAlts(idsRaw: unknown, altsRaw: unknown): IdAndAlt[] {
+  if (typeof idsRaw !== 'string') return [];
+  const altsList = typeof altsRaw === 'string' ? altsRaw.split(',').map((s) => s.trim()) : [];
   const seen = new Set<string>();
-  const out: string[] = [];
-  for (const s of raw.split(',')) {
-    const t = s.trim().toLowerCase();
+  const out: IdAndAlt[] = [];
+  const splits = idsRaw.split(',');
+  for (let i = 0; i < splits.length; i++) {
+    const t = splits[i]?.trim().toLowerCase() ?? '';
     if (HEX_PREFIX.test(t) && !seen.has(t)) {
       seen.add(t);
-      out.push(t);
+      out.push({ id: t, alt: altsList[i] ?? '' });
     }
   }
   return out;

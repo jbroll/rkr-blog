@@ -13,7 +13,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import {
-  extractImageIds,
+  extractImageIdsAndAlts,
   getKnownIds,
   indent,
   pictureAspect,
@@ -47,11 +47,19 @@ function extractCaption(node: DirectiveNode): string | null {
 interface ItemRender {
   id: string;
   sidecar: Sidecar;
+  /** Pre-escaped alt text. Empty = decorative default. */
+  alt: string;
 }
 
 function renderItem(item: ItemRender): string {
   const picture = indent(
-    renderPicture({ id: item.id, sidecar: item.sidecar, variants, fallback }),
+    renderPicture({
+      id: item.id,
+      sidecar: item.sidecar,
+      variants,
+      fallback,
+      alt: item.alt
+    }),
     '    '
   );
   return [
@@ -70,7 +78,7 @@ interface PanelSpec {
 
 function makeRender(spec: PanelSpec) {
   return async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
-    const inputs = extractImageIds(node.attributes?.ids);
+    const inputs = extractImageIdsAndAlts(node.attributes?.ids, node.attributes?.alts);
     if (inputs.length === 0) {
       return `<!-- ${spec.kind}: no valid ids -->`;
     }
@@ -88,16 +96,19 @@ function makeRender(spec: PanelSpec) {
     }
 
     const known = getKnownIds(ctx);
-    const resolved = resolveIds(trimmed, known);
+    const resolved = resolveIds(
+      trimmed.map((p) => p.id),
+      known
+    );
 
     const items: ItemRender[] = [];
     const missingComments: string[] = [];
     for (let i = 0; i < resolved.length; i++) {
       const id = resolved[i];
+      const inputId = trimmed[i]?.id ?? '';
+      const alt = escapeAttr(trimmed[i]?.alt ?? '');
       if (!id) {
-        missingComments.push(
-          `<!-- ${spec.kind}: no match for "${escapeAttr(trimmed[i] ?? '')}" -->`
-        );
+        missingComments.push(`<!-- ${spec.kind}: no match for "${escapeAttr(inputId)}" -->`);
         continue;
       }
       const sidecar = await sidecarRead(ctx.siteRoot, id);
@@ -105,7 +116,7 @@ function makeRender(spec: PanelSpec) {
         missingComments.push(`<!-- ${spec.kind}: no sidecar for ${escapeAttr(id)} -->`);
         continue;
       }
-      items.push({ id, sidecar });
+      items.push({ id, sidecar, alt });
     }
 
     const allComments = [...overflowComments, ...missingComments];

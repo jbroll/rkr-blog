@@ -104,13 +104,17 @@ differently in two posts.
 
 ## Step 8 follow-up
 
-### Per-image alt text in galleries (container directive form)
-**What.** Galleries/carousels/diptychs all hard-code `alt=""` (decorative
-default). For galleries that aren't decorative, there's no path for
-per-image alt text. Spec §12 mentions a future container directive form
-(`:::gallery{...}` enclosing `::image{...}` children) that would address this.
+### Container directive form for galleries (per-image alts with commas)
+**What.** Per-image alt text now ships via a parallel `alts="a,b,c"`
+attribute on every multi-image directive (gallery / carousel /
+diptych / triptych). The leaf form CAN'T carry a comma inside any
+single alt — those have to live in the spec's container directive
+form (`:::gallery{...}` enclosing `::image{...}` children), which
+hasn't been implemented yet.
 
-**Why deferred.** The leaf-directive MVP shipped first; the container form
-is a real parser+renderer change.
+**Why deferred.** The parallel-array form covers ~95% of real alt
+text and required no parser change. The container form is a real
+remarkDirective + renderer + editor refactor.
 
-**Trigger.** Authoring a gallery that needs accessible per-image alt.
+**Trigger.** Authoring an alt that contains a comma, or wanting
+per-image captions inside a multi-image directive.

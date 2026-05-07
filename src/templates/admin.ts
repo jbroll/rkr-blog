@@ -67,7 +67,11 @@ export function renderAdminPage(data: AdminPageData): string {
   }
   #rkr-image-attrs h3, #rkr-multi-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #555; }
   #rkr-image-attrs input, #rkr-image-attrs select,
-  #rkr-multi-attrs input, #rkr-multi-attrs select { padding: .25rem; }
+  #rkr-multi-attrs input, #rkr-multi-attrs select,
+  #rkr-multi-attrs textarea { padding: .25rem; }
+  /* Per-image alts textarea: monospace so column position matches the
+     comma-separated wire format. */
+  #rkr-multi-alts { font-family: ui-monospace, monospace; resize: vertical; }
   /* Browser-native :out-of-range styling for autoplay (input has
      min=0/max=60 attrs). Gives the author a visual cue that >60 will
      be silently clamped on save by emitMultiImage. */
@@ -188,6 +192,12 @@ export function renderAdminPage(data: AdminPageData): string {
   <h3 id="rkr-multi-attrs-label">Multi-image attributes</h3>
   <label for="rkr-multi-ids">IDs</label>
   <input id="rkr-multi-ids" type="text" readonly placeholder="comma-separated; populated by upload"/>
+  <label for="rkr-multi-alts">Alt text</label>
+  <textarea
+    id="rkr-multi-alts"
+    rows="3"
+    placeholder="one alt per line, in the same order as ids; leave blank for decorative"
+  ></textarea>
   <label for="rkr-multi-caption">Caption</label>
   <input id="rkr-multi-caption" type="text" placeholder="optional caption"/>
   <label for="rkr-multi-layout" id="rkr-multi-layout-label">Layout</label>

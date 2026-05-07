@@ -18,7 +18,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import {
-  extractImageIds,
+  extractImageIdsAndAlts,
   getKnownIds,
   indent,
   pictureAspect,
@@ -64,11 +64,19 @@ function extractCaption(node: DirectiveNode): string | null {
 interface ItemRender {
   id: string;
   sidecar: Sidecar;
+  /** Pre-escaped alt text (escapeAttr). Empty string is the decorative default. */
+  alt: string;
 }
 
 function renderItem(item: ItemRender): string {
   const picture = indent(
-    renderPicture({ id: item.id, sidecar: item.sidecar, variants, fallback }),
+    renderPicture({
+      id: item.id,
+      sidecar: item.sidecar,
+      variants,
+      fallback,
+      alt: item.alt
+    }),
     '    '
   );
   return [
@@ -79,7 +87,7 @@ function renderItem(item: ItemRender): string {
 }
 
 async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
-  const inputs = extractImageIds(node.attributes?.ids);
+  const inputs = extractImageIdsAndAlts(node.attributes?.ids, node.attributes?.alts);
   if (inputs.length === 0) {
     return '<!-- gallery: no valid ids -->';
   }
@@ -87,14 +95,19 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const caption = extractCaption(node);
 
   const known = getKnownIds(ctx);
-  const resolved = resolveIds(inputs, known);
+  const resolved = resolveIds(
+    inputs.map((p) => p.id),
+    known
+  );
 
   const items: ItemRender[] = [];
   const missingComments: string[] = [];
   for (let i = 0; i < resolved.length; i++) {
     const id = resolved[i];
+    const inputId = inputs[i]?.id ?? '';
+    const alt = escapeAttr(inputs[i]?.alt ?? '');
     if (!id) {
-      missingComments.push(`<!-- gallery: no match for "${escapeAttr(inputs[i] ?? '')}" -->`);
+      missingComments.push(`<!-- gallery: no match for "${escapeAttr(inputId)}" -->`);
       continue;
     }
     const sidecar = await sidecarRead(ctx.siteRoot, id);
@@ -102,7 +115,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
       missingComments.push(`<!-- gallery: no sidecar for ${escapeAttr(id)} -->`);
       continue;
     }
-    items.push({ id, sidecar });
+    items.push({ id, sidecar, alt });
   }
 
   if (items.length === 0) {

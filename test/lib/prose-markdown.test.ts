@@ -165,6 +165,47 @@ test('proseToMarkdown: gallery directive emits ids + layout + caption', () => {
   assert.match(md, /::gallery\{ids="abc,def,012" layout=masonry caption="Workbench shots"\}/);
 });
 
+test('proseToMarkdown: gallery with per-image alts emits alts="…"', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'gallery',
+        attrs: { ids: 'aaaaaa,bbbbbb,cccccc', alts: 'workbench,sky,bird' }
+      }
+    ]
+  };
+  const md = proseToMarkdown(doc);
+  assert.match(md, /alts="workbench,sky,bird"/);
+});
+
+test('proseToMarkdown: empty alts attribute is omitted entirely', () => {
+  const noAlts: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'gallery', attrs: { ids: 'aaaaaa,bbbbbb', alts: '' } }]
+  };
+  const allEmpty: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'gallery', attrs: { ids: 'aaaaaa,bbbbbb', alts: ',,' } }]
+  };
+  for (const doc of [noAlts, allEmpty]) {
+    const md = proseToMarkdown(doc);
+    assert.equal(md.includes('alts='), false);
+  }
+});
+
+test('markdownToProse: gallery with alts attribute carries it through', () => {
+  const md = '::gallery{ids="aaaaaa,bbbbbb" alts="cat,dog"}\n';
+  const doc = markdownToProse(md);
+  assert.equal(doc.content[0]?.attrs?.alts, 'cat,dog');
+});
+
+test('round-trip identity: gallery with per-image alts', () => {
+  const md = '::gallery{ids="aaaaaa,bbbbbb,cccccc" alts="workbench,sky,bird"}\n';
+  const back = proseToMarkdown(markdownToProse(md));
+  assert.equal(back.trim(), md.trim());
+});
+
 test('proseToMarkdown: gallery with default layout (justified) omits the layout attr', () => {
   const doc: ProseDoc = {
     type: 'doc',

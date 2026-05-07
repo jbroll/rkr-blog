@@ -12,7 +12,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import {
-  extractImageIds,
+  extractImageIdsAndAlts,
   getKnownIds,
   indent,
   pictureAspect,
@@ -62,11 +62,19 @@ interface SlideRender {
   id: string;
   sidecar: Sidecar;
   index: number;
+  /** Pre-escaped alt text. Empty = decorative default. */
+  alt: string;
 }
 
 function renderSlide(slide: SlideRender): string {
   const picture = indent(
-    renderPicture({ id: slide.id, sidecar: slide.sidecar, variants, fallback }),
+    renderPicture({
+      id: slide.id,
+      sidecar: slide.sidecar,
+      variants,
+      fallback,
+      alt: slide.alt
+    }),
     '    '
   );
   return [
@@ -77,7 +85,7 @@ function renderSlide(slide: SlideRender): string {
 }
 
 async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
-  const inputs = extractImageIds(node.attributes?.ids);
+  const inputs = extractImageIdsAndAlts(node.attributes?.ids, node.attributes?.alts);
   if (inputs.length === 0) {
     return '<!-- carousel: no valid ids -->';
   }
@@ -85,14 +93,19 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const autoplay = extractAutoplay(node);
 
   const known = getKnownIds(ctx);
-  const resolved = resolveIds(inputs, known);
+  const resolved = resolveIds(
+    inputs.map((p) => p.id),
+    known
+  );
 
   const slides: SlideRender[] = [];
   const missingComments: string[] = [];
   for (let i = 0; i < resolved.length; i++) {
     const id = resolved[i];
+    const inputId = inputs[i]?.id ?? '';
+    const alt = escapeAttr(inputs[i]?.alt ?? '');
     if (!id) {
-      missingComments.push(`<!-- carousel: no match for "${escapeAttr(inputs[i] ?? '')}" -->`);
+      missingComments.push(`<!-- carousel: no match for "${escapeAttr(inputId)}" -->`);
       continue;
     }
     const sidecar = await sidecarRead(ctx.siteRoot, id);
@@ -100,7 +113,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
       missingComments.push(`<!-- carousel: no sidecar for ${escapeAttr(id)} -->`);
       continue;
     }
-    slides.push({ id, sidecar, index: slides.length });
+    slides.push({ id, sidecar, index: slides.length, alt });
   }
 
   if (slides.length === 0) {

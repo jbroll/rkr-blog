@@ -95,6 +95,33 @@ test('gallery items carry an --aspect CSS variable from sidecar metadata', async
   assert.match(html, /style="--aspect:3\.0000;"/);
 });
 
+test('gallery zips per-image alts into <img alt> by parallel array position', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 3);
+  const html = await dispatch(root, {
+    ids: ids.join(','),
+    alts: 'first photo,second photo,third photo'
+  });
+  // Each rendered <img> should carry the alt at the matching position.
+  assert.match(html, /alt="first photo"/);
+  assert.match(html, /alt="second photo"/);
+  assert.match(html, /alt="third photo"/);
+});
+
+test('gallery escapes per-image alts (XSS defense)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 1);
+  // " in alt would break out of the attribute and inject markup unless
+  // escapeAttr is applied. Empty entries → alt="".
+  const html = await dispatch(root, {
+    ids: ids[0]!,
+    alts: '"><script>x</script>'
+  });
+  assert.equal(html.includes('<script>'), false);
+  // The rendered img tag should still have a valid alt attribute.
+  assert.match(html, /alt="&quot;&gt;&lt;script&gt;x&lt;\/script&gt;"/);
+});
+
 test('gallery emits gallery <figcaption> when caption attribute is set', async (t) => {
   const root = freshSiteRoot(t);
   const ids = await ingestN(root, 2);

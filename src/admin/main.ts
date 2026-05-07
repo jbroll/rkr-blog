@@ -147,6 +147,11 @@ const SLOT_SPEC: Record<MultiImageKind, { min: number; max: number }> = {
 
 interface MultiImageAttrs {
   ids: string;
+  /** Per-image alts, comma-separated, parallel to ids. Empty entries
+   * mean "no alt" (decorative). The textarea UI displays one alt per
+   * line for clarity; the wire format on the prose node stays
+   * comma-separated to match the rendered markdown. */
+  alts: string;
   caption: string;
   layout?: string;
   autoplay?: number;
@@ -162,6 +167,8 @@ function makeMultiImageNode(kind: MultiImageKind) {
     addAttributes() {
       const base = {
         ids: { default: '' },
+        // Per-image alts, parallel to ids; comma-separated on the wire.
+        alts: { default: '' },
         caption: { default: '' }
       };
       if (kind === 'gallery') {
@@ -673,6 +680,7 @@ function mount(): void {
   const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
   const multiLabel = $<HTMLHeadingElement>('rkr-multi-attrs-label');
   const multiIds = $<HTMLInputElement>('rkr-multi-ids');
+  const multiAlts = $<HTMLTextAreaElement>('rkr-multi-alts');
   const multiCaption = $<HTMLInputElement>('rkr-multi-caption');
   const multiLayout = $<HTMLSelectElement>('rkr-multi-layout');
   const multiLayoutLabel = $<HTMLLabelElement>('rkr-multi-layout-label');
@@ -699,7 +707,7 @@ function mount(): void {
     }
     try {
       const ids = await uploadMany(files.slice(0, max));
-      const attrs: Record<string, unknown> = { ids: ids.join(','), caption: '' };
+      const attrs: Record<string, unknown> = { ids: ids.join(','), alts: '', caption: '' };
       if (kind === 'gallery') attrs.layout = 'justified';
       if (kind === 'carousel') attrs.autoplay = 0;
       editor.chain().focus().insertContent({ type: kind, attrs }).run();
@@ -804,6 +812,14 @@ function mount(): void {
       populating = true;
       multiLabel.textContent = `${activeMulti} attributes`;
       multiIds.value = a.ids ?? '';
+      // Display alts one per line so the column position matches the
+      // comma-separated wire format. Pad with blank lines so the count
+      // matches the id count and authors see all slots.
+      const idCount = (a.ids ?? '').split(',').filter((s) => s.trim().length > 0).length;
+      const altsList = (a.alts ?? '').split(',').map((s) => s.trim());
+      while (altsList.length < idCount) altsList.push('');
+      multiAlts.value = altsList.slice(0, Math.max(idCount, altsList.length)).join('\n');
+      multiAlts.rows = Math.max(3, idCount);
       multiCaption.value = a.caption ?? '';
       const showLayout = activeMulti === 'gallery';
       multiLayout.style.display = showLayout ? '' : 'none';
@@ -895,7 +911,7 @@ function mount(): void {
     );
   });
 
-  function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay', value: string): void {
+  function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay' | 'alts', value: string): void {
     if (populating) return;
     const activeKind: MultiImageKind | null = MULTI_KINDS.find((k) => editor.isActive(k)) ?? null;
     if (!activeKind) return;
@@ -909,6 +925,19 @@ function mount(): void {
   multiCaption.addEventListener('input', () => commitMultiAttr('caption', multiCaption.value));
   multiLayout.addEventListener('change', () => commitMultiAttr('layout', multiLayout.value));
   multiAutoplay.addEventListener('input', () => commitMultiAttr('autoplay', multiAutoplay.value));
+  // Textarea is one-alt-per-line for clarity; serialize to the
+  // comma-separated wire format before committing. Trailing blank
+  // lines are preserved so an author who left a slot blank still gets
+  // the right index alignment with ids.
+  multiAlts.addEventListener('input', () =>
+    commitMultiAttr(
+      'alts',
+      multiAlts.value
+        .split('\n')
+        .map((s) => s.trim())
+        .join(',')
+    )
+  );
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
