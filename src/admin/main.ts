@@ -308,59 +308,100 @@ async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
   return (await res.json()) as SidecarMeta;
 }
 
-async function persistOps(id: string, ops: SidecarOp[], redoStack: SidecarOp[]): Promise<void> {
+// ---- Local edit state -------------------------------------------------
+// Edits live in the browser until the user hits "Save edits". Each
+// click (rotate / flip / crop / resample / undo / redo / delete-step /
+// reset) mutates this in-memory state and re-renders the preview via
+// the canvas pipeline. No server round-trip per click.
+//
+// Save commits ops + redoStack to /admin/sidecar/:id/ops AND uploads
+// the baked WebP to /admin/sidecar/:id/bake. `baseline` tracks what
+// the server has so we can detect "dirty" (Save button enabled) and
+// undo unsaved local edits if needed.
+
+interface LocalEditState {
+  ops: SidecarOp[];
+  redoStack: SidecarOp[];
+  /** Last server-known state. Update on Save. Used for dirty check. */
+  baseline: {
+    ops: SidecarOp[];
+    redoStack: SidecarOp[];
+  };
+  /** Source dimensions, copied from the sidecar metadata. Used by the
+   * cropper to set up its display ratio. */
+  sourceWidth: number | null;
+  sourceHeight: number | null;
+}
+
+const localEditState = new Map<string, LocalEditState>();
+
+/** Lazy-load the local state for an id from the server. Subsequent
+ * accesses reuse the cached state, preserving any in-progress edits
+ * across selection changes. */
+async function ensureLocalState(id: string): Promise<LocalEditState> {
+  const cached = localEditState.get(id);
+  if (cached) return cached;
+  const meta = await fetchSidecarMeta(id);
+  const fresh: LocalEditState = {
+    ops: [...meta.ops],
+    redoStack: [...meta.redoStack],
+    baseline: { ops: [...meta.ops], redoStack: [...meta.redoStack] },
+    sourceWidth: meta.width,
+    sourceHeight: meta.height
+  };
+  localEditState.set(id, fresh);
+  return fresh;
+}
+
+function isDirty(s: LocalEditState): boolean {
+  // Compare ops + redoStack to baseline. JSON canonical compare is
+  // fine since the op shapes are simple records of primitives.
+  return (
+    JSON.stringify(s.ops) !== JSON.stringify(s.baseline.ops) ||
+    JSON.stringify(s.redoStack) !== JSON.stringify(s.baseline.redoStack)
+  );
+}
+
+/** Mutate the local ops in place; clear redoStack (any new op
+ * invalidates redo history, the standard linear-undo invariant). */
+function localMutate(s: LocalEditState, mutator: (ops: SidecarOp[]) => SidecarOp[]): void {
+  s.ops = mutator(s.ops);
+  s.redoStack = [];
+}
+
+function localUndo(s: LocalEditState): void {
+  if (s.ops.length === 0) return;
+  const popped = s.ops[s.ops.length - 1] as SidecarOp;
+  s.ops = s.ops.slice(0, -1);
+  s.redoStack = [...s.redoStack, popped];
+}
+
+function localRedo(s: LocalEditState): void {
+  if (s.redoStack.length === 0) return;
+  const popped = s.redoStack[s.redoStack.length - 1] as SidecarOp;
+  s.ops = [...s.ops, popped];
+  s.redoStack = s.redoStack.slice(0, -1);
+}
+
+function localDeleteAt(s: LocalEditState, index: number): void {
+  if (index < 0 || index >= s.ops.length) return;
+  s.ops = [...s.ops.slice(0, index), ...s.ops.slice(index + 1)];
+}
+
+/** Server-side commit of one image's local edits. Used by the Save
+ * button. Posts ops + redoStack first (so the server unlinks any prior
+ * bake), then if there are still ops uploads the freshly baked WebP. */
+async function postOpsToServer(
+  id: string,
+  ops: SidecarOp[],
+  redoStack: SidecarOp[]
+): Promise<void> {
   const res = await fetch(`/admin/sidecar/${id}/ops`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ops, redoStack })
   });
-  if (!res.ok) throw new Error(`save: ${res.status} ${await res.text()}`);
-}
-
-/** Convenience helper used by the existing crop modal: replace ops
- * (default to clearing redoStack since adding a new op invalidates the
- * redo history per the standard linear-undo invariant). */
-async function replaceSidecarOps(id: string, ops: SidecarOp[]): Promise<void> {
-  await persistOps(id, ops, []);
-}
-
-/** Fetch current sidecar state, run the mutator, save back. Click-order
- * preserved — no canonicalization. Adding a new op clears redoStack;
- * undo/redo callers use mutateUndoRedo below instead. */
-async function mutateSidecarOps(
-  id: string,
-  mutator: (ops: SidecarOp[]) => SidecarOp[]
-): Promise<void> {
-  const meta = await fetchSidecarMeta(id);
-  const next = mutator(meta.ops);
-  // Standard invariant: any op-mutating action clears the redo stack.
-  await persistOps(id, next, []);
-}
-
-/** Pop the last op into the redo stack. */
-async function undoLastOp(id: string): Promise<void> {
-  const meta = await fetchSidecarMeta(id);
-  if (meta.ops.length === 0) return;
-  const popped = meta.ops[meta.ops.length - 1] as SidecarOp;
-  await persistOps(id, meta.ops.slice(0, -1), [...meta.redoStack, popped]);
-}
-
-/** Pop the last redoStack entry back onto ops. */
-async function redoLastOp(id: string): Promise<void> {
-  const meta = await fetchSidecarMeta(id);
-  if (meta.redoStack.length === 0) return;
-  const popped = meta.redoStack[meta.redoStack.length - 1] as SidecarOp;
-  await persistOps(id, [...meta.ops, popped], meta.redoStack.slice(0, -1));
-}
-
-/** Delete a single op by index. Mirrors the standard "edit history"
- * affordance on photo apps. The redoStack is unchanged — the user
- * removed a step explicitly, not via undo. */
-async function deleteOpAt(id: string, index: number): Promise<void> {
-  const meta = await fetchSidecarMeta(id);
-  if (index < 0 || index >= meta.ops.length) return;
-  const next = [...meta.ops.slice(0, index), ...meta.ops.slice(index + 1)];
-  await persistOps(id, next, meta.redoStack);
+  if (!res.ok) throw new Error(`ops: ${res.status} ${await res.text()}`);
 }
 
 /** Human-readable label for one op, used in the edits list under the
@@ -516,71 +557,93 @@ async function uploadBake(id: string, blob: Blob): Promise<void> {
 
 let activeCropper: Cropper | null = null;
 
-async function openCropper(id: string, onSaved: () => void): Promise<void> {
+async function openCropper(id: string, s: LocalEditState, onSaved: () => void): Promise<void> {
   const dialog = $<HTMLDialogElement>('rkr-crop-modal');
   const stageImg = $<HTMLImageElement>('rkr-crop-img');
   const status = $<HTMLSpanElement>('rkr-crop-status');
   const cancelBtn = $<HTMLButtonElement>('rkr-crop-cancel');
   const saveBtn = $<HTMLButtonElement>('rkr-crop-save');
 
-  status.textContent = 'loading…';
-  let meta: SidecarMeta;
-  try {
-    meta = await fetchSidecarMeta(id);
-  } catch (err) {
-    setStatus(`crop: ${(err as Error).message}`);
-    return;
-  }
-  if (!meta.width || !meta.height) {
+  if (!s.sourceWidth || !s.sourceHeight) {
     setStatus('crop: source image has no recorded dimensions');
     return;
   }
 
-  // Force a fresh load of the preview so the cropper sees post-crop
-  // changes if this image was just cropped.
-  stageImg.src = `/admin/preview/${id}?v=${Date.now()}`;
-  stageImg.onload = () => {
+  status.textContent = 'loading…';
+  // Cropper sources from the LOCAL post-ops canvas, not the server's
+  // preview. That way the user crops what they're actually looking at,
+  // and the returned coords are already in current-canvas space —
+  // applyCrop in the pipeline interprets them in that same space, so
+  // crop appends correctly even after prior crops/rotates.
+  let canvas: HTMLCanvasElement;
+  try {
+    const original = await loadOriginal(id);
+    canvas = getPipelineCache(id).apply(
+      {
+        drawable: original,
+        width: original.naturalWidth,
+        height: original.naturalHeight
+      },
+      s.ops
+    );
+  } catch (err) {
+    setStatus(`crop: ${(err as Error).message}`);
+    return;
+  }
+
+  let blob: Blob;
+  try {
+    blob = await canvasToBlob(canvas, 'image/webp', 0.95);
+  } catch (err) {
+    setStatus(`crop: ${(err as Error).message}`);
+    return;
+  }
+  const stageUrl = URL.createObjectURL(blob);
+  stageImg.src = stageUrl;
+  stageImg.onload = (): void => {
     if (activeCropper) activeCropper.destroy();
-    // ratio of original-pixel space to displayed-pixel space; Cropper's
-    // getData() returns numbers in IMG natural-pixel coords (= preview
-    // dimensions), and we scale them by these ratios on save.
-    const xRatio = (meta.width ?? 1) / stageImg.naturalWidth;
-    const yRatio = (meta.height ?? 1) / stageImg.naturalHeight;
     activeCropper = new Cropper(stageImg, {
       viewMode: 1,
       autoCropArea: 1,
       background: false,
       ready: () => {
-        status.textContent = `${meta.width}×${meta.height} original`;
+        status.textContent = `${canvas.width}×${canvas.height} current`;
       }
     });
-    saveBtn.onclick = async (): Promise<void> => {
+    saveBtn.onclick = (): void => {
       if (!activeCropper) return;
       const data = activeCropper.getData(true); // rounded to integers
-      const op = {
+      // Cropper coords are in stageImg.natural space, which IS the
+      // current canvas space. No scaling needed.
+      const op: SidecarOp = {
         type: 'crop',
-        x: Math.max(0, Math.round(data.x * xRatio)),
-        y: Math.max(0, Math.round(data.y * yRatio)),
-        w: Math.round(data.width * xRatio),
-        h: Math.round(data.height * yRatio)
+        x: Math.max(0, Math.round(data.x)),
+        y: Math.max(0, Math.round(data.y)),
+        w: Math.round(data.width),
+        h: Math.round(data.height)
       };
-      saveBtn.disabled = true;
-      status.textContent = 'saving…';
-      try {
-        await replaceSidecarOps(id, [op]);
-        status.textContent = 'saved';
-        closeCropper();
-        onSaved();
-        setStatus(`cropped ${id.slice(0, 8)}…`);
-      } catch (err) {
-        status.textContent = `save failed: ${(err as Error).message}`;
-        saveBtn.disabled = false;
-      }
+      // Append to the existing op chain. Prior rotates / flips / etc
+      // are preserved; the new crop operates on what they produced.
+      localMutate(s, (ops) => [...ops, op]);
+      status.textContent = 'saved';
+      closeCropper();
+      URL.revokeObjectURL(stageUrl);
+      onSaved();
     };
   };
 
-  cancelBtn.onclick = (): void => closeCropper();
-  dialog.addEventListener('close', () => closeCropper(), { once: true });
+  cancelBtn.onclick = (): void => {
+    closeCropper();
+    URL.revokeObjectURL(stageUrl);
+  };
+  dialog.addEventListener(
+    'close',
+    () => {
+      closeCropper();
+      URL.revokeObjectURL(stageUrl);
+    },
+    { once: true }
+  );
   dialog.showModal();
 }
 
@@ -820,6 +883,7 @@ function mount(): void {
   const attrResampleInput = $<HTMLInputElement>('rkr-image-resample');
   const attrResampleBtn = $<HTMLButtonElement>('rkr-image-resample-btn');
   const attrResetBtn = $<HTMLButtonElement>('rkr-image-reset-btn');
+  const attrSaveBtn = $<HTMLButtonElement>('rkr-image-save-btn');
   const attrEditsList = $<HTMLOListElement>('rkr-image-edits');
 
   const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
@@ -928,24 +992,25 @@ function mount(): void {
       attrPosition.value = a.position ?? 'default';
       populating = false;
       attrPanel.hidden = false;
-      // Async: load sidecar ops, toggle the Reset button, populate the
-      // resample-width input from any existing resample op, and render
-      // the edits list / undo-redo button states.
+      // Reset transient UI; populated below from local edit state.
       attrResetBtn.hidden = true;
       attrResampleInput.value = '';
       attrUndoBtn.disabled = true;
       attrRedoBtn.disabled = true;
+      attrSaveBtn.disabled = true;
       attrEditsList.replaceChildren();
       if (a.id) {
         const id = a.id;
-        void fetchSidecarMeta(id).then(
-          (meta) => {
-            attrResetBtn.hidden = meta.ops.length === 0;
-            const resample = meta.ops.find((o) => o.type === 'resample');
+        void ensureLocalState(id).then(
+          (s) => {
+            const resample = s.ops.find((o) => o.type === 'resample');
             if (resample && typeof resample.w === 'number') {
               attrResampleInput.value = String(resample.w);
             }
-            renderEditsPanel(id, meta);
+            renderEditsPanel(id, s);
+            // Repaint preview from local ops — there might be unsaved
+            // edits from a prior selection of this image in this session.
+            void refreshImagePreview(editor, id, s.ops);
           },
           () => {
             /* best-effort */
@@ -1008,14 +1073,16 @@ function mount(): void {
   }
 
   /** Render one row per op (in click order), plus per-row delete buttons,
-   * and update the undo/redo button enabled states. The id is captured
+   * and update the undo/redo/save/reset button states. The id is captured
    * at render time so each delete button is bound to the image whose
    * panel was showing when the row was rendered — selectionUpdate will
    * rebuild the list if the selection changes. */
-  function renderEditsPanel(id: string, meta: SidecarMeta): void {
-    attrUndoBtn.disabled = meta.ops.length === 0;
-    attrRedoBtn.disabled = meta.redoStack.length === 0;
-    const items = meta.ops.map((op, idx) => {
+  function renderEditsPanel(id: string, s: LocalEditState): void {
+    attrUndoBtn.disabled = s.ops.length === 0;
+    attrRedoBtn.disabled = s.redoStack.length === 0;
+    attrResetBtn.hidden = s.ops.length === 0;
+    attrSaveBtn.disabled = !isDirty(s);
+    const items = s.ops.map((op, idx) => {
       const li = document.createElement('li');
       const span = document.createElement('span');
       span.className = 'rkr-edits-step';
@@ -1027,13 +1094,10 @@ function mount(): void {
       del.title = 'Delete this step';
       del.setAttribute('aria-label', `Delete step ${idx + 1}: ${describeOp(op)}`);
       del.addEventListener('click', () => {
-        void deleteOpAt(id, idx).then(
-          () => {
-            setStatus(`deleted step ${idx + 1}`);
-            void refreshAfterEdit(id);
-          },
-          (err: unknown) => setStatus(`delete failed: ${(err as Error).message}`)
-        );
+        localDeleteAt(s, idx);
+        setStatus(`deleted step ${idx + 1}`);
+        renderEditsPanel(id, s);
+        void refreshImagePreview(editor, id, s.ops);
       });
       li.replaceChildren(span, del);
       return li;
@@ -1041,51 +1105,34 @@ function mount(): void {
     attrEditsList.replaceChildren(...items);
   }
 
-  /** Re-fetch sidecar meta, re-render the edits list / reset state,
-   * repaint the editor's <img> via the client-side canvas pipeline,
-   * and upload the resulting WebP bake so the server can skip applyOp
-   * in sharp on subsequent /img/ requests. Each successful op-mutating
-   * action is "saving the image edits" — the bake goes up then.
-   * Bake-upload failures are non-fatal: the editor preview is still
-   * correct; the server falls back to its original + applyOp path. */
-  async function refreshAfterEdit(id: string): Promise<void> {
-    try {
-      const meta = await fetchSidecarMeta(id);
-      attrResetBtn.hidden = meta.ops.length === 0;
-      renderEditsPanel(id, meta);
-      const blob = await refreshImagePreview(editor, id, meta.ops);
-      if (blob && meta.ops.length > 0) {
-        try {
-          await uploadBake(id, blob);
-        } catch (err) {
-          setStatus(`bake upload: ${(err as Error).message}`);
-        }
-      }
-    } catch {
-      /* best-effort */
-    }
+  /** Re-render the edits list + Save button state from local state, and
+   * repaint the editor's <img> via the canvas pipeline. No server I/O —
+   * the bake goes up only on Save (see attrSaveBtn handler). */
+  function refreshAfterEdit(id: string, s: LocalEditState, label: string): void {
+    setStatus(`${label} ${id.slice(0, 8)}…`);
+    renderEditsPanel(id, s);
+    void refreshImagePreview(editor, id, s.ops);
   }
 
-  /** Wrap a sidecar mutation: refuse if no image is selected, refresh
-   * the editor preview on success, surface errors to the status bar. */
+  /** Mutate the active image's local state. Refuses if no image is
+   * selected. Adding any op clears redoStack via localMutate. */
   function runEdit(label: string, mutator: (ops: SidecarOp[]) => SidecarOp[]): void {
     const id = activeImageId();
     if (!id) return;
-    void mutateSidecarOps(id, mutator).then(
-      () => {
-        setStatus(`${label} ${id.slice(0, 8)}…`);
-        void refreshAfterEdit(id);
-      },
-      (err: unknown) => setStatus(`${label} failed: ${(err as Error).message}`)
-    );
+    const s = localEditState.get(id);
+    if (!s) return;
+    localMutate(s, mutator);
+    refreshAfterEdit(id, s, label);
   }
 
   attrCropBtn.addEventListener('click', () => {
     const id = activeImageId();
-    if (id)
-      void openCropper(id, () => {
-        void refreshAfterEdit(id);
-      });
+    if (!id) return;
+    const s = localEditState.get(id);
+    if (!s) return;
+    void openCropper(id, s, () => {
+      refreshAfterEdit(id, s, 'crop');
+    });
   });
   attrRotateLBtn.addEventListener('click', () =>
     runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: -90 }])
@@ -1102,24 +1149,18 @@ function mount(): void {
   attrUndoBtn.addEventListener('click', () => {
     const id = activeImageId();
     if (!id) return;
-    void undoLastOp(id).then(
-      () => {
-        setStatus(`undo ${id.slice(0, 8)}…`);
-        void refreshAfterEdit(id);
-      },
-      (err: unknown) => setStatus(`undo failed: ${(err as Error).message}`)
-    );
+    const s = localEditState.get(id);
+    if (!s) return;
+    localUndo(s);
+    refreshAfterEdit(id, s, 'undo');
   });
   attrRedoBtn.addEventListener('click', () => {
     const id = activeImageId();
     if (!id) return;
-    void redoLastOp(id).then(
-      () => {
-        setStatus(`redo ${id.slice(0, 8)}…`);
-        void refreshAfterEdit(id);
-      },
-      (err: unknown) => setStatus(`redo failed: ${(err as Error).message}`)
-    );
+    const s = localEditState.get(id);
+    if (!s) return;
+    localRedo(s);
+    refreshAfterEdit(id, s, 'redo');
   });
   attrResampleBtn.addEventListener('click', () => {
     const w = Math.floor(Number(attrResampleInput.value) || 0);
@@ -1136,15 +1177,58 @@ function mount(): void {
   attrResetBtn.addEventListener('click', () => {
     const id = activeImageId();
     if (!id) return;
-    void replaceSidecarOps(id, []).then(
+    const s = localEditState.get(id);
+    if (!s) return;
+    localMutate(s, () => []);
+    attrResampleInput.value = '';
+    refreshAfterEdit(id, s, 'edits reset');
+  });
+  attrSaveBtn.addEventListener('click', () => {
+    const id = activeImageId();
+    if (!id) return;
+    const s = localEditState.get(id);
+    if (!s || !isDirty(s)) return;
+    // Guard against double-clicks during the (potentially multi-MB)
+    // bake upload. Re-enabled by renderEditsPanel on success (where
+    // isDirty is now false → disabled stays true) or explicitly on
+    // failure so the user can retry.
+    attrSaveBtn.disabled = true;
+    setStatus(`saving edits ${id.slice(0, 8)}…`);
+    void saveImageEdits(id, s).then(
       () => {
-        attrResampleInput.value = '';
-        setStatus('edits reset');
-        void refreshAfterEdit(id);
+        renderEditsPanel(id, s);
+        setStatus(`saved edits ${id.slice(0, 8)}…`);
       },
-      (err: unknown) => setStatus(`reset failed: ${(err as Error).message}`)
+      (err: unknown) => {
+        attrSaveBtn.disabled = false;
+        setStatus(`save edits failed: ${(err as Error).message}`);
+      }
     );
   });
+
+  /** POST the local ops + redoStack to the server, then bake the
+   * canvas and POST the WebP. Update baseline on success so isDirty
+   * flips back to false. Failures are surfaced; baseline only moves
+   * forward when both calls land. */
+  async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
+    await postOpsToServer(id, s.ops, s.redoStack);
+    if (s.ops.length > 0) {
+      // Build a fresh canvas from the ops we just committed (the
+      // pipeline cache likely already has it from the last preview).
+      const original = await loadOriginal(id);
+      const canvas = getPipelineCache(id).apply(
+        {
+          drawable: original,
+          width: original.naturalWidth,
+          height: original.naturalHeight
+        },
+        s.ops
+      );
+      const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
+      await uploadBake(id, blob);
+    }
+    s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+  }
 
   function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay' | 'alts', value: string): void {
     if (populating) return;

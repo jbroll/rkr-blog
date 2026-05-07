@@ -132,6 +132,13 @@ export function renderAdminPage(data: AdminPageData): string {
   .rkr-image-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
   .rkr-image-actions button { padding: .25rem .75rem; cursor: pointer; }
   .rkr-image-actions button:disabled { opacity: .4; cursor: not-allowed; }
+  /* Save edits is the primary action: visually distinct from the
+     in-place ops (rotate/flip/etc) and the Reset escape hatch. The
+     dirty-state flip lives in JS via the disabled attribute. */
+  .rkr-image-actions button.rkr-image-save:not(:disabled) {
+    background: var(--rkr-link); color: var(--rkr-bg);
+    border: 1px solid var(--rkr-link);
+  }
   /* Edits panel: ordered list of ops in click order, each with an
      inline delete button. Spans the value column of the parent grid
      so the label sits on its own row beside step 1. */
@@ -222,6 +229,7 @@ export function renderAdminPage(data: AdminPageData): string {
     <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
     <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
     <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
+    <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>Save edits</button>
   </span>
   <label for="rkr-image-resample">Max width (px)</label>
   <span class="rkr-image-actions">
