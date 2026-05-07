@@ -464,8 +464,15 @@ function setEditorImageSrc(editor: Editor, id: string, src: string): void {
 /** Re-render the editor preview for one image. Tries client-side bake
  * first (canvas pipeline against the master); on any failure (decode
  * unsupported format, fetch error) falls back to the server-baked
- * /admin/preview/<id> with a cache-buster. */
-async function refreshImagePreview(editor: Editor, id: string, ops: SidecarOp[]): Promise<void> {
+ * /admin/preview/<id> with a cache-buster.
+ *
+ * Returns the produced WebP blob so the caller can upload it as the
+ * server's bake; null when we fell back to the server-baked preview. */
+async function refreshImagePreview(
+  editor: Editor,
+  id: string,
+  ops: SidecarOp[]
+): Promise<Blob | null> {
   try {
     const original = await loadOriginal(id);
     // Per-image pipeline cache: when the new ops list is the previous
@@ -487,12 +494,14 @@ async function refreshImagePreview(editor: Editor, id: string, ops: SidecarOp[])
     if (old) URL.revokeObjectURL(old);
     previewBlobUrls.set(id, url);
     setEditorImageSrc(editor, id, url);
+    return blob;
   } catch {
     // Fallback: ask the server. The cache-buster query forces a 302
     // re-resolve so a stale derivative URL isn't reused. The new ops
     // are already on the sidecar, so the server's /admin/preview will
     // resolve to a fresh derivative.
     setEditorImageSrc(editor, id, `/admin/preview/${id}?v=${Date.now()}`);
+    return null;
   }
 }
 
@@ -503,71 +512,6 @@ async function uploadBake(id: string, blob: Blob): Promise<void> {
     body: blob
   });
   if (!res.ok) throw new Error(`bake: ${res.status} ${await res.text()}`);
-}
-
-/** Walk a TipTap document JSON and collect every image id referenced —
- * single-image nodes and the multi-image directive nodes (gallery,
- * carousel, diptych, triptych). Used by Save to drive bake uploads
- * for everything in the post. */
-function collectImageIds(doc: unknown): string[] {
-  const ids: string[] = [];
-  function visit(node: unknown): void {
-    if (!node || typeof node !== 'object') return;
-    const n = node as { type?: string; attrs?: Record<string, unknown>; content?: unknown[] };
-    if (n.type === 'image') {
-      const id = n.attrs?.id;
-      if (typeof id === 'string' && /^[0-9a-f]{64}$/.test(id)) ids.push(id);
-    } else if (n.type && (MULTI_KINDS as readonly string[]).includes(n.type)) {
-      const idsAttr = n.attrs?.ids;
-      if (typeof idsAttr === 'string') {
-        for (const id of idsAttr
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => /^[0-9a-f]{64}$/.test(s))) {
-          ids.push(id);
-        }
-      }
-    }
-    if (Array.isArray(n.content)) {
-      for (const child of n.content) visit(child);
-    }
-  }
-  visit(doc);
-  // Dedupe (same image could appear twice).
-  return [...new Set(ids)];
-}
-
-/** Bake and upload the post-ops WebP for every image in the post.
- * Skips images with no ops (no point baking a re-encoded original).
- * Run in parallel via Promise.allSettled — one failed upload doesn't
- * block the rest, and the worst case is the server falls back to its
- * original + applyOp path for those images. */
-async function bakeAndUploadAll(ids: readonly string[]): Promise<{ ok: number; failed: number }> {
-  const results = await Promise.allSettled(
-    ids.map(async (id) => {
-      const meta = await fetchSidecarMeta(id);
-      if (meta.ops.length === 0) return false;
-      const original = await loadOriginal(id);
-      const canvas = getPipelineCache(id).apply(
-        {
-          drawable: original,
-          width: original.naturalWidth,
-          height: original.naturalHeight
-        },
-        meta.ops
-      );
-      const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
-      await uploadBake(id, blob);
-      return true;
-    })
-  );
-  let ok = 0;
-  let failed = 0;
-  for (const r of results) {
-    if (r.status === 'fulfilled') ok++;
-    else failed++;
-  }
-  return { ok, failed };
 }
 
 let activeCropper: Cropper | null = null;
@@ -1098,18 +1042,25 @@ function mount(): void {
   }
 
   /** Re-fetch sidecar meta, re-render the edits list / reset state,
-   * and repaint the editor's <img> via the client-side canvas pipeline.
-   * The resulting bake is NOT uploaded to the server here — bake upload
-   * happens once on Save (handleSave), so a session of edits doesn't
-   * pile up bake-uploads-per-click on the network. Until Save, /img/
-   * requests fall back to original + applyOp on the server.
-   * Best-effort: on failure we leave whatever was on screen. */
+   * repaint the editor's <img> via the client-side canvas pipeline,
+   * and upload the resulting WebP bake so the server can skip applyOp
+   * in sharp on subsequent /img/ requests. Each successful op-mutating
+   * action is "saving the image edits" — the bake goes up then.
+   * Bake-upload failures are non-fatal: the editor preview is still
+   * correct; the server falls back to its original + applyOp path. */
   async function refreshAfterEdit(id: string): Promise<void> {
     try {
       const meta = await fetchSidecarMeta(id);
       attrResetBtn.hidden = meta.ops.length === 0;
       renderEditsPanel(id, meta);
-      await refreshImagePreview(editor, id, meta.ops);
+      const blob = await refreshImagePreview(editor, id, meta.ops);
+      if (blob && meta.ops.length > 0) {
+        try {
+          await uploadBake(id, blob);
+        } catch (err) {
+          setStatus(`bake upload: ${(err as Error).message}`);
+        }
+      }
     } catch {
       /* best-effort */
     }
@@ -1254,20 +1205,6 @@ async function handleSave(editor: Editor): Promise<void> {
   setStatus('saving…');
   try {
     const json = editor.getJSON();
-    // Bake + upload every image in the post BEFORE writing the
-    // markdown. This is when the server-side bake gets refreshed: a
-    // session of edits doesn't pile up bake uploads per click; one
-    // bake per image at save time is enough. Failures are reported
-    // but don't block the post save — the server falls back to
-    // original + applyOp for those images.
-    const imageIds = collectImageIds(json);
-    if (imageIds.length > 0) {
-      setStatus(`baking ${imageIds.length} image${imageIds.length === 1 ? '' : 's'}…`);
-      const { ok, failed } = await bakeAndUploadAll(imageIds);
-      if (failed > 0) {
-        setStatus(`baked ${ok}/${imageIds.length}; ${failed} failed (saving anyway)`);
-      }
-    }
     const result = await savePost({ slug, title, status, body: json });
     setStatus(`saved /${result.slug}`);
   } catch (err) {

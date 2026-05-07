@@ -71,3 +71,31 @@ function canonicalOp(op: Op): string {
   const keys = Object.keys(op).sort();
   return JSON.stringify(keys.map((k) => [k, op[k]]));
 }
+
+/** Simplify an op list for execution by collapsing adjacent logical
+ * no-ops:
+ *   - Adjacent rotates combine: rotate(a) + rotate(b) → rotate((a+b) mod 360),
+ *     dropped entirely if the sum is 0.
+ *   - Adjacent same-axis flips cancel: flip(h) + flip(h) → ∅.
+ *
+ * Storage (sidecar.ops) stays untouched — the edits panel still
+ * reflects the user's click history; only execution is simplified.
+ * Crop and resample don't compose cleanly so they pass through. */
+export function simplifyOps(ops: readonly Op[]): Op[] {
+  const out: Op[] = [];
+  for (const op of ops) {
+    const last = out[out.length - 1];
+    if (op.type === 'rotate' && last && last.type === 'rotate') {
+      const sum = (((Number(last.degrees) + Number(op.degrees)) % 360) + 360) % 360;
+      out.pop();
+      if (sum !== 0) out.push({ type: 'rotate', degrees: sum });
+    } else if (op.type === 'flip' && last && last.type === 'flip' && last.axis === op.axis) {
+      // Two flips on the same axis cancel. Cross-axis flips are NOT
+      // a no-op (h+v == 180° rotation visually) so we leave them.
+      out.pop();
+    } else {
+      out.push(op);
+    }
+  }
+  return out;
+}

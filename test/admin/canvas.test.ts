@@ -12,7 +12,8 @@ import {
   clampInt,
   computeResampleSize,
   normalizeRotation,
-  opsEqual
+  opsEqual,
+  simplifyOps
 } from '../../src/admin/canvas-math.ts';
 
 test('computeResampleSize: w only (downscale, preserves aspect)', () => {
@@ -128,4 +129,99 @@ test('opsEqual: differing values compare unequal', () => {
 
 test('opsEqual: differing types compare unequal', () => {
   assert.equal(opsEqual({ type: 'crop' }, { type: 'rotate' }), false);
+});
+
+// ---- pipeline simplification ------------------------------------------
+// Storage stays in click order so the edits panel reflects what the
+// user actually did. The executor collapses adjacent logical no-ops
+// before running so the canvas pipeline doesn't spend time undoing
+// itself: rotate(90) + rotate(-90) is dead code.
+
+test('simplifyOps: combines adjacent rotates into one', () => {
+  // rotate(90) + rotate(90) → rotate(180)
+  const out = simplifyOps([
+    { type: 'rotate', degrees: 90 },
+    { type: 'rotate', degrees: 90 }
+  ]);
+  assert.deepEqual(out, [{ type: 'rotate', degrees: 180 }]);
+});
+
+test('simplifyOps: cancelling rotates drop entirely', () => {
+  // rotate(90) + rotate(-90) → no-op (sum is 0)
+  const out = simplifyOps([
+    { type: 'rotate', degrees: 90 },
+    { type: 'rotate', degrees: -90 }
+  ]);
+  assert.deepEqual(out, []);
+});
+
+test('simplifyOps: chained rotates sum to canonical 0..360', () => {
+  // 90 + 90 + 90 → 90 + 180 → 270 (combined left-to-right by stack)
+  const out = simplifyOps([
+    { type: 'rotate', degrees: 90 },
+    { type: 'rotate', degrees: 90 },
+    { type: 'rotate', degrees: 90 }
+  ]);
+  assert.deepEqual(out, [{ type: 'rotate', degrees: 270 }]);
+});
+
+test('simplifyOps: same-axis flip pair cancels', () => {
+  // flip(h) + flip(h) → ∅
+  const out = simplifyOps([
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'flip', axis: 'horizontal' }
+  ]);
+  assert.deepEqual(out, []);
+});
+
+test('simplifyOps: cross-axis flips do NOT cancel', () => {
+  // h + v is a 180° rotation visually, not a no-op. Don't drop it.
+  const ops = [
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'flip', axis: 'vertical' }
+  ];
+  assert.deepEqual(simplifyOps(ops), ops);
+});
+
+test('simplifyOps: non-adjacent inverses do NOT cancel', () => {
+  // rotate(90) + flip(h) + rotate(-90) is NOT a no-op because the flip
+  // sits between them; the result is a different transform than identity.
+  // simplifyOps only handles adjacency.
+  const ops = [
+    { type: 'rotate', degrees: 90 },
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'rotate', degrees: -90 }
+  ];
+  assert.deepEqual(simplifyOps(ops), ops);
+});
+
+test('simplifyOps: leaves crop and resample untouched', () => {
+  // Crop and resample don't compose cleanly so we never combine or
+  // drop them, even when adjacent.
+  const ops = [
+    { type: 'crop', x: 0, y: 0, w: 100, h: 100 },
+    { type: 'crop', x: 10, y: 10, w: 80, h: 80 },
+    { type: 'resample', w: 200 },
+    { type: 'resample', w: 100 }
+  ];
+  assert.deepEqual(simplifyOps(ops), ops);
+});
+
+test('simplifyOps: empty input → empty output', () => {
+  assert.deepEqual(simplifyOps([]), []);
+});
+
+test('simplifyOps: simplification cascades after combining', () => {
+  // After combining the two -180s into 0 (drop), the surrounding
+  // [rotate 90, rotate 90] become adjacent and combine to 180.
+  // The current implementation walks left-to-right with a stack, so
+  // verify the cascade works.
+  const out = simplifyOps([
+    { type: 'rotate', degrees: 90 },
+    { type: 'rotate', degrees: -180 },
+    { type: 'rotate', degrees: 180 },
+    { type: 'rotate', degrees: 90 }
+  ]);
+  // 90 + (-180) = -90 → 270; 270 + 180 = 450 → 90; 90 + 90 = 180.
+  assert.deepEqual(out, [{ type: 'rotate', degrees: 180 }]);
 });

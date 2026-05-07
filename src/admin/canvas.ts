@@ -12,7 +12,13 @@
 // original's full resolution when the source decodes; the browser
 // scales the resulting <img> to fit the editor frame.
 
-import { clampInt, computeResampleSize, normalizeRotation, opsEqual } from './canvas-math';
+import {
+  clampInt,
+  computeResampleSize,
+  normalizeRotation,
+  opsEqual,
+  simplifyOps
+} from './canvas-math';
 
 /** A sidecar op as it arrives from /admin/sidecar/:id/meta — the
  * server validates shape, so we accept the loose type here and narrow
@@ -31,53 +37,60 @@ export interface CanvasSource {
 }
 
 /** Apply a list of ops, in click order, returning the final canvas. The
- * input is left untouched. Resample is typically the first op in
- * practice (set output size, then crop/rotate), but the executor doesn't
- * enforce ordering — author intent in click order is preserved. */
+ * input is left untouched. Adjacent logical no-ops (e.g. rotate(90)
+ * + rotate(-90)) are collapsed before execution via simplifyOps —
+ * storage is unchanged, the executor just skips needless work. */
 export function applyOps(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
+  const simplified = simplifyOps(ops);
   let canvas = drawSource(source);
-  for (const op of ops) {
+  for (const op of simplified) {
     canvas = applyOne(canvas, op);
   }
   return canvas;
 }
 
-/** Per-image incremental pipeline cache. Holds the last op list and its
- * result canvas. On a subsequent apply with the same ops + one new op
- * appended, applies just the new op to the cached canvas — the "only
- * execute the last step on each change" fast path. Any other change
- * (delete, undo/redo, insertion in the middle) misses the cache and
- * re-executes from source. */
+/** Per-image incremental pipeline cache. Holds the last simplified op
+ * list and its result canvas. On a subsequent apply with the simplified
+ * new ops being the previous simplified list + exactly one appended op,
+ * applies just that op to the cached canvas — the "only execute the
+ * last step on each change" fast path. Anything else misses the cache
+ * and re-executes from source.
+ *
+ * Operating on simplified ops means click `rotate 90` then `rotate
+ * -90` collapses to nothing: the user-visible result reverts to source
+ * and we don't run sharp on a no-op chain. */
 export class PipelineCache {
   private lastResult: HTMLCanvasElement | null = null;
-  private lastOps: SidecarOp[] = [];
+  private lastSimplified: SidecarOp[] = [];
 
   apply(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
-    // Cache hit: new ops is previous ops + exactly one appended op.
+    const simplified = simplifyOps(ops);
+
+    // Cache hit: new simplified is previous + exactly one appended op.
     if (
       this.lastResult !== null &&
-      ops.length === this.lastOps.length + 1 &&
-      this.lastOps.every((op, i) => {
-        const next = ops[i];
+      simplified.length === this.lastSimplified.length + 1 &&
+      this.lastSimplified.every((op, i) => {
+        const next = simplified[i];
         return next !== undefined && opsEqual(op, next);
       })
     ) {
-      const newOp = ops[ops.length - 1];
+      const newOp = simplified[simplified.length - 1];
       if (newOp) {
         const next = applyOne(this.lastResult, newOp);
         this.lastResult = next;
-        this.lastOps = [...ops];
+        this.lastSimplified = [...simplified];
         return next;
       }
     }
 
-    // Cache miss: re-execute the chain from source.
+    // Cache miss: re-execute the simplified chain from source.
     let canvas = drawSource(source);
-    for (const op of ops) {
+    for (const op of simplified) {
       canvas = applyOne(canvas, op);
     }
     this.lastResult = canvas;
-    this.lastOps = [...ops];
+    this.lastSimplified = [...simplified];
     return canvas;
   }
 
@@ -85,7 +98,7 @@ export class PipelineCache {
    * replaced — e.g. the user navigates between different images. */
   invalidate(): void {
     this.lastResult = null;
-    this.lastOps = [];
+    this.lastSimplified = [];
   }
 }
 
