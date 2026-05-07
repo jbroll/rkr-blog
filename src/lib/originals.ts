@@ -30,11 +30,30 @@ export { FORMAT_TO_EXT };
 // Default derivative set on first ingest. Matches the image widget
 // defaults (spec.md §5 sidecar schema). Caller can rewrite via POST
 // /admin/sidecar/:id.
-const DEFAULT_OUTPUTS = [
+// These constants are exported and asserted by
+// test/lib/widget-fallback-alignment.test.ts to guarantee every
+// (variant, output) the rendered HTML references in <img src> /
+// <source srcset> is one the sidecar actually declares — otherwise
+// findVariantOutput in routes/public.ts can't reproduce the cacheKey
+// and /img/ 404s with "no matching variant".
+//
+// The union covers every src-emitting widget (image, carousel,
+// diptych, gallery): widths 320/400/640/800/1200/1600, formats
+// webp@85 + avif@70 (srcset sources) and jpeg@85 (the <img>
+// fallback for browsers without webp/avif support).
+export const DEFAULT_OUTPUTS = [
   { format: 'webp', quality: 85 },
-  { format: 'avif', quality: 70 }
+  { format: 'avif', quality: 70 },
+  { format: 'jpeg', quality: 85 }
 ];
-const DEFAULT_VARIANTS = [{ w: 400 }, { w: 800 }, { w: 1600 }];
+export const DEFAULT_VARIANTS = [
+  { w: 320 }, // diptych/gallery srcset
+  { w: 400 }, // image/carousel srcset
+  { w: 640 }, // diptych/gallery srcset
+  { w: 800 }, // image/carousel srcset + diptych/gallery fallback
+  { w: 1200 }, // image/carousel fallback + diptych/gallery srcset
+  { w: 1600 } // image/carousel srcset
+];
 
 export interface IngestSource {
   kind: string;

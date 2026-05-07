@@ -46,7 +46,10 @@ export const variants: VariantSpec[] = [
   { w: 1200, formats: ['webp', 'avif'] }
 ];
 
-export const fallback: FallbackSpec = { w: 800, format: 'jpeg', quality: 82 };
+// quality:85 (was 82) so this matches one of DEFAULT_OUTPUTS in
+// originals.ts — every widget fallback must hit a (variant, output)
+// pair declared on the sidecar or /img/ 404s on the <img src>.
+export const fallback: FallbackSpec = { w: 800, format: 'jpeg', quality: 85 };
 
 const VALID_LAYOUTS = new Set(['justified', 'masonry', 'matrix']);
 type Layout = 'justified' | 'masonry' | 'matrix';
