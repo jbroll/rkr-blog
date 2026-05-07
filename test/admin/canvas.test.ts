@@ -12,10 +12,7 @@ import {
   clampInt,
   computeResampleSize,
   normalizeRotation,
-  opsEqual,
-  reorderForExecution,
-  resampleRatio,
-  scaleCropOp
+  opsEqual
 } from '../../src/admin/canvas-math.ts';
 
 test('computeResampleSize: w only (downscale, preserves aspect)', () => {
@@ -113,97 +110,10 @@ test('normalizeRotation: non-orthogonal or non-finite returns null', () => {
   assert.equal(normalizeRotation('x'), null);
 });
 
-// ---- pipeline reordering -----------------------------------------------
-// User directive: resample should be an early pipeline stage. Storage
-// (sidecar.ops) keeps click order; execution hoists resample to first
-// and scales crop coords on ops that originally preceded it. This lets
-// every subsequent op operate on a small canvas instead of the master.
-
-test('resampleRatio: w-bounded resample preserves aspect (returns w/srcW)', () => {
-  // 4000×3000 bounded by w=1600 → ratio 0.4.
-  const ratio = resampleRatio(4000, 3000, { type: 'resample', w: 1600, fit: 'inside' });
-  assert.equal(ratio, 0.4);
-});
-
-test('resampleRatio: target ≥ source returns 1 (withoutEnlargement)', () => {
-  // The pipeline never upscales; a target larger than source is a no-op.
-  const ratio = resampleRatio(800, 600, { type: 'resample', w: 1600, fit: 'inside' });
-  assert.equal(ratio, 1);
-});
-
-test('scaleCropOp: scales x/y/w/h by ratio and clamps to non-negative', () => {
-  const scaled = scaleCropOp({ type: 'crop', x: 1000, y: 500, w: 2000, h: 1500 }, 0.4);
-  assert.deepEqual(scaled, { type: 'crop', x: 400, y: 200, w: 800, h: 600 });
-});
-
-test('scaleCropOp: non-crop op passes through unchanged', () => {
-  // Rotate / flip don't depend on absolute coords; only crop shifts.
-  const op = { type: 'rotate', degrees: 90 };
-  assert.equal(scaleCropOp(op, 0.4), op);
-});
-
-test('reorderForExecution: hoists resample, scales preceding crop coords', () => {
-  // User clicked: crop a 4000-space region, then resample to 1600.
-  // Execution should resample first, then a crop with coords scaled
-  // by 0.4 (so the same region of the original is selected, but
-  // operating on the 1600-space canvas).
-  const exec = reorderForExecution(
-    [
-      { type: 'crop', x: 1000, y: 500, w: 2000, h: 1500 },
-      { type: 'resample', w: 1600, fit: 'inside' }
-    ],
-    4000,
-    3000
-  );
-  assert.equal(exec.length, 2);
-  assert.equal(exec[0]?.type, 'resample');
-  assert.deepEqual(exec[1], { type: 'crop', x: 400, y: 200, w: 800, h: 600 });
-});
-
-test('reorderForExecution: ops after resample pass through unchanged', () => {
-  // Only ops that originally PRECEDED the resample need scaling.
-  // Anything after stays in its given form (it was already authored
-  // in resample-space conceptually).
-  const exec = reorderForExecution(
-    [
-      { type: 'resample', w: 1600, fit: 'inside' },
-      { type: 'crop', x: 100, y: 50, w: 200, h: 150 },
-      { type: 'rotate', degrees: 90 }
-    ],
-    4000,
-    3000
-  );
-  assert.equal(exec[0]?.type, 'resample');
-  // Unchanged crop coords.
-  assert.deepEqual(exec[1], { type: 'crop', x: 100, y: 50, w: 200, h: 150 });
-  assert.deepEqual(exec[2], { type: 'rotate', degrees: 90 });
-});
-
-test('reorderForExecution: no resample → ops in click order', () => {
-  // Without a resample, there's nothing to reorder; everything stays.
-  const ops = [
-    { type: 'crop', x: 0, y: 0, w: 100, h: 100 },
-    { type: 'rotate', degrees: 90 }
-  ];
-  assert.deepEqual(reorderForExecution(ops, 800, 600), ops);
-});
-
-test('reorderForExecution: rotate/flip preceding resample pass through (no coord scaling)', () => {
-  // Rotate/flip don't have coords; they pass through. The resample
-  // still gets hoisted.
-  const exec = reorderForExecution(
-    [
-      { type: 'rotate', degrees: 90 },
-      { type: 'flip', axis: 'horizontal' },
-      { type: 'resample', w: 800, fit: 'inside' }
-    ],
-    1600,
-    1200
-  );
-  assert.equal(exec[0]?.type, 'resample');
-  assert.deepEqual(exec[1], { type: 'rotate', degrees: 90 });
-  assert.deepEqual(exec[2], { type: 'flip', axis: 'horizontal' });
-});
+// ---- op equality ------------------------------------------------------
+// PipelineCache uses opsEqual to test whether the new ops list is the
+// previous list with one op appended. Robust against key order so two
+// JSON-equivalent ops compare equal regardless of how they were built.
 
 test('opsEqual: same shape ops compare equal regardless of key order', () => {
   // {type, x, y} == {y, x, type}. Used by the incremental cache to

@@ -12,13 +12,7 @@
 // original's full resolution when the source decodes; the browser
 // scales the resulting <img> to fit the editor frame.
 
-import {
-  clampInt,
-  computeResampleSize,
-  normalizeRotation,
-  opsEqual,
-  reorderForExecution
-} from './canvas-math';
+import { clampInt, computeResampleSize, normalizeRotation, opsEqual } from './canvas-math';
 
 /** A sidecar op as it arrives from /admin/sidecar/:id/meta — the
  * server validates shape, so we accept the loose type here and narrow
@@ -36,61 +30,54 @@ export interface CanvasSource {
   height: number;
 }
 
-/** Apply a list of ops, returning the final canvas. The input is left
- * untouched. Ops are executed in their click order BUT with one
- * rewrite: any resample is hoisted to the start and crop coords on
- * ops that originally preceded it are scaled by the resample ratio.
- * This keeps every subsequent op operating on a small canvas. Storage
- * (sidecar.ops) stays in click order; only execution reorders. */
+/** Apply a list of ops, in click order, returning the final canvas. The
+ * input is left untouched. Resample is typically the first op in
+ * practice (set output size, then crop/rotate), but the executor doesn't
+ * enforce ordering — author intent in click order is preserved. */
 export function applyOps(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
-  const exec = reorderForExecution(ops, source.width, source.height);
   let canvas = drawSource(source);
-  for (const op of exec) {
+  for (const op of ops) {
     canvas = applyOne(canvas, op);
   }
   return canvas;
 }
 
-/** Per-image incremental pipeline cache. Holds the last execution-order
- * op list and its result canvas. On a subsequent apply with the same
- * ops + one new op appended, applies just the new op to the cached
- * canvas — fulfilling the "only execute the last step on each change"
- * directive for the common case of clicking a new op button. Any
- * other change (delete, undo/redo, resample insertion that triggers a
- * reorder) misses cache and re-executes from source. */
+/** Per-image incremental pipeline cache. Holds the last op list and its
+ * result canvas. On a subsequent apply with the same ops + one new op
+ * appended, applies just the new op to the cached canvas — the "only
+ * execute the last step on each change" fast path. Any other change
+ * (delete, undo/redo, insertion in the middle) misses the cache and
+ * re-executes from source. */
 export class PipelineCache {
   private lastResult: HTMLCanvasElement | null = null;
-  private lastExec: SidecarOp[] = [];
+  private lastOps: SidecarOp[] = [];
 
   apply(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
-    const exec = reorderForExecution(ops, source.width, source.height);
-
-    // Cache hit: new exec is previous exec + exactly one appended op.
+    // Cache hit: new ops is previous ops + exactly one appended op.
     if (
       this.lastResult !== null &&
-      exec.length === this.lastExec.length + 1 &&
-      this.lastExec.every((op, i) => {
-        const next = exec[i];
+      ops.length === this.lastOps.length + 1 &&
+      this.lastOps.every((op, i) => {
+        const next = ops[i];
         return next !== undefined && opsEqual(op, next);
       })
     ) {
-      const newOp = exec[exec.length - 1];
+      const newOp = ops[ops.length - 1];
       if (newOp) {
         const next = applyOne(this.lastResult, newOp);
         this.lastResult = next;
-        this.lastExec = [...exec];
+        this.lastOps = [...ops];
         return next;
       }
     }
 
-    // Cache miss (insertion in the middle, deletion, undo/redo,
-    // reorder-triggering resample, first call, source change): re-run.
+    // Cache miss: re-execute the chain from source.
     let canvas = drawSource(source);
-    for (const op of exec) {
+    for (const op of ops) {
       canvas = applyOne(canvas, op);
     }
     this.lastResult = canvas;
-    this.lastExec = [...exec];
+    this.lastOps = [...ops];
     return canvas;
   }
 
@@ -98,7 +85,7 @@ export class PipelineCache {
    * replaced — e.g. the user navigates between different images. */
   invalidate(): void {
     this.lastResult = null;
-    this.lastExec = [];
+    this.lastOps = [];
   }
 }
 

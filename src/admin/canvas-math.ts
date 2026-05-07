@@ -55,62 +55,10 @@ export function normalizeRotation(degrees: unknown): 0 | 90 | 180 | 270 | null {
   return mod as 0 | 90 | 180 | 270;
 }
 
-// ---- pipeline reordering -----------------------------------------------
-// User directive: "resample should be an early pipeline stage."
-//
-// Storage stays in click order (the edits panel reflects the user's
-// actions). Execution reorders so resample runs first — this lets every
-// subsequent op work on a small canvas instead of the full master.
-// Crop coords on ops that originally preceded the resample are scaled
-// down proportionally so the post-resample crop selects the same region
-// the user picked in original-pixel space.
-//
-// This module is DOM-free; canvas.ts wires it up to the actual rendering.
-
 /** Loose op shape — same one canvas.ts uses. We re-declare here rather
  * than import from canvas.ts so the canvas-math module stays free of
  * DOM-typed siblings. */
 type Op = { type: string; [k: string]: unknown };
-
-/** Compute the post-resample width:source-width ratio for a resample op,
- * given the source canvas dimensions. Used to scale crop coords that
- * originally preceded the resample in click order. */
-export function resampleRatio(srcW: number, srcH: number, op: Op): number {
-  const targetW = op.w !== undefined ? Number(op.w) : undefined;
-  const targetH = op.h !== undefined ? Number(op.h) : undefined;
-  const fit = typeof op.fit === 'string' ? op.fit : 'inside';
-  const { width: outW } = computeResampleSize(srcW, srcH, targetW, targetH, fit);
-  return outW / srcW;
-}
-
-/** Scale a crop op's coords by `ratio`. Non-crop ops pass through
- * unchanged (rotate/flip don't depend on absolute coords). */
-export function scaleCropOp(op: Op, ratio: number): Op {
-  if (op.type !== 'crop') return op;
-  return {
-    type: 'crop',
-    x: Math.max(0, Math.round(Number(op.x) * ratio)),
-    y: Math.max(0, Math.round(Number(op.y) * ratio)),
-    w: Math.max(1, Math.round(Number(op.w) * ratio)),
-    h: Math.max(1, Math.round(Number(op.h) * ratio))
-  };
-}
-
-/** Rewrite an op list for execution: hoist the first resample to the
- * front; scale crop coords that originally preceded the resample by the
- * resample ratio. Ops after the resample (and ops with no resample at
- * all) pass through in click order. */
-export function reorderForExecution(ops: readonly Op[], srcW: number, srcH: number): Op[] {
-  const idx = ops.findIndex((o) => o.type === 'resample');
-  if (idx === -1 || idx === 0) return [...ops];
-  const resample = ops[idx] as Op;
-  const ratio = resampleRatio(srcW, srcH, resample);
-  // No-op resample (target ≥ source) → ratio is 1; nothing to scale.
-  // Still hoist for consistency, though it's a free op at execute time.
-  const before = ops.slice(0, idx).map((op) => scaleCropOp(op, ratio));
-  const after = ops.slice(idx + 1);
-  return [resample, ...before, ...after];
-}
 
 /** Stable equality for op records. Sort keys so {type, x, y} == {y, x, type}.
  * Used by the incremental pipeline cache to test "is the new ops list
