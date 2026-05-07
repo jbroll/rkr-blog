@@ -315,9 +315,10 @@ export default async function adminRoutes(
   // the bake instead of re-applying ops via sharp, taking ops out of
   // the per-request hot path.
   //
-  // Body is the raw WebP bytes (image/webp content type). 50 MB cap
-  // covers a 24 MP camera image at q=0.95 with headroom; reject anything
-  // larger as either a runaway client or a misuse.
+  // Body is the raw WebP bytes (image/webp content type). 25 MB cap
+  // is well above realistic bakes (a 50 MP camera image at q=0.95 is
+  // ~5-10 MB) but tight enough that a runaway / misused client can't
+  // wedge a multi-GB upload through.
   fastify.post<{
     Params: { id: string };
   }>('/admin/sidecar/:id/bake', { ...guard, bodyLimit: BAKE_MAX_BYTES }, async (req, reply) => {
@@ -552,10 +553,10 @@ const MAX_SLUG_LENGTH = 100;
 const SIDECAR_LIST_TTL_MS = 5_000;
 
 /** Max bytes accepted by /admin/sidecar/:id/bake. WebP at q=0.95 for a
- * 24 MP camera photo is ~3-5 MB; 50 MB leaves ample headroom for
- * higher-resolution sources (panoramas, scanner output) without
- * inviting runaway uploads. */
-const BAKE_MAX_BYTES = 50 * 1024 * 1024;
+ * 50 MP camera photo runs ~5-10 MB; 25 MB leaves headroom for unusual
+ * sources (panoramas, scanner output) while keeping the upload bounded
+ * tight enough that a runaway client can't wedge a multi-GB POST. */
+const BAKE_MAX_BYTES = 25 * 1024 * 1024;
 
 function randomSuffix(): string {
   return crypto.randomBytes(6).toString('hex');

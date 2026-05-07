@@ -582,6 +582,23 @@ function loadOriginal(id: string): Promise<HTMLImageElement> {
   return p;
 }
 
+/** Lazy WebGL availability probe. Cached because the answer doesn't
+ * change at runtime — once a context is denied (older browser, WebGL
+ * disabled by privacy tooling), it stays denied for the session. The
+ * perspective button uses this at mount to disable up front rather
+ * than letting a click silently no-op. */
+let webglSupportCached: boolean | null = null;
+function hasWebglSupport(): boolean {
+  if (webglSupportCached !== null) return webglSupportCached;
+  try {
+    const probe = document.createElement('canvas');
+    webglSupportCached = probe.getContext('webgl') !== null;
+  } catch {
+    webglSupportCached = false;
+  }
+  return webglSupportCached;
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -1206,6 +1223,14 @@ function mount(): void {
   const attrFlipHBtn = $<HTMLButtonElement>('rkr-image-flip-h-btn');
   const attrFlipVBtn = $<HTMLButtonElement>('rkr-image-flip-v-btn');
   const attrPerspBtn = $<HTMLButtonElement>('rkr-image-perspective-btn');
+  // Perspective rectify needs WebGL (Canvas2D's setTransform is affine
+  // only, so a homography can't be applied without a fragment shader).
+  // Detect at mount time and disable the button up front rather than
+  // surprising the user with a silent no-op when they save the modal.
+  if (!hasWebglSupport()) {
+    attrPerspBtn.disabled = true;
+    attrPerspBtn.title = 'Perspective rectify requires WebGL; your browser does not support it.';
+  }
   const attrUndoBtn = $<HTMLButtonElement>('rkr-image-undo-btn');
   const attrRedoBtn = $<HTMLButtonElement>('rkr-image-redo-btn');
   const attrResampleInput = $<HTMLInputElement>('rkr-image-resample');
