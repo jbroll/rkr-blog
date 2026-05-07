@@ -1,0 +1,40 @@
+# fly.io config for rkr-blog. Connected via fly's GitHub App, so a
+# push to this branch triggers an auto-deploy. No fly CLI needed on
+# the developer side.
+
+app = "rkr-blog"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PUBLIC_BASE_URL = "https://rkr-blog.fly.dev"
+  # ADMIN_TOKEN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET are set via
+  # `fly secrets set ...` (or the dashboard); they override the
+  # Dockerfile defaults at runtime.
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  # Cold-start hits the JIT cache + node:sqlite open + migrate; budget
+  # for that without 502'ing the first request after wake.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 80
+    hard_limit = 100
+
+[[vm]]
+  # 1 shared CPU + 512 MB is enough for a single-author CMS with a
+  # warm sharp pipeline. Bump if /img/ pre-render bursts hit OOM.
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# No [[mounts]] block: SITE_ROOT (/site) lives on the ephemeral root
+# filesystem. Posts, originals, derivatives, and the SQLite index are
+# wiped on machine restart. Acceptable for the demo because the WP
+# importer can re-seed in seconds; add a 1 GB volume here for
+# persistence.

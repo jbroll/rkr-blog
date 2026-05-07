@@ -1,0 +1,35 @@
+# Keep the build context small — Docker uploads everything that isn't
+# excluded here to the daemon (or fly.io's remote builder) before the
+# build starts.
+
+node_modules
+coverage
+.nyc_output
+*.log
+
+# Build artifacts that get rebuilt inside the image (npm run build).
+static/admin
+static/site
+
+# VCS + editor noise.
+.git
+.gitignore
+.githooks
+.idea
+.vscode
+.DS_Store
+*.swp
+
+# Tests + dev fixtures don't ship to runtime. (npm ci still installs
+# devDependencies in the builder stage; this just avoids COPYing the
+# /test tree onto the image.)
+test
+
+# Local site roots, env files, ad-hoc docs that aren't needed at
+# runtime.
+site
+var
+.env
+.env.*
+DEFERRED.md
+developer-quickstart.md
