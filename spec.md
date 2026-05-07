@@ -285,7 +285,7 @@ caption.
 
 | Provider | Mechanism | Auth |
 |---|---|---|
-| Local upload | multi-file input | session |
+| Local upload | multi-file input + drag-drop / paste into the editor | session |
 | Plain URL | server-side fetch (size + content-type capped) | session |
 | Dropbox | Chooser SDK | none for read |
 | OneDrive | File Picker SDK + Graph API | OAuth2 |

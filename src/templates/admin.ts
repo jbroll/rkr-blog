@@ -53,6 +53,13 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-root {
     margin-bottom: .5rem; padding: .25rem 1rem;
     border: 1px solid var(--rkr-rule); border-radius: 4px;
+    transition: border-color .1s, background .1s;
+  }
+  /* Visual cue while the user is dragging files over the editor.
+     CSS-only via a JS-toggled class; see admin/main.ts mount(). */
+  #rkroll-admin-root.is-drag-over {
+    border-color: var(--rkr-link);
+    background: color-mix(in srgb, var(--rkr-link) 5%, var(--rkr-bg));
   }
   /* Visible focus ring on the editable region (WCAG 2.4.7). The
      central control of the entire admin shouldn't be invisible. */
