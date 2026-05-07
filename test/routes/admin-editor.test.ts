@@ -44,12 +44,19 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   // rendered post — figures, prose width, gallery placeholder styles.
   assert.match(res.body, /<link rel="stylesheet" href="\/static\/site\.css"\/>/);
 
-  // Security headers: CSP restricts script-src to self + esm.sh (the
-  // editor's import map host); X-Content-Type-Options blocks MIME sniffing.
+  // Security headers: TipTap is bundled into the admin entry, so
+  // script-src can be 'self' only with no third-party CDN allowance and
+  // no 'unsafe-inline'. frame-ancestors blocks clickjacking.
   const csp = res.headers['content-security-policy'] as string;
-  assert.match(csp, /script-src 'self' https:\/\/esm\.sh/);
+  assert.match(csp, /script-src 'self'(?!\s*https)/);
+  assert.equal(csp.includes('esm.sh'), false);
+  assert.equal(csp.includes("script-src 'self' 'unsafe-inline'"), false);
   assert.match(csp, /frame-ancestors 'none'/);
   assert.equal(res.headers['x-content-type-options'], 'nosniff');
+
+  // No inline import map — TipTap is bundled.
+  assert.equal(res.body.includes('importmap'), false);
+  assert.equal(res.body.includes('esm.sh'), false);
 });
 
 test('GET /static/admin/main.js serves the compiled bundle when present', async (t) => {

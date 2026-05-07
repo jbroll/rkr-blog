@@ -1,12 +1,9 @@
 // Admin SPA shell.
 //
-// Loads TipTap from esm.sh via an import map, with each package pinned to
-// its exact version. Subresource Integrity hashes are NOT yet attached —
-// per spec §3 we want either a vendored copy or CDN+SRI for production.
-// SRI is a deployment-hardening item before going public; documented as a
-// follow-up. Versions are pinned so the served bytes don't drift mid-session.
-
-const TIPTAP_VERSION = '3.22.5';
+// TipTap and ProseMirror are bundled into the admin entry by esbuild
+// (see `npm run build:admin`); the served bundle has no third-party
+// network dependency at runtime, which keeps the editor's CSP tight
+// (script-src 'self' only, no esm.sh / CDN allowance).
 
 export interface AdminPageData {
   /** Where the compiled admin bundle is mounted on the URL space. */
@@ -14,28 +11,6 @@ export interface AdminPageData {
 }
 
 export function renderAdminPage(data: AdminPageData): string {
-  const importMap = JSON.stringify(
-    {
-      imports: {
-        '@tiptap/core': `https://esm.sh/@tiptap/core@${TIPTAP_VERSION}`,
-        '@tiptap/pm/state': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/state`,
-        '@tiptap/pm/view': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/view`,
-        '@tiptap/pm/model': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/model`,
-        '@tiptap/pm/transform': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/transform`,
-        '@tiptap/pm/commands': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/commands`,
-        '@tiptap/pm/keymap': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/keymap`,
-        '@tiptap/pm/schema-list': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/schema-list`,
-        '@tiptap/pm/dropcursor': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/dropcursor`,
-        '@tiptap/pm/gapcursor': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/gapcursor`,
-        '@tiptap/pm/inputrules': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/inputrules`,
-        '@tiptap/pm/history': `https://esm.sh/@tiptap/pm@${TIPTAP_VERSION}/history`,
-        '@tiptap/starter-kit': `https://esm.sh/@tiptap/starter-kit@${TIPTAP_VERSION}`
-      }
-    },
-    null,
-    2
-  );
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -172,9 +147,6 @@ export function renderAdminPage(data: AdminPageData): string {
 </div>
 <div id="rkroll-admin-status"></div>
 <input id="rkr-image-input" type="file" accept="image/*" hidden/>
-<script type="importmap">
-${importMap}
-</script>
 <script type="module" src="${data.bundleUrl}"></script>
 </body>
 </html>

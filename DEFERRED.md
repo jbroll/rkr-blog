@@ -12,20 +12,6 @@ the queue is searchable.
 
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
-### M1 — Editor loads TipTap from esm.sh without SRI
-**What.** `/admin/editor` loads `@tiptap/*` via an import map pointing at
-`https://esm.sh/@tiptap/...@<version>`. An esm.sh compromise = full admin
-RCE. CSP `script-src 'self' https://esm.sh 'unsafe-inline'` accepts whatever
-esm.sh serves. Versions are pinned but bytes are not.
-
-**Why deferred.** Vendoring TipTap (or building the admin bundle with TipTap
-inlined) is the right answer; SRI alone is hard because each module has its
-own hash and esm.sh redirects across version tags. Both options are real
-work.
-
-**Trigger.** Before opening the admin to anyone other than the project owner,
-or before publishing the project as a template others will run.
-
 ### M3 — Sliding-session lookup timing
 **What.** `readSessionUser` does `WHERE id = ?` on a TEXT primary key;
 SQLite's lookup is roughly constant-time but a second query follows.
@@ -46,7 +32,6 @@ deployment. Specifically:
 - The PKCE state map is in-process (lost on restart, not shared across
   workers)
 - No auth-write logging
-- Editor's esm.sh trust (M1)
 
 **Why deferred.** We are explicitly building a single-author CMS.
 

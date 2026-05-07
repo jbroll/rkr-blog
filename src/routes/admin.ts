@@ -319,19 +319,18 @@ const MAX_SLUG_LENGTH = 100;
 const SIDECAR_LIST_TTL_MS = 5_000;
 
 /**
- * CSP for /admin/editor. Allows TipTap modules from esm.sh (the editor's
- * import map) and inline styles/importmap JSON. `'unsafe-inline'` for
- * scripts is unfortunately required for the inline `<script
- * type="importmap">` block; tighten to a nonce when we move off
- * template-literal HTML. esm.sh trust is documented in spec §17 — long-
- * term plan is to vendor or pin via SRI.
+ * CSP for /admin/editor. TipTap is now bundled into the admin entry by
+ * esbuild (no esm.sh / CDN at runtime), so script-src can be 'self' only
+ * with no third-party allowance and no `'unsafe-inline'`. Inline styles
+ * still need `'unsafe-inline'` for the template's <style> block (move
+ * to a nonce when we drop template-literal HTML).
  */
 const ADMIN_EDITOR_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://esm.sh 'unsafe-inline'",
+  "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  "connect-src 'self' https://esm.sh",
+  "connect-src 'self'",
   "font-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
