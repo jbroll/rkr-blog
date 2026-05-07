@@ -9,6 +9,7 @@ import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from '
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { Db } from '../lib/db.ts';
+import { type IdTokenVerifier, makeGoogleVerifier } from '../lib/google-jwt.ts';
 import { createSession, deleteSession } from '../lib/sessions.ts';
 import { findOrCreateOAuthUser, NotInvitedError, type User } from '../lib/users.ts';
 
@@ -41,6 +42,8 @@ export interface AuthRoutesOpts {
   db: Db;
   /** Production exchange uses arctic.Google. Tests inject a stub. */
   exchange?: TokenExchange;
+  /** Production verifier hits Google's JWKS endpoint. Tests inject a stub. */
+  verifier?: IdTokenVerifier;
   /** When set, the post-login redirect goes here (default /admin/editor). */
   postLoginPath?: string;
   /** Use Secure cookie attribute (true in prod over TLS). Default true. */
@@ -53,6 +56,10 @@ export default async function authRoutes(
 ): Promise<void> {
   const { db, postLoginPath = '/admin/editor', secureCookies = true } = opts;
   const exchange = opts.exchange ?? makeGoogleExchange();
+  const verifier =
+    opts.verifier ??
+    /* c8 ignore next -- prod-only wiring; tests inject the verifier */
+    makeGoogleVerifier(process.env.GOOGLE_CLIENT_ID ?? '');
 
   // Cookie plugin (idempotent — safe to register twice). Without an
   // explicit secret we get unsigned cookies, which is fine for our session
@@ -110,9 +117,10 @@ export default async function authRoutes(
       const idToken = tokens.idToken();
       let payload: GoogleIdPayload;
       try {
-        payload = decodeJwtPayload<GoogleIdPayload>(idToken);
-      } catch {
-        return reply.code(400).send({ error: 'malformed id token' });
+        payload = await verifier.verify(idToken);
+      } catch (err) {
+        req.log.warn({ err }, 'id token verification failed');
+        return reply.code(400).send({ error: 'invalid id token' });
       }
 
       if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') {
@@ -187,15 +195,6 @@ function clearCookie(reply: FastifyReply, name: string, attrs: { secure: boolean
 
 function readCookie(req: FastifyRequest, name: string): string | undefined {
   return (req.cookies as Record<string, string | undefined> | undefined)?.[name];
-}
-
-/** Decode a JWT payload (no signature verification). */
-export function decodeJwtPayload<T>(jwt: string): T {
-  const parts = jwt.split('.');
-  if (parts.length !== 3) throw new Error('not a JWT');
-  const padded = (parts[1] ?? '') + '='.repeat((4 - ((parts[1]?.length ?? 0) % 4)) % 4);
-  const json = Buffer.from(padded, 'base64url').toString('utf8');
-  return JSON.parse(json) as T;
 }
 
 /* c8 ignore start -- production-only wiring; tests inject a stub TokenExchange */

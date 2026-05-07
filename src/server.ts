@@ -7,6 +7,7 @@ import Fastify from 'fastify';
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { paths, serverConfig } from './lib/config.ts';
 import { type Db, open } from './lib/db.ts';
+import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
 import adminRoutes from './routes/admin.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
@@ -34,6 +35,8 @@ export interface BuildAppOpts {
    */
   auth?: {
     exchange?: TokenExchange;
+    /** Production verifies via Google's JWKS; tests inject a stub. */
+    verifier?: IdTokenVerifier;
     secureCookies?: boolean;
     /** When true, skip the requireUser preHandler so admin routes stay open (legacy tests). */
     skipGate?: boolean;
@@ -79,6 +82,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     await app.register(authRoutes, {
       db: opts.db,
       ...(opts.auth.exchange ? { exchange: opts.auth.exchange } : {}),
+      ...(opts.auth.verifier ? { verifier: opts.auth.verifier } : {}),
       secureCookies: opts.auth.secureCookies ?? true
     });
     // Picker integration routes (gated behind auth via requireUser).

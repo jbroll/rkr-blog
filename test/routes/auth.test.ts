@@ -5,9 +5,10 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { open } from '../../src/lib/db.ts';
+import type { IdTokenVerifier } from '../../src/lib/google-jwt.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { findUserByEmail, inviteEmail } from '../../src/lib/users.ts';
-import type { TokenExchange } from '../../src/routes/auth.ts';
+import type { GoogleIdPayload, TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
 
 interface ErrorBody {
@@ -34,6 +35,8 @@ interface StubExchangeOpts {
   idTokenPayload: Record<string, unknown>;
   /** Override the authorization URL emitted by /start. */
   authorizationUrl?: string;
+  /** When true, the stub verifier rejects (simulates a forged/invalid token). */
+  verifierRejects?: boolean;
 }
 
 function stubExchange(opts: StubExchangeOpts): TokenExchange {
@@ -63,6 +66,20 @@ function stubExchange(opts: StubExchangeOpts): TokenExchange {
   };
 }
 
+/** Stub verifier paired with stubExchange — yields the same payload the
+ * exchange used for the id token, or rejects if the test wants to simulate
+ * an invalid signature / aud / iss. Production verifies via Google JWKS. */
+function stubVerifier(opts: StubExchangeOpts): IdTokenVerifier {
+  return {
+    async verify() {
+      if (opts.verifierRejects) {
+        throw new Error('signature mismatch (stub)');
+      }
+      return opts.idTokenPayload as unknown as GoogleIdPayload;
+    }
+  };
+}
+
 async function setup(
   t: TestContext,
   opts: StubExchangeOpts
@@ -79,7 +96,11 @@ async function setup(
     siteRoot: root,
     db,
     startWorker: false,
-    auth: { exchange: stubExchange(opts), secureCookies: false }
+    auth: {
+      exchange: stubExchange(opts),
+      verifier: stubVerifier(opts),
+      secureCookies: false
+    }
   });
   t.after(() => app.close());
   return { root, db, app };
@@ -177,6 +198,25 @@ test('callback: missing state cookie → 400', async (t) => {
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorBody>().error, /no oauth state cookie/);
+});
+
+test('callback: id token signature/aud/iss verification failure → 400', async (t) => {
+  // A forged token (or one for the wrong audience) is rejected by the
+  // verifier before sub/email are even read. Without this guard, an
+  // attacker who could intercept the exchange could mint a session for
+  // any email address (the original critical finding).
+  const { app } = await setup(t, {
+    idTokenPayload: { sub: 'g-1', email: 'forger@evil.com', email_verified: true },
+    verifierRejects: true
+  });
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/auth/google/callback?code=c&state=st',
+    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<ErrorBody>().error, /invalid id token/);
 });
 
 test('callback: id token missing sub or email → 400', async (t) => {
