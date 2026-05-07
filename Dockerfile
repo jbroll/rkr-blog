@@ -16,7 +16,7 @@ FROM node:22-bookworm-slim AS builder
 # available, but having the toolchain present means the install never
 # fails on a missing-prebuild day). ca-certificates lets npm fetch.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3 make g++ ca-certificates \
+      python3 make g++ ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -29,6 +29,11 @@ COPY bin ./bin
 COPY src ./src
 COPY static ./static
 COPY migrations ./migrations
+# Bring .git over solely to capture the SHA into a small text file the
+# runtime stage can read. Done in its own RUN so the layer is small
+# and the heavy .git tree doesn't end up in the runtime image.
+COPY .git ./.git
+RUN git rev-parse HEAD > /app/git-hash && rm -rf /app/.git
 
 # Build admin + site browser bundles into ./static/{admin,site}.
 # (admin/ and site/ are gitignored; this rebuild produces them fresh.)
@@ -51,12 +56,14 @@ COPY --from=builder /app/bin ./bin
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/static ./static
+COPY --from=builder /app/git-hash ./git-hash
 
 ENV NODE_ENV=production \
     SITE_ROOT=/site \
     HOST=0.0.0.0 \
     PORT=3000 \
     LOG_LEVEL=info \
+    GIT_HASH_FILE=/app/git-hash \
     GOOGLE_CLIENT_ID=demo-stub-no-one-can-sign-in \
     GOOGLE_CLIENT_SECRET=demo-stub-no-one-can-sign-in
 # PUBLIC_BASE_URL and ADMIN_TOKEN come from fly.toml / fly secrets.

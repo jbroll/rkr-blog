@@ -6,6 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import Fastify from 'fastify';
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
+import { resolveGitHash } from './lib/build-info.ts';
 import { paths, serverConfig } from './lib/config.ts';
 import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
@@ -107,7 +108,14 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
   // when they fail). Login start is gated against credential probing.
   await app.register(rateLimit, { global: false });
 
-  app.get('/health', async () => ({ ok: true }));
+  app.get('/health', async () => {
+    const gitHash = resolveGitHash();
+    return {
+      ok: true,
+      gitHash,
+      gitHashShort: gitHash === 'unknown' ? gitHash : gitHash.slice(0, 12)
+    };
+  });
 
   // Auth wiring (when db + auth opts are provided): register the
   // session-cookie middleware before admin routes so request.user is

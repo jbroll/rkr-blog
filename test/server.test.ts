@@ -8,12 +8,25 @@ import { open } from '../src/lib/db.ts';
 import { migrate } from '../src/lib/migrate.ts';
 import { buildApp, startServer } from '../src/server.ts';
 
-test('GET /health returns 200 {"ok":true}', async () => {
+test('GET /health returns 200 with ok flag and git hash', async () => {
   const app = await buildApp();
   try {
     const res = await app.inject({ method: 'GET', url: '/health' });
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.json(), { ok: true });
+    const body = res.json<{ ok: boolean; gitHash: string; gitHashShort: string }>();
+    assert.equal(body.ok, true);
+    // Either a real SHA (40 hex) resolved from the local .git, the
+    // GIT_HASH_FILE the Docker build writes, or 'unknown' when neither
+    // is present. The endpoint must never crash on missing git state.
+    assert.ok(
+      body.gitHash === 'unknown' || /^[0-9a-f]{7,40}$/.test(body.gitHash),
+      `unexpected gitHash: ${body.gitHash}`
+    );
+    if (body.gitHash === 'unknown') {
+      assert.equal(body.gitHashShort, 'unknown');
+    } else {
+      assert.equal(body.gitHashShort, body.gitHash.slice(0, 12));
+    }
   } finally {
     await app.close();
   }
@@ -56,7 +69,12 @@ test('startServer listens on an ephemeral port and serves /health', async (_t) =
 
     const res = await fetch(`http://127.0.0.1:${addr.port}/health`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true });
+    const body = (await res.json()) as { ok: boolean; gitHash: string };
+    assert.equal(body.ok, true);
+    assert.ok(
+      body.gitHash === 'unknown' || /^[0-9a-f]{7,40}$/.test(body.gitHash),
+      `unexpected gitHash: ${body.gitHash}`
+    );
   } finally {
     console.log = originalLog;
     if (app) await app.close();

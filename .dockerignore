@@ -11,10 +11,12 @@ coverage
 static/admin
 static/site
 
-# VCS + editor noise.
-.git
+# Editor noise.
 .gitignore
 .githooks
+# .git is intentionally NOT ignored — the builder reads it to bake the
+# current commit SHA into /app/git-hash so /health can report what's
+# deployed. The .git tree is a few MB; only consulted in stage 1.
 .idea
 .vscode
 .DS_Store
