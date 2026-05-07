@@ -83,9 +83,21 @@ function emitBlock(node: ProseNode): string {
     case 'image': {
       const id = String(node.attrs?.id ?? '').trim();
       if (!id) return '';
+      const parts: string[] = [];
       const alt = node.attrs?.alt;
-      const altPart = typeof alt === 'string' && alt.length > 0 ? ` alt=${quote(alt)}` : '';
-      return `::image{#${id}${altPart}}`;
+      if (typeof alt === 'string' && alt.length > 0) parts.push(`alt=${quote(alt)}`);
+      const caption = node.attrs?.caption;
+      if (typeof caption === 'string' && caption.length > 0) {
+        parts.push(`caption=${quote(caption)}`);
+      }
+      // Position values are constrained to the same set the public renderer
+      // recognises. 'default' is the implicit default; only emit when set.
+      const position = node.attrs?.position;
+      if (typeof position === 'string' && position !== 'default' && position.length > 0) {
+        parts.push(`position=${position}`);
+      }
+      const attrPart = parts.length > 0 ? ` ${parts.join(' ')}` : '';
+      return `::image{#${id}${attrPart}}`;
     }
     /* c8 ignore next 2 -- defensive: editor schema prevents unknown block node types */
     default:
@@ -186,7 +198,17 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
     const d = node as unknown as DirectiveLike;
     if (d.name === 'image') {
       const attrs = d.attributes ?? {};
-      return { type: 'image', attrs: { id: attrs.id ?? '', alt: attrs.alt ?? '' } };
+      return {
+        type: 'image',
+        attrs: {
+          id: attrs.id ?? '',
+          alt: attrs.alt ?? '',
+          caption: attrs.caption ?? '',
+          // Default to 'default' so the editor's position select always has
+          // a non-empty value, matching the public renderer's fallback.
+          position: attrs.position ?? 'default'
+        }
+      };
     }
     return null;
   }

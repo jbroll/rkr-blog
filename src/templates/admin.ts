@@ -52,6 +52,15 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
+  /* Image-attribute panel: shown only when an image node is selected. */
+  #rkr-image-attrs[hidden] { display: none; }
+  #rkr-image-attrs {
+    display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
+    align-items: center; margin: .75rem 0;
+    padding: .5rem .75rem; border: 1px solid #ccc; border-radius: 4px; background: #f7f7f7;
+  }
+  #rkr-image-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #555; }
+  #rkr-image-attrs input, #rkr-image-attrs select { padding: .25rem; }
 </style>
 </head>
 <body>
@@ -66,6 +75,21 @@ export function renderAdminPage(data: AdminPageData): string {
   </select>
 </div>
 <div id="rkroll-admin-toolbar"></div>
+<div id="rkr-image-attrs" hidden>
+  <h3>Image attributes</h3>
+  <label for="rkr-image-alt">Alt text</label>
+  <input id="rkr-image-alt" type="text" placeholder="describe the image for screen readers"/>
+  <label for="rkr-image-caption">Caption</label>
+  <input id="rkr-image-caption" type="text" placeholder="optional caption shown below"/>
+  <label for="rkr-image-position">Position</label>
+  <select id="rkr-image-position">
+    <option value="default">default (centered, breakout)</option>
+    <option value="full">full (edge-to-edge)</option>
+    <option value="left">left (float, prose wraps right)</option>
+    <option value="right">right (float, prose wraps left)</option>
+    <option value="inline">inline (small, in text flow)</option>
+  </select>
+</div>
 <div id="rkroll-admin-root"></div>
 <div id="rkroll-admin-status"></div>
 <input id="rkr-image-input" type="file" accept="image/*" hidden/>

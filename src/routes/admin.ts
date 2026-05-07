@@ -1,11 +1,12 @@
 // Admin routes. Authentication added in Step 7b (social login + sessions).
 //
 // Routes:
-//   GET  /admin/editor    → SPA shell (loads /static/admin/main.js)
-//   GET  /static/*        → public + admin static assets (CSS, admin bundle)
-//   POST /admin/posts     → save editor JSON as a markdown post + reindex
-//   POST /admin/upload    → multipart image ingest (routed to ingestStream)
-//   POST /admin/import/url → server-side fetch + ingest from a URL
+//   GET  /admin/editor       → SPA shell (loads /static/admin/main.js)
+//   GET  /static/*           → public + admin static assets (CSS, admin bundle)
+//   GET  /admin/preview/:id  → 302 to a derivative URL the editor can <img src>
+//   POST /admin/posts        → save editor JSON as a markdown post + reindex
+//   POST /admin/upload       → multipart image ingest (routed to ingestStream)
+//   POST /admin/import/url   → server-side fetch + ingest from a URL
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,10 +19,15 @@ import type { FastifyInstance } from 'fastify';
 import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
+import { cacheKey } from '../lib/hash.ts';
 import { ingestStream } from '../lib/originals.ts';
+import { listSidecarIds } from '../lib/posts.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
+import type { OutputFormat } from '../lib/render.ts';
+import { read as sidecarRead } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
+import imageWidget from '../widgets/image.ts';
 
 /** Production default fetcher used by /admin/import/url. Injectable from
  * tests so a fixture server on 127.0.0.1 doesn't trip the SSRF guard. */
@@ -82,6 +88,44 @@ export default async function adminRoutes(
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(renderAdminPage({ bundleUrl: '/static/admin/main.js' }));
   });
+
+  // Editor preview: redirect to the derivative URL the public renderer
+  // would serve for this image's <img> fallback. The editor uses this
+  // as the `src` for image nodes in TipTap so it doesn't have to
+  // reproduce the cache-key calculation client-side.
+  fastify.get<{ Params: { id: string } }>(
+    '/admin/preview/:id',
+    { ...guard },
+    async (req, reply) => {
+      const { id } = req.params;
+      if (!/^[0-9a-f]{6,64}$/.test(id)) {
+        return reply.code(400).send({ error: 'invalid id' });
+      }
+      let fullId = id;
+      if (id.length !== 64) {
+        const known = listSidecarIds(siteRoot);
+        const matches = known.filter((k) => k.startsWith(id));
+        if (matches.length !== 1) {
+          return reply.code(404).send({ error: 'unknown id' });
+        }
+        fullId = matches[0] as string;
+      }
+      const sidecar = await sidecarRead(siteRoot, fullId);
+      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+      const fb = imageWidget.fallback;
+      /* c8 ignore next 3 -- imageWidget always declares a fallback */
+      if (!fb) return reply.code(500).send({ error: 'no fallback configured' });
+
+      const ophash = cacheKey({
+        originalId: fullId,
+        ops: sidecar.ops as Parameters<typeof cacheKey>[0]['ops'],
+        variant: { w: fb.w },
+        output: { format: fb.format as OutputFormat, quality: fb.quality }
+      });
+      return reply.redirect(`/img/${fullId}.${ophash}.${fb.format}`, 302);
+    }
+  );
 
   fastify.post<{
     Body: {

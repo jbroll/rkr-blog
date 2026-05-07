@@ -93,6 +93,62 @@ test('markdownToProse: paragraph + heading + image directive', () => {
   assert.equal(img.attrs?.alt, 'picture');
 });
 
+test('proseToMarkdown: image with caption and position emits all three attrs', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'image',
+        attrs: {
+          id: 'abc123',
+          alt: 'a picture',
+          caption: 'Workbench at dusk',
+          position: 'right'
+        }
+      }
+    ]
+  };
+  const md = proseToMarkdown(doc);
+  assert.match(md, /::image\{#abc123 alt="a picture" caption="Workbench at dusk" position=right\}/);
+});
+
+test('proseToMarkdown: image with default position omits the position attribute', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'image', attrs: { id: 'abc123', alt: 'x', position: 'default' } }]
+  };
+  const md = proseToMarkdown(doc);
+  assert.equal(md.includes('position='), false);
+});
+
+test('proseToMarkdown: image with empty caption omits the caption attribute', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'image', attrs: { id: 'abc123', alt: 'x', caption: '' } }]
+  };
+  const md = proseToMarkdown(doc);
+  assert.equal(md.includes('caption='), false);
+});
+
+test('markdownToProse: image directive carries caption and position into prose attrs', () => {
+  const md = '::image{#abc123 alt="picture" caption="A workbench" position=full}\n';
+  const doc = markdownToProse(md);
+  const img = doc.content[0]!;
+  assert.equal(img.type, 'image');
+  assert.equal(img.attrs?.caption, 'A workbench');
+  assert.equal(img.attrs?.position, 'full');
+});
+
+test('markdownToProse: image without caption/position fills defaults', () => {
+  // Bare ::image{#id alt=…} should still produce a node with caption='' and position='default'
+  // so the editor's attribute panel always has values to bind.
+  const md = '::image{#abc123 alt="x"}\n';
+  const doc = markdownToProse(md);
+  const img = doc.content[0]!;
+  assert.equal(img.attrs?.caption, '');
+  assert.equal(img.attrs?.position, 'default');
+});
+
 test('round-trip: prose → markdown → prose preserves structure on a representative doc', () => {
   const original: ProseDoc = {
     type: 'doc',

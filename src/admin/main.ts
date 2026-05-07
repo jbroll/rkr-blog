@@ -5,9 +5,13 @@
 import { Editor, mergeAttributes, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 
+type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
+
 interface ImageAttrs {
   id: string | null;
   alt: string | null;
+  caption: string | null;
+  position: ImagePosition;
 }
 
 interface SaveResponse {
@@ -72,9 +76,10 @@ interface GapiGlobal {
   load(name: string, callback: () => void): void;
 }
 
-// Custom image node. Stores {id, alt} in the document; renders to an
-// <img> tag pointing at one of the image widget's preview URLs. Server
-// sees this as a `::image{#id alt="..."}` directive after serialization.
+// Custom image node. Stores {id, alt, caption, position} in the document;
+// renders to an <img> pointing at /admin/preview/<id> (server redirects
+// to the actual cached derivative). Server sees this as
+// `::image{#id alt=… caption=… position=…}` after serialization.
 const ImageNode = Node.create({
   name: 'image',
   group: 'block',
@@ -84,22 +89,32 @@ const ImageNode = Node.create({
   addAttributes() {
     return {
       id: { default: null },
-      alt: { default: null }
+      alt: { default: null },
+      caption: { default: null },
+      position: { default: 'default' }
     };
   },
   parseHTML() {
     return [{ tag: 'img.rkr-image[data-id]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    const id = (HTMLAttributes as { id?: string }).id ?? '';
-    const alt = (HTMLAttributes as { alt?: string }).alt ?? '';
+    const attrs = HTMLAttributes as {
+      id?: string;
+      alt?: string;
+      caption?: string;
+      position?: ImagePosition;
+    };
+    const id = attrs.id ?? '';
+    const alt = attrs.alt ?? '';
+    const position = attrs.position ?? 'default';
     return [
       'img',
       mergeAttributes(HTMLAttributes, {
-        class: 'rkr-image',
+        class: `rkr-image rkr-pos-${position}`,
         'data-id': id,
-        src: id ? `/img/${id}.preview.webp` : '',
-        alt
+        src: id ? `/admin/preview/${id}` : '',
+        alt,
+        title: attrs.caption ?? ''
       })
     ];
   }
@@ -233,8 +248,7 @@ async function pickFromDrive(editor: Editor): Promise<void> {
         setStatus(`importing ${doc.name ?? doc.id} from Drive…`);
         try {
           const r = await importGdriveFile(doc.id);
-          const alt = prompt(`Alt text for ${doc.name ?? doc.id}?`, '') ?? '';
-          const attrs: ImageAttrs = { id: r.id, alt };
+          const attrs: ImageAttrs = { id: r.id, alt: '', caption: '', position: 'default' };
           editor.chain().focus().insertContent({ type: 'image', attrs }).run();
           setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
         } catch (err) {
@@ -267,6 +281,10 @@ function mount(): void {
   const root = $('rkroll-admin-root');
   const toolbar = $('rkroll-admin-toolbar');
   const fileInput = $<HTMLInputElement>('rkr-image-input');
+  const attrPanel = $<HTMLDivElement>('rkr-image-attrs');
+  const attrAlt = $<HTMLInputElement>('rkr-image-alt');
+  const attrCaption = $<HTMLInputElement>('rkr-image-caption');
+  const attrPosition = $<HTMLSelectElement>('rkr-image-position');
 
   const editor = new Editor({
     element: root,
@@ -302,7 +320,12 @@ function mount(): void {
     makeButton('Save', () => void handleSave(editor), 'save')
   );
 
-  // Sync active states on selection change.
+  // Sync active states on selection change. Also reveals the image-
+  // attribute panel when an image node is selected so the author can
+  // edit alt / caption / position. Programmatic updates from the panel
+  // re-trigger this handler; we guard against feedback loops via
+  // `populating`.
+  let populating = false;
   editor.on('selectionUpdate', () => {
     for (const b of toolbar.querySelectorAll<HTMLButtonElement>('button[data-cmd]')) {
       const cmd = b.dataset.cmd;
@@ -314,7 +337,31 @@ function mount(): void {
       else if (cmd === 'link') active = editor.isActive('link');
       b.classList.toggle('is-active', active);
     }
+
+    if (editor.isActive('image')) {
+      const a = editor.getAttributes('image') as Partial<ImageAttrs>;
+      populating = true;
+      attrAlt.value = a.alt ?? '';
+      attrCaption.value = a.caption ?? '';
+      attrPosition.value = a.position ?? 'default';
+      populating = false;
+      attrPanel.hidden = false;
+    } else {
+      attrPanel.hidden = true;
+    }
   });
+
+  function commitAttr(name: 'alt' | 'caption' | 'position', value: string): void {
+    if (populating || !editor.isActive('image')) return;
+    editor
+      .chain()
+      .focus()
+      .updateAttributes('image', { [name]: value })
+      .run();
+  }
+  attrAlt.addEventListener('input', () => commitAttr('alt', attrAlt.value));
+  attrCaption.addEventListener('input', () => commitAttr('caption', attrCaption.value));
+  attrPosition.addEventListener('change', () => commitAttr('position', attrPosition.value));
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
@@ -323,8 +370,9 @@ function mount(): void {
     setStatus(`uploading ${file.name}…`);
     try {
       const result = await uploadImage(file);
-      const alt = prompt('Alt text?', '') ?? '';
-      const attrs: ImageAttrs = { id: result.id, alt };
+      // Insert with empty attrs; author edits via the image-attribute
+      // panel that auto-reveals when the inserted node is selected.
+      const attrs: ImageAttrs = { id: result.id, alt: '', caption: '', position: 'default' };
       editor.chain().focus().insertContent({ type: 'image', attrs }).run();
       setStatus(
         `uploaded ${file.name} (${result.bytes} bytes${result.deduplicated ? ', dedup' : ''})`
