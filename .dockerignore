@@ -1,0 +1,23 @@
+node_modules/
+
+# Browser bundle build artifacts (built from src/admin/ + src/site/ via tsc -p tsconfig.browser.json)
+static/admin/
+static/site/
+
+# c8 coverage output (test:coverage / test:coverage:report)
+coverage/
+.nyc_output/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Local site root for dev (per §8: data lives outside repo, but in case anyone points SITE_ROOT inside)
+/site/
+/var/
+
+# Editor / OS noise
+*.swp
+.idea/
+.vscode/
