@@ -10,7 +10,7 @@ import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 
 import { PipelineCache, type SidecarOp } from './canvas';
-import { computeHomography, perspectiveOutputSize } from './canvas-math';
+import { canonicalJson, computeHomography, perspectiveOutputSize } from './canvas-math';
 
 type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
 
@@ -355,11 +355,14 @@ async function ensureLocalState(id: string): Promise<LocalEditState> {
 }
 
 function isDirty(s: LocalEditState): boolean {
-  // Compare ops + redoStack to baseline. JSON canonical compare is
-  // fine since the op shapes are simple records of primitives.
+  // Use canonicalJson rather than JSON.stringify so two semantically
+  // equivalent op chains compare equal regardless of object-key
+  // insertion order — ops can be built by the cropper, the perspective
+  // modal, runEdit, or the round-tripped server response, each of
+  // which may emit keys in a different order.
   return (
-    JSON.stringify(s.ops) !== JSON.stringify(s.baseline.ops) ||
-    JSON.stringify(s.redoStack) !== JSON.stringify(s.baseline.redoStack)
+    canonicalJson(s.ops) !== canonicalJson(s.baseline.ops) ||
+    canonicalJson(s.redoStack) !== canonicalJson(s.baseline.redoStack)
   );
 }
 
@@ -598,8 +601,12 @@ function loadOriginal(id: string): Promise<HTMLImageElement> {
   })();
   lruSet(originalCache, id, p, IMAGE_CACHE_CAP);
   // Don't cache failures — a transient 5xx shouldn't poison the
-  // session.
-  p.catch(() => originalCache.delete(id));
+  // session. Compare-and-delete: if `p` has already been replaced by
+  // a fresh load (eviction-then-reload race) we must NOT delete the
+  // replacement.
+  p.catch(() => {
+    if (originalCache.get(id) === p) originalCache.delete(id);
+  });
   return p;
 }
 

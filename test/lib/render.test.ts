@@ -395,6 +395,6 @@ test('renderDerivative throws on perspective op when bake is absent', async (t) 
       output: { format: 'webp', quality: 85 },
       siteRoot: root
     }),
-    /unknown op type/
+    /perspective op requires a bake/
   );
 });

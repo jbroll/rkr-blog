@@ -3,6 +3,12 @@
 // in DOM types (canvas.ts itself touches HTMLCanvasElement and friends,
 // which only exist under the browser tsconfig's lib).
 
+// canvas-math is dual-tsconfig: included by tsconfig.browser.json AND
+// visited transitively by tsconfig.json via test/admin/canvas.test.ts.
+// Both tsconfigs have allowImportingTsExtensions enabled so we use the
+// .ts form here. esbuild strips the extension at bundle time.
+export { canonicalJson } from '../lib/canonical-json.ts';
+
 /** Compute the post-resample canvas size given the bounds and fit mode.
  * Mirrors sharp's behavior closely enough for live-preview parity:
  * 'inside' (default) preserves aspect, never enlarges; 'fill' stretches;

@@ -244,26 +244,50 @@ function applyPerspective(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasEl
 
   // GL canvas drives the rasterization; we copy the result back to a
   // 2D canvas so downstream ops in the chain (which expect HTMLCanvasElement
-  // sources) can keep using getContext('2d').
+  // sources) can keep using getContext('2d'). Browsers cap concurrent
+  // WebGL contexts at 8-16; without explicit teardown after each call,
+  // heavy editing exhausts the cap and getContext('webgl') starts
+  // returning null. We delete the program/buffer/texture and force
+  // context loss before returning.
   const gl = createWebglCanvas(outW, outH);
   if (!gl) {
     // WebGL unavailable in this browser. Fall back to passing the
     // input through unchanged — the server's bake will be wrong, but
-    // the editor doesn't crash.
+    // the editor doesn't crash. (The perspective button is disabled
+    // at mount time when WebGL is unavailable; this branch is the
+    // belt-and-suspenders path for a context that vanishes between
+    // probe and use.)
     return input;
   }
 
-  drawPerspective(gl, input, Hinv, outW, outH);
+  try {
+    drawPerspective(gl, input, Hinv, outW, outH);
 
-  // Snapshot to a 2D canvas so the downstream pipeline (and toBlob)
-  // can consume it without WebGL knowledge.
-  const out = document.createElement('canvas');
-  out.width = outW;
-  out.height = outH;
-  const ctx = out.getContext('2d');
-  if (!ctx) throw new Error('canvas: 2d context unavailable');
-  ctx.drawImage(gl.canvas, 0, 0);
-  return out;
+    // Snapshot to a 2D canvas so the downstream pipeline (and toBlob)
+    // can consume it without WebGL knowledge.
+    const out = document.createElement('canvas');
+    out.width = outW;
+    out.height = outH;
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('canvas: 2d context unavailable');
+    ctx.drawImage(gl.canvas, 0, 0);
+    return out;
+  } finally {
+    disposeGlContext(gl);
+  }
+}
+
+function disposeGlContext(ctx: GlContext): void {
+  const { gl, program, texture, positionBuf } = ctx;
+  gl.deleteTexture(texture);
+  gl.deleteBuffer(positionBuf);
+  gl.deleteProgram(program);
+  // Force the underlying GPU context to release. Without this, the
+  // browser's per-page WebGL-context cap fills up after a handful
+  // of perspective edits and subsequent createWebglCanvas calls
+  // return null — silently degrading every later perspective op.
+  const ext = gl.getExtension('WEBGL_lose_context');
+  if (ext) ext.loseContext();
 }
 
 interface GlContext {

@@ -66,7 +66,19 @@ export interface FlipOp {
   axis: 'horizontal' | 'vertical';
 }
 
-export type Op = CropOp | ResampleOp | RotateOp | FlipOp;
+/** Perspective rectify op. Sharp can't apply a homography (Canvas2D
+ * setTransform is affine only and libvips has no equivalent), so the
+ * client bakes the result and uploads it; the renderer only ever sees
+ * this op when sourcing from `originals/` as a fallback, in which case
+ * applyOp throws and the request returns an error. The op is in the
+ * union so the exhaustiveness check at applyOp's `default` branch is
+ * a real type-level guarantee rather than a runtime-only string match. */
+export interface PerspectiveOp {
+  type: 'perspective';
+  corners: ReadonlyArray<readonly [number, number]>;
+}
+
+export type Op = CropOp | ResampleOp | RotateOp | FlipOp | PerspectiveOp;
 
 export interface Variant {
   w?: number;
@@ -211,6 +223,15 @@ function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
       // (left↔right). We expose `axis` instead of the flip/flop
       // shorthand to spare every reader the same five-second confusion.
       return op.axis === 'horizontal' ? p.flop() : p.flip();
+    case 'perspective':
+      // Client-only op: the canvas pipeline produces the rectified
+      // result and uploads it as the bake. Reaching this branch means
+      // we sourced from `originals/` as a fallback (bake missing),
+      // which we can't satisfy. Surface clearly so the operator can
+      // re-bake rather than ship a derivative that ignored the op.
+      throw new Error(
+        'renderDerivative: perspective op requires a bake (run Save edits in the editor)'
+      );
     default: {
       const exhaustive: never = op;
       throw new Error(`renderDerivative: unknown op type ${(exhaustive as Op).type}`);

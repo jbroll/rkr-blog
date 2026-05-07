@@ -18,6 +18,7 @@
     "sourceMap": true,
     "removeComments": false,
 
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
