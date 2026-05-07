@@ -42,15 +42,40 @@ export function renderAdminPage(data: AdminPageData): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>rkroll admin</title>
+<!-- Public theme: gives the editor preview the same look the published post
+     will have (figures, prose width, headings, gallery/carousel placeholders).
+     Loaded BEFORE the admin overrides so the inline styles below win for
+     admin chrome (toolbar, panels, body layout). -->
+<link rel="stylesheet" href="/static/site.css"/>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 56rem; margin: 2rem auto; padding: 0 1rem; }
+  /* Override site.css's body reset so the admin chrome keeps its own
+     layout. The editor's prose preview lives inside <article> below,
+     where site.css's prose rules apply naturally. */
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 56rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background: var(--rkr-bg, #fff);
+    color: var(--rkr-text, #1a1a1a);
+  }
   #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid #ccc; border-radius: 4px; }
-  #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
+  #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; font-family: system-ui, sans-serif; }
   #rkroll-admin-toolbar button.is-active { background: #333; color: white; }
-  #rkroll-admin-root .ProseMirror { min-height: 20rem; padding: 1rem; border: 1px solid #ccc; border-radius: 4px; outline: none; }
-  #rkroll-admin-root .ProseMirror img.rkr-image { max-width: 100%; height: auto; display: block; margin: 1rem auto; }
-  #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; }
-  .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
+  /* Editor preview frame: the ProseMirror editable lives inside an
+     <article>, so site.css's prose typography (max-width, font-family,
+     headings, blockquotes, code, hr) applies. We give it a visible
+     box-style border + min-height so it's obvious where you can edit. */
+  #rkroll-admin-root {
+    margin-bottom: .5rem; padding: .25rem 1rem;
+    border: 1px solid #ccc; border-radius: 4px;
+  }
+  #rkroll-admin-root .ProseMirror { min-height: 20rem; outline: none; }
+  /* Site.css would normally constrain article width via max-width: --rkr-prose
+     and hide overflow; in the editor we let it stretch to the editable box. */
+  #rkroll-admin-root article { max-width: none; margin: 0; }
+  #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; font-family: system-ui, sans-serif; }
+  .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; font-family: system-ui, sans-serif; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
   /* Attribute panels: shown only when a matching node is selected. */
   #rkr-image-attrs[hidden], #rkr-multi-attrs[hidden] { display: none; }
@@ -122,7 +147,9 @@ export function renderAdminPage(data: AdminPageData): string {
   <label for="rkr-multi-autoplay" id="rkr-multi-autoplay-label">Autoplay (s)</label>
   <input id="rkr-multi-autoplay" type="number" min="0" max="60" step="1"/>
 </div>
-<div id="rkroll-admin-root"></div>
+<div id="rkroll-admin-root">
+  <article id="rkroll-admin-article"></article>
+</div>
 <div id="rkroll-admin-status"></div>
 <input id="rkr-image-input" type="file" accept="image/*" hidden/>
 <script type="importmap">

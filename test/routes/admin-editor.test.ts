@@ -36,8 +36,13 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   const res = await app.inject({ method: 'GET', url: '/admin/editor' });
   assert.equal(res.statusCode, 200);
   assert.match(res.headers['content-type'] as string, /text\/html/);
-  assert.match(res.body, /<div id="rkroll-admin-root"><\/div>/);
+  assert.match(res.body, /<div id="rkroll-admin-root">/);
+  assert.match(res.body, /<article id="rkroll-admin-article"><\/article>/);
   assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js"><\/script>/);
+
+  // Public theme stylesheet is loaded so the editor preview matches the
+  // rendered post — figures, prose width, gallery placeholder styles.
+  assert.match(res.body, /<link rel="stylesheet" href="\/static\/site\.css"\/>/);
 
   // Security headers: CSP restricts script-src to self + esm.sh (the
   // editor's import map host); X-Content-Type-Options blocks MIME sniffing.

@@ -383,7 +383,10 @@ async function savePost(payload: {
 }
 
 function mount(): void {
-  const root = $('rkroll-admin-root');
+  // Mount inside the <article> child so site.css's prose typography
+  // (max-width, headings, blockquote, hr, code) applies to the editable
+  // region. The outer #rkroll-admin-root keeps the framed-box look.
+  const root = $('rkroll-admin-article');
   const toolbar = $('rkroll-admin-toolbar');
   const fileInput = $<HTMLInputElement>('rkr-image-input');
   const attrPanel = $<HTMLDivElement>('rkr-image-attrs');
