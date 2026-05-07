@@ -358,9 +358,11 @@ deletes everything in the cache not in the set; idempotent.
   Cookie is `HttpOnly`, `Secure`, `SameSite=Lax`.
 - **Per-user picker tokens** (Drive, OneDrive) live encrypted in the
   index DB.
-- **No CSRF protection in v1** — `SameSite=Lax` session cookie + no
-  third-party-initiated state changes. Reopen if any admin route ever
-  accepts cross-origin requests.
+- **CSRF**: Origin/Referer guard for state-changing methods, plus
+  `SameSite=Lax` session cookie as the primary line. The cookie alone
+  blocks the realistic threat model (top-level GET navigation,
+  cross-site form POST); the Origin check is defense-in-depth in case
+  a future browser-quirk or extension bypasses SameSite.
 
 ## 14. Deployment configuration
 

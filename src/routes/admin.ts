@@ -28,7 +28,7 @@ import { bakePath, FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/orig
 import { listSidecarIds } from '../lib/posts.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { type OutputFormat, SHARP_PIXEL_LIMIT } from '../lib/render.ts';
-import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
+import { type SidecarOp, read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 // Import the fallback as a named, non-optional export so the runtime
@@ -125,6 +125,13 @@ export default async function adminRoutes(
     cachedIds = listSidecarIds(siteRoot);
     cachedAt = now;
     return cachedIds;
+  }
+  /** Drop the cached id list. Call after any path that creates a new
+   * sidecar (upload, url import, gdrive/onedrive import) so the next
+   * /admin/preview/<short-prefix> sees the new id immediately. */
+  function invalidateSidecarListCache(): void {
+    cachedIds = null;
+    cachedAt = 0;
   }
 
   fastify.get<{ Params: { id: string } }>(
@@ -465,10 +472,23 @@ export default async function adminRoutes(
         source: { kind: 'upload', originalName: part.filename ?? null }
       });
 
-      // @fastify/multipart sets file.truncated when the size limit was hit.
+      // @fastify/multipart sets file.truncated when the size limit was
+      // hit. ingestStream already wrote the partial bytes + a sidecar
+      // for them; unlink both before returning 413 so storage doesn't
+      // accumulate truncated-image garbage that the user can't reach
+      // (the partial bytes have a different sha256 than any future
+      // full upload, so they're orphaned by id alone).
       if (part.file.truncated) {
+        await fs.promises.unlink(result.path).catch(() => {});
+        const sidecarFile = path.join(siteRoot, 'sidecars', `${result.id}.json`);
+        await fs.promises.unlink(sidecarFile).catch(() => {});
         return reply.code(413).send({ error: 'file too large' });
       }
+
+      // Fresh id: drop the sidecar-listing cache so the next
+      // /admin/preview/<short-prefix> finds it without waiting out
+      // the TTL.
+      invalidateSidecarListCache();
 
       return {
         id: result.id,
@@ -549,6 +569,7 @@ export default async function adminRoutes(
           siteRoot,
           source: { kind: 'url', originalName: deriveName(url, ct) }
         });
+        invalidateSidecarListCache();
         return {
           id: result.id,
           bytes: result.bytes,
@@ -628,8 +649,6 @@ const MAX_RESAMPLE_PX = 8000;
 const MAX_PERSPECTIVE_COORD = 100_000;
 
 const VALID_FITS = new Set(['inside', 'outside', 'cover', 'contain', 'fill']);
-
-type SidecarOp = { type: string; [k: string]: unknown };
 
 interface ValidatedOps {
   ok: true;

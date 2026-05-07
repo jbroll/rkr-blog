@@ -24,10 +24,13 @@ import {
   simplifyOps
 } from './canvas-math';
 
-/** A sidecar op as it arrives from /admin/sidecar/:id/meta — the
- * server validates shape, so we accept the loose type here and narrow
- * per-op below. */
-export type SidecarOp = { type: string; [k: string]: unknown };
+// Single SidecarOp shape shared by the canvas pipeline, the admin SPA,
+// and the server's route validator. lib/sidecar-types.ts is a pure
+// type module (no node:fs, no node:crypto), safe to import from the
+// browser bundle.
+export type { SidecarOp } from '../lib/sidecar-types.ts';
+
+import type { SidecarOp } from '../lib/sidecar-types.ts';
 
 export interface CanvasSource {
   /** The decoded source pixels — anything `drawImage` accepts. */

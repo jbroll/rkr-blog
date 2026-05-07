@@ -70,7 +70,7 @@ rkroll-cms/
 │   │   ├── google-jwt.ts     # ID-token verify
 │   │   ├── google-drive.ts   # picker + drive v3 client
 │   │   ├── microsoft-graph.ts# OneDrive picker + Graph API client
-│   │   ├── csrf.ts           # CSRF helpers (deferred; see §13 spec)
+│   │   ├── csrf.ts           # CSRF Origin/Referer guard for state-changing methods
 │   │   ├── auth-middleware.ts# requireUser
 │   │   ├── sessions.ts       # server-side session table
 │   │   ├── users.ts          # users + allowlist + oauth_accounts

@@ -1,63 +1,25 @@
 // Sidecar JSON read/write/validate. One file per logical image at
 // $SITE_ROOT/sidecars/<id>.json (see spec.md §5 sidecar schema).
+// Type declarations live in ./sidecar-types.ts so the browser bundle
+// can import them without pulling in node:fs / node:crypto.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { Sidecar } from './sidecar-types.ts';
+
+export type {
+  Sidecar,
+  SidecarMetadata,
+  SidecarOp,
+  SidecarOutput,
+  SidecarSource,
+  SidecarVariant
+} from './sidecar-types.ts';
+
 export const CURRENT_VERSION = 1;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
-
-export interface SidecarSource {
-  kind: string;
-  fetched?: string;
-  originalName?: string | null;
-  // Provider-specific fields (fileId, etc.) are allowed but unenumerated.
-  [k: string]: unknown;
-}
-
-export interface SidecarMetadata {
-  width?: number;
-  height?: number;
-  format?: string;
-  exif?: Record<string, unknown>;
-  [k: string]: unknown;
-}
-
-export interface SidecarOp {
-  type: string;
-  [k: string]: unknown;
-}
-
-export interface SidecarOutput {
-  format: string;
-  quality?: number;
-  [k: string]: unknown;
-}
-
-export interface SidecarVariant {
-  w?: number;
-  h?: number;
-  fit?: string;
-  [k: string]: unknown;
-}
-
-export interface Sidecar {
-  version: 1;
-  original: string;
-  source: SidecarSource;
-  metadata: SidecarMetadata;
-  ops: SidecarOp[];
-  /** Ops popped via undo, in pop order (i.e. the last entry is the
-   * one redo would re-apply first). Persisted with the sidecar so
-   * undo/redo survives reload + cross-session. Optional for backward
-   * compatibility with sidecars written before this field existed.
-   * Adding a new op clears this stack — the standard linear-undo
-   * invariant. */
-  redoStack?: SidecarOp[];
-  outputs: SidecarOutput[];
-  variants: SidecarVariant[];
-}
 
 export type ValidateResult = { ok: true } | { ok: false; error: string };
 
