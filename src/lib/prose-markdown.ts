@@ -1,4 +1,9 @@
 // Bidirectional ProseMirror JSON ↔ markdown converter for the admin editor.
+// Lives under src/lib/ but is bundled into the admin browser bundle (via
+// tsconfig.browser.json) — the editor calls `proseToMarkdown` locally on
+// save and POSTs markdown to /admin/posts, so the server never loads this
+// module at runtime. Imports must stay browser-safe (no node:* APIs).
+//
 // Scope: only the node + mark types our TipTap editor declares (paragraph,
 // heading, hard_break, text, bold, italic, link, code, our custom `image`,
 // blockquote, code block, lists, thematic break). Unknown nodes/marks fall
@@ -23,7 +28,7 @@ import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 
-import { safeLinkUrl } from './content.ts';
+import { safeLinkUrl } from './safe-url.ts';
 
 // ---- ProseMirror JSON shape (subset) ----------------------------------
 

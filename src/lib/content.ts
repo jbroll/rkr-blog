@@ -30,7 +30,10 @@ import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 import { parse as yamlParse } from 'yaml';
 
+import { safeLinkUrl } from './safe-url.ts';
 import type { WidgetRegistry } from './widgets.ts';
+
+export { safeLinkUrl };
 
 export interface PostFrontmatter {
   title: string;
@@ -208,31 +211,4 @@ export function escapeText(s: string): string {
 
 export function escapeAttr(s: string): string {
   return s.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c);
-}
-
-/** URL schemes safe to render in markdown links. Anything else (including
- * `javascript:`, `data:`, `vbscript:`, `file:`) is replaced with `#` so a
- * pasted or typo'd URL can't fire an XSS payload on click. Site-relative
- * (`/`, `#`, `.`) and protocol-relative (`//`) URLs pass through. */
-const SAFE_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:']);
-export function safeLinkUrl(url: string): string {
-  const trimmed = url.trim();
-  if (trimmed === '') return '#';
-  // Site-relative / fragment / protocol-relative — no scheme to check.
-  if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('?') ||
-    trimmed.startsWith('.')
-  ) {
-    return trimmed;
-  }
-  // First colon decides: anything before it that doesn't contain
-  // a path-like character is a scheme.
-  const colon = trimmed.indexOf(':');
-  if (colon === -1) return trimmed;
-  const head = trimmed.slice(0, colon);
-  if (/[/?#]/.test(head)) return trimmed; // colon is past the path start
-  const scheme = `${head.toLowerCase()}:`;
-  return SAFE_LINK_SCHEMES.has(scheme) ? trimmed : '#';
 }

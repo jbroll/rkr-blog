@@ -19,7 +19,7 @@ For developer setup (lint, test, hooks, dev commands), see
 | Image pipeline (server) | Sharp (libvips) | Releases the libuv thread pool; AVIF/WebP/EXIF/ICC handling. |
 | Image pipeline (client) | HTMLCanvasElement + WebGL (perspective only) | No external library; 4-corner perspective uses a tiny fragment shader. |
 | Markdown | `remark` + `remark-directive` + `remark-frontmatter` | Stable AST; the directive syntax fits widget blocks. |
-| Editor | TipTap (ProseMirror) | Custom node types map cleanly to widget blocks; markdown round-trip via the `remark` plugin family. |
+| Editor | TipTap (ProseMirror) | Custom node types map cleanly to widget blocks; markdown round-trip via the `remark` plugin family runs in the browser, so `POST /admin/posts` is a markdown-only endpoint. |
 | Editor bundle | esbuild | TipTap bundled into a single browser file so the admin SPA has zero CDN dependencies and a tight CSP. |
 | Auth | OAuth (Google) via `arctic` | No password to store; provider handles MFA / recovery. |
 | Front proxy | Apache 2.4 (`mod_rewrite` + `mod_proxy_http` + `mod_headers` + `mod_expires`) | Static cache hits never reach Node. |
@@ -61,7 +61,8 @@ rkroll-cms/
 │   │   ├── render.ts         # renderDerivative + Sharp pipeline
 │   │   ├── jobs.ts           # job queue operations
 │   │   ├── posts.ts          # post markdown read/parse/serialize
-│   │   ├── prose-markdown.ts # TipTap JSON ⇄ markdown directive round-trip
+│   │   ├── prose-markdown.ts # TipTap JSON ⇄ markdown directive round-trip (bundled into the admin browser bundle; not server-side at runtime)
+│   │   ├── safe-url.ts       # URL-scheme allowlist (shared by content.ts + prose-markdown.ts)
 │   │   ├── widgets.ts        # widget registry, dispatch
 │   │   ├── content.ts        # HTML escape, sanitize
 │   │   ├── render-formats.ts # constants for output format/quality
@@ -477,14 +478,21 @@ content-hashed.
 
 ## 8. Editor browser bundle
 
-`tsconfig.browser.json` covers `src/admin/**` and `src/site/**`. The
-admin bundle is built with esbuild (TipTap + ProseMirror + Cropper.js
-all bundled into one file):
+`tsconfig.browser.json` covers `src/admin/**`, `src/site/**`, and the
+two shared lib files the admin bundle pulls in (`prose-markdown.ts` +
+`safe-url.ts`). The admin bundle is built with esbuild (TipTap +
+ProseMirror + Cropper.js + remark + remark-directive all bundled into
+one file):
 
-- `static/admin/main.js` — admin SPA bundle (~400 KB minified)
+- `static/admin/main.js` — admin SPA bundle (~420 KB minified)
 - `static/admin/main.css` — Cropper.js extracted CSS
 - `static/site/lightbox.js` — public-page lightbox
 - `static/site/carousel.js` — public-page carousel runtime
+
+The remark stack lives in the admin bundle because the editor converts
+ProseMirror → markdown locally before POSTing to `/admin/posts`. The
+server only receives markdown (validated via `parsePost`), so it never
+loads `prose-markdown.ts` at runtime.
 
 All served at `/static/*` by `@fastify/static` in dev (Apache in
 prod). The editor bundle has zero CDN runtime dependency; the only

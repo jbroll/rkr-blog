@@ -28,6 +28,11 @@
 
     "types": []
   },
-  "include": ["src/admin/**/*.ts", "src/site/**/*.ts"],
+  "include": [
+    "src/admin/**/*.ts",
+    "src/site/**/*.ts",
+    "src/lib/prose-markdown.ts",
+    "src/lib/safe-url.ts"
+  ],
   "exclude": ["node_modules", "**/*.test.ts"]
 }

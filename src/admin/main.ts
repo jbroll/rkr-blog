@@ -1,6 +1,7 @@
 // Admin SPA: TipTap editor wired to /admin/upload (image insertion) and
-// /admin/posts (save). The editor never shows markdown to the user; the
-// server-side prose-markdown converter handles serialization both ways.
+// /admin/posts (save). The editor never shows markdown to the user;
+// proseToMarkdown converts on save before POSTing — the server-side
+// /admin/posts endpoint just persists the markdown after validation.
 
 import { Editor, mergeAttributes, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
@@ -9,6 +10,7 @@ import Cropper from 'cropperjs';
 // into static/admin/main.js (no separate CSS file at runtime).
 import 'cropperjs/dist/cropper.css';
 
+import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { PipelineCache, type SidecarOp } from './canvas';
 import { canonicalJson, computeHomography, perspectiveOutputSize } from './canvas-math';
 
@@ -1223,7 +1225,7 @@ async function savePost(payload: {
   slug: string;
   title: string;
   status: 'draft' | 'published';
-  body: unknown;
+  markdown: string;
 }): Promise<SaveResponse> {
   const res = await fetch('/admin/posts', {
     method: 'POST',
@@ -1779,8 +1781,9 @@ async function handleSave(editor: Editor): Promise<void> {
   }
   setStatus('saving…');
   try {
-    const json = editor.getJSON();
-    const result = await savePost({ slug, title, status, body: json });
+    const json = editor.getJSON() as ProseDoc;
+    const markdown = proseToMarkdown(json);
+    const result = await savePost({ slug, title, status, markdown });
     setStatus(`saved /${result.slug}`);
   } catch (err) {
     setStatus(`save error: ${(err as Error).message}`);

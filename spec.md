@@ -227,7 +227,10 @@ syntax (`::name{attrs}`).
 
 Custom node types per widget — the author sees image / gallery /
 carousel / diptych / triptych blocks, never the directive syntax.
-Round-trips through markdown on save and reload.
+Round-trips through markdown on save and reload. The ProseMirror ⇄
+markdown conversion happens in the browser; `POST /admin/posts`
+accepts markdown directly so the same endpoint can be driven by other
+tools (e.g. the WordPress importer).
 
 ## 9. Image widgets
 

@@ -6,7 +6,6 @@ import { type TestContext, test } from 'node:test';
 
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
-import type { ProseDoc } from '../../src/lib/prose-markdown.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -32,19 +31,7 @@ async function setup(t: TestContext) {
   return { root, app };
 }
 
-const SAMPLE_DOC: ProseDoc = {
-  type: 'doc',
-  content: [
-    {
-      type: 'paragraph',
-      content: [
-        { type: 'text', text: 'Hello ' },
-        { type: 'text', text: 'world', marks: [{ type: 'bold' }] }
-      ]
-    },
-    { type: 'image', attrs: { id: 'abc123def4567890', alt: 'cap' } }
-  ]
-};
+const SAMPLE_MD = 'Hello **world**\n\n::image{#abc123def4567890 alt="cap"}\n';
 
 test('POST /admin/posts saves a new post and reindexes (visible at /:slug)', async (t) => {
   const { root, app } = await setup(t);
@@ -57,7 +44,7 @@ test('POST /admin/posts saves a new post and reindexes (visible at /:slug)', asy
       title: 'Hello world',
       status: 'published',
       date: '2026-05-06T14:00:00Z',
-      body: SAMPLE_DOC
+      markdown: SAMPLE_MD
     }
   });
   assert.equal(res.statusCode, 200, res.body);
@@ -84,7 +71,7 @@ test('POST /admin/posts overwrites an existing post (inserted=false)', async (t)
     slug: 'twice',
     title: 'First take',
     status: 'draft',
-    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'v1' }] }] }
+    markdown: 'v1\n'
   };
   const r1 = await app.inject({ method: 'POST', url: '/admin/posts', payload });
   assert.equal(r1.statusCode, 200);
@@ -99,13 +86,13 @@ test('POST /admin/posts overwrites an existing post (inserted=false)', async (t)
   assert.equal(r2.json<{ inserted: boolean }>().inserted, false);
 });
 
-test('POST /admin/posts rejects bad slug / missing title / missing body', async (t) => {
+test('POST /admin/posts rejects bad slug / missing title / missing markdown', async (t) => {
   const { app } = await setup(t);
 
   const bad1 = await app.inject({
     method: 'POST',
     url: '/admin/posts',
-    payload: { slug: 'has spaces', title: 'X', status: 'draft', body: { type: 'doc', content: [] } }
+    payload: { slug: 'has spaces', title: 'X', status: 'draft', markdown: '' }
   });
   assert.equal(bad1.statusCode, 400);
   assert.match(bad1.json<{ error: string }>().error, /slug/);
@@ -113,7 +100,7 @@ test('POST /admin/posts rejects bad slug / missing title / missing body', async 
   const bad2 = await app.inject({
     method: 'POST',
     url: '/admin/posts',
-    payload: { slug: 'ok', title: '', status: 'draft', body: { type: 'doc', content: [] } }
+    payload: { slug: 'ok', title: '', status: 'draft', markdown: '' }
   });
   assert.equal(bad2.statusCode, 400);
   assert.match(bad2.json<{ error: string }>().error, /title/);
@@ -121,20 +108,35 @@ test('POST /admin/posts rejects bad slug / missing title / missing body', async 
   const bad3 = await app.inject({
     method: 'POST',
     url: '/admin/posts',
-    payload: { slug: 'ok', title: 'X', status: 'draft', body: 'not-a-doc' }
+    payload: { slug: 'ok', title: 'X', status: 'draft', markdown: 42 }
   });
   assert.equal(bad3.statusCode, 400);
-  assert.match(bad3.json<{ error: string }>().error, /ProseMirror doc/);
+  assert.match(bad3.json<{ error: string }>().error, /markdown/);
+
+  // Reject markdown that opens with a YAML frontmatter delimiter — it
+  // would smuggle a second frontmatter block past the one we control.
+  const bad4 = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'ok',
+      title: 'X',
+      status: 'draft',
+      markdown: '---\ntitle: hijack\n---\n\nbody\n'
+    }
+  });
+  assert.equal(bad4.statusCode, 400);
+  assert.match(bad4.json<{ error: string }>().error, /frontmatter/);
 
   // Slug length cap: 200-char slug is rejected even though every char is
   // a valid kebab-case character. Without this, a 50KB slug would be
   // accepted, written to disk as a filename, and indexed.
   const longSlug = 'a'.repeat(200);
-  const bad4 = await app.inject({
+  const bad5 = await app.inject({
     method: 'POST',
     url: '/admin/posts',
-    payload: { slug: longSlug, title: 'X', status: 'draft', body: { type: 'doc', content: [] } }
+    payload: { slug: longSlug, title: 'X', status: 'draft', markdown: '' }
   });
-  assert.equal(bad4.statusCode, 400);
-  assert.match(bad4.json<{ error: string }>().error, /slug/);
+  assert.equal(bad5.statusCode, 400);
+  assert.match(bad5.json<{ error: string }>().error, /slug/);
 });

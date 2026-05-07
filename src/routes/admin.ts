@@ -23,10 +23,10 @@ import sharp from 'sharp';
 import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
+import { parsePost } from '../lib/content.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { bakePath, FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
-import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { type OutputFormat, SHARP_PIXEL_LIMIT } from '../lib/render.ts';
 import { type SidecarOp, read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
@@ -416,10 +416,10 @@ export default async function adminRoutes(
       title?: unknown;
       status?: unknown;
       date?: unknown;
-      body?: unknown;
+      markdown?: unknown;
     };
   }>('/admin/posts', { ...guard }, async (request, reply) => {
-    const { slug, title, status, date, body } = request.body ?? {};
+    const { slug, title, status, date, markdown } = request.body ?? {};
 
     if (
       typeof slug !== 'string' ||
@@ -431,13 +431,19 @@ export default async function adminRoutes(
     if (typeof title !== 'string' || !title.trim()) {
       return reply.code(400).send({ error: 'title is required' });
     }
+    if (typeof markdown !== 'string') {
+      return reply.code(400).send({ error: 'markdown must be a string' });
+    }
+    // The body must not start with a frontmatter delimiter — that would
+    // attach a second YAML block past the one we control, and parsePost
+    // would pick up whichever it sees first. The editor never produces
+    // this, but a forged request might.
+    if (/^\s*---\s*\n/.test(markdown)) {
+      return reply.code(400).send({ error: 'markdown body must not start with --- frontmatter' });
+    }
     const finalStatus: 'draft' | 'published' = status === 'published' ? 'published' : 'draft';
     const dateStr = typeof date === 'string' && date.trim() ? date : new Date().toISOString();
-    if (!body || typeof body !== 'object' || (body as ProseDoc).type !== 'doc') {
-      return reply.code(400).send({ error: 'body must be a ProseMirror doc' });
-    }
 
-    const md = proseToMarkdown(body as ProseDoc);
     const fm = [
       '---',
       `title: ${yamlScalar(title)}`,
@@ -447,7 +453,16 @@ export default async function adminRoutes(
       '---',
       ''
     ].join('\n');
-    const file = `${fm}\n${md}`;
+    const trimmedMd = markdown.startsWith('\n') ? markdown.slice(1) : markdown;
+    const file = `${fm}\n${trimmedMd}`;
+
+    // Validate the full file parses cleanly before writing — gives a 400
+    // with a useful message instead of corrupting the posts dir.
+    try {
+      parsePost(file);
+    } catch (err) {
+      return reply.code(400).send({ error: `markdown failed to parse: ${(err as Error).message}` });
+    }
 
     const postsDir = path.join(siteRoot, 'content', 'posts');
     await fs.promises.mkdir(postsDir, { recursive: true });
