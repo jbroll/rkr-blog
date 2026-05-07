@@ -1,7 +1,7 @@
 // Streaming ingest of an image into originals/ + sidecars/.
 // Hash-while-stream so we never have to re-read the bytes off disk.
 //
-// On-disk layout per spec §9:
+// On-disk layout per implementation.md §3:
 //   originals/<id[0:2]>/<id[2:4]>/<id>.<ext>
 //
 // Sharp determines the authoritative format from bytes (not the client's
@@ -36,8 +36,9 @@ export const FORMAT_TO_EXT: Record<string, string | undefined> = {
   heif: 'heif'
 };
 
-// Default derivative set on first ingest. Matches the image widget defaults
-// in spec §12. Caller can rewrite via POST /admin/sidecar/:id.
+// Default derivative set on first ingest. Matches the image widget
+// defaults (spec.md §5 sidecar schema). Caller can rewrite via POST
+// /admin/sidecar/:id.
 const DEFAULT_OUTPUTS = [
   { format: 'webp', quality: 85 },
   { format: 'avif', quality: 70 }

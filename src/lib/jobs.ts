@@ -1,5 +1,6 @@
 // Job queue. The `jobs` SQLite table is the queue (no Redis, no BullMQ
-// — see spec §3, §11). One worker codepath drives the queue from two
+// — see implementation.md §1 stack and §6 worker lifecycle). One worker
+// codepath drives the queue from two
 // contexts: inside Fastify (in-process worker, woken by EventEmitter
 // on enqueue) and inside `site-admin render` (drains and exits).
 //

@@ -1,5 +1,5 @@
 -- Auth refactor: replace single-password with Google social login
--- (spec §17). Drops the old auth/sessions/oauth_tokens and rebuilds
+-- (spec.md §13). Drops the old auth/sessions/oauth_tokens and rebuilds
 -- everything to be per-user.
 
 DROP TABLE IF EXISTS auth;

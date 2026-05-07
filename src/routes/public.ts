@@ -3,8 +3,8 @@
 //   GET /:slug           — rendered post page
 //   GET /img/:filename   — derivative image, on Apache cache-miss fall-through
 //
-// Apache rewrites /img/* directly to the cache file when present (spec §14);
-// only on miss does it fall through here.
+// Apache rewrites /img/* directly to the cache file when present
+// (implementation.md §7); only on miss does it fall through here.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -123,7 +123,7 @@ export default async function publicRoutes(
     '/img/:filename',
     {
       // Anti-DoS: cap derivative renders per IP. Apache serves cache hits
-      // directly (spec §14), so this only bites on cache-miss requests
+      // directly (implementation.md §7), so this only bites on cache-miss requests
       // hitting Fastify — exactly the expensive path. 120 req/min/IP is
       // very generous for normal browsing; abusive bursts get 429.
       config: { rateLimit: { max: 120, timeWindow: '1 minute' } }

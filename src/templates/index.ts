@@ -1,4 +1,4 @@
-// Index page template. Plain template-literal HTML per spec §12.
+// Index page template. Plain template-literal HTML (spec.md §8 content model).
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type SiteChrome, siteFoot, siteHead } from './layout.ts';

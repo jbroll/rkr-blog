@@ -1,7 +1,7 @@
 // Post markdown read/parse/serialize + HTML rendering.
-// See spec §12 (content model) and §18 (sample post).
+// See spec.md §8 (content model) and implementation.md §13 (sample fixtures).
 //
-// Round-trip notes (spec §21 Step 5):
+// Round-trip notes (implementation.md §11 Step 5):
 //   - Frontmatter content survives parse → stringify exactly.
 //   - Directive attribute syntax is normalized by remark-directive:
 //       `id=abcd1234` → `#abcd1234`     (id shorthand)

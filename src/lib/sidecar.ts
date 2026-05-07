@@ -1,5 +1,5 @@
 // Sidecar JSON read/write/validate. One file per logical image at
-// $SITE_ROOT/sidecars/<id>.json (spec §10).
+// $SITE_ROOT/sidecars/<id>.json (see spec.md §5 sidecar schema).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';

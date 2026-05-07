@@ -1,6 +1,6 @@
 // Widget registry. Widgets implement custom directives (`::name{attrs}`)
 // in post markdown — for now `::image{...}`; gallery arrives in Step 8.
-// See spec §12.
+// See spec.md §9 image widgets.
 
 import type { Parent, PhrasingContent } from 'mdast';
 

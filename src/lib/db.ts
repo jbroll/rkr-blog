@@ -4,8 +4,9 @@
 // - coercing bigint lastInsertRowid to Number,
 // - giving migrations a single place to handle PRAGMAs.
 //
-// Surface per spec §15. Generic Statement<TRow, TParams> is opt-in: callers
-// that don't pass type args get `unknown` rows and `SqlParam[]` params.
+// Surface per implementation.md §4. Generic Statement<TRow, TParams> is
+// opt-in: callers that don't pass type args get `unknown` rows and
+// `SqlParam[]` params.
 
 import { DatabaseSync } from 'node:sqlite';
 

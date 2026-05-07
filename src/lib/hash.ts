@@ -1,5 +1,6 @@
 // Hashing + canonical JSON + cache-key derivation.
-// See spec §10 (sidecar/cache key) and §11 (renderDerivative).
+// See spec.md §5 (sidecar/cache key) and implementation.md §5
+// (renderDerivative).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -38,7 +39,7 @@ export function sha256Stream(stream: Readable): Promise<string> {
 
 /**
  * Canonical JSON serialization. Required so semantically-identical ops
- * produce identical hashes across nodes and processes (spec §10).
+ * produce identical hashes across nodes and processes (spec.md §5).
  *
  * Rules:
  * - object keys sorted ascending, recursively
@@ -98,7 +99,7 @@ function asciiOnly(s: string): string {
 
 /**
  * Derive the per-derivative cache key. Returns the 12-hex-char `ophash`
- * suffix used in the on-disk filename (spec §11).
+ * suffix used in the on-disk filename (implementation.md §5).
  */
 export function cacheKey({ originalId, ops, variant, output }: CacheKeyArgs): string {
   const input = canonicalJson({ originalId, ops, variant, output });

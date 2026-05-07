@@ -9,7 +9,7 @@
 //   site-admin verify
 //   site-admin server [--port 3000]
 //
-// Future subcommands (see spec §16): reindex, import, password.
+// Future subcommands (see spec.md §12 operator commands): reindex, import, password.
 
 const COMMANDS = {
   init:    () => import('../src/cli/init.ts'),

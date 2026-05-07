@@ -1,35 +1,45 @@
 # rkroll-cms
 
-Single-author CMS with photo-first content model. See [spec.md](./spec.md) for the full design.
+A self-hosted, single-author CMS built around photography. Markdown is
+the canonical content format, but the editor never makes you look at
+markdown. Photos are first-class: the original is preserved untouched
+and the entire crop / rotate / resample / perspective-rectify pipeline
+runs in your browser on a canvas, with results baked once and served
+from disk thereafter.
+
+## What it is
+
+- **Single-author** by design. Sign-in is invite-only via Google OAuth;
+  no passwords stored, no multi-user features.
+- **Markdown + custom directives** (`::image`, `::gallery`, `::carousel`,
+  `::diptych`, `::triptych`) for content. Posts are plain `.md` files
+  on disk — diff-friendly, scriptable, version-controllable.
+- **Photo pipeline** that records edits as a recipe (`crop / rotate /
+  flip / resample / perspective`), keeps the master byte-identical
+  forever, and serves cached derivatives directly from Apache. Edits
+  apply in the browser via canvas + WebGL; the browser-baked result is
+  what the public site displays.
+- **No bundler, no ORM, no Redis, no Docker.** Source is TypeScript
+  that runs as-is via Node 22's `--experimental-strip-types`. Storage is
+  the filesystem + SQLite (`node:sqlite`). HTTP is Fastify behind
+  Apache.
+- **Imports** from local upload, an arbitrary URL, Google Drive,
+  OneDrive, and Dropbox. Provider pickers (not URL parsing) handle
+  selection; the server fetches once and dedupes by sha256.
+
+## Read next
+
+- **[spec.md](./spec.md)** — what the application does. The features
+  and behavior an alternate implementation would need to reproduce.
+- **[implementation.md](./implementation.md)** — how this codebase
+  delivers the spec: stack choices, repo layout, database schema,
+  image-pipeline internals, build order.
+- **[developer-quickstart.md](./developer-quickstart.md)** — local
+  development setup, coding conventions, test/lint/hook configuration,
+  command cheatsheet.
 
 ## Status
 
-Working through the build order in spec §21:
-
-- Step 1 (skeleton) — done.
-- Step 2 (originals + sidecars + `POST /admin/upload`) — done.
-- Step 3 (render pipeline + jobs + `GET /img`) — `renderDerivative` landed; jobs + route still in progress.
-
-## Dev quickstart
-
-Requires Node 22.
-
-```bash
-npm install
-npm run hooks:install                          # one-time: enable .githooks/
-
-SITE_ROOT=$HOME/site bin/site-admin init       # create dirs + run migrations
-SITE_ROOT=$HOME/site PORT=3000 npm start       # boot Fastify
-curl http://127.0.0.1:3000/health              # → {"ok":true}
-
-npm test                                       # node --test
-npm run lint                                   # biome check
-npm run lint:fix                               # biome check --write
-npm run check                                  # biome check + tests
-```
-
-The pre-commit hook (after `npm run hooks:install`) runs `biome check --staged` then the full test suite. Bypass with `git commit --no-verify` only when you know what you're doing.
-
-## Layout
-
-See spec §8. Source under `src/`, tests under `test/` mirroring the source layout, runtime data outside the repo at `$SITE_ROOT` (default `/var/www/site`).
+Self-hosted single-author CMS for one site. v1 in progress; image
+pipeline (Phases 1–4) complete. Run from source on Void / Debian /
+Ubuntu; production on Apache 2.4 + Node 22 + SQLite.

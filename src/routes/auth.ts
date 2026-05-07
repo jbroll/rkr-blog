@@ -1,4 +1,4 @@
-// Social-login routes (Google only for now). See spec §17.
+// Social-login routes (Google only for now). See spec.md §13 auth.
 //
 //   GET  /admin/auth/google/start    → redirect to Google's consent page
 //   GET  /admin/auth/google/callback → exchange code, create session, redirect

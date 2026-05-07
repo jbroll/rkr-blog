@@ -2,7 +2,7 @@
 // with srcset entries for each (variant × format) the widget declares,
 // using cache-friendly URLs `/img/<id>.<ophash>.<fmt>`.
 //
-// The widget's `variants` are the source of truth for srcset (spec §12).
+// The widget's `variants` are the source of truth for srcset (spec.md §9).
 // Image ingest currently writes the same defaults into each sidecar, so a
 // `site-admin render` warms exactly these URLs. Custom per-image variant
 // sets are a future enhancement.

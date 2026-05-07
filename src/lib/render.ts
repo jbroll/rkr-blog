@@ -1,6 +1,7 @@
 // Image derivative renderer. Pure modulo filesystem writes:
 // same args → same on-disk path → same bytes (assuming a stable libvips).
-// See spec §11.
+// See spec.md §7 derivative rendering and implementation.md §5 image
+// pipeline internals.
 //
 // Source-image precedence:
 //   1. cache/img/<id>.<ophash>.<fmt>   — finished derivative (fast path).
@@ -153,7 +154,8 @@ export async function renderDerivative(
     sourcePath = originalPath(siteRoot, originalId, ext);
   }
 
-  // Per spec §11: keep libvips threads from multiplying with job concurrency.
+  // Keep libvips threads from multiplying with job concurrency
+  // (implementation.md §5).
   sharp.concurrency(1);
 
   // Cap decoded pixel count to defend against decompression bombs — a

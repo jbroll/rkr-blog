@@ -87,7 +87,7 @@ export default async function adminRoutes(
   );
 
   // One static handler at /static/. Public CSS lives at /static/site.css;
-  // the admin bundle at /static/admin/main.js. Apache vhost (spec §14)
+  // the admin bundle at /static/admin/main.js. Apache vhost (implementation.md §7)
   // already serves /static/* directly with cache headers in production.
   if (fs.existsSync(staticDir)) {
     await fastify.register(fastifyStatic, {
@@ -540,7 +540,7 @@ export default async function adminRoutes(
 }
 
 const URL_FETCH_TIMEOUT_MS = 30_000;
-const URL_FETCH_MAX_BYTES = 50 * 1024 * 1024; // 50 MiB per spec §13
+const URL_FETCH_MAX_BYTES = 50 * 1024 * 1024; // 50 MiB per spec.md §10 remote import
 
 /** Cap slug length so a 50KB attacker slug can't be written to disk and
  * indexed. The kebab-case regex permits a-z/0-9/-; this just bounds it. */
