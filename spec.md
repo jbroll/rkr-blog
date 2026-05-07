@@ -177,6 +177,8 @@ $SITE_ROOT/
     ab/cd/abcd1234ef….jpg
   sidecars/                     # one JSON per logical image
     abcd1234ef….json
+  bakes/                        # client-baked post-ops WebP per id (Phase 3+)
+    ab/cd/abcd1234ef….webp
   cache/
     img/                        # served directly by Apache
       abcd1234ef….<ophash>.webp
@@ -191,8 +193,9 @@ $SITE_ROOT/
 
 Properties:
 - `originals/` is write-once. Re-importing a byte-identical file is a no-op (hash collision = same file).
-- `cache/` is fully derivable from `originals/` + `sidecars/`. Safe to delete in full.
-- Backup set: `originals/`, `sidecars/`, `content/`, `data/site.db`. Skip `cache/`.
+- `bakes/` holds the editor's client-baked post-ops WebP per image, uploaded on Save edits. When present, `renderDerivative` reads it as the source and skips applying ops in sharp. When absent, sharp falls back to applying ops to the original. Safe to delete in full — the next Save re-uploads.
+- `cache/` is fully derivable from `originals/` + `sidecars/` (via the bake when present). Safe to delete in full.
+- Backup set: `originals/`, `sidecars/`, `content/`, `data/site.db`. Skip `cache/` and `bakes/` (both reproducible).
 
 ## 10. Sidecar schema
 
@@ -215,8 +218,12 @@ One JSON file per logical image. The "image" the post references is `(original_i
     "exif": { "DateTimeOriginal": "...", "Model": "..." }
   },
   "ops": [
-    { "type": "crop", "x": 100, "y": 200, "w": 4800, "h": 3200 },
-    { "type": "resample", "w": 2400, "fit": "inside" }
+    { "type": "resample", "w": 2400, "fit": "inside" },
+    { "type": "crop", "x": 50, "y": 100, "w": 2300, "h": 1500 },
+    { "type": "rotate", "degrees": 90 }
+  ],
+  "redoStack": [
+    { "type": "flip", "axis": "horizontal" }
   ],
   "outputs": [
     { "format": "webp", "quality": 85 },
@@ -228,8 +235,20 @@ One JSON file per logical image. The "image" the post references is `(original_i
 }
 ```
 
+**Op types:**
+
+| type | shape | semantics |
+|---|---|---|
+| `crop` | `{x, y, w, h}` | extract a region |
+| `rotate` | `{degrees}` | multiple of 90; ±90, 180, 270 |
+| `flip` | `{axis: 'horizontal' \| 'vertical'}` | mirror left↔right or top↔bottom |
+| `resample` | `{w?, h?, fit}` | downscale (`withoutEnlargement: true`); fit is sharp's |
+| `perspective` | `{corners: [[x,y]×4]}` | client-only; tl/tr/br/bl in current-canvas coords. The renderer relies on the bake for this op — sharp can't apply a homography. |
+
 Rules:
-- `ops` describes geometry on the **original**. `crop` is a box in original coordinates, not chained on the previous op's output. Re-edits never compound rounding error and can be reordered safely.
+- `ops` is the user's click order; the executor applies ops sequentially with each op's coords interpreted in the canvas state at the time it runs (i.e. post-prior-ops). Authoring tools that produce `crop` after `rotate` therefore record coords in the rotated canvas's coordinate space.
+- `redoStack` is a parallel array tracking ops popped via undo, in pop order (last entry is the first redo target). Persisted with the sidecar so undo/redo survives reload. Adding any new op clears the redo stack — the standard linear-undo invariant.
+- The executor applies a small simplification pre-pass at execution time: adjacent rotates combine (`rotate(90) + rotate(-90) → ∅`), adjacent same-axis flips cancel. Storage stays in click order so the edits panel reflects what the user actually did.
 - `outputs` × `variants` enumerates the derivative set.
 - The cache key for a single derivative is `hash(original_id || canonical_json(op_subset_for_variant) || format || quality)`. Stored as `<original_id>.<ophash>.<fmt>`.
 - `canonical_json` = stable key order (sort keys recursively), no whitespace, no trailing zeros on numbers, ASCII-only escaping. Required so semantically-identical ops produce identical hashes across nodes.
@@ -260,8 +279,25 @@ Behavior:
 - Computes cache key from `(originalId, ops, variant, output)` via canonical JSON + sha256, truncated to 12 hex chars (`ophash`).
 - Output path: `${siteRoot}/cache/img/${originalId}.${ophash}.${format}`.
 - If the file already exists, returns `{ cached: true }` without invoking Sharp.
-- Otherwise: reads original, applies ops in order via Sharp, writes to a temp file, atomic-renames into place.
+- Cache miss source-image precedence:
+  1. `bakes/<id>.webp` if present — read it as the source AND skip `applyOp` (the bake is post-ops; the client baked it via the canvas pipeline). Sharp's job is then variant downscale + format encode only. Takes ops out of the per-request hot path.
+  2. `originals/<id>.<ext>` otherwise — fall back to applying the full ops chain in sharp. Note: sharp can't apply a `perspective` op; render fails with `unknown op type` if a render request hits a sidecar with perspective in ops AND the bake is missing. The bake is the authoritative source for perspective results.
+- After the source decision: writes to a temp file, atomic-renames into place.
 - Concurrency: caller controls. Use `sharp.concurrency(1)` per call so libvips threads don't multiply with job concurrency.
+
+### Client canvas pipeline
+
+The editor runs the same op chain in-browser via HTMLCanvasElement (and WebGL for `perspective`) so live preview during editing is round-trip-free.
+
+- `src/admin/canvas.ts` — `applyOps` and `PipelineCache`. Per-image `PipelineCache` holds the last simplified op list and result canvas; on the common "added one op" case it applies just that op to the cached canvas (the "only execute the last step on each change" fast path). Insert / delete / undo / redo miss the cache and re-execute from source.
+- `src/admin/canvas-math.ts` — pure-math helpers split out so they can be unit-tested under the server tsconfig. Includes `computeResampleSize`, `simplifyOps`, `computeHomography`, `invertMatrix3`, `perspectiveOutputSize`, `opsEqual`.
+- `applyPerspective` compiles a tiny WebGL program once per call (vertex shader flips Y so `v_dst` is canvas-Y-down throughout, fragment shader samples the source via the inverse homography per pixel). The result is copied back to a 2D canvas so downstream ops in the chain stay HTMLCanvasElement-based.
+
+### Bake invalidation contract
+
+- `POST /admin/sidecar/:id/ops` unlinks the bake (ops changed → bake stale) AND any prior `cache/img/<id>.*` derivatives.
+- `POST /admin/sidecar/:id/bake` writes the new bake AND unlinks any prior `cache/img/<id>.*` derivatives so re-bakes don't serve stale derivative content.
+- A render request landing between `/ops` (bake gone) and the next `/bake` (new bake lands) falls through to the original + applyOp path. One slower request at most; correct content.
 
 ### Job worker lifecycle
 
@@ -320,6 +356,12 @@ Custom widgets use the [CommonMark generic directive](https://talk.commonmark.or
 ### Editor
 
 TipTap with custom node types per widget. The user never sees `::image{...}` — they see an image block with handles for crop, alt text, etc. Serialization to markdown happens on save; deserialization on load. The editor and the renderer share the widget registry so they can't drift.
+
+**Image-edit model.** Each op click (rotate / flip / crop / resample / perspective / undo / redo / delete-step / reset) mutates an in-browser `LocalEditState` for the active image — `ops`, `redoStack`, and a `baseline` snapshot of what the server has. The canvas pipeline + `PipelineCache` repaint live preview locally; **nothing** crosses the wire until the user clicks **Save edits**. That POSTs ops + redoStack to `/admin/sidecar/:id/ops` and uploads the WebP bake to `/admin/sidecar/:id/bake`. The Save button is disabled when the local state matches `baseline` (no dirty changes). Cross-image state survives selection switches in the same browser session; full page reload loses unsaved local edits (no `beforeunload` warning in v1).
+
+**Cropper** sources from a Blob URL of the local post-ops canvas (not the server preview), so cropper coords land in current-canvas space and `applyCrop` in the executor interprets them in that same space — crop appends correctly even atop prior crops/rotates/flips.
+
+**Perspective rectify** uses a custom 4-corner drag modal (Pointer Events for mouse + touch + pen, SVG overlay for the connecting quad). Initial handle positions are the four image corners; the user drags them to the corners of the region to straighten. Save commits a `{type:'perspective', corners:[…]}` op. Storage corners are in current-canvas pixel space.
 
 ### Renderer
 
@@ -551,20 +593,24 @@ Required modules: `rewrite`, `proxy`, `proxy_http`, `headers`, `expires`. `immut
 ### Fastify routes
 
 ```
-GET  /                          → rendered index
-GET  /:slug                     → rendered post
-GET  /img/:filename             → on miss only; renders + writes to cache
-POST /admin/login               → password (argon2id) + session cookie
-GET  /admin                     → editor SPA
-POST /admin/posts               → create
-PUT  /admin/posts/:id           → update
-POST /admin/upload              → multipart, streams to originals/
-POST /admin/import/url          → server-side fetch
-POST /admin/import/dropbox      → accept Chooser payload
-POST /admin/import/onedrive     → accept Picker payload + token
-POST /admin/import/gdrive       → accept Picker payload + token
-POST /admin/sidecar/:id         → update ops/variants on existing image
-GET  /health                    → 200 {"ok":true}
+GET  /                              → rendered index
+GET  /:slug                         → rendered post
+GET  /img/:filename                 → on miss only; renders + writes to cache
+POST /admin/login                   → password (argon2id) + session cookie
+GET  /admin                         → editor SPA
+POST /admin/posts                   → create
+PUT  /admin/posts/:id               → update
+POST /admin/upload                  → multipart, streams to originals/
+POST /admin/import/url              → server-side fetch
+POST /admin/import/dropbox          → accept Chooser payload
+POST /admin/import/onedrive         → accept Picker payload + token
+POST /admin/import/gdrive           → accept Picker payload + token
+GET  /admin/preview/:id             → 302 to a derivative URL the editor uses as <img src>
+GET  /admin/original/:id            → stream the master bytes for the client canvas pipeline
+GET  /admin/sidecar/:id/meta        → {width, height, format, ops, redoStack}
+POST /admin/sidecar/:id/ops         → replace ops + (optional) redoStack; unlinks bake + stale derivatives
+POST /admin/sidecar/:id/bake        → image/webp body of the client-baked post-ops image (≤50 MB)
+GET  /health                        → 200 {"ok":true}
 ```
 
 Routes split into Fastify plugin modules in `src/routes/`. Each module exports a default function `(fastify, opts)` per Fastify convention.
@@ -951,6 +997,23 @@ Each step ends with a binary done-signal. Don't move to step N+1 until step N's 
 - [ ] No JS on the public side except native `loading="lazy"` on images.
 - [ ] Mobile-responsive.
 - [ ] Apache vhost deployed to a staging VPS; full smoke test (publish a post, view as anonymous user, check `<picture>` srcset, verify cache headers).
+
+### Step 11 — Image-edit local pipeline (Phases 1-3)
+
+- [x] Sidecar `redoStack` field; ops execute in click order with per-op simplification (adjacent rotate combine, same-axis flip cancel).
+- [x] Edits-list panel with delete-step, undo, redo. Reset clears local ops.
+- [x] `GET /admin/original/:id` streams the master so the client can decode once per session and apply ops via `HTMLCanvasElement`.
+- [x] Per-image `PipelineCache` for incremental "added one op" execution.
+- [x] `POST /admin/sidecar/:id/bake` accepts `image/webp` (≤50 MB) and stores `bakes/<id>.webp`. `renderDerivative` prefers it as the source.
+- [x] In-browser `LocalEditState` with explicit "Save edits" button. POST ops + bake atomically; `baseline` flips dirty/clean for the Save button.
+- [x] Cropper sources from the local post-ops canvas; crop appends to ops in current-canvas space.
+
+### Step 12 — Perspective rectify (Phase 4)
+
+- [x] Server-side validation of `{type:'perspective', corners:[[x,y]×4]}` op shape (non-negative, finite, exactly 4 corners).
+- [x] Client `applyPerspective` via WebGL: vertex shader Y-flip, fragment shader samples source via inverse homography per pixel, transparent for out-of-source samples.
+- [x] 4-corner drag modal (Pointer Events + SVG quad overlay).
+- [x] Math helpers: `computeHomography` (8×8 Gauss-Jordan with partial pivoting), `invertMatrix3`, `perspectiveOutputSize` (averages opposing edge lengths).
 
 ---
 
