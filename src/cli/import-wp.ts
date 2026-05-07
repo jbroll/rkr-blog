@@ -1,23 +1,29 @@
-// `site-admin import-wp {list,post}` — import posts from a WordPress
-// blog via its REST API. See lib/wp-import.ts for the heavy lifting.
+// `site-admin import-wp {list,post,push}` — import posts from a
+// WordPress blog via its REST API. See lib/wp-import.ts for the local
+// import + lib/wp-push.ts for the push-to-remote flow.
 
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { paths } from '../lib/config.ts';
 import { fetchPost, importPost, listPosts } from '../lib/wp-import.ts';
+import { pushPost } from '../lib/wp-push.ts';
 
-const SUBCOMMANDS = ['list', 'post'] as const;
+const SUBCOMMANDS = ['list', 'post', 'push'] as const;
 type Sub = (typeof SUBCOMMANDS)[number];
 
 export default async function importWpCmd(argv: string[]): Promise<void> {
   const sub = argv[0];
   if (!sub || !(SUBCOMMANDS as readonly string[]).includes(sub)) {
     throw new Error(
-      `usage:\n  site-admin import-wp list <base-url> [--page N] [--per-page N] [--status STATUS]\n  site-admin import-wp post <base-url> <id-or-slug> [--force]`
+      `usage:
+  site-admin import-wp list <base-url> [--page N] [--per-page N] [--status STATUS]
+  site-admin import-wp post <base-url> <id-or-slug> [--force]
+  site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]`
     );
   }
   if ((sub as Sub) === 'list') return list(argv.slice(1));
+  if ((sub as Sub) === 'push') return push(argv.slice(1));
   return post(argv.slice(1));
 }
 
@@ -71,6 +77,37 @@ async function post(args: string[]): Promise<void> {
     console.warn(`  ! ${e.url}: ${e.error}`);
   }
   console.log(`status: draft — review with the editor before publishing`);
+}
+
+async function push(args: string[]): Promise<void> {
+  const wpBaseUrl = args[0];
+  const slug = args[1];
+  if (!wpBaseUrl || !slug) {
+    throw new Error(
+      'usage: site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]'
+    );
+  }
+  const toUrl = stringFlag(args, '--to');
+  if (!toUrl) throw new Error('--to <fly-url> is required');
+
+  // --token wins; otherwise read ADMIN_TOKEN from env so the caller
+  // doesn't have to put the secret on the command line / shell history.
+  const token = stringFlag(args, '--token') ?? process.env.ADMIN_TOKEN;
+  if (!token) {
+    throw new Error('bearer token required: pass --token or set ADMIN_TOKEN env');
+  }
+
+  const statusFlag = stringFlag(args, '--status');
+  const status: 'draft' | 'published' = statusFlag === 'draft' ? 'draft' : 'published';
+
+  console.log(`pushing ${wpBaseUrl} ${slug} → ${toUrl}`);
+  const result = await pushPost({ wpBaseUrl, slug, toUrl, token, status });
+
+  console.log(
+    `${result.inserted ? 'created' : 'overwrote'} /${result.slug}: ${result.imagesUploaded} image(s)${
+      result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
+    }, status=${result.status}`
+  );
 }
 
 // ---- arg helpers ------------------------------------------------------
