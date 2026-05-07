@@ -14,6 +14,9 @@ import { workQueue } from './lib/jobs.ts';
 import adminRoutes, { type UrlFetcher } from './routes/admin.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
 import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
+import integrationsOnedriveRoutes, {
+  type OneDriveTokenExchange
+} from './routes/integrations-onedrive.ts';
 import publicRoutes from './routes/public.ts';
 
 const UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MiB cap on a single file
@@ -59,6 +62,15 @@ export interface BuildAppOpts {
   gdrive?: {
     exchange?: DriveTokenExchange;
     driveFetcher?: typeof fetch;
+  };
+  /**
+   * When set (and auth is wired), Microsoft OneDrive picker integration
+   * registers. Same pattern as gdrive — tests inject stubs; production
+   * derives wiring from MICROSOFT_CLIENT_ID / SECRET / TENANT env vars.
+   */
+  onedrive?: {
+    exchange?: OneDriveTokenExchange;
+    graphFetcher?: typeof fetch;
   };
 }
 
@@ -120,6 +132,24 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
         siteRoot,
         ...(opts.gdrive?.exchange ? { exchange: opts.gdrive.exchange } : {}),
         ...(opts.gdrive?.driveFetcher ? { driveFetcher: opts.gdrive.driveFetcher } : {}),
+        secureCookies: opts.auth.secureCookies ?? true
+      });
+    }
+
+    // OneDrive integration: same conditional-registration pattern as
+    // gdrive. Production needs MICROSOFT_CLIENT_ID + SECRET +
+    // PUBLIC_BASE_URL; tests inject opts.onedrive.exchange directly.
+    const onedriveConfigured =
+      opts.onedrive?.exchange !== undefined ||
+      (process.env.MICROSOFT_CLIENT_ID &&
+        process.env.MICROSOFT_CLIENT_SECRET &&
+        process.env.PUBLIC_BASE_URL);
+    if (onedriveConfigured) {
+      await app.register(integrationsOnedriveRoutes, {
+        db: opts.db,
+        siteRoot,
+        ...(opts.onedrive?.exchange ? { exchange: opts.onedrive.exchange } : {}),
+        ...(opts.onedrive?.graphFetcher ? { graphFetcher: opts.onedrive.graphFetcher } : {}),
         secureCookies: opts.auth.secureCookies ?? true
       });
     }

@@ -67,15 +67,23 @@ or if authors start losing data via clipboard round-trips.
 
 ## Step 7 follow-ups
 
-### OneDrive picker integration
-**What.** Spec §17 listed Dropbox/OneDrive/Drive as the import targets.
-Drive shipped in Step 7c2; OneDrive was deferred pending the user
-registering an MS Entra app for OAuth. Dropbox was dropped from scope.
+### OneDrive picker UI (Microsoft File Picker SDK)
+**What.** Server side is fully shipped (`src/lib/microsoft-graph.ts` +
+`src/routes/integrations-onedrive.ts`): connect/callback/access-token/
+import endpoints exist, tested with stubs. Editor has an MVP "OneDrive"
+button that opens the connect flow and falls back to a manual item-id
+prompt. The Microsoft File Picker SDK (analogous to Google's `gapi`
+picker, served from a Microsoft CDN) is NOT integrated; the
+`/picker-config` endpoint is ready for it.
 
-**Why deferred.** Blocked on user-side credential registration.
+**Why deferred.** End-to-end testing of the picker SDK requires an MS
+Entra app registration, which is blocked on user-side credentials
+(`MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, optional
+`MICROSOFT_TENANT_ID`). Once those land, the SDK integration is a
+mirror of `pickFromDrive` in src/admin/main.ts.
 
-**Trigger.** When the user registers an MS Entra app and provides
-`MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET`.
+**Trigger.** When the user registers the Entra app and we want a
+proper picker UI rather than the manual id MVP.
 
 ## Step 9d follow-ups (after the crop UI shipped)
 
