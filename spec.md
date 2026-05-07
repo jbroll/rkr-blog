@@ -397,7 +397,7 @@ export const editorNode;
 | `lightbox` | overlay enlargement on click; pairs with any of the others | implemented (`src/site/lightbox.ts`) |
 | `gallery` | `justified` (default), `masonry`, `matrix` | implemented (`src/widgets/gallery.ts`) |
 | `carousel` | one image at a time, swipe/click to advance, optional autoplay | implemented (`src/widgets/carousel.ts` + `src/site/carousel.ts`) |
-| `diptych` / `triptych` | 2 or 3 images side by side | planned |
+| `diptych` / `triptych` | 2 or 3 images side by side | implemented (`src/widgets/diptych.ts`) |
 
 The `gallery` directive groups multiple image ids into one of three
 layouts via the `layout=` attribute:
@@ -453,6 +453,23 @@ slideshow:
   button (no surprise re-starts).
 - Same id-resolution rules as `gallery` (prefix matching, comments
   for unmatched ids).
+
+The `diptych` / `triptych` directives are simple equal-width side-by-side
+panels for art-directed pairings (before/after, two angles, panel
+triptychs):
+
+```
+::diptych{ids="abc,def" caption="Before / after"}
+::triptych{ids="abc,def,012" caption="Three angles"}
+```
+
+- CSS Grid with 2 or 3 equal-width columns. No JavaScript.
+- Each cell keeps its natural aspect ratio (heights may differ — crop
+  in advance if matched heights matter).
+- Excess ids past the slot count are silently dropped with an HTML
+  comment; under-capacity is fine (renders whatever was supplied).
+- Same id-resolution rules and missing-id comment behavior as `gallery`.
+- Stacks to a single column on narrow screens.
 
 **Lightbox** is not a directive widget — it's a small browser-side
 script (`src/site/lightbox.ts` → `static/site/lightbox.js`) loaded from

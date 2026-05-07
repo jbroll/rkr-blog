@@ -474,6 +474,53 @@ article hr {
   border-color: var(--rkr-text);
 }
 
+/* ---- diptych / triptych ------------------------------------------- */
+/* Two- or three-image side-by-side panels for art-directed pairings.
+   Equal-width columns; each cell keeps its natural aspect ratio (so the
+   row baseline aligns at the top, not at matched heights — photographers
+   crop in advance if matched heights matter). Stack to one column on
+   narrow screens. */
+
+.rkr-diptych,
+.rkr-triptych {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: var(--rkr-content);
+  margin: 2.5rem auto;
+}
+.rkr-diptych  { grid-template-columns: 1fr 1fr; }
+.rkr-triptych { grid-template-columns: 1fr 1fr 1fr; }
+
+.rkr-diptych > figure,
+.rkr-triptych > figure {
+  margin: 0;
+}
+.rkr-diptych picture,
+.rkr-triptych picture {
+  display: block;
+}
+.rkr-diptych img,
+.rkr-triptych img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--rkr-radius);
+  box-shadow: 0 1px 3px var(--rkr-shadow);
+}
+.rkr-diptych > figcaption,
+.rkr-triptych > figcaption {
+  grid-column: 1 / -1;
+  margin-top: .25rem;
+  text-align: center;
+  color: var(--rkr-muted);
+  font-size: 0.9rem;
+  font-style: italic;
+  max-width: var(--rkr-prose);
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* ---- index page --------------------------------------------------- */
 
 .post-list {
@@ -560,6 +607,11 @@ nav[aria-label="pagination"] a {
     width: 1.75rem;
     height: 1.75rem;
     font-size: 0.9rem;
+  }
+  /* Diptych / triptych: collapse to a single column on narrow screens. */
+  .rkr-diptych,
+  .rkr-triptych {
+    grid-template-columns: 1fr;
   }
 }
 

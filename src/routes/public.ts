@@ -26,6 +26,7 @@ import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderIndexPage } from '../templates/index.ts';
 import { renderPostPage } from '../templates/post.ts';
 import carouselWidget from '../widgets/carousel.ts';
+import { diptychWidget, triptychWidget } from '../widgets/diptych.ts';
 import galleryWidget from '../widgets/gallery.ts';
 import imageWidget from '../widgets/image.ts';
 
@@ -59,6 +60,8 @@ export default async function publicRoutes(
   widgets.register(imageWidget);
   widgets.register(galleryWidget);
   widgets.register(carouselWidget);
+  widgets.register(diptychWidget);
+  widgets.register(triptychWidget);
 
   // ---- index: GET / -----------------------------------------------------
 
