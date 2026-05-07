@@ -1,6 +1,15 @@
 // Image derivative renderer. Pure modulo filesystem writes:
 // same args → same on-disk path → same bytes (assuming a stable libvips).
 // See spec §11.
+//
+// Source-image precedence:
+//   1. cache/img/<id>.<ophash>.<fmt>   — finished derivative (fast path).
+//   2. bakes/<id>.webp                 — client-baked post-ops image,
+//      uploaded by the editor after each ops mutation. When present we
+//      skip applyOp and just downscale + encode for the variant.
+//   3. originals/<id>.<ext>            — the master; sharp applies
+//      every op before downscaling. Fallback for ids that never had a
+//      bake uploaded (legacy data, batch imports, etc).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -8,7 +17,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
-import { originalPath } from './originals.ts';
+import { bakePath, originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
 /** Maximum pixel count any sharp pipeline will decode. Anti-DoS: caps
@@ -121,17 +130,28 @@ export async function renderDerivative(
     }
   }
 
-  // Cache miss: locate the original via the sidecar and run the pipeline.
-  const sidecar = await sidecarRead(siteRoot, originalId);
-  if (!sidecar) {
-    throw new Error(`renderDerivative: no sidecar for ${originalId}`);
+  // Cache miss: pick a source. Prefer the client-baked post-ops image
+  // when present — its very existence means it was uploaded to match
+  // the *current* sidecar.ops (the /admin/sidecar/:id/ops handler
+  // unlinks any prior bake when ops change). Using it skips applyOp:
+  // ops are already baked into the pixels.
+  const baked = bakePath(siteRoot, originalId);
+  const useBake = await fileExists(baked);
+  let sourcePath: string;
+  if (useBake) {
+    sourcePath = baked;
+  } else {
+    const sidecar = await sidecarRead(siteRoot, originalId);
+    if (!sidecar) {
+      throw new Error(`renderDerivative: no sidecar for ${originalId}`);
+    }
+    const fmt = sidecar.metadata.format;
+    const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
+    if (!ext) {
+      throw new Error(`renderDerivative: unsupported original format ${String(fmt)}`);
+    }
+    sourcePath = originalPath(siteRoot, originalId, ext);
   }
-  const fmt = sidecar.metadata.format;
-  const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
-  if (!ext) {
-    throw new Error(`renderDerivative: unsupported original format ${String(fmt)}`);
-  }
-  const origPath = originalPath(siteRoot, originalId, ext);
 
   // Per spec §11: keep libvips threads from multiplying with job concurrency.
   sharp.concurrency(1);
@@ -140,9 +160,13 @@ export async function renderDerivative(
   // malicious 64Kpx-square WebP can decompress to gigabytes of memory.
   // 50 Mpx covers any realistic camera sensor; reject larger originals
   // up front. Mirror the same cap in originals.ingestStream.
-  let pipeline = sharp(origPath, { failOn: 'error', limitInputPixels: SHARP_PIXEL_LIMIT });
-  for (const op of ops) {
-    pipeline = applyOp(pipeline, op);
+  let pipeline = sharp(sourcePath, { failOn: 'error', limitInputPixels: SHARP_PIXEL_LIMIT });
+  // Only apply ops when sourcing from the original — the bake already
+  // has them baked in.
+  if (!useBake) {
+    for (const op of ops) {
+      pipeline = applyOp(pipeline, op);
+    }
   }
   pipeline = applyVariant(pipeline, variant);
   pipeline = applyOutput(pipeline, output);
@@ -200,6 +224,15 @@ function applyVariant(p: sharp.Sharp, variant: Variant): sharp.Sharp {
     fit: variant.fit ?? 'inside',
     withoutEnlargement: true
   });
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.promises.access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function applyOutput(p: sharp.Sharp, output: Output): sharp.Sharp {

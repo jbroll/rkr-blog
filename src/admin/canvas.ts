@@ -6,10 +6,11 @@
 // produces a new canvas; the output of op N is the input of op N+1.
 //
 // Save-time bake (Phase 3) re-runs this same pipeline on the master
-// original and uploads the final PNG/JPEG to the server. For live
-// preview during edits we render at the original's full resolution
-// when the source decodes; the browser scales the resulting <img> to
-// fit the editor frame.
+// original and uploads the final WebP to the server. WebP, not PNG,
+// because camera photos compress ~10x better at q=0.95 with no
+// perceptible loss. For live preview during edits we render at the
+// original's full resolution when the source decodes; the browser
+// scales the resulting <img> to fit the editor frame.
 
 import { clampInt, computeResampleSize, normalizeRotation } from './canvas-math';
 

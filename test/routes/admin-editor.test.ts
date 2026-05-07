@@ -253,6 +253,158 @@ test('GET /admin/original/:id 404s when sidecar exists but original file is miss
   assert.match(res.json<{ error: string }>().error, /missing/);
 });
 
+// ---- /admin/sidecar/:id/bake -------------------------------------------
+// The editor uploads its client-baked post-ops WebP here. The server
+// stores it at bakes/<id[0:2]>/<id[2:4]>/<id>.webp and the render
+// pipeline prefers it over the original (skipping applyOp in sharp).
+
+import { bakePath } from '../../src/lib/originals.ts';
+
+async function makeWebp(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 60, g: 100, b: 180 } }
+  })
+    .webp({ quality: 90 })
+    .toBuffer();
+}
+
+test('POST /admin/sidecar/:id/bake stores the WebP at bakes/<id>.webp', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const webp = await makeWebp(800, 600);
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: webp
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json<{ bytes: number }>().bytes, webp.length);
+
+  // File on disk matches what we uploaded.
+  const onDisk = await fs.promises.readFile(bakePath(root, ingest.id));
+  assert.equal(Buffer.compare(onDisk, webp), 0);
+});
+
+test('POST /admin/sidecar/:id/bake rejects non-WebP content types and bad bodies', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Wrong content-type → 415.
+  const wrongCt = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/png' },
+    payload: Buffer.from([0x89, 0x50, 0x4e, 0x47])
+  });
+  assert.equal(wrongCt.statusCode, 415);
+
+  // Right content-type but the body isn't a valid WebP → 400.
+  const garbage = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: Buffer.from('not a webp file at all just text bytes here')
+  });
+  assert.equal(garbage.statusCode, 400);
+  assert.match(garbage.json<{ error: string }>().error, /not a WebP/);
+});
+
+test('POST /admin/sidecar/:id/bake 400s on malformed id and 404s on unknown', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const bad = await app.inject({
+    method: 'POST',
+    url: '/admin/sidecar/not-a-real-id/bake',
+    headers: { 'content-type': 'image/webp' },
+    payload: await makeWebp(10, 10)
+  });
+  assert.equal(bad.statusCode, 400);
+
+  const missing = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${'a'.repeat(64)}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: await makeWebp(10, 10)
+  });
+  assert.equal(missing.statusCode, 404);
+});
+
+test('POST /admin/sidecar/:id/ops unlinks the bake (so render falls back to original until next bake upload)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Plant a bake.
+  const webp = await makeWebp(800, 600);
+  const planted = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: webp
+  });
+  assert.equal(planted.statusCode, 200);
+  assert.equal(fs.existsSync(bakePath(root, ingest.id)), true);
+
+  // Mutate ops; bake must be gone afterwards.
+  const opsRes = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: 90 }] }
+  });
+  assert.equal(opsRes.statusCode, 200);
+  assert.equal(fs.existsSync(bakePath(root, ingest.id)), false);
+});
+
+test('POST /admin/sidecar/:id/bake also drops stale derivatives so cached results match the new bake', async (t) => {
+  // Re-bake at higher quality (or a redo of identical ops) → ops
+  // didn't change but the rendered output should. Stale per-id
+  // cache files would otherwise serve a render derived from the
+  // previous bake.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const cacheImg = path.join(root, 'cache', 'img');
+  fs.mkdirSync(cacheImg, { recursive: true });
+  const stale = path.join(cacheImg, `${ingest.id}.aaaaaaaaaaaa.webp`);
+  fs.writeFileSync(stale, 'old-bytes');
+
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: await makeWebp(800, 600)
+  });
+
+  assert.equal(fs.existsSync(stale), false);
+});
+
 // ---- /admin/sidecar/:id/meta + /admin/sidecar/:id/ops -----------------
 // Backing endpoints for the crop UI: meta supplies original-pixel
 // dimensions so the cropper can scale display coords; ops replaces the

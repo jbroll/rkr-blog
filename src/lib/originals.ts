@@ -191,4 +191,17 @@ export function originalPath(siteRoot: string, id: string, ext: string): string 
   return path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4), `${id}.${ext}`);
 }
 
+/** Path for the client-baked post-ops image. The bake is the canvas
+ * pipeline's final output for the current sidecar.ops, uploaded by the
+ * editor right after each ops mutation. The render pipeline prefers it
+ * over the original when present (skips re-applying ops in sharp).
+ *
+ * Always WebP: camera photos compress ~10x better than PNG at q=0.95
+ * with no perceptible quality loss; WebP also supports lossless if a
+ * future caller wants to preserve text-crisp graphics. Same 2/2 prefix
+ * nesting as originals so we don't dump 10k files in one directory. */
+export function bakePath(siteRoot: string, id: string): string {
+  return path.join(siteRoot, 'bakes', id.slice(0, 2), id.slice(2, 4), `${id}.webp`);
+}
+
 export { sidecarPath };

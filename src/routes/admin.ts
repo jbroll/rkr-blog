@@ -5,10 +5,12 @@
 //   GET  /static/*           → public + admin static assets (CSS, admin bundle)
 //   GET  /admin/preview/:id  → 302 to a derivative URL the editor can <img src>
 //   GET  /admin/original/:id → streams the original (master) bytes for client-side ops
+//   POST /admin/sidecar/:id/bake → upload the client-baked post-ops WebP
 //   POST /admin/posts        → save editor JSON as a markdown post + reindex
 //   POST /admin/upload       → multipart image ingest (routed to ingestStream)
 //   POST /admin/import/url   → server-side fetch + ingest from a URL
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
@@ -21,7 +23,7 @@ import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/originals.ts';
+import { bakePath, FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import type { OutputFormat } from '../lib/render.ts';
@@ -74,6 +76,15 @@ export default async function adminRoutes(
     opts.staticDir ?? (opts.adminBundleDir ? path.dirname(opts.adminBundleDir) : REPO_STATIC_DIR);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
   const urlFetcher: UrlFetcher = opts.urlFetcher ?? safeFetch;
+
+  // Raw-body parser for /admin/sidecar/:id/bake. The editor POSTs a
+  // WebP blob; without an explicit parser fastify rejects unknown
+  // content types. Capped at BAKE_MAX_BYTES (matches the route limit).
+  fastify.addContentTypeParser(
+    'image/webp',
+    { parseAs: 'buffer', bodyLimit: BAKE_MAX_BYTES },
+    (_req, body, done) => done(null, body)
+  );
 
   // One static handler at /static/. Public CSS lives at /static/site.css;
   // the admin bundle at /static/admin/main.js. Apache vhost (spec §14)
@@ -289,8 +300,80 @@ export default async function adminRoutes(
     for (const name of staleNames) {
       await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
     }
+    // Also drop the client-baked post-ops image (if any). The bake
+    // corresponds to the *previous* ops; the editor will re-upload
+    // a fresh bake right after this POST returns. Until then, the
+    // render pipeline falls back to the original.
+    await fs.promises.unlink(bakePath(siteRoot, id)).catch(() => {});
 
     return { ops: sidecar.ops, redoStack: sidecar.redoStack ?? [] };
+  });
+
+  // Receive the editor's client-baked post-ops image for this id. The
+  // canvas pipeline is now the authority on pixel results — this endpoint
+  // just persists what the browser produced. The render pipeline reads
+  // the bake instead of re-applying ops via sharp, taking ops out of
+  // the per-request hot path.
+  //
+  // Body is the raw WebP bytes (image/webp content type). 50 MB cap
+  // covers a 24 MP camera image at q=0.95 with headroom; reject anything
+  // larger as either a runaway client or a misuse.
+  fastify.post<{
+    Params: { id: string };
+  }>('/admin/sidecar/:id/bake', { ...guard, bodyLimit: BAKE_MAX_BYTES }, async (req, reply) => {
+    const { id } = req.params;
+    if (!/^[0-9a-f]{64}$/.test(id)) {
+      return reply.code(400).send({ error: 'invalid id' });
+    }
+    const ct = (req.headers['content-type'] ?? '').toLowerCase();
+    if (!ct.startsWith('image/webp')) {
+      return reply.code(415).send({ error: 'content-type must be image/webp' });
+    }
+    const sidecar = await sidecarRead(siteRoot, id);
+    if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return reply.code(400).send({ error: 'empty body' });
+    }
+    // Magic-byte check: WebP files start with "RIFF????WEBP". Cheap
+    // sanity check that the client posted what it claimed.
+    if (
+      body.length < 12 ||
+      body.slice(0, 4).toString('ascii') !== 'RIFF' ||
+      body.slice(8, 12).toString('ascii') !== 'WEBP'
+    ) {
+      return reply.code(400).send({ error: 'body is not a WebP file' });
+    }
+
+    const finalPath = bakePath(siteRoot, id);
+    await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
+    const tmp = `${finalPath}.${randomSuffix()}.tmp`;
+    try {
+      await fs.promises.writeFile(tmp, body);
+      await fs.promises.rename(tmp, finalPath);
+    } catch (err) {
+      await fs.promises.unlink(tmp).catch(() => {});
+      req.log.error({ err, id }, 'bake write failed');
+      return reply.code(500).send({ error: 'bake write failed' });
+    }
+
+    // Drop any stale derivatives keyed off the prior bake / prior
+    // ops. /ops also does this when ops change, but /bake catches the
+    // case where ops didn't change (e.g. user re-baked at higher
+    // quality) so previously-cached derivatives still match the
+    // current cacheKey.
+    const cacheImgDir = path.join(siteRoot, 'cache', 'img');
+    try {
+      const stale = (await fs.promises.readdir(cacheImgDir)).filter((n) => n.startsWith(`${id}.`));
+      for (const name of stale) {
+        await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+
+    return { bytes: body.length };
   });
 
   fastify.post<{
@@ -467,6 +550,16 @@ const MAX_SLUG_LENGTH = 100;
  * prefix within a few seconds; long enough that a post with many
  * images doesn't scan the directory once per request. */
 const SIDECAR_LIST_TTL_MS = 5_000;
+
+/** Max bytes accepted by /admin/sidecar/:id/bake. WebP at q=0.95 for a
+ * 24 MP camera photo is ~3-5 MB; 50 MB leaves ample headroom for
+ * higher-resolution sources (panoramas, scanner output) without
+ * inviting runaway uploads. */
+const BAKE_MAX_BYTES = 50 * 1024 * 1024;
+
+function randomSuffix(): string {
+  return crypto.randomBytes(6).toString('hex');
+}
 
 /** Map a Sharp/libvips format name to an HTTP Content-Type for serving
  * the original file. Limited to formats the ingest accepts. */

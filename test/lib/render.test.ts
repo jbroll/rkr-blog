@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
-import { ingestStream } from '../../src/lib/originals.ts';
+import { bakePath, ingestStream } from '../../src/lib/originals.ts';
 import {
   derivativeFilename,
   derivativePath,
@@ -254,4 +254,103 @@ test('renderDerivative composes crop + rotate + flip + resample in order', async
   const meta = await sharp(result.path).metadata();
   assert.equal(meta.width, 100);
   assert.equal(meta.height, 100);
+});
+
+// ---- bake-source preference -------------------------------------------
+// When bakes/<id>.webp is present, renderDerivative reads it as the
+// source and skips applyOp (the bake is already post-ops). This is how
+// the editor takes sharp's op-application out of the per-request hot
+// path: the client did the work in a canvas, server just downscales /
+// re-encodes for variants.
+
+async function makeWebp({
+  width,
+  height,
+  color
+}: {
+  width: number;
+  height: number;
+  color: { r: number; g: number; b: number };
+}): Promise<Buffer> {
+  return sharp({ create: { width, height, channels: 3, background: color } })
+    .webp({ quality: 90 })
+    .toBuffer();
+}
+
+async function plantBake(root: string, id: string, bytes: Buffer): Promise<void> {
+  const p = bakePath(root, id);
+  await fs.promises.mkdir(path.dirname(p), { recursive: true });
+  await fs.promises.writeFile(p, bytes);
+}
+
+test('renderDerivative reads from bakes/<id>.webp when present (skips applyOp)', async (t) => {
+  // The original is solid blue 800x600. Plant a bake of solid red at
+  // 200x200. With ops=[crop big region of original] but a bake on
+  // disk, the renderer should produce red pixels (from the bake) at
+  // the variant size, not blue (from the original + crop).
+  const root = freshSiteRoot(t);
+  const r = await ingest(
+    root,
+    await makeJpeg({ width: 800, height: 600, color: { r: 0, g: 0, b: 200 } })
+  );
+  await plantBake(
+    root,
+    r.id,
+    await makeWebp({ width: 200, height: 200, color: { r: 200, g: 0, b: 0 } })
+  );
+
+  const result = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    // Ops would have produced a blue derivative. With the bake taking
+    // over, ops are ignored — output is red, sized 100×100 by variant.
+    ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 400 }],
+    variant: { w: 100, fit: 'inside' },
+    siteRoot: root
+  });
+
+  const buf = await fs.promises.readFile(result.path);
+  const { data, info } = await sharp(buf).raw().toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 100);
+  assert.equal(info.height, 100);
+  // The first pixel should be predominantly red (bake), not blue (original).
+  // libvips re-encoding of a solid-color WebP can shift the channel by
+  // a few units, so just assert the dominant channel is red.
+  const r0 = data[0] ?? 0;
+  const g0 = data[1] ?? 0;
+  const b0 = data[2] ?? 0;
+  assert.ok(
+    r0 > g0 + 50 && r0 > b0 + 50,
+    `expected red-dominant pixel, got rgb(${r0},${g0},${b0})`
+  );
+});
+
+test('renderDerivative falls back to original + applyOp when bake is absent', async (t) => {
+  // Same setup as above, but no bake on disk → ops should apply normally.
+  const root = freshSiteRoot(t);
+  const r = await ingest(
+    root,
+    await makeJpeg({ width: 800, height: 600, color: { r: 0, g: 0, b: 200 } })
+  );
+  // Sanity: confirm bake is absent before the call.
+  assert.equal(fs.existsSync(bakePath(root, r.id)), false);
+
+  const result = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 400 }],
+    variant: { w: 100, fit: 'inside' },
+    siteRoot: root
+  });
+
+  const buf = await fs.promises.readFile(result.path);
+  const { data } = await sharp(buf).raw().toBuffer({ resolveWithObject: true });
+  // Without the bake, output is sourced from the blue original.
+  const r0 = data[0] ?? 0;
+  const g0 = data[1] ?? 0;
+  const b0 = data[2] ?? 0;
+  assert.ok(
+    b0 > r0 + 50 && b0 > g0 + 50,
+    `expected blue-dominant pixel, got rgb(${r0},${g0},${b0})`
+  );
 });

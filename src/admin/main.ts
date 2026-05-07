@@ -430,9 +430,13 @@ function loadOriginal(id: string): Promise<HTMLImageElement> {
   return p;
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, mime: string): Promise<Blob> {
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((b): void => (b ? resolve(b) : reject(new Error('toBlob: empty result'))), mime);
+    canvas.toBlob(
+      (b): void => (b ? resolve(b) : reject(new Error('toBlob: empty result'))),
+      mime,
+      quality
+    );
   });
 }
 
@@ -458,7 +462,11 @@ async function refreshImagePreview(editor: Editor, id: string, ops: SidecarOp[])
       },
       ops
     );
-    const blob = await canvasToBlob(canvas, 'image/png');
+    // WebP, not PNG: a 24MP camera image is ~30 MB as PNG vs ~2-3 MB as
+    // WebP at q=0.95 with no perceptible quality loss. Quality matters
+    // here only for the in-editor preview; the save-time bake uses the
+    // same format with the same quality (Phase 3).
+    const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
     const url = URL.createObjectURL(blob);
     const old = previewBlobUrls.get(id);
     if (old) URL.revokeObjectURL(old);
