@@ -245,6 +245,63 @@ test('markdownToProse: diptych and triptych become typed prose nodes', () => {
   assert.equal(doc.content[1]?.type, 'triptych');
 });
 
+// ---- round-trip identity (markdown → prose → markdown) ------------------
+// These guard against drift between the two converters: when one side
+// learns a new attribute the other will silently lose it.
+
+test('round-trip identity: image directive with caption + position', () => {
+  const md = '::image{#abc123 alt="x" caption="A caption" position=full}\n';
+  const back = proseToMarkdown(markdownToProse(md));
+  assert.equal(back.trim(), md.trim());
+});
+
+test('round-trip identity: gallery directive with non-default layout + caption', () => {
+  const md = '::gallery{ids="abc,def" layout=masonry caption="Two shots"}\n';
+  const back = proseToMarkdown(markdownToProse(md));
+  assert.equal(back.trim(), md.trim());
+});
+
+test('round-trip identity: carousel directive with autoplay + caption', () => {
+  const md = '::carousel{ids="a,b,c" autoplay=5 caption="Slideshow"}\n';
+  const back = proseToMarkdown(markdownToProse(md));
+  assert.equal(back.trim(), md.trim());
+});
+
+test('round-trip identity: diptych and triptych preserve ids + caption', () => {
+  const di = '::diptych{ids="a,b" caption="Pair"}\n';
+  assert.equal(proseToMarkdown(markdownToProse(di)).trim(), di.trim());
+
+  const tri = '::triptych{ids="a,b,c"}\n';
+  assert.equal(proseToMarkdown(markdownToProse(tri)).trim(), tri.trim());
+});
+
+test('proseToMarkdown: invalid image position values are silently dropped', () => {
+  // The widget on the public side coerces unknown positions back to
+  // 'default' (src/widgets/image.ts extractPosition). Without validation
+  // here, a stale/forged prose doc could round-trip `position=foo` into
+  // markdown and break round-trip identity vs the rendered HTML.
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'image', attrs: { id: 'abc', alt: '', position: 'something-bogus' } }]
+  };
+  const md = proseToMarkdown(doc);
+  assert.equal(md.includes('position='), false);
+});
+
+test('proseToMarkdown: carousel autoplay is capped at 60 to match the public renderer', () => {
+  // src/widgets/carousel.ts caps autoplay at 60. Without clamping here,
+  // the editor could store autoplay=999, emit it verbatim, and the
+  // public side would silently render data-autoplay=60 — breaking
+  // round-trip identity (markdown→prose→markdown wouldn't be stable).
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'carousel', attrs: { ids: 'a,b', autoplay: 999 } }]
+  };
+  const md = proseToMarkdown(doc);
+  assert.match(md, /autoplay=60/);
+  assert.equal(md.includes('autoplay=999'), false);
+});
+
 test('round-trip: prose → markdown → prose preserves structure on a representative doc', () => {
   const original: ProseDoc = {
     type: 'doc',

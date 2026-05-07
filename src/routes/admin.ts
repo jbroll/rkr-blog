@@ -93,6 +93,22 @@ export default async function adminRoutes(
   // would serve for this image's <img> fallback. The editor uses this
   // as the `src` for image nodes in TipTap so it doesn't have to
   // reproduce the cache-key calculation client-side.
+  //
+  // Short-prefix lookup needs the sidecar listing. listSidecarIds() is
+  // a synchronous fs.readdirSync; an editor session that re-renders a
+  // post with N image directives would otherwise scan once per image.
+  // Cache for SIDECAR_LIST_TTL_MS so a burst stays cheap. Full-id
+  // requests skip the listing entirely.
+  let cachedIds: string[] | null = null;
+  let cachedAt = 0;
+  function getKnownIdsCached(): string[] {
+    const now = Date.now();
+    if (cachedIds && now - cachedAt < SIDECAR_LIST_TTL_MS) return cachedIds;
+    cachedIds = listSidecarIds(siteRoot);
+    cachedAt = now;
+    return cachedIds;
+  }
+
   fastify.get<{ Params: { id: string } }>(
     '/admin/preview/:id',
     { ...guard },
@@ -103,10 +119,10 @@ export default async function adminRoutes(
       }
       let fullId = id;
       if (id.length !== 64) {
-        const known = listSidecarIds(siteRoot);
+        const known = getKnownIdsCached();
         const matches = known.filter((k) => k.startsWith(id));
         if (matches.length !== 1) {
-          return reply.code(404).send({ error: 'unknown id' });
+          return reply.code(404).send({ error: 'unknown or ambiguous id' });
         }
         fullId = matches[0] as string;
       }
@@ -295,6 +311,12 @@ const URL_FETCH_MAX_BYTES = 50 * 1024 * 1024; // 50 MiB per spec §13
 /** Cap slug length so a 50KB attacker slug can't be written to disk and
  * indexed. The kebab-case regex permits a-z/0-9/-; this just bounds it. */
 const MAX_SLUG_LENGTH = 100;
+
+/** Cache lifetime for the sidecar listing inside /admin/preview/:id.
+ * Short enough that a freshly-uploaded image becomes findable by short
+ * prefix within a few seconds; long enough that a post with many
+ * images doesn't scan the directory once per request. */
+const SIDECAR_LIST_TTL_MS = 5_000;
 
 /**
  * CSP for /admin/editor. Allows TipTap modules from esm.sh (the editor's

@@ -91,9 +91,17 @@ function emitBlock(node: ProseNode): string {
         parts.push(`caption=${quote(caption)}`);
       }
       // Position values are constrained to the same set the public renderer
-      // recognises. 'default' is the implicit default; only emit when set.
+      // recognises (src/widgets/image.ts extractPosition). Validate on emit
+      // so a stale/forged prose doc can't round-trip an unknown value into
+      // markdown — `position=foo` would be silently coerced to 'default'
+      // by the widget anyway, breaking round-trip identity. Unquoted
+      // because every valid position is slug-safe (no spaces/specials).
       const position = node.attrs?.position;
-      if (typeof position === 'string' && position !== 'default' && position.length > 0) {
+      if (
+        typeof position === 'string' &&
+        position !== 'default' &&
+        VALID_IMAGE_POSITIONS.has(position)
+      ) {
         parts.push(`position=${position}`);
       }
       const attrPart = parts.length > 0 ? ` ${parts.join(' ')}` : '';
@@ -169,6 +177,16 @@ function quote(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+/** Mirrors VALID_POSITIONS in src/widgets/image.ts. Kept locally rather
+ * than importing to keep prose-markdown free of widget-side dependencies. */
+const VALID_IMAGE_POSITIONS = new Set(['default', 'full', 'left', 'right', 'inline']);
+
+/** Carousel autoplay cap; mirrors src/widgets/carousel.ts extractAutoplay.
+ * Without this, the editor could store autoplay=999, emit it verbatim,
+ * and the public renderer would silently cap to 60 — breaking round-trip
+ * identity (markdown→prose→markdown wouldn't be stable). */
+const CAROUSEL_AUTOPLAY_CAP = 60;
+
 /**
  * Emit a multi-image directive (gallery / carousel / diptych / triptych).
  * `ids` may be either a comma-separated string or a string array; the
@@ -199,7 +217,7 @@ function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
   if (kind === 'carousel') {
     const autoplay = Number(attrs.autoplay ?? 0);
     if (Number.isFinite(autoplay) && autoplay > 0) {
-      parts.push(`autoplay=${Math.floor(autoplay)}`);
+      parts.push(`autoplay=${Math.min(CAROUSEL_AUTOPLAY_CAP, Math.floor(autoplay))}`);
     }
   }
 

@@ -114,7 +114,9 @@ const ImageNode = Node.create({
         'data-id': id,
         src: id ? `/admin/preview/${id}` : '',
         alt,
-        title: attrs.caption ?? ''
+        // Only set title when there's a caption; an empty title attr
+        // produces an empty hover bubble in some browsers.
+        ...(attrs.caption ? { title: attrs.caption } : {})
       })
     ];
   }
@@ -126,6 +128,18 @@ const ImageNode = Node.create({
 // renders a placeholder containing thumbnail <img>s pointing at
 // /admin/preview/<id> so the author sees which photos are included.
 type MultiImageKind = 'gallery' | 'carousel' | 'diptych' | 'triptych';
+
+const MULTI_KINDS: readonly MultiImageKind[] = ['gallery', 'carousel', 'diptych', 'triptych'];
+
+/** Slot caps per kind. Diptych/triptych enforce a hard min/max here in the
+ * editor for friendlier UX; the public widgets (src/widgets/diptych.ts)
+ * silently truncate excess ids with an HTML comment as a defensive fallback. */
+const SLOT_SPEC: Record<MultiImageKind, { min: number; max: number }> = {
+  gallery: { min: 1, max: Number.POSITIVE_INFINITY },
+  carousel: { min: 1, max: Number.POSITIVE_INFINITY },
+  diptych: { min: 2, max: 2 },
+  triptych: { min: 3, max: 3 }
+};
 
 interface MultiImageAttrs {
   ids: string;
@@ -167,9 +181,8 @@ function makeMultiImageNode(kind: MultiImageKind) {
         'img',
         { src: `/admin/preview/${id}`, alt: '', class: 'rkr-multi-thumb' }
       ]);
-      const captionLine = attrs.caption
-        ? ['div', { class: 'rkr-multi-caption' }, attrs.caption]
-        : '';
+      // Conditional spread keeps captionLine out of the array entirely
+      // when empty; otherwise TipTap inserts an empty text node.
       return [
         'div',
         mergeAttributes(HTMLAttributes, {
@@ -179,7 +192,7 @@ function makeMultiImageNode(kind: MultiImageKind) {
         }),
         ['div', { class: 'rkr-multi-label' }, `${kind} (${idList.length})`],
         ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
-        captionLine
+        ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])
       ];
     }
   });
@@ -230,7 +243,10 @@ async function uploadMany(files: File[]): Promise<string[]> {
 }
 
 /** Open a hidden file input with `multiple` set, await the user's
- * selection, and resolve to the chosen File array (empty if cancelled). */
+ * selection, and resolve to the chosen File array (empty if cancelled).
+ * Without the `cancel` listener (and the focus-return fallback for
+ * older browsers) the Promise would hang and the input would leak
+ * into the DOM if the user dismissed the dialog without choosing. */
 function pickMany(): Promise<File[]> {
   return new Promise<File[]>((resolve) => {
     const input = document.createElement('input');
@@ -238,15 +254,22 @@ function pickMany(): Promise<File[]> {
     input.accept = 'image/*';
     input.multiple = true;
     input.style.display = 'none';
-    input.addEventListener(
-      'change',
-      () => {
-        const files = input.files ? Array.from(input.files) : [];
-        document.body.removeChild(input);
-        resolve(files);
-      },
-      { once: true }
-    );
+    let settled = false;
+    const finish = (files: File[]): void => {
+      if (settled) return;
+      settled = true;
+      if (input.parentNode) input.parentNode.removeChild(input);
+      resolve(files);
+    };
+    input.addEventListener('change', () => finish(input.files ? Array.from(input.files) : []), {
+      once: true
+    });
+    input.addEventListener('cancel', () => finish([]), { once: true });
+    // Focus-return fallback: browsers that don't fire `cancel` (older
+    // Safari/Firefox) restore focus to the window when the picker closes
+    // without a selection. Resolve empty after a short delay so we don't
+    // race the change event.
+    window.addEventListener('focus', () => setTimeout(() => finish([]), 300), { once: true });
     document.body.appendChild(input);
     input.click();
   });
@@ -413,8 +436,7 @@ function mount(): void {
   async function insertMultiImage(kind: MultiImageKind): Promise<void> {
     const files = await pickMany();
     if (files.length === 0) return;
-    const min = kind === 'diptych' ? 2 : kind === 'triptych' ? 3 : 1;
-    const max = kind === 'diptych' ? 2 : kind === 'triptych' ? 3 : Number.POSITIVE_INFINITY;
+    const { min, max } = SLOT_SPEC[kind];
     if (files.length < min) {
       setStatus(`${kind} needs at least ${min} image(s); got ${files.length}`);
       return;
@@ -495,10 +517,7 @@ function mount(): void {
       attrPanel.hidden = true;
     }
 
-    const activeMulti: MultiImageKind | null =
-      (['gallery', 'carousel', 'diptych', 'triptych'] as MultiImageKind[]).find((k) =>
-        editor.isActive(k)
-      ) ?? null;
+    const activeMulti: MultiImageKind | null = MULTI_KINDS.find((k) => editor.isActive(k)) ?? null;
     if (activeMulti) {
       const a = editor.getAttributes(activeMulti) as Partial<MultiImageAttrs>;
       populating = true;
@@ -534,10 +553,7 @@ function mount(): void {
 
   function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay', value: string): void {
     if (populating) return;
-    const activeKind: MultiImageKind | null =
-      (['gallery', 'carousel', 'diptych', 'triptych'] as MultiImageKind[]).find((k) =>
-        editor.isActive(k)
-      ) ?? null;
+    const activeKind: MultiImageKind | null = MULTI_KINDS.find((k) => editor.isActive(k)) ?? null;
     if (!activeKind) return;
     const v: unknown = name === 'autoplay' ? Math.max(0, Math.floor(Number(value) || 0)) : value;
     editor

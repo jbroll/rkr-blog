@@ -144,3 +144,31 @@ test('GET /admin/preview/:id 404s on an unknown but well-formed id', async (t) =
   const res = await app.inject({ method: 'GET', url: `/admin/preview/${fakeId}` });
   assert.equal(res.statusCode, 404);
 });
+
+test('GET /admin/preview/:id 404s on an ambiguous short prefix', async (t) => {
+  // Two ingests with hand-crafted sidecar files sharing a prefix; bypass
+  // ingestStream so we can guarantee the prefix collision.
+  const root = freshSiteRoot(t);
+  const idA = `aaaaaa${'1'.repeat(58)}`;
+  const idB = `aaaaaa${'2'.repeat(58)}`;
+  for (const id of [idA, idB]) {
+    fs.writeFileSync(
+      path.join(root, 'sidecars', `${id}.json`),
+      JSON.stringify({
+        version: 1,
+        original: id,
+        source: { kind: 'upload', fetched: '2030-01-01T00:00:00Z' },
+        metadata: { width: 100, height: 75, format: 'jpeg' },
+        ops: [],
+        outputs: [{ format: 'jpeg', quality: 85 }],
+        variants: [{ w: 1200 }]
+      })
+    );
+  }
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/admin/preview/aaaaaa' });
+  assert.equal(res.statusCode, 404);
+  assert.match(res.json<{ error: string }>().error, /ambiguous/);
+});

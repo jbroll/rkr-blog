@@ -52,15 +52,19 @@ export function renderAdminPage(data: AdminPageData): string {
      layout. The editor's prose preview lives inside <article> below,
      where site.css's prose rules apply naturally. */
   body {
-    font-family: system-ui, sans-serif;
     max-width: 56rem;
     margin: 2rem auto;
     padding: 0 1rem;
     background: var(--rkr-bg, #fff);
     color: var(--rkr-text, #1a1a1a);
   }
+  /* Single font-family rule for all admin chrome (toolbar buttons,
+     status, meta, panels). Site.css would otherwise impose its serif
+     prose font on form controls, which is jarring for UI elements.
+     The editable region inside <article> still gets the prose font. */
+  body, button, input, select { font-family: system-ui, sans-serif; }
   #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid #ccc; border-radius: 4px; }
-  #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; font-family: system-ui, sans-serif; }
+  #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
   #rkroll-admin-toolbar button.is-active { background: #333; color: white; }
   /* Editor preview frame: the ProseMirror editable lives inside an
      <article>, so site.css's prose typography (max-width, font-family,
@@ -74,8 +78,8 @@ export function renderAdminPage(data: AdminPageData): string {
   /* Site.css would normally constrain article width via max-width: --rkr-prose
      and hide overflow; in the editor we let it stretch to the editable box. */
   #rkroll-admin-root article { max-width: none; margin: 0; }
-  #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; font-family: system-ui, sans-serif; }
-  .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; font-family: system-ui, sans-serif; }
+  #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; }
+  .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
   /* Attribute panels: shown only when a matching node is selected. */
   #rkr-image-attrs[hidden], #rkr-multi-attrs[hidden] { display: none; }
