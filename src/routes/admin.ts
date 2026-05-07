@@ -147,9 +147,10 @@ export default async function adminRoutes(
     }
   );
 
-  // Sidecar inspection: returns just the metadata + ops the editor needs
-  // for the crop UI. Original-pixel width/height let the cropper scale
-  // display coords (from the smaller preview img) back to original coords.
+  // Sidecar inspection: returns metadata + ops + redoStack so the
+  // editor can populate its undo/redo UI on each session-start. The
+  // redo stack is persisted on the sidecar (cheap JSON) so the
+  // user's undo history survives reload and cross-session.
   fastify.get<{ Params: { id: string } }>(
     '/admin/sidecar/:id/meta',
     { ...guard },
@@ -164,7 +165,8 @@ export default async function adminRoutes(
         width: sidecar.metadata.width ?? null,
         height: sidecar.metadata.height ?? null,
         format: sidecar.metadata.format ?? null,
-        ops: sidecar.ops
+        ops: sidecar.ops,
+        redoStack: sidecar.redoStack ?? []
       };
     }
   );
@@ -174,56 +176,77 @@ export default async function adminRoutes(
   // Edit ops live on the SIDECAR, not per-instance: changing a sidecar's
   // ops affects every post that references this image. That's the
   // existing render-pipeline design (sidecar.ops is the source of truth).
-  fastify.post<{ Params: { id: string }; Body: { ops?: unknown } }>(
-    '/admin/sidecar/:id/ops',
-    { ...guard },
-    async (req, reply) => {
-      const { id } = req.params;
-      if (!/^[0-9a-f]{64}$/.test(id)) {
-        return reply.code(400).send({ error: 'invalid id' });
-      }
-      const sidecar = await sidecarRead(siteRoot, id);
-      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
-
-      const validation = validateOps(req.body?.ops, sidecar.metadata);
-      if (!validation.ok) return reply.code(400).send({ error: validation.error });
-
-      // Snapshot existing derivative filenames BEFORE writing the new
-      // sidecar. After the write, every derivative still on disk is
-      // bound to the OLD ops (different cacheKey from anything we'd
-      // generate now). Unlink them so a previously-shared
-      //   /img/<id>.<oldHash>.<fmt>
-      // URL stops serving the stale uncropped image. Snapshotting
-      // first avoids racing a render-in-flight that's about to rename
-      // its tmp into final position with the new ops.
-      const cacheImgDir = path.join(siteRoot, 'cache', 'img');
-      const stalePrefix = `${id}.`;
-      let staleNames: string[] = [];
-      try {
-        staleNames = (await fs.promises.readdir(cacheImgDir)).filter((n) =>
-          n.startsWith(stalePrefix)
-        );
-      } catch (err) {
-        /* c8 ignore next 3 -- ENOENT is fine; directory may not exist yet */
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-      }
-
-      sidecar.ops = validation.ops;
-      try {
-        await sidecarWrite(siteRoot, id, sidecar);
-      } catch (err) {
-        req.log.error({ err, id }, 'sidecar write failed');
-        return reply.code(500).send({ error: 'sidecar write failed' });
-      }
-
-      // Best-effort cleanup; failures don't block the response.
-      for (const name of staleNames) {
-        await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
-      }
-
-      return { ops: sidecar.ops };
+  fastify.post<{
+    Params: { id: string };
+    Body: { ops?: unknown; redoStack?: unknown };
+  }>('/admin/sidecar/:id/ops', { ...guard }, async (req, reply) => {
+    const { id } = req.params;
+    if (!/^[0-9a-f]{64}$/.test(id)) {
+      return reply.code(400).send({ error: 'invalid id' });
     }
-  );
+    const sidecar = await sidecarRead(siteRoot, id);
+    if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+    const validation = validateOps(req.body?.ops, sidecar.metadata);
+    if (!validation.ok) return reply.code(400).send({ error: validation.error });
+
+    // redoStack uses the same op-shape validator. The bounds check
+    // against metadata is shared — popping an undone crop later
+    // shouldn't suddenly produce out-of-bounds coords.
+    let redoStackOut: SidecarOp[] = [];
+    if (req.body?.redoStack !== undefined) {
+      const rsValidation = validateOps(req.body.redoStack, sidecar.metadata);
+      if (!rsValidation.ok) {
+        return reply.code(400).send({ error: `redoStack: ${rsValidation.error}` });
+      }
+      redoStackOut = rsValidation.ops;
+    }
+
+    // Snapshot existing derivative filenames BEFORE writing the new
+    // sidecar. After the write, every derivative still on disk is
+    // bound to the OLD ops (different cacheKey from anything we'd
+    // generate now). Unlink them so a previously-shared
+    //   /img/<id>.<oldHash>.<fmt>
+    // URL stops serving the stale uncropped image. Snapshotting
+    // first avoids racing a render-in-flight that's about to rename
+    // its tmp into final position with the new ops.
+    const cacheImgDir = path.join(siteRoot, 'cache', 'img');
+    const stalePrefix = `${id}.`;
+    let staleNames: string[] = [];
+    try {
+      staleNames = (await fs.promises.readdir(cacheImgDir)).filter((n) =>
+        n.startsWith(stalePrefix)
+      );
+    } catch (err) {
+      /* c8 ignore next 3 -- ENOENT is fine; directory may not exist yet */
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+
+    sidecar.ops = validation.ops;
+    // Persist redoStack only when the client supplied one. Omitting
+    // body.redoStack preserves whatever was on disk (e.g. a different
+    // editor surface POSTing only ops).
+    if (req.body?.redoStack !== undefined) {
+      if (redoStackOut.length === 0) {
+        delete sidecar.redoStack;
+      } else {
+        sidecar.redoStack = redoStackOut;
+      }
+    }
+    try {
+      await sidecarWrite(siteRoot, id, sidecar);
+    } catch (err) {
+      req.log.error({ err, id }, 'sidecar write failed');
+      return reply.code(500).send({ error: 'sidecar write failed' });
+    }
+
+    // Best-effort cleanup; failures don't block the response.
+    for (const name of staleNames) {
+      await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
+    }
+
+    return { ops: sidecar.ops, redoStack: sidecar.redoStack ?? [] };
+  });
 
   fastify.post<{
     Body: {
@@ -412,9 +435,11 @@ const MAX_RESAMPLE_PX = 8000;
 
 const VALID_FITS = new Set(['inside', 'outside', 'cover', 'contain', 'fill']);
 
+type SidecarOp = { type: string; [k: string]: unknown };
+
 interface ValidatedOps {
   ok: true;
-  ops: { type: string; [k: string]: unknown }[];
+  ops: SidecarOp[];
 }
 type OpsValidation = ValidatedOps | { ok: false; error: string };
 

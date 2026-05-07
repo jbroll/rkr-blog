@@ -131,6 +131,31 @@ export function renderAdminPage(data: AdminPageData): string {
      instead of horizontally overflowing. */
   .rkr-image-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
   .rkr-image-actions button { padding: .25rem .75rem; cursor: pointer; }
+  .rkr-image-actions button:disabled { opacity: .4; cursor: not-allowed; }
+  /* Edits panel: ordered list of ops in click order, each with an
+     inline delete button. Spans the value column of the parent grid
+     so the label sits on its own row beside step 1. */
+  #rkr-image-edits-label { align-self: start; padding-top: .25rem; color: var(--rkr-muted); }
+  #rkr-image-edits {
+    margin: 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: .15rem;
+  }
+  #rkr-image-edits:empty::before {
+    content: 'no edits'; color: var(--rkr-muted); font-style: italic; font-size: .85rem;
+  }
+  #rkr-image-edits li {
+    display: flex; align-items: center; gap: .5rem;
+    font-family: ui-monospace, monospace; font-size: .85rem;
+  }
+  #rkr-image-edits .rkr-edits-step { flex: 1; }
+  #rkr-image-edits button.rkr-edits-del {
+    padding: 0 .35rem; background: transparent;
+    border: 1px solid var(--rkr-rule); border-radius: 2px;
+    cursor: pointer; font-size: .85rem; line-height: 1.4;
+  }
+  #rkr-image-edits button.rkr-edits-del:hover {
+    background: color-mix(in srgb, var(--rkr-text) 8%, var(--rkr-bg));
+  }
   #rkr-crop-modal {
     border: 1px solid var(--rkr-rule); border-radius: 6px; padding: 0;
     width: min(80vw, 60rem); max-width: 95vw; max-height: 90vh;
@@ -194,6 +219,8 @@ export function renderAdminPage(data: AdminPageData): string {
     <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
     <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
     <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
+    <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
+    <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
     <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
   </span>
   <label for="rkr-image-resample">Max width (px)</label>
@@ -201,6 +228,8 @@ export function renderAdminPage(data: AdminPageData): string {
     <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
     <button type="button" id="rkr-image-resample-btn">Apply</button>
   </span>
+  <span id="rkr-image-edits-label">Edits</span>
+  <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
 </div>
 <dialog id="rkr-crop-modal" aria-labelledby="rkr-crop-modal-title">
   <h2 id="rkr-crop-modal-title">Crop image</h2>

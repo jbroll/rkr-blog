@@ -192,10 +192,12 @@ interface MetaResponse {
   height: number | null;
   format: string | null;
   ops: Array<Record<string, unknown>>;
+  redoStack: Array<Record<string, unknown>>;
 }
 
 interface OpsResponse {
   ops: Array<Record<string, unknown>>;
+  redoStack: Array<Record<string, unknown>>;
 }
 
 async function makeJpegSized(width: number, height: number): Promise<Buffer> {
@@ -223,6 +225,9 @@ test('GET /admin/sidecar/:id/meta returns original dimensions + ops', async (t) 
   assert.equal(body.height, 600);
   assert.equal(body.format, 'jpeg');
   assert.deepEqual(body.ops, []);
+  // Fresh sidecar has no redo history. Empty array (not absent) so the
+  // client doesn't have to defend against undefined.
+  assert.deepEqual(body.redoStack, []);
 });
 
 test('GET /admin/sidecar/:id/meta 404s on unknown id and 400s on malformed', async (t) => {
@@ -590,4 +595,193 @@ test('POST /admin/sidecar/:id/ops refuses non-empty ops when source has no recor
     payload: { ops: [] }
   });
   assert.equal(cleared.statusCode, 200);
+});
+
+// ---- Click-order + redoStack -----------------------------------------
+// The pipeline preserves the user's click order — no canonicalization.
+// `redoStack` is persisted alongside ops so undo/redo survives reload.
+// Adding a new op invalidates redoStack (standard linear-undo invariant);
+// the *client* enforces that by sending [] for redoStack on every
+// op-mutating action. The server passes redoStack through verbatim.
+
+test('POST /admin/sidecar/:id/ops preserves click order (no canonicalization)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // A flip BEFORE rotate should stay before rotate. An older
+  // canonicalizer enforced a fixed order (crop → rotate → flip →
+  // resample); we removed it so authors can chain ops in whatever
+  // order they actually want.
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [
+        { type: 'flip', axis: 'horizontal' },
+        { type: 'rotate', degrees: 90 },
+        { type: 'flip', axis: 'vertical' }
+      ]
+    }
+  });
+  assert.equal(res.statusCode, 200);
+  const ops = res.json<OpsResponse>().ops;
+  assert.equal(ops[0]?.type, 'flip');
+  assert.equal(ops[0]?.axis, 'horizontal');
+  assert.equal(ops[1]?.type, 'rotate');
+  assert.equal(ops[2]?.type, 'flip');
+  assert.equal(ops[2]?.axis, 'vertical');
+});
+
+test('POST /admin/sidecar/:id/ops persists and round-trips redoStack', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Simulate a client undo: ops shrinks by one, redoStack grows by one.
+  const saved = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [{ type: 'rotate', degrees: 90 }],
+      redoStack: [{ type: 'flip', axis: 'horizontal' }]
+    }
+  });
+  assert.equal(saved.statusCode, 200);
+  const body = saved.json<OpsResponse>();
+  assert.deepEqual(body.ops, [{ type: 'rotate', degrees: 90 }]);
+  assert.deepEqual(body.redoStack, [{ type: 'flip', axis: 'horizontal' }]);
+
+  // Reload via GET /meta and confirm both arrays survive.
+  const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
+  const m = meta.json<MetaResponse>();
+  assert.deepEqual(m.ops, [{ type: 'rotate', degrees: 90 }]);
+  assert.deepEqual(m.redoStack, [{ type: 'flip', axis: 'horizontal' }]);
+});
+
+test('POST /admin/sidecar/:id/ops with empty redoStack clears any prior redo history', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Stash some redo history first.
+  await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [],
+      redoStack: [{ type: 'rotate', degrees: 90 }]
+    }
+  });
+
+  // Then push a new op with redoStack:[] — the standard linear-undo
+  // invariant. The redoStack should be cleared on disk.
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [{ type: 'flip', axis: 'horizontal' }],
+      redoStack: []
+    }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json<OpsResponse>().redoStack, []);
+
+  const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
+  assert.deepEqual(meta.json<MetaResponse>().redoStack, []);
+});
+
+test('POST /admin/sidecar/:id/ops omitting body.redoStack preserves on-disk redoStack', async (t) => {
+  // Backward compat: clients that don't know about redoStack (or simple
+  // tools posting just an ops array) shouldn't accidentally wipe redo
+  // history. Only an explicit body.redoStack mutates it.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Stash a redo entry.
+  await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [{ type: 'rotate', degrees: 90 }],
+      redoStack: [{ type: 'flip', axis: 'vertical' }]
+    }
+  });
+
+  // Now POST with ops only (no redoStack key). Should preserve the
+  // existing redoStack entry.
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: 180 }] }
+  });
+  assert.equal(res.statusCode, 200);
+
+  const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
+  assert.deepEqual(meta.json<MetaResponse>().ops, [{ type: 'rotate', degrees: 180 }]);
+  assert.deepEqual(meta.json<MetaResponse>().redoStack, [{ type: 'flip', axis: 'vertical' }]);
+});
+
+test('POST /admin/sidecar/:id/ops validates redoStack op shapes the same as ops', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [],
+      redoStack: [{ type: 'invert' }]
+    }
+  });
+  assert.equal(res.statusCode, 400);
+  // Error is prefixed with `redoStack:` so the caller can locate which
+  // array was at fault.
+  assert.match(res.json<{ error: string }>().error, /redoStack:/);
+});
+
+test('POST /admin/sidecar/:id/ops 400s when body.redoStack is not an array', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [], redoStack: 'not-an-array' }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /redoStack/);
 });

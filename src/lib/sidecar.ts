@@ -48,6 +48,13 @@ export interface Sidecar {
   source: SidecarSource;
   metadata: SidecarMetadata;
   ops: SidecarOp[];
+  /** Ops popped via undo, in pop order (i.e. the last entry is the
+   * one redo would re-apply first). Persisted with the sidecar so
+   * undo/redo survives reload + cross-session. Optional for backward
+   * compatibility with sidecars written before this field existed.
+   * Adding a new op clears this stack — the standard linear-undo
+   * invariant. */
+  redoStack?: SidecarOp[];
   outputs: SidecarOutput[];
   variants: SidecarVariant[];
 }
@@ -118,6 +125,10 @@ export function validate(data: unknown): ValidateResult {
     if (!Array.isArray(d[k])) {
       return { ok: false, error: `${k} must be an array` };
     }
+  }
+  // redoStack is optional; if present, must be an array.
+  if (d.redoStack !== undefined && !Array.isArray(d.redoStack)) {
+    return { ok: false, error: 'redoStack must be an array' };
   }
 
   return { ok: true };

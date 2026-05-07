@@ -292,11 +292,14 @@ function pickMany(): Promise<File[]> {
 // returns them in the IMG element's natural-pixel space) back to
 // original-pixel space using the sidecar's recorded width/height.
 
+type SidecarOp = { type: string; [k: string]: unknown };
+
 interface SidecarMeta {
   width: number | null;
   height: number | null;
   format: string | null;
-  ops: Array<{ type: string; [k: string]: unknown }>;
+  ops: SidecarOp[];
+  redoStack: SidecarOp[];
 }
 
 async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
@@ -305,59 +308,83 @@ async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
   return (await res.json()) as SidecarMeta;
 }
 
-type SidecarOp = { type: string; [k: string]: unknown };
-
-async function replaceSidecarOps(id: string, ops: SidecarOp[]): Promise<void> {
+async function persistOps(id: string, ops: SidecarOp[], redoStack: SidecarOp[]): Promise<void> {
   const res = await fetch(`/admin/sidecar/${id}/ops`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ops })
+    body: JSON.stringify({ ops, redoStack })
   });
   if (!res.ok) throw new Error(`save: ${res.status} ${await res.text()}`);
 }
 
-/** Fetch current sidecar ops, run them through `mutator`, normalize the
- * result into canonical order, and save back. The canonical order is
- * [crop, rotate, flip, resample]; only one of crop/resample is kept
- * (latest wins), rotates are summed mod 360, flips are toggled per
- * axis. This keeps the chain small and deterministic regardless of
- * click order. */
+/** Convenience helper used by the existing crop modal: replace ops
+ * (default to clearing redoStack since adding a new op invalidates the
+ * redo history per the standard linear-undo invariant). */
+async function replaceSidecarOps(id: string, ops: SidecarOp[]): Promise<void> {
+  await persistOps(id, ops, []);
+}
+
+/** Fetch current sidecar state, run the mutator, save back. Click-order
+ * preserved — no canonicalization. Adding a new op clears redoStack;
+ * undo/redo callers use mutateUndoRedo below instead. */
 async function mutateSidecarOps(
   id: string,
   mutator: (ops: SidecarOp[]) => SidecarOp[]
 ): Promise<void> {
   const meta = await fetchSidecarMeta(id);
-  const next = canonicalizeOps(mutator(meta.ops));
-  await replaceSidecarOps(id, next);
+  const next = mutator(meta.ops);
+  // Standard invariant: any op-mutating action clears the redo stack.
+  await persistOps(id, next, []);
 }
 
-const OP_ORDER: Record<string, number> = { crop: 0, rotate: 1, flip: 2, resample: 3 };
+/** Pop the last op into the redo stack. */
+async function undoLastOp(id: string): Promise<void> {
+  const meta = await fetchSidecarMeta(id);
+  if (meta.ops.length === 0) return;
+  const popped = meta.ops[meta.ops.length - 1] as SidecarOp;
+  await persistOps(id, meta.ops.slice(0, -1), [...meta.redoStack, popped]);
+}
 
-function canonicalizeOps(ops: SidecarOp[]): SidecarOp[] {
-  // Coalesce: keep at most one crop / resample (last wins), sum rotate
-  // degrees mod 360, dedupe flip axes (each toggle cancels the previous
-  // for that axis).
-  let crop: SidecarOp | null = null;
-  let resample: SidecarOp | null = null;
-  let totalDegrees = 0;
-  const flipAxes = new Set<string>();
-  for (const op of ops) {
-    if (op.type === 'crop') crop = op;
-    else if (op.type === 'resample') resample = op;
-    else if (op.type === 'rotate') totalDegrees += Number(op.degrees ?? 0);
-    else if (op.type === 'flip') {
-      const a = String(op.axis);
-      if (flipAxes.has(a)) flipAxes.delete(a);
-      else flipAxes.add(a);
+/** Pop the last redoStack entry back onto ops. */
+async function redoLastOp(id: string): Promise<void> {
+  const meta = await fetchSidecarMeta(id);
+  if (meta.redoStack.length === 0) return;
+  const popped = meta.redoStack[meta.redoStack.length - 1] as SidecarOp;
+  await persistOps(id, [...meta.ops, popped], meta.redoStack.slice(0, -1));
+}
+
+/** Delete a single op by index. Mirrors the standard "edit history"
+ * affordance on photo apps. The redoStack is unchanged — the user
+ * removed a step explicitly, not via undo. */
+async function deleteOpAt(id: string, index: number): Promise<void> {
+  const meta = await fetchSidecarMeta(id);
+  if (index < 0 || index >= meta.ops.length) return;
+  const next = [...meta.ops.slice(0, index), ...meta.ops.slice(index + 1)];
+  await persistOps(id, next, meta.redoStack);
+}
+
+/** Human-readable label for one op, used in the edits list under the
+ * image-attributes panel. Tries to format coords / dimensions in a way
+ * the author can scan ("crop 400×300 @ 100,50"); falls back to the raw
+ * type for anything we don't recognize. */
+function describeOp(op: SidecarOp): string {
+  switch (op.type) {
+    case 'crop': {
+      const w = Number(op.w) || 0;
+      const h = Number(op.h) || 0;
+      const x = Number(op.x) || 0;
+      const y = Number(op.y) || 0;
+      return `crop ${w}×${h} @ ${x},${y}`;
     }
+    case 'rotate':
+      return `rotate ${String(op.degrees)}°`;
+    case 'flip':
+      return `flip ${String(op.axis)}`;
+    case 'resample':
+      return `resample max-w ${String(op.w)}`;
+    default:
+      return op.type;
   }
-  const out: SidecarOp[] = [];
-  if (crop) out.push(crop);
-  const norm = ((totalDegrees % 360) + 360) % 360;
-  if (norm !== 0) out.push({ type: 'rotate', degrees: norm });
-  for (const axis of flipAxes) out.push({ type: 'flip', axis });
-  if (resample) out.push(resample);
-  return out.sort((a, b) => (OP_ORDER[a.type] ?? 99) - (OP_ORDER[b.type] ?? 99));
 }
 
 /** Force the editor's <img> to refetch /admin/preview/<id> after a crop
@@ -673,9 +700,12 @@ function mount(): void {
   const attrRotateRBtn = $<HTMLButtonElement>('rkr-image-rotate-r-btn');
   const attrFlipHBtn = $<HTMLButtonElement>('rkr-image-flip-h-btn');
   const attrFlipVBtn = $<HTMLButtonElement>('rkr-image-flip-v-btn');
+  const attrUndoBtn = $<HTMLButtonElement>('rkr-image-undo-btn');
+  const attrRedoBtn = $<HTMLButtonElement>('rkr-image-redo-btn');
   const attrResampleInput = $<HTMLInputElement>('rkr-image-resample');
   const attrResampleBtn = $<HTMLButtonElement>('rkr-image-resample-btn');
   const attrResetBtn = $<HTMLButtonElement>('rkr-image-reset-btn');
+  const attrEditsList = $<HTMLOListElement>('rkr-image-edits');
 
   const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
   const multiLabel = $<HTMLHeadingElement>('rkr-multi-attrs-label');
@@ -783,19 +813,24 @@ function mount(): void {
       attrPosition.value = a.position ?? 'default';
       populating = false;
       attrPanel.hidden = false;
-      // Async: load sidecar ops, toggle the Reset button, and populate
-      // the resample-width input from any existing resample op so the
-      // author sees the current value rather than an empty placeholder.
+      // Async: load sidecar ops, toggle the Reset button, populate the
+      // resample-width input from any existing resample op, and render
+      // the edits list / undo-redo button states.
       attrResetBtn.hidden = true;
       attrResampleInput.value = '';
+      attrUndoBtn.disabled = true;
+      attrRedoBtn.disabled = true;
+      attrEditsList.replaceChildren();
       if (a.id) {
-        void fetchSidecarMeta(a.id).then(
+        const id = a.id;
+        void fetchSidecarMeta(id).then(
           (meta) => {
             attrResetBtn.hidden = meta.ops.length === 0;
             const resample = meta.ops.find((o) => o.type === 'resample');
             if (resample && typeof resample.w === 'number') {
               attrResampleInput.value = String(resample.w);
             }
+            renderEditsPanel(id, meta);
           },
           () => {
             /* best-effort */
@@ -857,6 +892,53 @@ function mount(): void {
     return a.id ?? null;
   }
 
+  /** Render one row per op (in click order), plus per-row delete buttons,
+   * and update the undo/redo button enabled states. The id is captured
+   * at render time so each delete button is bound to the image whose
+   * panel was showing when the row was rendered — selectionUpdate will
+   * rebuild the list if the selection changes. */
+  function renderEditsPanel(id: string, meta: SidecarMeta): void {
+    attrUndoBtn.disabled = meta.ops.length === 0;
+    attrRedoBtn.disabled = meta.redoStack.length === 0;
+    const items = meta.ops.map((op, idx) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'rkr-edits-step';
+      span.textContent = `${idx + 1}. ${describeOp(op)}`;
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'rkr-edits-del';
+      del.textContent = '×';
+      del.title = 'Delete this step';
+      del.setAttribute('aria-label', `Delete step ${idx + 1}: ${describeOp(op)}`);
+      del.addEventListener('click', () => {
+        void deleteOpAt(id, idx).then(
+          () => {
+            bustImagePreview(editor, id);
+            setStatus(`deleted step ${idx + 1}`);
+            void refreshEdits(id);
+          },
+          (err: unknown) => setStatus(`delete failed: ${(err as Error).message}`)
+        );
+      });
+      li.replaceChildren(span, del);
+      return li;
+    });
+    attrEditsList.replaceChildren(...items);
+  }
+
+  /** Re-fetch sidecar meta and re-render the edits list / reset state.
+   * Best-effort: on failure we leave whatever was on screen. */
+  async function refreshEdits(id: string): Promise<void> {
+    try {
+      const meta = await fetchSidecarMeta(id);
+      attrResetBtn.hidden = meta.ops.length === 0;
+      renderEditsPanel(id, meta);
+    } catch {
+      /* best-effort */
+    }
+  }
+
   /** Wrap a sidecar mutation: refuse if no image is selected, refresh
    * the editor preview on success, surface errors to the status bar. */
   function runEdit(label: string, mutator: (ops: SidecarOp[]) => SidecarOp[]): void {
@@ -865,8 +947,8 @@ function mount(): void {
     void mutateSidecarOps(id, mutator).then(
       () => {
         bustImagePreview(editor, id);
-        attrResetBtn.hidden = false;
         setStatus(`${label} ${id.slice(0, 8)}…`);
+        void refreshEdits(id);
       },
       (err: unknown) => setStatus(`${label} failed: ${(err as Error).message}`)
     );
@@ -874,7 +956,11 @@ function mount(): void {
 
   attrCropBtn.addEventListener('click', () => {
     const id = activeImageId();
-    if (id) void openCropper(id, () => bustImagePreview(editor, id));
+    if (id)
+      void openCropper(id, () => {
+        bustImagePreview(editor, id);
+        void refreshEdits(id);
+      });
   });
   attrRotateLBtn.addEventListener('click', () =>
     runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: -90 }])
@@ -888,6 +974,30 @@ function mount(): void {
   attrFlipVBtn.addEventListener('click', () =>
     runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'vertical' }])
   );
+  attrUndoBtn.addEventListener('click', () => {
+    const id = activeImageId();
+    if (!id) return;
+    void undoLastOp(id).then(
+      () => {
+        bustImagePreview(editor, id);
+        setStatus(`undo ${id.slice(0, 8)}…`);
+        void refreshEdits(id);
+      },
+      (err: unknown) => setStatus(`undo failed: ${(err as Error).message}`)
+    );
+  });
+  attrRedoBtn.addEventListener('click', () => {
+    const id = activeImageId();
+    if (!id) return;
+    void redoLastOp(id).then(
+      () => {
+        bustImagePreview(editor, id);
+        setStatus(`redo ${id.slice(0, 8)}…`);
+        void refreshEdits(id);
+      },
+      (err: unknown) => setStatus(`redo failed: ${(err as Error).message}`)
+    );
+  });
   attrResampleBtn.addEventListener('click', () => {
     const w = Math.floor(Number(attrResampleInput.value) || 0);
     if (w <= 0) {
@@ -906,9 +1016,9 @@ function mount(): void {
     void replaceSidecarOps(id, []).then(
       () => {
         bustImagePreview(editor, id);
-        attrResetBtn.hidden = true;
         attrResampleInput.value = '';
         setStatus('edits reset');
+        void refreshEdits(id);
       },
       (err: unknown) => setStatus(`reset failed: ${(err as Error).message}`)
     );
