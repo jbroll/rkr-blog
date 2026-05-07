@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parsePost, renderPostHtml, serializePost } from '../../src/lib/content.ts';
+import { parsePost, renderPostHtml, safeLinkUrl, serializePost } from '../../src/lib/content.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
 
 type AnyDirective = {
@@ -109,4 +109,56 @@ test('renderPostHtml escapes plain text content to prevent HTML injection', asyn
   assert.match(safeHtml, /A &amp; B then <em>italic<\/em>/);
   // Trust check on raw HTML: <script>...</script> passes through verbatim.
   assert.match(html, /<script>alert\(1\)<\/script>/);
+});
+
+// ---- safeLinkUrl ------------------------------------------------------
+// XSS defense at the link-render layer. Markdown lets authors write
+// `[click](javascript:alert(1))` which round-trips to a clickable XSS
+// payload unless the renderer strips dangerous schemes. Single-author
+// trust covers external attackers, but a misclick or pasted markdown
+// is still in scope.
+
+test('safeLinkUrl: passes http / https / mailto / tel through', () => {
+  for (const u of [
+    'https://example.com/x',
+    'http://example.com',
+    'mailto:a@b.com',
+    'tel:+15551234'
+  ]) {
+    assert.equal(safeLinkUrl(u), u);
+  }
+});
+
+test('safeLinkUrl: passes site-relative + fragment + query through', () => {
+  for (const u of ['/about', '#section', '?q=1', '../sibling', './child']) {
+    assert.equal(safeLinkUrl(u), u);
+  }
+});
+
+test('safeLinkUrl: replaces javascript:, data:, vbscript:, file: with #', () => {
+  for (const u of [
+    'javascript:alert(1)',
+    'JAVASCRIPT:alert(1)',
+    '  javascript:alert(1)  ',
+    'data:text/html,<script>alert(1)</script>',
+    'vbscript:msgbox(1)',
+    'file:///etc/passwd'
+  ]) {
+    assert.equal(safeLinkUrl(u), '#');
+  }
+});
+
+test('safeLinkUrl: empty / whitespace-only collapses to #', () => {
+  assert.equal(safeLinkUrl(''), '#');
+  assert.equal(safeLinkUrl('   '), '#');
+});
+
+test('safeLinkUrl: a colon inside the path is not a scheme', () => {
+  // /a:b — the colon is past the path-start, so this is a relative URL.
+  assert.equal(safeLinkUrl('/a:b'), '/a:b');
+  // example.com/a:b — no scheme; head has no path-marker; the colon
+  // ends the "scheme" and "example.com/a" isn't a known one → reject.
+  // (This is intentionally strict; pathless schemes are rare and
+  // explicit `https://` is one keystroke.)
+  assert.equal(safeLinkUrl('a:b'), '#');
 });

@@ -439,15 +439,17 @@ If `RETURNING` returns no row, another worker took the job; move on.
 2. Fastify route parses `<originalId>.<ophash>.<fmt>` from the
    filename.
 3. Looks up the matching sidecar + variant + output by ophash.
-4. Calls `renderDerivative` synchronously with a 2-second wall-clock
-   budget.
+4. Calls `renderDerivative` synchronously with a wall-clock budget
+   (`renderBudgetMs`, default 30 s).
 5. On success within budget: `200` with the bytes (and Apache picks up
    subsequent requests from disk).
 6. On budget exceeded: enqueues the job, returns `202` + a low-res
    placeholder, client retries.
 
-The 2s budget is configurable; revisit after measuring on the actual
-VPS.
+The 30 s default sizes for a low-end VPS rendering large variants;
+the spec just calls for "configurable wall-clock budget" without
+fixing the number. Override via `BuildAppOpts.renderBudgetMs` when
+constructing the app (currently only used by tests).
 
 ## 7. Front proxy (Apache vhost)
 
@@ -625,8 +627,9 @@ Pinned implementation calls; revisit if real-world data contradicts.
 
 1. **Markdown directive serializer**: TipTap output → markdown
    round-trip via a small custom plugin atop `remark-stringify`.
-2. **Sync vs async render budget on miss**: 2s default. Measure and
-   tune.
+2. **Sync vs async render budget on miss**: 30 s default. Generous
+   so the 202+placeholder fallback only fires for genuinely slow
+   variants. Tune lower once production timings exist.
 3. **AVIF cost/benefit**: encoding is ~10× slower than WebP. Currently
    eager (rendered ahead of time via `site-admin render`); can shift to
    on-demand if publish latency hurts.

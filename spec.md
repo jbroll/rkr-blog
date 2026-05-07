@@ -181,10 +181,11 @@ application server:
 3. Writes atomically to the cache path; from there the front proxy
    serves it for every subsequent request.
 
-A 2-second wall-clock budget governs synchronous rendering. Past
+A configurable wall-clock budget governs synchronous rendering. Past
 budget the request returns `202 + a placeholder` and a job worker
 finishes the render in the background; subsequent requests pick up
-the cached result.
+the cached result. The exact default is set by the implementation
+(see `implementation.md` §5).
 
 ### Bake invalidation
 

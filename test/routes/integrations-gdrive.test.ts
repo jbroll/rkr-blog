@@ -12,7 +12,7 @@ import { readToken } from '../../src/lib/oauth-tokens.ts';
 import { ensureSecretKey, readSecretKey } from '../../src/lib/secrets.ts';
 import { createSession } from '../../src/lib/sessions.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
-import { findOrCreateOAuthUser } from '../../src/lib/users.ts';
+import { findOrCreateOAuthUser, inviteEmail } from '../../src/lib/users.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import type { DriveTokenExchange } from '../../src/routes/integrations-gdrive.ts';
 import { buildApp } from '../../src/server.ts';
@@ -147,6 +147,7 @@ async function setup(t: TestContext, opts: StubOpts = {}) {
   t.after(() => app.close());
 
   // Bootstrap a logged-in user + session.
+  inviteEmail(db, 'a@x.com', 'owner');
   const user = findOrCreateOAuthUser(db, {
     provider: 'google',
     sub: 'g-1',
@@ -446,6 +447,7 @@ test('POST /admin/import/gdrive fetches via Drive API and ingests', async (t) =>
   t.after(() => app.close());
 
   // Set up a connected user.
+  inviteEmail(db, 'a@x.com', 'owner');
   const user = findOrCreateOAuthUser(db, {
     provider: 'google',
     sub: 'g-1',
@@ -519,6 +521,7 @@ test('POST /admin/import/gdrive 415s when Drive returns non-image content-type',
   });
   t.after(() => app.close());
 
+  inviteEmail(db, 'a@x.com', 'owner');
   const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
   const session = createSession(db, { userId: user.id });
   const sessionCookie = `rkr_session=${session.id}`;

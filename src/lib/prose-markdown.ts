@@ -23,6 +23,8 @@ import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 
+import { safeLinkUrl } from './content.ts';
+
 // ---- ProseMirror JSON shape (subset) ----------------------------------
 
 export interface ProseMark {
@@ -167,7 +169,11 @@ function applyMark(mark: ProseMark, text: string): string {
     case 'code':
       return `\`${text}\``;
     case 'link': {
-      const href = String(mark.attrs?.href ?? '');
+      // Strip dangerous schemes (javascript:, data:, vbscript:) at
+      // serialize time so a paste / typo can't ride through to the
+      // public renderer. content.ts re-applies the same guard on
+      // render — defense in depth.
+      const href = safeLinkUrl(String(mark.attrs?.href ?? ''));
       return `[${text}](${href})`;
     }
     default:

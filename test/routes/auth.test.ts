@@ -146,10 +146,40 @@ test('GET /admin/auth/google/start redirects to provider with state in URL + coo
 
 // ---- /admin/auth/google/callback (happy paths) -------------------------
 
-test('callback: bootstrap user (no users yet) becomes owner', async (t) => {
+test('callback: empty allowlist → 403 (operator must invite first)', async (t) => {
+  // Removed the old "first login becomes owner" bypass. The operator
+  // runs `site-admin user invite <email> --role=owner` before any
+  // OAuth login can succeed. Without an entry, every login 403s —
+  // closing the deployment-window takeover risk.
   const { db, app } = await setup(t, {
-    idTokenPayload: { sub: 'g-1', email: 'first@example.com', name: 'First', email_verified: true }
+    idTokenPayload: {
+      sub: 'g-1',
+      email: 'first@example.com',
+      name: 'First',
+      email_verified: true
+    }
   });
+
+  const { state, cookie } = await primeStartFlow(app);
+  const res = await app.inject({
+    method: 'GET',
+    url: `/admin/auth/google/callback?code=abc&state=${state}`,
+    headers: { cookie }
+  });
+  assert.equal(res.statusCode, 403);
+  assert.equal(findUserByEmail(db, 'first@example.com'), undefined);
+});
+
+test('callback: invited owner email is bootstrapped as owner', async (t) => {
+  const { db, app } = await setup(t, {
+    idTokenPayload: {
+      sub: 'g-1',
+      email: 'owner@example.com',
+      name: 'Owner',
+      email_verified: true
+    }
+  });
+  inviteEmail(db, 'owner@example.com', 'owner');
 
   const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
@@ -160,7 +190,7 @@ test('callback: bootstrap user (no users yet) becomes owner', async (t) => {
   assert.equal(res.statusCode, 302);
   assert.equal(res.headers.location, '/admin/editor');
 
-  const user = findUserByEmail(db, 'first@example.com');
+  const user = findUserByEmail(db, 'owner@example.com');
   assert.ok(user);
   assert.equal(user?.role, 'owner');
 
@@ -368,6 +398,7 @@ test('GET /admin/editor succeeds with a valid session cookie', async (t) => {
   const { db, app } = await setup(t, {
     idTokenPayload: { sub: 'g-1', email: 'first@example.com', email_verified: true }
   });
+  inviteEmail(db, 'first@example.com', 'owner');
 
   // Sign in via the callback to mint a real session.
   const { state, cookie } = await primeStartFlow(app);

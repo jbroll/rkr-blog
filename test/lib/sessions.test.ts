@@ -12,7 +12,7 @@ import {
   readSessionUser,
   touchSession
 } from '../../src/lib/sessions.ts';
-import { findOrCreateOAuthUser } from '../../src/lib/users.ts';
+import { findOrCreateOAuthUser, inviteEmail } from '../../src/lib/users.ts';
 
 function freshDb() {
   const db = open(':memory:');
@@ -21,6 +21,7 @@ function freshDb() {
 }
 
 function bootstrapUser(db: ReturnType<typeof open>, email = 'a@x.com', sub = 'g-1') {
+  inviteEmail(db, email, 'owner');
   return findOrCreateOAuthUser(db, { provider: 'google', sub, email });
 }
 

@@ -58,6 +58,20 @@ curl http://127.0.0.1:3000/health      # → {"ok":true}
 
 Browse the editor at `http://127.0.0.1:3000/admin/editor`.
 
+### First-time login
+
+There is no implicit "first user becomes owner" bootstrap. Before any
+OAuth login can succeed, invite the operator email via the CLI:
+
+```bash
+SITE_ROOT=$HOME/site bin/site-admin user invite you@example.com --role=owner
+```
+
+Without an entry on the allowlist, every login 403s. This closes the
+deployment-window takeover risk where a stranger reaching the URL
+before the operator's first login could otherwise become owner. Add
+editors the same way (`--role=editor`).
+
 ## 4. Coding conventions
 
 ### Module system + language

@@ -14,7 +14,7 @@ import {
   upsertToken
 } from '../../src/lib/oauth-tokens.ts';
 import { ensureSecretKey, readSecretKey } from '../../src/lib/secrets.ts';
-import { findOrCreateOAuthUser } from '../../src/lib/users.ts';
+import { findOrCreateOAuthUser, inviteEmail } from '../../src/lib/users.ts';
 
 function setup(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-tokens-'));
@@ -23,6 +23,7 @@ function setup(t: TestContext) {
   const key = readSecretKey(root);
   const db = open(':memory:');
   migrate(db);
+  inviteEmail(db, 'a@x.com', 'owner');
   const user = findOrCreateOAuthUser(db, {
     provider: 'google',
     sub: 'g-1',

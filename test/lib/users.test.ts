@@ -8,7 +8,6 @@ import {
   findOrCreateOAuthUser,
   findUserByEmail,
   findUserById,
-  findUserByOAuth,
   inviteEmail,
   isAllowed,
   listInvites,
@@ -58,19 +57,41 @@ test('inviteEmail upserts: inviting again updates role', () => {
   }
 });
 
-test('findOrCreateOAuthUser bootstraps the first user as owner', () => {
+test('findOrCreateOAuthUser refuses an empty allowlist (no implicit owner)', () => {
+  // Removing the old "first login becomes owner" bypass. The operator
+  // must invite themselves via `site-admin user invite <email>
+  // --role=owner` before logging in. Without an entry, every login
+  // 401s — closing the deployment-window takeover risk.
   const db = freshDb();
   try {
     assert.equal(userCount(db), 0);
-    const user = findOrCreateOAuthUser(db, {
+    assert.throws(
+      () =>
+        findOrCreateOAuthUser(db, {
+          provider: 'google',
+          sub: 'g-1',
+          email: 'first@example.com',
+          displayName: 'First'
+        }),
+      NotInvitedError
+    );
+    assert.equal(userCount(db), 0, 'no user created on rejected login');
+  } finally {
+    db.close();
+  }
+});
+
+test('findOrCreateOAuthUser creates with allowlist role for the first invited user', () => {
+  const db = freshDb();
+  try {
+    inviteEmail(db, 'owner@x.com', 'owner');
+    const u = findOrCreateOAuthUser(db, {
       provider: 'google',
       sub: 'g-1',
-      email: 'first@example.com',
-      displayName: 'First'
+      email: 'owner@x.com'
     });
-    assert.equal(user.role, 'owner', 'first user is implicit owner');
-    assert.equal(user.email, 'first@example.com');
-    assert.ok(findUserByOAuth(db, 'google', 'g-1'));
+    assert.equal(u.role, 'owner');
+    assert.equal(userCount(db), 1);
   } finally {
     db.close();
   }
@@ -79,6 +100,7 @@ test('findOrCreateOAuthUser bootstraps the first user as owner', () => {
 test('findOrCreateOAuthUser creates with allowlist role for subsequent users', () => {
   const db = freshDb();
   try {
+    inviteEmail(db, 'owner@x.com', 'owner');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'owner@x.com' });
     inviteEmail(db, 'editor@x.com', 'editor');
     const u = findOrCreateOAuthUser(db, {
@@ -96,6 +118,7 @@ test('findOrCreateOAuthUser creates with allowlist role for subsequent users', (
 test('findOrCreateOAuthUser rejects an unknown email after bootstrap', () => {
   const db = freshDb();
   try {
+    inviteEmail(db, 'owner@x.com', 'owner');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'owner@x.com' });
     assert.throws(
       () =>
@@ -114,6 +137,7 @@ test('findOrCreateOAuthUser rejects an unknown email after bootstrap', () => {
 test('findOrCreateOAuthUser returns existing user on second login (touches last_seen_at)', async () => {
   const db = freshDb();
   try {
+    inviteEmail(db, 'a@x.com', 'owner');
     const u1 = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
     const before = u1.last_seen_at;
     await new Promise((r) => setTimeout(r, 5));
@@ -133,6 +157,7 @@ test('findOrCreateOAuthUser refuses to silently link a new provider via shared e
   // must be initiated from a session.
   const db = freshDb();
   try {
+    inviteEmail(db, 'a@x.com', 'owner');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
     assert.throws(
       () =>
@@ -156,6 +181,7 @@ test('findOrCreateOAuthUser email lookup is NFKC-normalized', () => {
   // decomposed form (or vice versa) to bypass the allowlist.
   const db = freshDb();
   try {
+    inviteEmail(db, 'owner@x.com', 'owner');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'owner@x.com' });
     inviteEmail(db, 'Änna@x.com', 'editor'); // precomposed
     const u = findOrCreateOAuthUser(db, {
@@ -172,6 +198,7 @@ test('findOrCreateOAuthUser email lookup is NFKC-normalized', () => {
 test('findUserByEmail is case-insensitive on the lookup', () => {
   const db = freshDb();
   try {
+    inviteEmail(db, 'mixed@case.com', 'owner');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'Mixed@Case.COM' });
     assert.ok(findUserByEmail(db, 'mixed@case.com'));
     assert.ok(findUserByEmail(db, 'MIXED@CASE.COM'));
@@ -183,6 +210,7 @@ test('findUserByEmail is case-insensitive on the lookup', () => {
 test('listUsers returns rows in creation order', () => {
   const db = freshDb();
   try {
+    inviteEmail(db, 'a@x.com', 'owner');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
     inviteEmail(db, 'b@x.com', 'editor');
     findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-2', email: 'b@x.com' });
@@ -198,6 +226,7 @@ test('listUsers returns rows in creation order', () => {
 test('touchLastSeen updates the user row', () => {
   const db = freshDb();
   try {
+    inviteEmail(db, 'a@x.com', 'owner');
     const u = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
     touchLastSeen(db, u.id, '2030-01-01T00:00:00Z');
     assert.equal(findUserById(db, u.id)?.last_seen_at, '2030-01-01T00:00:00Z');

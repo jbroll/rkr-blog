@@ -188,9 +188,13 @@ export function findOrCreateOAuthUser(db: Db, identity: OAuthIdentity): User {
   const create = db.transaction((): User => {
     const now = new Date().toISOString();
     const allow = isAllowed(db, email);
-    const isBootstrap = userCount(db) === 0;
-    if (!allow && !isBootstrap) throw new NotInvitedError(email);
-    const role: Role = allow?.role ?? 'owner';
+    // No first-login-becomes-owner bypass. The operator must invite
+    // their own email via `site-admin user invite <email> --role=owner`
+    // before logging in for the first time. Without this gate, anyone
+    // who reached the deployment URL before the operator's first login
+    // could silently take over the site.
+    if (!allow) throw new NotInvitedError(email);
+    const role: Role = allow.role;
     const r = db
       .prepare(
         'INSERT INTO users (email, display_name, role, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'

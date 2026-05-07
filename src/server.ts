@@ -82,7 +82,14 @@ export interface StartServerOpts {
 
 export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: opts.logger ?? false
+    logger: opts.logger ?? false,
+    // Trust the loopback proxy (Apache, per deploy/apache.conf). Without
+    // this, every `req.ip` resolves to 127.0.0.1 — which makes the
+    // per-IP rate limit a single global bucket and turns sessions.ip
+    // into useless forensic data. mod_proxy_http already adds
+    // X-Forwarded-For by default (ProxyAddHeaders is on); we just
+    // tell Fastify to honour it from the loopback hop only.
+    trustProxy: 'loopback'
   });
 
   const siteRoot = opts.siteRoot ?? paths().root;

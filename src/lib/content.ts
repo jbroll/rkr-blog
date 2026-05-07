@@ -178,14 +178,14 @@ async function renderInlineOne(node: PhrasingContent, ctx: RenderCtx): Promise<s
       return `<em>${await renderInline((node as Parent).children as PhrasingContent[], ctx)}</em>`;
     case 'link': {
       const l = node as Link;
-      return `<a href="${escapeAttr(l.url)}">${await renderInline(l.children, ctx)}</a>`;
+      return `<a href="${escapeAttr(safeLinkUrl(l.url))}">${await renderInline(l.children, ctx)}</a>`;
     }
     case 'inlineCode':
       return `<code>${escapeText((node as InlineCode).value)}</code>`;
     case 'image': {
       const i = node as MdImage;
       const alt = escapeAttr(i.alt ?? '');
-      return `<img src="${escapeAttr(i.url)}" alt="${alt}"/>`;
+      return `<img src="${escapeAttr(safeLinkUrl(i.url))}" alt="${alt}"/>`;
     }
     case 'break':
       return '<br/>';
@@ -208,4 +208,31 @@ export function escapeText(s: string): string {
 
 export function escapeAttr(s: string): string {
   return s.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c);
+}
+
+/** URL schemes safe to render in markdown links. Anything else (including
+ * `javascript:`, `data:`, `vbscript:`, `file:`) is replaced with `#` so a
+ * pasted or typo'd URL can't fire an XSS payload on click. Site-relative
+ * (`/`, `#`, `.`) and protocol-relative (`//`) URLs pass through. */
+const SAFE_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+export function safeLinkUrl(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed === '') return '#';
+  // Site-relative / fragment / protocol-relative — no scheme to check.
+  if (
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('?') ||
+    trimmed.startsWith('.')
+  ) {
+    return trimmed;
+  }
+  // First colon decides: anything before it that doesn't contain
+  // a path-like character is a scheme.
+  const colon = trimmed.indexOf(':');
+  if (colon === -1) return trimmed;
+  const head = trimmed.slice(0, colon);
+  if (/[/?#]/.test(head)) return trimmed; // colon is past the path start
+  const scheme = `${head.toLowerCase()}:`;
+  return SAFE_LINK_SCHEMES.has(scheme) ? trimmed : '#';
 }
