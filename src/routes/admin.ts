@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
+import sharp from 'sharp';
 
 import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
@@ -26,7 +27,7 @@ import { cacheKey } from '../lib/hash.ts';
 import { bakePath, FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
-import type { OutputFormat } from '../lib/render.ts';
+import { type OutputFormat, SHARP_PIXEL_LIMIT } from '../lib/render.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
@@ -345,6 +346,31 @@ export default async function adminRoutes(
       body.slice(8, 12).toString('ascii') !== 'WEBP'
     ) {
       return reply.code(400).send({ error: 'body is not a WebP file' });
+    }
+    // Full decode-side validation. The magic-byte check above is cheap
+    // but a malformed WebP (truncated chunks, oversized declared dims)
+    // would only fail at first render time. Run sharp.metadata() now
+    // so corrupt or decompression-bomb uploads are rejected at the
+    // boundary rather than landing on disk and 500-ing every public
+    // image request that hits this id.
+    try {
+      const meta = await sharp(body, {
+        failOn: 'error',
+        limitInputPixels: SHARP_PIXEL_LIMIT
+      }).metadata();
+      if (meta.format !== 'webp') {
+        return reply.code(400).send({ error: 'body did not decode as WebP' });
+      }
+      const w = meta.width ?? 0;
+      const h = meta.height ?? 0;
+      if (w * h > SHARP_PIXEL_LIMIT) {
+        return reply
+          .code(400)
+          .send({ error: `bake exceeds pixel limit (${w}×${h} > ${SHARP_PIXEL_LIMIT})` });
+      }
+    } catch (err) {
+      req.log.warn({ err, id }, 'bake decode failed');
+      return reply.code(400).send({ error: 'body is not a decodable WebP' });
     }
 
     const finalPath = bakePath(siteRoot, id);

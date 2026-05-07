@@ -6,6 +6,33 @@
 // Apache rewrites /img/* directly to the cache file when present
 // (implementation.md §7); only on miss does it fall through here.
 
+// Public-page security headers. CSP is intentionally tight: posts
+// don't need third-party scripts, images, or styles. The site-wide
+// JS (lightbox + carousel) is bundled and served from /static. The
+// markdown renderer passes through raw HTML in posts (single-author
+// trust); CSP+nosniff narrow the blast radius if a content mistake
+// or future external-import path lets something through.
+const PUBLIC_CSP = [
+  "default-src 'self'",
+  "img-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self'",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'self'"
+].join('; ');
+
+function setPublicSecurityHeaders(reply: import('fastify').FastifyReply): void {
+  reply.header('Content-Security-Policy', PUBLIC_CSP);
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // X-Frame-Options is redundant with frame-ancestors for modern
+  // browsers but cheap insurance for old crawlers + WAF heuristics.
+  reply.header('X-Frame-Options', 'DENY');
+}
+
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -89,6 +116,7 @@ export default async function publicRoutes(
       }))
     });
 
+    setPublicSecurityHeaders(reply);
     return reply.type('text/html; charset=utf-8').send(html);
   });
 
@@ -114,6 +142,7 @@ export default async function publicRoutes(
       bodyHtml
     });
 
+    setPublicSecurityHeaders(reply);
     return reply.type('text/html; charset=utf-8').send(html);
   });
 

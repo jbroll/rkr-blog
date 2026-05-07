@@ -169,3 +169,33 @@ test('GET / paginates when published posts exceed the page size', async (t) => {
   assert.match(r2.body, /page 2 of 2/);
   assert.match(r2.body, /rel="prev"/);
 });
+
+test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking headers', async (t) => {
+  // Defense-in-depth for the markdown renderer's "raw HTML passes
+  // through" trust decision: a misclick or pasted HTML can't open
+  // arbitrary script-src or be framed for clickjacking.
+  const { root, app } = await setup(t);
+  writePost(
+    root,
+    'a.md',
+    { slug: 'a', title: 'Alpha', status: 'published', date: '2026-05-06T14:00:00Z' },
+    'body a'
+  );
+  runReindex(root);
+
+  for (const url of ['/', '/a']) {
+    const res = await app.inject({ method: 'GET', url });
+    assert.equal(res.statusCode, 200, `${url} → ${res.statusCode}`);
+    const csp = res.headers['content-security-policy'] as string;
+    assert.match(csp, /default-src 'self'/, `${url}: csp default-src`);
+    assert.match(csp, /frame-ancestors 'none'/, `${url}: csp frame-ancestors`);
+    assert.match(csp, /script-src 'self'/, `${url}: csp script-src`);
+    assert.equal(res.headers['x-content-type-options'], 'nosniff', `${url}: nosniff`);
+    assert.equal(res.headers['x-frame-options'], 'DENY', `${url}: x-frame-options`);
+    assert.match(
+      res.headers['referrer-policy'] as string,
+      /strict-origin-when-cross-origin/,
+      `${url}: referrer-policy`
+    );
+  }
+});

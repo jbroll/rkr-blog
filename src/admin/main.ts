@@ -411,19 +411,40 @@ async function postOpsToServer(
  * only after both calls land — partial commits stay dirty so a retry
  * picks them up. */
 async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
+  // Snapshot the prior server-known state before mutating: if /ops
+  // succeeds but /bake fails, we restore the snapshot so the public
+  // site doesn't end up serving 500s for an `ops` chain whose bake
+  // never landed (notably, `perspective` is client-only — sharp can't
+  // apply a homography, so a missing bake means `unknown op type`
+  // until the next save).
+  const priorOps = [...s.baseline.ops];
+  const priorRedo = [...s.baseline.redoStack];
+
   await postOpsToServer(id, s.ops, s.redoStack);
   if (s.ops.length > 0) {
-    const original = await loadOriginal(id);
-    const canvas = getPipelineCache(id).apply(
-      {
-        drawable: original,
-        width: original.naturalWidth,
-        height: original.naturalHeight
-      },
-      s.ops
-    );
-    const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
-    await uploadBake(id, blob);
+    try {
+      const original = await loadOriginal(id);
+      const canvas = getPipelineCache(id).apply(
+        {
+          drawable: original,
+          width: original.naturalWidth,
+          height: original.naturalHeight
+        },
+        s.ops
+      );
+      const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
+      await uploadBake(id, blob);
+    } catch (err) {
+      // Roll back the server's view of ops to the prior baseline so
+      // the public site stays in a coherent state. Best-effort: if
+      // this also fails the user's session is offline — the local
+      // state stays dirty for retry, and beforeunload will warn
+      // before the user loses work to a reload.
+      await postOpsToServer(id, priorOps, priorRedo).catch(() => {
+        /* network gone; user retries */
+      });
+      throw err;
+    }
   }
   s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
 }

@@ -321,6 +321,25 @@ test('POST /admin/sidecar/:id/bake rejects non-WebP content types and bad bodies
   });
   assert.equal(garbage.statusCode, 400);
   assert.match(garbage.json<{ error: string }>().error, /not a WebP/);
+
+  // Magic-byte spoof: starts with "RIFF????WEBP" but the rest is junk.
+  // The pre-sharp magic-byte check passes, then sharp.metadata() fails
+  // and we reject with the decode error rather than landing the bytes
+  // on disk.
+  const spoof = Buffer.concat([
+    Buffer.from('RIFF', 'ascii'),
+    Buffer.from([0x10, 0x00, 0x00, 0x00]), // size = 16
+    Buffer.from('WEBP', 'ascii'),
+    Buffer.from('garbage_!@#$', 'ascii')
+  ]);
+  const spoofRes = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: spoof
+  });
+  assert.equal(spoofRes.statusCode, 400);
+  assert.match(spoofRes.json<{ error: string }>().error, /not a decodable WebP/);
 });
 
 test('POST /admin/sidecar/:id/bake 400s on malformed id and 404s on unknown', async (t) => {
