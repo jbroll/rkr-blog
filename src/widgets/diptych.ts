@@ -11,10 +11,15 @@
 // or unique-prefix match against $SITE_ROOT/sidecars/.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { cacheKey } from '../lib/hash.ts';
-import type { OutputFormat } from '../lib/render.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
-import { extractImageIds, getKnownIds, resolveIds } from '../lib/widget-helpers.ts';
+import {
+  extractImageIds,
+  getKnownIds,
+  indent,
+  pictureAspect,
+  renderPicture,
+  resolveIds
+} from '../lib/widget-helpers.ts';
 import type {
   DirectiveNode,
   FallbackSpec,
@@ -34,13 +39,6 @@ export const variants: VariantSpec[] = [
 
 export const fallback: FallbackSpec = { w: 800, format: 'jpeg', quality: 82 };
 
-const QUALITY_BY_FORMAT: Record<string, number> = {
-  webp: 85,
-  avif: 70,
-  jpeg: 85,
-  png: 0
-};
-
 function extractCaption(node: DirectiveNode): string | null {
   const c = node.attributes?.caption;
   return typeof c === 'string' && c.length > 0 ? c : null;
@@ -52,44 +50,14 @@ interface ItemRender {
 }
 
 function renderItem(item: ItemRender): string {
-  const { id, sidecar } = item;
-  const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
-  const w = sidecar.metadata.width ?? 1;
-  const h = sidecar.metadata.height ?? 1;
-  const aspect = (w / h).toFixed(4);
-
-  const formats = uniq(variants.flatMap((v) => v.formats));
-  const sources = formats.map((format) => {
-    const entries = variants
-      .filter((v) => v.formats.includes(format))
-      .map((v) => {
-        const ophash = cacheKey({
-          originalId: id,
-          ops,
-          variant: { w: v.w },
-          /* c8 ignore next -- ?? 85 fallback unreachable */
-          output: { format, quality: QUALITY_BY_FORMAT[format] ?? 85 }
-        });
-        return `/img/${id}.${ophash}.${format} ${v.w}w`;
-      });
-    return `      <source type="image/${format}" srcset="${entries.join(', ')}"/>`;
-  });
-
-  const fbHash = cacheKey({
-    originalId: id,
-    ops,
-    variant: { w: fallback.w },
-    output: { format: fallback.format as OutputFormat, quality: fallback.quality }
-  });
-  const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
-
+  const picture = indent(
+    renderPicture({ id: item.id, sidecar: item.sidecar, variants, fallback }),
+    '    '
+  );
   return [
-    `  <figure style="--aspect:${aspect};">`,
-    `    <picture>`,
-    ...sources,
-    `      <img src="${fbUrl}" alt="" loading="lazy"/>`,
-    `    </picture>`,
-    `  </figure>`
+    `  <figure style="--aspect:${pictureAspect(item.sidecar)};">`,
+    picture,
+    '  </figure>'
   ].join('\n');
 }
 
@@ -156,10 +124,6 @@ ${itemsHtml}${captionHtml}
   };
 }
 
-function uniq<T>(arr: T[]): T[] {
-  return [...new Set(arr)];
-}
-
 export const diptychWidget: Widget = {
   name: 'diptych',
   variants,
@@ -173,5 +137,3 @@ export const triptychWidget: Widget = {
   fallback,
   render: makeRender({ kind: 'triptych', count: 3 })
 };
-
-export default diptychWidget;

@@ -1,9 +1,15 @@
 // Shared helpers used by every multi-image widget (gallery, carousel,
 // diptych/triptych) to parse `ids="…"` attributes, resolve them against
 // the sidecar set, and avoid hammering the filesystem on every render.
+// Also exports the responsive <picture> renderer that the single-image
+// and multi-image widgets all share — keeping the cache-key + srcset
+// machinery in exactly one place.
 
+import { cacheKey } from './hash.ts';
 import { listSidecarIds } from './posts.ts';
-import type { WidgetCtx } from './widgets.ts';
+import type { OutputFormat } from './render.ts';
+import type { Sidecar } from './sidecar.ts';
+import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
 
@@ -56,4 +62,87 @@ export function getKnownIds(ctx: WidgetCtx): string[] {
     knownIdsByCtx.set(ctx, cached);
   }
   return cached;
+}
+
+// ---- responsive picture rendering --------------------------------------
+
+const QUALITY_BY_FORMAT: Record<string, number> = {
+  webp: 85,
+  avif: 70,
+  jpeg: 85,
+  png: 0
+};
+
+export interface PictureArgs {
+  id: string;
+  sidecar: Sidecar;
+  variants: VariantSpec[];
+  fallback: FallbackSpec;
+  /** Alt text. Already-escaped or plain string; renderPicture inlines verbatim. */
+  alt?: string;
+  /** loading attribute; default 'lazy'. */
+  loading?: 'lazy' | 'eager';
+}
+
+/**
+ * Render the responsive `<picture>` block for one image. One `<source>`
+ * per format with srcset entries for each declared variant width, plus
+ * a JPEG `<img>` fallback. Output has no leading indent — callers wrap
+ * it in their own figure / slide / cell shell and indent as needed.
+ */
+export function renderPicture(args: PictureArgs): string {
+  const { id, sidecar, variants, fallback, alt = '', loading = 'lazy' } = args;
+  const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
+
+  const formats = unique(variants.flatMap((v) => v.formats));
+  const sources = formats.map((format) => {
+    const entries = variants
+      .filter((v) => v.formats.includes(format))
+      .map((v) => {
+        const oph = cacheKey({
+          originalId: id,
+          ops,
+          variant: { w: v.w },
+          /* c8 ignore next -- ?? 85 unreachable: every format is in QUALITY_BY_FORMAT */
+          output: { format, quality: QUALITY_BY_FORMAT[format] ?? 85 }
+        });
+        return `/img/${id}.${oph}.${format} ${v.w}w`;
+      });
+    return `<source type="image/${format}" srcset="${entries.join(', ')}"/>`;
+  });
+
+  const fbHash = cacheKey({
+    originalId: id,
+    ops,
+    variant: { w: fallback.w },
+    output: { format: fallback.format as OutputFormat, quality: fallback.quality }
+  });
+  const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
+
+  return [
+    '<picture>',
+    ...sources,
+    `<img src="${fbUrl}" alt="${alt}" loading="${loading}"/>`,
+    '</picture>'
+  ].join('\n');
+}
+
+/** Aspect ratio (w/h) as a 4-decimal string from sidecar metadata.
+ * Used in the `--aspect` CSS variable on gallery/carousel/diptych cells. */
+export function pictureAspect(sidecar: Sidecar): string {
+  const w = sidecar.metadata.width ?? 1;
+  const h = sidecar.metadata.height ?? 1;
+  return (w / h).toFixed(4);
+}
+
+function unique<T>(arr: T[]): T[] {
+  return [...new Set(arr)];
+}
+
+/** Indent every line of a multi-line string by the given prefix. */
+export function indent(text: string, prefix: string): string {
+  return text
+    .split('\n')
+    .map((line) => prefix + line)
+    .join('\n');
 }

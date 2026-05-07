@@ -10,10 +10,15 @@
 // (`:::carousel{...}` enclosing `::image{...}` children).
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { cacheKey } from '../lib/hash.ts';
-import type { OutputFormat } from '../lib/render.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
-import { extractImageIds, getKnownIds, resolveIds } from '../lib/widget-helpers.ts';
+import {
+  extractImageIds,
+  getKnownIds,
+  indent,
+  pictureAspect,
+  renderPicture,
+  resolveIds
+} from '../lib/widget-helpers.ts';
 import type {
   DirectiveNode,
   FallbackSpec,
@@ -34,13 +39,6 @@ export const variants: VariantSpec[] = [
 ];
 
 export const fallback: FallbackSpec = { w: 1200, format: 'jpeg', quality: 85 };
-
-const QUALITY_BY_FORMAT: Record<string, number> = {
-  webp: 85,
-  avif: 70,
-  jpeg: 85,
-  png: 0
-};
 
 function extractCaption(node: DirectiveNode): string | null {
   const c = node.attributes?.caption;
@@ -67,44 +65,14 @@ interface SlideRender {
 }
 
 function renderSlide(slide: SlideRender): string {
-  const { id, sidecar, index } = slide;
-  const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
-  const w = sidecar.metadata.width ?? 1;
-  const h = sidecar.metadata.height ?? 1;
-  const aspect = (w / h).toFixed(4);
-
-  const formats = uniq(variants.flatMap((v) => v.formats));
-  const sources = formats.map((format) => {
-    const entries = variants
-      .filter((v) => v.formats.includes(format))
-      .map((v) => {
-        const ophash = cacheKey({
-          originalId: id,
-          ops,
-          variant: { w: v.w },
-          /* c8 ignore next -- ?? 85 fallback unreachable */
-          output: { format, quality: QUALITY_BY_FORMAT[format] ?? 85 }
-        });
-        return `/img/${id}.${ophash}.${format} ${v.w}w`;
-      });
-    return `      <source type="image/${format}" srcset="${entries.join(', ')}"/>`;
-  });
-
-  const fbHash = cacheKey({
-    originalId: id,
-    ops,
-    variant: { w: fallback.w },
-    output: { format: fallback.format as OutputFormat, quality: fallback.quality }
-  });
-  const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
-
+  const picture = indent(
+    renderPicture({ id: slide.id, sidecar: slide.sidecar, variants, fallback }),
+    '    '
+  );
   return [
-    `  <figure class="rkr-carousel-slide" data-index="${index}" style="--aspect:${aspect};">`,
-    `    <picture>`,
-    ...sources,
-    `      <img src="${fbUrl}" alt="" loading="lazy"/>`,
-    `    </picture>`,
-    `  </figure>`
+    `  <figure class="rkr-carousel-slide" data-index="${slide.index}" style="--aspect:${pictureAspect(slide.sidecar)};">`,
+    picture,
+    '  </figure>'
   ].join('\n');
 }
 
@@ -166,10 +134,6 @@ ${dotsHtml}
 ${playPauseHtml}    <button type="button" class="rkr-carousel-next" aria-label="Next slide">&rarr;</button>
   </nav>${captionHtml}
 </figure>`;
-}
-
-function uniq<T>(arr: T[]): T[] {
-  return [...new Set(arr)];
 }
 
 const widget: Widget = { name, variants, fallback, render };

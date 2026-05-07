@@ -8,9 +8,8 @@
 // sets are a future enhancement.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { cacheKey } from '../lib/hash.ts';
-import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
+import { indent, renderPicture } from '../lib/widget-helpers.ts';
 import type {
   DirectiveNode,
   FallbackSpec,
@@ -28,13 +27,6 @@ export const variants: VariantSpec[] = [
 ];
 
 export const fallback: FallbackSpec = { w: 1200, format: 'jpeg', quality: 85 };
-
-const QUALITY_BY_FORMAT: Record<string, number> = {
-  webp: 85,
-  avif: 70,
-  jpeg: 85,
-  png: 0
-};
 
 /** Pull the id from a directive's attributes (handles both `id=…` and `#…`). */
 function extractId(node: DirectiveNode): string | null {
@@ -74,52 +66,15 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const alt = escapeAttr(extractAlt(node));
   const caption = extractCaption(node);
   const position = extractPosition(node);
-  const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
 
-  // One <source> per format, srcset listing each width.
-  const formats = uniq(variants.flatMap((v) => v.formats));
-  const sources = formats.map((format) => {
-    const entries = variants
-      .filter((v) => v.formats.includes(format))
-      .map((v) => {
-        const ophash = cacheKey({
-          originalId: id,
-          ops,
-          variant: { w: v.w },
-          /* c8 ignore next -- ?? 85 fallback unreachable: every format we emit is in QUALITY_BY_FORMAT */
-          output: { format, quality: QUALITY_BY_FORMAT[format] ?? 85 }
-        });
-        return `/img/${id}.${ophash}.${format} ${v.w}w`;
-      });
-    return `  <source type="image/${format}" srcset="${entries.join(', ')}"/>`;
-  });
-
-  // Fallback <img> uses the JPEG fallback variant.
-  const fbHash = cacheKey({
-    originalId: id,
-    ops,
-    variant: { w: fallback.w },
-    output: { format: fallback.format as OutputFormat, quality: fallback.quality }
-  });
-  const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
-
-  const pictureBlock = [
-    `<picture>`,
-    ...sources,
-    `  <img src="${fbUrl}" alt="${alt}" loading="lazy"/>`,
-    `</picture>`
-  ].join('\n');
+  const picture = indent(renderPicture({ id, sidecar, variants, fallback, alt }), '  ');
 
   // Position class; CSS in static/site.css implements each variant.
   // Always emit a <figure> so the position class has a single host element
   // (also gives consistent semantics whether or not a caption is set).
   const figureClass = `rkr-figure rkr-pos-${position}`;
   const captionBlock = caption ? `\n  <figcaption>${escapeText(caption)}</figcaption>` : '';
-  return `<figure class="${figureClass}">\n${pictureBlock}${captionBlock}\n</figure>`;
-}
-
-function uniq<T>(arr: T[]): T[] {
-  return [...new Set(arr)];
+  return `<figure class="${figureClass}">\n${picture}${captionBlock}\n</figure>`;
 }
 
 const widget: Widget = { name, variants, fallback, render };
