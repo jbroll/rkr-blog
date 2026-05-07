@@ -12,14 +12,15 @@
 // Future subcommands (see spec.md §12 operator commands): reindex, import, password.
 
 const COMMANDS = {
-  init:    () => import('../src/cli/init.ts'),
-  migrate: () => import('../src/cli/migrate.ts'),
-  render:  () => import('../src/cli/render.ts'),
-  gc:      () => import('../src/cli/gc.ts'),
-  verify:  () => import('../src/cli/verify.ts'),
-  reindex: () => import('../src/cli/reindex.ts'),
-  user:    () => import('../src/cli/user.ts'),
-  server:  () => import('../src/cli/server.ts')
+  init:        () => import('../src/cli/init.ts'),
+  migrate:     () => import('../src/cli/migrate.ts'),
+  render:      () => import('../src/cli/render.ts'),
+  gc:          () => import('../src/cli/gc.ts'),
+  verify:      () => import('../src/cli/verify.ts'),
+  reindex:     () => import('../src/cli/reindex.ts'),
+  user:        () => import('../src/cli/user.ts'),
+  server:      () => import('../src/cli/server.ts'),
+  'import-wp': () => import('../src/cli/import-wp.ts')
 };
 
 const KNOWN = Object.keys(COMMANDS);

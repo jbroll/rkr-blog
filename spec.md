@@ -337,7 +337,8 @@ render --since <date>   pre-render posts newer than date
 render --force          re-render even existing cache entries
 gc                      delete cache entries that no sidecar references
 verify                  rehash originals; flag mismatches
-import <url-or-path>    one-off import outside the editor
+import-wp list <base-url>          list posts on a WordPress source
+import-wp post <base-url> <id>     import one WP post + every image it references
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
 server [--port N]       run the application server

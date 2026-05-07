@@ -39,6 +39,8 @@
     "fastify": "^5.0.0",
     "ipaddr.js": "^2.4.0",
     "jose": "^6.2.3",
+    "rehype-parse": "^9.0.1",
+    "rehype-remark": "^10.0.1",
     "remark": "^15.0.0",
     "remark-directive": "^3.0.0",
     "remark-frontmatter": "^5.0.0",
