@@ -275,6 +275,24 @@ test('round-trip identity: diptych and triptych preserve ids + caption', () => {
   assert.equal(proseToMarkdown(markdownToProse(tri)).trim(), tri.trim());
 });
 
+test('proseToMarkdown: drops image directives whose id is not 6-64 hex', () => {
+  // Defends against a forged ProseMirror JSON body submitted via
+  // POST /admin/posts that smuggles directive syntax through the id
+  // attribute (e.g. `id="abc} ::shell{cmd=…`). The editor never
+  // authors non-hex ids, but emit-side validation matches the same
+  // shape check the multi-image emit and the public-side renderer use.
+  const cases: ProseDoc[] = [
+    { type: 'doc', content: [{ type: 'image', attrs: { id: 'too-short', alt: '' } }] },
+    { type: 'doc', content: [{ type: 'image', attrs: { id: 'NOT_HEX!@#', alt: '' } }] },
+    { type: 'doc', content: [{ type: 'image', attrs: { id: 'ABC123', alt: '' } }] }, // uppercase hex isn't accepted
+    { type: 'doc', content: [{ type: 'image', attrs: { id: '} ::shell{', alt: '' } }] }
+  ];
+  for (const doc of cases) {
+    const md = proseToMarkdown(doc);
+    assert.equal(md.includes('::image'), false, `should drop ${JSON.stringify(doc.content[0])}`);
+  }
+});
+
 test('proseToMarkdown: invalid image position values are silently dropped', () => {
   // The widget on the public side coerces unknown positions back to
   // 'default' (src/widgets/image.ts extractPosition). Without validation

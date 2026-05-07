@@ -11,6 +11,8 @@
 //   POST /admin/integrations/gdrive/disconnect    → drop the row
 //   POST /admin/import/gdrive                     → fetch + ingest a file by id
 
+import { Transform } from 'node:stream';
+
 import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from 'arctic';
 import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
@@ -213,9 +215,26 @@ export default async function integrationsGdriveRoutes(
         .send({ error: `content-type must be image/*; got ${drive.contentType}` });
     }
 
+    // Cap the streamed bytes the same way /admin/import/url does. Drive
+    // could legitimately stream a multi-GB file (or a compromised access
+    // token could redirect to one); without this, ingestStream would
+    // buffer the whole thing to a tmp file before sharp.metadata fails
+    // on the pixel-count guard. This trips first.
+    let bytes = 0;
+    const limiter = new Transform({
+      transform(chunk: Buffer, _enc, cb) {
+        bytes += chunk.length;
+        if (bytes > GDRIVE_MAX_BYTES) {
+          cb(new Error('streamed bytes exceeded limit'));
+          return;
+        }
+        cb(null, chunk);
+      }
+    });
+
     try {
       const result = await ingestStream({
-        stream: drive.body,
+        stream: drive.body.pipe(limiter),
         siteRoot,
         source: {
           kind: 'gdrive',
@@ -230,11 +249,17 @@ export default async function integrationsGdriveRoutes(
         ext: result.ext
       };
     } catch (err) {
+      const msg = (err as Error).message;
+      const code = /exceeded limit/.test(msg) ? 413 : 400;
       req.log.warn({ err, fileId }, 'gdrive ingest failed');
-      return reply.code(400).send({ error: (err as Error).message });
+      return reply.code(code).send({ error: msg });
     }
   });
 }
+
+/** Mirrors URL_FETCH_MAX_BYTES in src/routes/admin.ts; keeps the two
+ * remote-import paths bounded by the same per-request size cap. */
+const GDRIVE_MAX_BYTES = 50 * 1024 * 1024;
 
 /**
  * Read the user's gdrive token; if expired and a refresh token exists,

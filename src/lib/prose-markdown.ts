@@ -82,7 +82,14 @@ function emitBlock(node: ProseNode): string {
       return emitList(node, '1.');
     case 'image': {
       const id = String(node.attrs?.id ?? '').trim();
-      if (!id) return '';
+      // Validate hex shape on emit — the editor's upload flow only ever
+      // produces 64-hex ids, but a forged ProseMirror JSON body submitted
+      // via POST /admin/posts could otherwise inject directive syntax
+      // through the id (e.g. `id="abc} ::shell{cmd=rm` would round-trip
+      // verbatim into the markdown). The public-side widget rejects
+      // bad ids defensively too, but blocking at emit is cheaper and
+      // matches the validation already present for multi-image directives.
+      if (!id || !/^[0-9a-f]{6,64}$/.test(id)) return '';
       const parts: string[] = [];
       const alt = node.attrs?.alt;
       if (typeof alt === 'string' && alt.length > 0) parts.push(`alt=${quote(alt)}`);

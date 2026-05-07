@@ -45,12 +45,14 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   assert.match(res.body, /<link rel="stylesheet" href="\/static\/site\.css"\/>/);
 
   // Security headers: TipTap is bundled into the admin entry, so
-  // script-src can be 'self' only with no third-party CDN allowance and
-  // no 'unsafe-inline'. frame-ancestors blocks clickjacking.
+  // script-src does NOT include esm.sh or any 'unsafe-inline'. The
+  // single third-party allowance is apis.google.com, the Drive
+  // picker SDK loaded dynamically by the gdrive integration — same
+  // trust we already extend to Google for OAuth.
   const csp = res.headers['content-security-policy'] as string;
-  assert.match(csp, /script-src 'self'(?!\s*https)/);
   assert.equal(csp.includes('esm.sh'), false);
   assert.equal(csp.includes("script-src 'self' 'unsafe-inline'"), false);
+  assert.match(csp, /script-src 'self' https:\/\/apis\.google\.com/);
   assert.match(csp, /frame-ancestors 'none'/);
   assert.equal(res.headers['x-content-type-options'], 'nosniff');
 
@@ -381,4 +383,79 @@ test('POST /admin/sidecar/:id/ops 400s when body.ops is missing', async (t) => {
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /must be an array/);
+});
+
+test('POST /admin/sidecar/:id/ops unlinks stale derivatives so previously-shared URLs stop serving', async (t) => {
+  // If the owner crops to redact, anyone who saw a previously-shared
+  // /img/<id>.<oldHash>.<fmt> URL must not still get the unredacted
+  // image. Re-audit LOW finding: invalidate the cache on ops change.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  // Plant some stale derivative files keyed by id.
+  const cacheImg = path.join(root, 'cache', 'img');
+  fs.mkdirSync(cacheImg, { recursive: true });
+  const stale1 = path.join(cacheImg, `${ingest.id}.aaaaaaaaaaaa.jpeg`);
+  const stale2 = path.join(cacheImg, `${ingest.id}.bbbbbbbbbbbb.webp`);
+  const otherId = `${'c'.repeat(64)}.aaaaaaaaaaaa.jpeg`;
+  fs.writeFileSync(stale1, 'old-jpeg');
+  fs.writeFileSync(stale2, 'old-webp');
+  fs.writeFileSync(path.join(cacheImg, otherId), 'unrelated');
+
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }] }
+  });
+  assert.equal(res.statusCode, 200);
+
+  // Stale derivatives for THIS id are gone…
+  assert.equal(fs.existsSync(stale1), false);
+  assert.equal(fs.existsSync(stale2), false);
+  // …but a derivative for a DIFFERENT id is untouched.
+  assert.equal(fs.existsSync(path.join(cacheImg, otherId)), true);
+});
+
+test('POST /admin/sidecar/:id/ops refuses non-empty ops when source has no recorded dimensions', async (t) => {
+  // Direct-write a sidecar without metadata.width/height — simulating
+  // an unusual format or future version where dims aren't known. Any
+  // crop op would produce an unrenderable sidecar.
+  const root = freshSiteRoot(t);
+  const id = 'd'.repeat(64);
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${id}.json`),
+    JSON.stringify({
+      version: 1,
+      original: id,
+      source: { kind: 'upload', fetched: '2030-01-01T00:00:00Z' },
+      metadata: {},
+      ops: [],
+      outputs: [{ format: 'jpeg', quality: 85 }],
+      variants: [{ w: 1200 }]
+    })
+  );
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${id}/ops`,
+    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }] }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /no recorded dimensions/);
+
+  // But clearing ops with [] still works (no bounds to check against).
+  const cleared = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${id}/ops`,
+    payload: { ops: [] }
+  });
+  assert.equal(cleared.statusCode, 200);
 });

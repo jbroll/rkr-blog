@@ -184,6 +184,26 @@ export default async function adminRoutes(
       const validation = validateOps(req.body?.ops, sidecar.metadata);
       if (!validation.ok) return reply.code(400).send({ error: validation.error });
 
+      // Snapshot existing derivative filenames BEFORE writing the new
+      // sidecar. After the write, every derivative still on disk is
+      // bound to the OLD ops (different cacheKey from anything we'd
+      // generate now). Unlink them so a previously-shared
+      //   /img/<id>.<oldHash>.<fmt>
+      // URL stops serving the stale uncropped image. Snapshotting
+      // first avoids racing a render-in-flight that's about to rename
+      // its tmp into final position with the new ops.
+      const cacheImgDir = path.join(siteRoot, 'cache', 'img');
+      const stalePrefix = `${id}.`;
+      let staleNames: string[] = [];
+      try {
+        staleNames = (await fs.promises.readdir(cacheImgDir)).filter((n) =>
+          n.startsWith(stalePrefix)
+        );
+      } catch (err) {
+        /* c8 ignore next 3 -- ENOENT is fine; directory may not exist yet */
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+
       sidecar.ops = validation.ops;
       try {
         await sidecarWrite(siteRoot, id, sidecar);
@@ -191,6 +211,12 @@ export default async function adminRoutes(
         req.log.error({ err, id }, 'sidecar write failed');
         return reply.code(500).send({ error: 'sidecar write failed' });
       }
+
+      // Best-effort cleanup; failures don't block the response.
+      for (const name of staleNames) {
+        await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
+      }
+
       return { ops: sidecar.ops };
     }
   );
@@ -393,6 +419,14 @@ function validateOps(raw: unknown, metadata: { width?: number; height?: number }
 
   const W = metadata.width ?? 0;
   const H = metadata.height ?? 0;
+  // Without source dimensions we can't sanity-check crop bounds.
+  // Silently accepting would let an authored op produce an
+  // unrenderable sidecar (sharp.extract throws) — every /img request
+  // that hits this id then 500s. Refuse non-empty op lists in that
+  // case; an empty array (clear all ops) is still allowed.
+  if (raw.length > 0 && (W <= 0 || H <= 0)) {
+    return { ok: false, error: 'source has no recorded dimensions; cannot validate ops' };
+  }
 
   const out: { type: string; [k: string]: unknown }[] = [];
   for (const [i, opRaw] of raw.entries()) {
@@ -431,18 +465,25 @@ function validateOps(raw: unknown, metadata: { width?: number; height?: number }
 }
 
 /**
- * CSP for /admin/editor. TipTap is now bundled into the admin entry by
- * esbuild (no esm.sh / CDN at runtime), so script-src can be 'self' only
- * with no third-party allowance and no `'unsafe-inline'`. Inline styles
- * still need `'unsafe-inline'` for the template's <style> block (move
- * to a nonce when we drop template-literal HTML).
+ * CSP for /admin/editor. TipTap is bundled by esbuild so the editor
+ * itself has no third-party script dependency at runtime. The Google
+ * Drive picker integration is an exception: it dynamically injects
+ * https://apis.google.com/js/api.js (the Picker SDK), loads its UI
+ * inside an iframe served from https://docs.google.com, and pulls
+ * thumbnails from https://*.googleusercontent.com. Each Google host is
+ * narrowly listed below — same trust we already extend to Google for
+ * OAuth (verifying ID tokens via JWKS, exchanging codes).
+ *
+ * Inline styles still need `'unsafe-inline'` for the template's <style>
+ * block (move to a nonce when we drop template-literal HTML).
  */
 const ADMIN_EDITOR_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://apis.google.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "connect-src 'self'",
+  "img-src 'self' data: blob: https://*.googleusercontent.com",
+  "connect-src 'self' https://apis.google.com https://*.googleapis.com https://accounts.google.com",
+  'frame-src https://docs.google.com https://accounts.google.com',
   "font-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
