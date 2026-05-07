@@ -38,6 +38,29 @@ export class NotInvitedError extends Error {
   }
 }
 
+/**
+ * Thrown when a fresh OAuth login (no matching oauth_accounts row)
+ * presents an email that belongs to an existing user via a *different*
+ * provider. Without this guard, anyone who controls victim@gmail.com
+ * on a newly-supported provider could inherit the existing user's role
+ * by silent linking. Real cross-provider linking must be authenticated
+ * (initiated from an existing session) — there's no UI for that yet,
+ * so we reject here.
+ */
+export class EmailLinkedError extends Error {
+  constructor(email: string) {
+    super(`email already linked to another provider: ${email}`);
+    this.name = 'EmailLinkedError';
+  }
+}
+
+/** NFKC + lowercase. NFKC collapses visually-identical Unicode forms
+ * (e.g. `İ` vs `i̇`) so allowlist comparisons can't be bypassed
+ * via a different code-point sequence. */
+function normalizeEmail(email: string): string {
+  return email.normalize('NFKC').toLowerCase();
+}
+
 // ---- users -------------------------------------------------------------
 
 export function findUserByEmail(db: Db, email: string): User | undefined {
@@ -45,7 +68,7 @@ export function findUserByEmail(db: Db, email: string): User | undefined {
     .prepare<User>(
       'SELECT id, email, display_name, role, created_at, last_seen_at FROM users WHERE email = ?'
     )
-    .get(email.toLowerCase());
+    .get(normalizeEmail(email));
 }
 
 export function findUserById(db: Db, id: number): User | undefined {
@@ -97,7 +120,7 @@ export function inviteEmail(
   invitedBy: number | null = null,
   when: string = new Date().toISOString()
 ): void {
-  const e = email.toLowerCase();
+  const e = normalizeEmail(email);
   db.prepare(
     `INSERT INTO allowed_emails (email, role, invited_at, invited_by) VALUES (?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_at = excluded.invited_at,
@@ -106,7 +129,7 @@ export function inviteEmail(
 }
 
 export function removeInvite(db: Db, email: string): boolean {
-  const r = db.prepare('DELETE FROM allowed_emails WHERE email = ?').run(email.toLowerCase());
+  const r = db.prepare('DELETE FROM allowed_emails WHERE email = ?').run(normalizeEmail(email));
   return r.changes > 0;
 }
 
@@ -123,7 +146,7 @@ export function isAllowed(db: Db, email: string): AllowedEmail | undefined {
     .prepare<AllowedEmail>(
       'SELECT email, role, invited_at, invited_by FROM allowed_emails WHERE email = ?'
     )
-    .get(email.toLowerCase());
+    .get(normalizeEmail(email));
 }
 
 // ---- bootstrap path: first-user-becomes-owner --------------------------
@@ -150,33 +173,36 @@ export function findOrCreateOAuthUser(db: Db, identity: OAuthIdentity): User {
     return existing;
   }
 
-  const email = identity.email.toLowerCase();
-  // Same email previously used with a different OAuth provider — link.
+  const email = normalizeEmail(identity.email);
+
+  // If the email already belongs to a user from a different provider,
+  // refuse to silently link. Real cross-provider linking must be
+  // initiated from an authenticated session — there's no UI for that
+  // yet, so anyone presenting this email via a new provider is either
+  // the legitimate owner (who should log in via the original provider
+  // first and link from settings) or an attacker who happens to control
+  // the email at a different provider. Reject either way.
   const sameEmailUser = findUserByEmail(db, email);
+  if (sameEmailUser) throw new EmailLinkedError(email);
+
   const create = db.transaction((): User => {
     const now = new Date().toISOString();
-    let user: User;
-    if (sameEmailUser) {
-      user = sameEmailUser;
-    } else {
-      const allow = isAllowed(db, email);
-      const isBootstrap = userCount(db) === 0;
-      if (!allow && !isBootstrap) throw new NotInvitedError(email);
-      const role: Role = allow?.role ?? 'owner';
-      const r = db
-        .prepare(
-          'INSERT INTO users (email, display_name, role, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'
-        )
-        .run(email, identity.displayName ?? null, role, now, now);
-      const created = findUserById(db, r.lastInsertRowid);
-      /* c8 ignore next -- defensive: row we just inserted must exist */
-      if (!created) throw new Error('users insert returned no row');
-      user = created;
-    }
+    const allow = isAllowed(db, email);
+    const isBootstrap = userCount(db) === 0;
+    if (!allow && !isBootstrap) throw new NotInvitedError(email);
+    const role: Role = allow?.role ?? 'owner';
+    const r = db
+      .prepare(
+        'INSERT INTO users (email, display_name, role, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(email, identity.displayName ?? null, role, now, now);
+    const created = findUserById(db, r.lastInsertRowid);
+    /* c8 ignore next -- defensive: row we just inserted must exist */
+    if (!created) throw new Error('users insert returned no row');
     db.prepare(
       'INSERT INTO oauth_accounts (provider, provider_sub, user_id, created_at) VALUES (?, ?, ?, ?)'
-    ).run(identity.provider, identity.sub, user.id, now);
-    return user;
+    ).run(identity.provider, identity.sub, created.id, now);
+    return created;
   });
 
   return create();

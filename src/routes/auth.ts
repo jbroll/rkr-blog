@@ -11,7 +11,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Db } from '../lib/db.ts';
 import { type IdTokenVerifier, makeGoogleVerifier } from '../lib/google-jwt.ts';
 import { createSession, deleteSession } from '../lib/sessions.ts';
-import { findOrCreateOAuthUser, NotInvitedError, type User } from '../lib/users.ts';
+import {
+  EmailLinkedError,
+  findOrCreateOAuthUser,
+  NotInvitedError,
+  type User
+} from '../lib/users.ts';
 
 const SESSION_COOKIE = 'rkr_session';
 const OAUTH_STATE_COOKIE = 'rkr_oauth_state';
@@ -148,10 +153,10 @@ export default async function authRoutes(
           displayName: payload.name ?? null
         });
       } catch (err) {
-        if (err instanceof NotInvitedError) {
+        if (err instanceof NotInvitedError || err instanceof EmailLinkedError) {
           return reply.code(403).send({ error: err.message });
         }
-        /* c8 ignore next -- defensive: only NotInvitedError is thrown by name */
+        /* c8 ignore next -- defensive: only NotInvitedError/EmailLinkedError thrown by name */
         throw err;
       }
 

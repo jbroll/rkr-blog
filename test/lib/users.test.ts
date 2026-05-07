@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import {
+  EmailLinkedError,
   findOrCreateOAuthUser,
   findUserByEmail,
   findUserById,
@@ -124,22 +125,45 @@ test('findOrCreateOAuthUser returns existing user on second login (touches last_
   }
 });
 
-test('findOrCreateOAuthUser links a new provider to an existing same-email user', () => {
+test('findOrCreateOAuthUser refuses to silently link a new provider via shared email', () => {
+  // Security: with no authenticated linking flow, anyone who controls
+  // victim@gmail.com on a newly-supported provider could otherwise
+  // inherit the existing user's role. EmailLinkedError forces them to
+  // log in via the original provider first; cross-provider linking
+  // must be initiated from a session.
   const db = freshDb();
   try {
-    const owner = findOrCreateOAuthUser(db, {
-      provider: 'google',
-      sub: 'g-1',
-      email: 'a@x.com'
-    });
-    // Hypothetical second provider for the same person.
+    findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+    assert.throws(
+      () =>
+        findOrCreateOAuthUser(db, {
+          provider: 'apple',
+          sub: 'a-1',
+          email: 'a@x.com'
+        }),
+      EmailLinkedError
+    );
+    assert.equal(userCount(db), 1, 'no second user created');
+  } finally {
+    db.close();
+  }
+});
+
+test('findOrCreateOAuthUser email lookup is NFKC-normalized', () => {
+  // Two visually-identical Unicode forms: precomposed "Ä" (U+00C4) and
+  // decomposed "A" + combining diaeresis (U+0041 U+0308). Without NFKC,
+  // an attacker could invite the precomposed form and log in with the
+  // decomposed form (or vice versa) to bypass the allowlist.
+  const db = freshDb();
+  try {
+    findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'owner@x.com' });
+    inviteEmail(db, 'Änna@x.com', 'editor'); // precomposed
     const u = findOrCreateOAuthUser(db, {
-      provider: 'apple',
-      sub: 'a-1',
-      email: 'a@x.com'
+      provider: 'google',
+      sub: 'g-2',
+      email: 'Änna@x.com' // decomposed — NFKC collapses to the same form
     });
-    assert.equal(u.id, owner.id, 'links to existing user by email');
-    assert.equal(userCount(db), 1);
+    assert.equal(u.role, 'editor');
   } finally {
     db.close();
   }
