@@ -481,18 +481,20 @@ content-hashed.
 `tsconfig.browser.json` covers `src/admin/**`, `src/site/**`, and the
 two shared lib files the admin bundle pulls in (`prose-markdown.ts` +
 `safe-url.ts`). The admin bundle is built with esbuild (TipTap +
-ProseMirror + Cropper.js + remark + remark-directive all bundled into
-one file):
+ProseMirror + Cropper.js):
 
 - `static/admin/main.js` — admin SPA bundle (~420 KB minified)
 - `static/admin/main.css` — Cropper.js extracted CSS
 - `static/site/lightbox.js` — public-page lightbox
 - `static/site/carousel.js` — public-page carousel runtime
 
-The remark stack lives in the admin bundle because the editor converts
-ProseMirror → markdown locally before POSTing to `/admin/posts`. The
-server only receives markdown (validated via `parsePost`), so it never
-loads `prose-markdown.ts` at runtime.
+The editor converts ProseMirror → markdown locally before POSTing to
+`/admin/posts`. The server only receives markdown (validated via
+`parsePost`), so it never loads `prose-markdown.ts` at runtime. Note:
+only `proseToMarkdown` is reachable from `src/admin/main.ts`, so the
+remark/remark-directive/remark-frontmatter stack used by `markdownToProse`
+is tree-shaken away — adding the import added ~3 KB to the bundle, not
+the full ~70 KB the dependency tree would suggest.
 
 All served at `/static/*` by `@fastify/static` in dev (Apache in
 prod). The editor bundle has zero CDN runtime dependency; the only

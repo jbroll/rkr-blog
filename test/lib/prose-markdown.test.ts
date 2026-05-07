@@ -418,7 +418,9 @@ test('proseToMarkdown: blockquote, code block, lists, hard break, horizontal rul
   assert.match(md, /^> a quote line/m);
   assert.match(md, /```js\nconst x = 1;\n```/);
   assert.match(md, /- one\n- two/);
-  assert.match(md, /^---$/m);
+  // `* * *` rather than `---` so a leading horizontal rule can't be
+  // mistaken for a frontmatter delimiter when this markdown is POSTed.
+  assert.match(md, /^\* \* \*$/m);
   assert.match(md, /first {2}\nsecond/);
 });
 

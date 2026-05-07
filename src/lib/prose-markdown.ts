@@ -67,7 +67,10 @@ function emitBlock(node: ProseNode): string {
     }
     case 'horizontalRule':
     case 'horizontal_rule':
-      return '---';
+      // `* * *` instead of `---` so a leading horizontal rule can't be
+      // mistaken for a YAML frontmatter delimiter when the markdown is
+      // pushed to /admin/posts. Both forms parse to thematicBreak.
+      return '* * *';
     case 'codeBlock':
     case 'code_block': {
       const lang = typeof node.attrs?.language === 'string' ? node.attrs.language : '';

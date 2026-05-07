@@ -434,11 +434,15 @@ export default async function adminRoutes(
     if (typeof markdown !== 'string') {
       return reply.code(400).send({ error: 'markdown must be a string' });
     }
-    // The body must not start with a frontmatter delimiter — that would
-    // attach a second YAML block past the one we control, and parsePost
-    // would pick up whichever it sees first. The editor never produces
-    // this, but a forged request might.
-    if (/^\s*---\s*\n/.test(markdown)) {
+    // YAML-smuggling guard: reject a body that opens with a YAML
+    // frontmatter delimiter. Without this, a forged request could prepend
+    // its own ---\nslug: ...\n--- block and parsePost would pick up the
+    // *first* yaml node it sees, ignoring the one we're about to write.
+    // proseToMarkdown emits horizontal rules as `* * *` (not `---`) so
+    // the editor never produces this prefix; we still validate at the
+    // boundary because the endpoint is also driven by the WP importer
+    // and any future scripted client.
+    if (looksLikeFrontmatterDelimiter(markdown)) {
       return reply.code(400).send({ error: 'markdown body must not start with --- frontmatter' });
     }
     const finalStatus: 'draft' | 'published' = status === 'published' ? 'published' : 'draft';
@@ -456,8 +460,10 @@ export default async function adminRoutes(
     const trimmedMd = markdown.startsWith('\n') ? markdown.slice(1) : markdown;
     const file = `${fm}\n${trimmedMd}`;
 
-    // Validate the full file parses cleanly before writing — gives a 400
-    // with a useful message instead of corrupting the posts dir.
+    // parsePost only verifies our assembled YAML frontmatter is a mapping
+    // with title/slug strings — it doesn't reject body content (most
+    // markdown is permissive). It catches the case where one of our own
+    // yamlScalar() calls produced something unparseable.
     try {
       parsePost(file);
     } catch (err) {
@@ -872,4 +878,38 @@ function yamlScalar(s: string): string {
     return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
   }
   return s;
+}
+
+/**
+ * Does the body open with a yaml frontmatter delimiter?
+ *
+ * Accepts: a leading BOM / unicode whitespace, then `---`, then a CR/LF,
+ * then *something that resembles yaml content* — either another `---`
+ * (empty frontmatter) or a `key:` mapping line. Matching only `---\n`
+ * would false-positive on a leading `* * *` regression — we want to
+ * reject the smuggling shape, not bare horizontal-rule punctuation.
+ * CRLF and CR-only line endings are both handled.
+ */
+function looksLikeFrontmatterDelimiter(s: string): boolean {
+  // Strip leading BOM + whitespace (incl. NBSP) so a one-byte prefix can't
+  // sidestep the check.
+  const trimmed = s.replace(/^[﻿\s]+/, '');
+  if (!trimmed.startsWith('---')) return false;
+  // Must be EOL right after the opening ---. Bare punctuation (`---foo`,
+  // `--- text`) isn't a delimiter.
+  const afterDashes = trimmed.slice(3);
+  const eolMatch = /^[\t  ]*(\r\n|\r|\n)/.exec(afterDashes);
+  if (!eolMatch) return false;
+  // Look at the first non-empty line that follows. If it's another `---`
+  // (empty frontmatter) or a `key:` mapping, this is yaml. A blank or
+  // prose-shaped line means it was punctuation that happened to look
+  // like our delimiter.
+  const rest = afterDashes.slice(eolMatch[0].length);
+  for (const line of rest.split(/\r\n|\r|\n/)) {
+    if (line.trim() === '') continue;
+    if (line.trim() === '---') return true;
+    if (/^[A-Za-z_][A-Za-z0-9_-]*\s*:/.test(line)) return true;
+    return false;
+  }
+  return false;
 }

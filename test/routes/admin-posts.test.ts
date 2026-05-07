@@ -64,6 +64,26 @@ test('POST /admin/posts saves a new post and reindexes (visible at /:slug)', asy
   assert.match(page.body, /<title>Hello world — [^<]+<\/title>/);
 });
 
+test('POST /admin/posts accepts a body that opens with a horizontal rule', async (t) => {
+  // Regression: proseToMarkdown emits `* * *` (not `---`) for a leading
+  // horizontal rule precisely so the editor's own valid output isn't
+  // rejected by the frontmatter-smuggling guard. The guard still has
+  // to recognise that `* * *` is not a delimiter.
+  const { app } = await setup(t);
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'starts-with-rule',
+      title: 'Rule first',
+      status: 'draft',
+      markdown: '* * *\n\nafter the rule\n'
+    }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+});
+
 test('POST /admin/posts overwrites an existing post (inserted=false)', async (t) => {
   const { app } = await setup(t);
 
@@ -127,6 +147,21 @@ test('POST /admin/posts rejects bad slug / missing title / missing markdown', as
   });
   assert.equal(bad4.statusCode, 400);
   assert.match(bad4.json<{ error: string }>().error, /frontmatter/);
+
+  // CR-only line endings must also be caught — a sloppy `\s\n` regex
+  // would have let `---\rkey: x\r---` slip through.
+  const badCr = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'ok',
+      title: 'X',
+      status: 'draft',
+      markdown: '---\rtitle: hijack\r---\r\nbody\n'
+    }
+  });
+  assert.equal(badCr.statusCode, 400);
+  assert.match(badCr.json<{ error: string }>().error, /frontmatter/);
 
   // Slug length cap: 200-char slug is rejected even though every char is
   // a valid kebab-case character. Without this, a 50KB slug would be
