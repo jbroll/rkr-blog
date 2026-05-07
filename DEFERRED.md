@@ -111,18 +111,33 @@ registering an MS Entra app for OAuth. Dropbox was dropped from scope.
 **Trigger.** When the user registers an MS Entra app and provides
 `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET`.
 
-## Step 6 follow-up
+## Step 9d follow-ups (after the crop UI shipped)
 
-### Crop UI (Step 9d)
-**What.** Spec §6 / Step 9d (in our renumbered build order) calls for a
-client-side crop tool wired to the existing `crop` op in the render pipeline.
-The op exists; the UI does not.
+### Per-instance crops in multi-image directives
+**What.** Crops live on the sidecar, so cropping an image in one post
+affects every post that references it. There's no editor flow today for
+"different crop per directive instance" or "different crop per gallery
+slot."
 
-**Why deferred.** The user explicitly chose the 9a-9c slice for editor
-parity work; crop was acknowledged as an enhancement to come later.
+**Why deferred.** The current model matches the existing render-pipeline
+design (sidecar.ops is the source of truth for derivatives). Per-instance
+crops would require either separate sidecars per crop variant or
+embedding ops in the directive node itself — significant data model
+change.
 
-**Trigger.** Next editor work cycle, or when an author needs to crop
-post-upload (currently has to crop in another tool first).
+**Trigger.** First time an author wants the same source image cropped
+differently in two posts.
+
+### Other crop ops (rotate, flip, resample) lack UI
+**What.** The render pipeline supports `resample` and `rotate` ops; the
+editor only emits `crop`. validateOps in src/routes/admin.ts also only
+accepts `crop`.
+
+**Why deferred.** Crop is the 80% case; rotate/resample need their own
+UIs.
+
+**Trigger.** When an author wants to rotate or resize without leaving
+the editor.
 
 ## Step 8 follow-up
 

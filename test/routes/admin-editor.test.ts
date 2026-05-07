@@ -179,3 +179,206 @@ test('GET /admin/preview/:id 404s on an ambiguous short prefix', async (t) => {
   assert.equal(res.statusCode, 404);
   assert.match(res.json<{ error: string }>().error, /ambiguous/);
 });
+
+// ---- /admin/sidecar/:id/meta + /admin/sidecar/:id/ops -----------------
+// Backing endpoints for the crop UI: meta supplies original-pixel
+// dimensions so the cropper can scale display coords; ops replaces the
+// sidecar's ops array with a validated crop (or future resample/rotate).
+
+interface MetaResponse {
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  ops: Array<Record<string, unknown>>;
+}
+
+interface OpsResponse {
+  ops: Array<Record<string, unknown>>;
+}
+
+async function makeJpegSized(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 50, g: 100, b: 200 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
+test('GET /admin/sidecar/:id/meta returns original dimensions + ops', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
+  assert.equal(res.statusCode, 200);
+  const body = res.json<MetaResponse>();
+  assert.equal(body.width, 800);
+  assert.equal(body.height, 600);
+  assert.equal(body.format, 'jpeg');
+  assert.deepEqual(body.ops, []);
+});
+
+test('GET /admin/sidecar/:id/meta 404s on unknown id and 400s on malformed', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const fake = await app.inject({
+    method: 'GET',
+    url: `/admin/sidecar/${'a'.repeat(64)}/meta`
+  });
+  assert.equal(fake.statusCode, 404);
+
+  const bad = await app.inject({ method: 'GET', url: '/admin/sidecar/short/meta' });
+  assert.equal(bad.statusCode, 400);
+});
+
+test('POST /admin/sidecar/:id/ops persists a crop op', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'crop', x: 100, y: 50, w: 400, h: 300 }] }
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json<OpsResponse>();
+  assert.deepEqual(body.ops, [{ type: 'crop', x: 100, y: 50, w: 400, h: 300 }]);
+
+  // Confirm the sidecar on disk reflects the new ops.
+  const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
+  assert.deepEqual(meta.json<MetaResponse>().ops, [
+    { type: 'crop', x: 100, y: 50, w: 400, h: 300 }
+  ]);
+});
+
+test('POST /admin/sidecar/:id/ops rejects out-of-bounds crops', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Crop extends past the right edge.
+  const overflow = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'crop', x: 500, y: 0, w: 400, h: 100 }] }
+  });
+  assert.equal(overflow.statusCode, 400);
+  assert.match(overflow.json<{ error: string }>().error, /exceeds source/);
+
+  // Negative coordinate.
+  const neg = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'crop', x: -1, y: 0, w: 100, h: 100 }] }
+  });
+  assert.equal(neg.statusCode, 400);
+
+  // Zero width.
+  const zero = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 0, h: 100 }] }
+  });
+  assert.equal(zero.statusCode, 400);
+});
+
+test('POST /admin/sidecar/:id/ops rejects unknown op types', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'flip-horizontal' }] }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /must be 'crop'/);
+});
+
+test('POST /admin/sidecar/:id/ops rejects too-many ops', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const ops = Array.from({ length: 20 }, () => ({ type: 'crop', x: 0, y: 0, w: 100, h: 100 }));
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /at most/);
+});
+
+test('POST /admin/sidecar/:id/ops with empty ops clears the array', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Install a crop, then clear it.
+  await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }] }
+  });
+  const cleared = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [] }
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.deepEqual(cleared.json<OpsResponse>().ops, []);
+});
+
+test('POST /admin/sidecar/:id/ops 400s when body.ops is missing', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {}
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /must be an array/);
+});

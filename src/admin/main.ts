@@ -4,6 +4,10 @@
 
 import { Editor, mergeAttributes, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import Cropper from 'cropperjs';
+// Cropper.js ships its CSS as a side-effect import; esbuild bundles it
+// into static/admin/main.js (no separate CSS file at runtime).
+import 'cropperjs/dist/cropper.css';
 
 type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
 
@@ -275,6 +279,134 @@ function pickMany(): Promise<File[]> {
   });
 }
 
+// ---- Cropper helpers --------------------------------------------------
+// The crop UI mounts Cropper.js on the existing /admin/preview/<id>
+// (the JPEG fallback, ~150KB) rather than the original — small payload,
+// fewer pixels to render. On save we scale display coords (Cropper
+// returns them in the IMG element's natural-pixel space) back to
+// original-pixel space using the sidecar's recorded width/height.
+
+interface SidecarMeta {
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  ops: Array<{ type: string; [k: string]: unknown }>;
+}
+
+async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
+  const res = await fetch(`/admin/sidecar/${id}/meta`);
+  if (!res.ok) throw new Error(`meta: ${res.status}`);
+  return (await res.json()) as SidecarMeta;
+}
+
+async function hasSidecarOps(id: string): Promise<boolean> {
+  const meta = await fetchSidecarMeta(id);
+  return meta.ops.length > 0;
+}
+
+async function replaceSidecarOps(
+  id: string,
+  ops: Array<{ type: string; [k: string]: unknown }>
+): Promise<void> {
+  const res = await fetch(`/admin/sidecar/${id}/ops`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ops })
+  });
+  if (!res.ok) throw new Error(`save: ${res.status} ${await res.text()}`);
+}
+
+/** Force the editor's <img> to refetch /admin/preview/<id> after a crop
+ * change. The 302 target's URL changes (different ophash) so the browser
+ * cache won't return the stale derivative — but the <img>'s already-set
+ * src is unchanged, so without busting it the DOM keeps the old visual. */
+function bustImagePreview(editor: Editor, id: string): void {
+  const dom = editor.view.dom as HTMLElement;
+  for (const img of dom.querySelectorAll<HTMLImageElement>(`img.rkr-image[data-id="${id}"]`)) {
+    const base = `/admin/preview/${id}`;
+    img.src = `${base}?v=${Date.now()}`;
+  }
+}
+
+let activeCropper: Cropper | null = null;
+
+async function openCropper(id: string, onSaved: () => void): Promise<void> {
+  const dialog = $<HTMLDialogElement>('rkr-crop-modal');
+  const stageImg = $<HTMLImageElement>('rkr-crop-img');
+  const status = $<HTMLSpanElement>('rkr-crop-status');
+  const cancelBtn = $<HTMLButtonElement>('rkr-crop-cancel');
+  const saveBtn = $<HTMLButtonElement>('rkr-crop-save');
+
+  status.textContent = 'loading…';
+  let meta: SidecarMeta;
+  try {
+    meta = await fetchSidecarMeta(id);
+  } catch (err) {
+    setStatus(`crop: ${(err as Error).message}`);
+    return;
+  }
+  if (!meta.width || !meta.height) {
+    setStatus('crop: source image has no recorded dimensions');
+    return;
+  }
+
+  // Force a fresh load of the preview so the cropper sees post-crop
+  // changes if this image was just cropped.
+  stageImg.src = `/admin/preview/${id}?v=${Date.now()}`;
+  stageImg.onload = () => {
+    if (activeCropper) activeCropper.destroy();
+    // ratio of original-pixel space to displayed-pixel space; Cropper's
+    // getData() returns numbers in IMG natural-pixel coords (= preview
+    // dimensions), and we scale them by these ratios on save.
+    const xRatio = (meta.width ?? 1) / stageImg.naturalWidth;
+    const yRatio = (meta.height ?? 1) / stageImg.naturalHeight;
+    activeCropper = new Cropper(stageImg, {
+      viewMode: 1,
+      autoCropArea: 1,
+      background: false,
+      ready: () => {
+        status.textContent = `${meta.width}×${meta.height} original`;
+      }
+    });
+    saveBtn.onclick = async (): Promise<void> => {
+      if (!activeCropper) return;
+      const data = activeCropper.getData(true); // rounded to integers
+      const op = {
+        type: 'crop',
+        x: Math.max(0, Math.round(data.x * xRatio)),
+        y: Math.max(0, Math.round(data.y * yRatio)),
+        w: Math.round(data.width * xRatio),
+        h: Math.round(data.height * yRatio)
+      };
+      saveBtn.disabled = true;
+      status.textContent = 'saving…';
+      try {
+        await replaceSidecarOps(id, [op]);
+        status.textContent = 'saved';
+        closeCropper();
+        onSaved();
+        setStatus(`cropped ${id.slice(0, 8)}…`);
+      } catch (err) {
+        status.textContent = `save failed: ${(err as Error).message}`;
+        saveBtn.disabled = false;
+      }
+    };
+  };
+
+  cancelBtn.onclick = (): void => closeCropper();
+  dialog.addEventListener('close', () => closeCropper(), { once: true });
+  dialog.showModal();
+}
+
+function closeCropper(): void {
+  const dialog = $<HTMLDialogElement>('rkr-crop-modal');
+  if (activeCropper) {
+    activeCropper.destroy();
+    activeCropper = null;
+  }
+  if (dialog.open) dialog.close();
+}
+
 // ---- Google Drive picker helpers --------------------------------------
 
 const GAPI_SRC = 'https://apis.google.com/js/api.js';
@@ -416,6 +548,8 @@ function mount(): void {
   const attrAlt = $<HTMLInputElement>('rkr-image-alt');
   const attrCaption = $<HTMLInputElement>('rkr-image-caption');
   const attrPosition = $<HTMLSelectElement>('rkr-image-position');
+  const attrCropBtn = $<HTMLButtonElement>('rkr-image-crop-btn');
+  const attrUncropBtn = $<HTMLButtonElement>('rkr-image-uncrop-btn');
 
   const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
   const multiLabel = $<HTMLHeadingElement>('rkr-multi-attrs-label');
@@ -513,6 +647,21 @@ function mount(): void {
       attrPosition.value = a.position ?? 'default';
       populating = false;
       attrPanel.hidden = false;
+      // Async: ask the server whether this sidecar has any ops; toggle
+      // the "Remove crop" button accordingly. Best-effort — failures
+      // just leave the button hidden.
+      if (a.id) {
+        void hasSidecarOps(a.id).then(
+          (has) => {
+            attrUncropBtn.hidden = !has;
+          },
+          () => {
+            attrUncropBtn.hidden = true;
+          }
+        );
+      } else {
+        attrUncropBtn.hidden = true;
+      }
     } else {
       attrPanel.hidden = true;
     }
@@ -550,6 +699,25 @@ function mount(): void {
   attrAlt.addEventListener('input', () => commitAttr('alt', attrAlt.value));
   attrCaption.addEventListener('input', () => commitAttr('caption', attrCaption.value));
   attrPosition.addEventListener('change', () => commitAttr('position', attrPosition.value));
+
+  attrCropBtn.addEventListener('click', () => {
+    if (!editor.isActive('image')) return;
+    const a = editor.getAttributes('image') as Partial<ImageAttrs>;
+    if (a.id) void openCropper(a.id, () => bustImagePreview(editor, a.id ?? ''));
+  });
+  attrUncropBtn.addEventListener('click', () => {
+    if (!editor.isActive('image')) return;
+    const a = editor.getAttributes('image') as Partial<ImageAttrs>;
+    if (!a.id) return;
+    void replaceSidecarOps(a.id, []).then(
+      () => {
+        bustImagePreview(editor, a.id ?? '');
+        attrUncropBtn.hidden = true;
+        setStatus('crop removed');
+      },
+      (err: unknown) => setStatus(`uncrop failed: ${(err as Error).message}`)
+    );
+  });
 
   function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay', value: string): void {
     if (populating) return;

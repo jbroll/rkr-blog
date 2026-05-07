@@ -24,7 +24,7 @@ import { ingestStream } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import type { OutputFormat } from '../lib/render.ts';
-import { read as sidecarRead } from '../lib/sidecar.ts';
+import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 import imageWidget from '../widgets/image.ts';
@@ -140,6 +140,58 @@ export default async function adminRoutes(
         output: { format: fb.format as OutputFormat, quality: fb.quality }
       });
       return reply.redirect(`/img/${fullId}.${ophash}.${fb.format}`, 302);
+    }
+  );
+
+  // Sidecar inspection: returns just the metadata + ops the editor needs
+  // for the crop UI. Original-pixel width/height let the cropper scale
+  // display coords (from the smaller preview img) back to original coords.
+  fastify.get<{ Params: { id: string } }>(
+    '/admin/sidecar/:id/meta',
+    { ...guard },
+    async (req, reply) => {
+      const { id } = req.params;
+      if (!/^[0-9a-f]{64}$/.test(id)) {
+        return reply.code(400).send({ error: 'invalid id' });
+      }
+      const sidecar = await sidecarRead(siteRoot, id);
+      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+      return {
+        width: sidecar.metadata.width ?? null,
+        height: sidecar.metadata.height ?? null,
+        format: sidecar.metadata.format ?? null,
+        ops: sidecar.ops
+      };
+    }
+  );
+
+  // Replace a sidecar's ops array. Used by the crop UI; future image-
+  // edit ops (resample, rotate) extend the same endpoint.
+  // Crops live on the SIDECAR, not per-instance: changing a sidecar's
+  // ops affects every post that references this image. That's the
+  // existing render-pipeline design (sidecar.ops is the source of truth).
+  fastify.post<{ Params: { id: string }; Body: { ops?: unknown } }>(
+    '/admin/sidecar/:id/ops',
+    { ...guard },
+    async (req, reply) => {
+      const { id } = req.params;
+      if (!/^[0-9a-f]{64}$/.test(id)) {
+        return reply.code(400).send({ error: 'invalid id' });
+      }
+      const sidecar = await sidecarRead(siteRoot, id);
+      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+      const validation = validateOps(req.body?.ops, sidecar.metadata);
+      if (!validation.ok) return reply.code(400).send({ error: validation.error });
+
+      sidecar.ops = validation.ops;
+      try {
+        await sidecarWrite(siteRoot, id, sidecar);
+      } catch (err) {
+        req.log.error({ err, id }, 'sidecar write failed');
+        return reply.code(500).send({ error: 'sidecar write failed' });
+      }
+      return { ops: sidecar.ops };
     }
   );
 
@@ -317,6 +369,66 @@ const MAX_SLUG_LENGTH = 100;
  * prefix within a few seconds; long enough that a post with many
  * images doesn't scan the directory once per request. */
 const SIDECAR_LIST_TTL_MS = 5_000;
+
+/** Maximum ops in a sidecar. Caps the chain depth a single editor save
+ * can install — defends against a malicious / runaway client building
+ * a million-step pipeline that the renderer would have to execute. */
+const MAX_OPS = 8;
+
+interface ValidatedOps {
+  ok: true;
+  ops: { type: string; [k: string]: unknown }[];
+}
+type OpsValidation = ValidatedOps | { ok: false; error: string };
+
+/**
+ * Validate the body's `ops` array and clamp it against the source's
+ * actual pixel bounds. Currently supports only the `crop` op shape
+ * (the only op the editor's crop UI emits today); resample/rotate land
+ * here when their UIs ship.
+ */
+function validateOps(raw: unknown, metadata: { width?: number; height?: number }): OpsValidation {
+  if (!Array.isArray(raw)) return { ok: false, error: 'ops must be an array' };
+  if (raw.length > MAX_OPS) return { ok: false, error: `at most ${MAX_OPS} ops` };
+
+  const W = metadata.width ?? 0;
+  const H = metadata.height ?? 0;
+
+  const out: { type: string; [k: string]: unknown }[] = [];
+  for (const [i, opRaw] of raw.entries()) {
+    if (!opRaw || typeof opRaw !== 'object') {
+      return { ok: false, error: `ops[${i}] must be an object` };
+    }
+    const op = opRaw as Record<string, unknown>;
+    if (op.type !== 'crop') {
+      return { ok: false, error: `ops[${i}].type must be 'crop' (got ${String(op.type)})` };
+    }
+    const x = Number(op.x);
+    const y = Number(op.y);
+    const w = Number(op.w);
+    const h = Number(op.h);
+    if (![x, y, w, h].every(Number.isFinite)) {
+      return { ok: false, error: `ops[${i}] crop must have numeric x/y/w/h` };
+    }
+    if (x < 0 || y < 0 || w <= 0 || h <= 0) {
+      return { ok: false, error: `ops[${i}] crop must have x/y >= 0 and w/h > 0` };
+    }
+    if (W > 0 && H > 0 && (x + w > W || y + h > H)) {
+      return {
+        ok: false,
+        error: `ops[${i}] crop ${x},${y} ${w}x${h} exceeds source ${W}x${H}`
+      };
+    }
+    out.push({
+      type: 'crop',
+      x: Math.floor(x),
+      y: Math.floor(y),
+      w: Math.floor(w),
+      h: Math.floor(h)
+    });
+  }
+  return { ok: true, ops: out };
+}
 
 /**
  * CSP for /admin/editor. TipTap is now bundled into the admin entry by

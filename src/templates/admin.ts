@@ -22,6 +22,8 @@ export function renderAdminPage(data: AdminPageData): string {
      Loaded BEFORE the admin overrides so the inline styles below win for
      admin chrome (toolbar, panels, body layout). -->
 <link rel="stylesheet" href="/static/site.css"/>
+<!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
+<link rel="stylesheet" href="/static/admin/main.css"/>
 <style>
   /* Override site.css's body reset so the admin chrome keeps its own
      layout. The editor's prose preview lives inside <article> below,
@@ -98,6 +100,30 @@ export function renderAdminPage(data: AdminPageData): string {
     height: auto;
     margin: .5rem 0;
   }
+  /* Image-attribute action row + crop modal. */
+  .rkr-image-actions { display: flex; gap: .5rem; }
+  .rkr-image-actions button { padding: .25rem .75rem; cursor: pointer; }
+  #rkr-crop-modal {
+    border: 1px solid #ccc; border-radius: 6px; padding: 0;
+    width: min(80vw, 60rem); max-width: 95vw; max-height: 90vh;
+    background: #fff; color: #1a1a1a; box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  }
+  #rkr-crop-modal::backdrop { background: rgba(0,0,0,.6); }
+  #rkr-crop-modal .rkr-crop-stage {
+    /* Cropper needs a contained stage that bounds the image so the
+       handles render inside the modal rather than at full image size. */
+    height: 60vh; max-height: 32rem; background: #222;
+  }
+  #rkr-crop-modal .rkr-crop-stage img {
+    /* Cropper.js requires display:block + width:100% to attach handles. */
+    display: block; max-width: 100%;
+  }
+  #rkr-crop-modal .rkr-crop-actions {
+    display: flex; gap: .5rem; align-items: center; padding: .75rem;
+    border-top: 1px solid #eee; justify-content: flex-end;
+  }
+  #rkr-crop-modal #rkr-crop-status { flex: 1; color: #666; font-size: .9rem; }
+  #rkr-crop-modal button { padding: .35rem .85rem; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -126,7 +152,22 @@ export function renderAdminPage(data: AdminPageData): string {
     <option value="right">right (float, prose wraps left)</option>
     <option value="inline">inline (small, in text flow)</option>
   </select>
+  <span></span>
+  <span class="rkr-image-actions">
+    <button type="button" id="rkr-image-crop-btn">Crop…</button>
+    <button type="button" id="rkr-image-uncrop-btn" hidden>Remove crop</button>
+  </span>
 </div>
+<dialog id="rkr-crop-modal" aria-label="Crop image">
+  <div class="rkr-crop-stage">
+    <img id="rkr-crop-img" alt=""/>
+  </div>
+  <div class="rkr-crop-actions">
+    <span id="rkr-crop-status"></span>
+    <button type="button" id="rkr-crop-cancel">Cancel</button>
+    <button type="button" id="rkr-crop-save">Save crop</button>
+  </div>
+</dialog>
 <div id="rkr-multi-attrs" hidden>
   <h3 id="rkr-multi-attrs-label">Multi-image attributes</h3>
   <label for="rkr-multi-ids">IDs</label>
