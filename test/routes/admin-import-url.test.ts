@@ -48,7 +48,23 @@ async function startFixtureServer(t: TestContext, handler: http.RequestListener)
 
 async function setup(t: TestContext) {
   const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
+  // Tests bind fixture servers to 127.0.0.1:randomPort, which the
+  // production SSRF guard correctly rejects. Inject a plain-fetch
+  // passthrough so the URL-import route still exercises its plumbing
+  // (content-type/size/stream checks) without the SSRF check firing.
+  // SSRF defenses are validated in test/lib/url-safety.test.ts.
+  const app = await buildApp({
+    siteRoot: root,
+    urlFetcher: async (url, opts) => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 30_000);
+      try {
+        return await fetch(url, { signal: ac.signal, redirect: 'follow' });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  });
   t.after(() => app.close());
   return { root, app };
 }
@@ -95,6 +111,21 @@ test('POST /admin/import/url 400s on a non-http URL', async (t) => {
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorResponse>().error, /http\(s\) URL/);
+});
+
+test('POST /admin/import/url 400s on private/loopback URL via the default SSRF guard', async (t) => {
+  // No urlFetcher override → production safeFetch runs and rejects loopback.
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/url',
+    payload: { url: 'http://169.254.169.254/latest/meta-data/' }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<ErrorResponse>().error, /unsafe url/);
 });
 
 test('POST /admin/import/url 400s on missing url field', async (t) => {

@@ -9,7 +9,7 @@ import { paths, serverConfig } from './lib/config.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
-import adminRoutes from './routes/admin.ts';
+import adminRoutes, { type UrlFetcher } from './routes/admin.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
 import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
 import publicRoutes from './routes/public.ts';
@@ -27,6 +27,9 @@ export interface BuildAppOpts {
   startWorker?: boolean;
   /** Override the admin bundle dir (default: <repo>/static/admin). */
   adminBundleDir?: string;
+  /** Override the URL-import fetcher (tests use plain `fetch` to skip the
+   * SSRF guard against fixture servers on 127.0.0.1). */
+  urlFetcher?: UrlFetcher;
   /**
    * When set, /admin/auth routes register and admin routes are gated.
    * Test suites that don't want auth gating can omit this — auth wiring is
@@ -109,6 +112,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
   await app.register(adminRoutes, {
     siteRoot,
     ...(opts.adminBundleDir !== undefined ? { adminBundleDir: opts.adminBundleDir } : {}),
+    ...(opts.urlFetcher ? { urlFetcher: opts.urlFetcher } : {}),
     requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
   });
 

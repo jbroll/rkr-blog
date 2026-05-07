@@ -20,7 +20,12 @@ import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
+import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
+
+/** Production default fetcher used by /admin/import/url. Injectable from
+ * tests so a fixture server on 127.0.0.1 doesn't trip the SSRF guard. */
+export type UrlFetcher = (url: string, opts: SafeFetchOptions) => Promise<Response>;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +46,8 @@ export interface AdminRoutesOpts {
   adminBundleDir?: string;
   /** When true, every /admin route gets the requireUser preHandler. */
   requireAuth?: boolean;
+  /** Override the URL-import fetcher (default: SSRF-safe via lib/url-safety). */
+  urlFetcher?: UrlFetcher;
 }
 
 export default async function adminRoutes(
@@ -54,6 +61,7 @@ export default async function adminRoutes(
   const staticDir =
     opts.staticDir ?? (opts.adminBundleDir ? path.dirname(opts.adminBundleDir) : REPO_STATIC_DIR);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
+  const urlFetcher: UrlFetcher = opts.urlFetcher ?? safeFetch;
 
   // One static handler at /static/. Public CSS lives at /static/site.css;
   // the admin bundle at /static/admin/main.js. Apache vhost (spec §14)
@@ -156,14 +164,17 @@ export default async function adminRoutes(
         return reply.code(400).send({ error: 'url must be an http(s) URL' });
       }
 
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), URL_FETCH_TIMEOUT_MS);
-
+      // safeFetch: SSRF defense — rejects private/loopback/link-local IPs,
+      // non-default ports, and re-validates each redirect hop. Replaces
+      // the previous fetch(url, { redirect: 'follow' }) which could be
+      // pointed at AWS metadata, internal admin panels, or 127.0.0.1.
       let res: Response;
       try {
-        res = await fetch(url, { signal: ac.signal, redirect: 'follow' });
+        res = await urlFetcher(url, { timeoutMs: URL_FETCH_TIMEOUT_MS });
       } catch (err) {
-        clearTimeout(timer);
+        if (err instanceof UnsafeUrlError) {
+          return reply.code(400).send({ error: `unsafe url: ${err.message}` });
+        }
         const msg =
           (err as { name?: string; message?: string }).name === 'AbortError'
             ? 'fetch timed out'
@@ -172,13 +183,11 @@ export default async function adminRoutes(
       }
 
       if (!res.ok) {
-        clearTimeout(timer);
         return reply.code(400).send({ error: `fetch returned ${res.status}` });
       }
 
       const ct = (res.headers.get('content-type') ?? '').toLowerCase();
       if (!/^image\//.test(ct)) {
-        clearTimeout(timer);
         return reply
           .code(415)
           .send({ error: `content-type must be image/*; got ${ct || '(none)'}` });
@@ -186,12 +195,10 @@ export default async function adminRoutes(
 
       const contentLength = Number(res.headers.get('content-length') ?? 0);
       if (contentLength && contentLength > URL_FETCH_MAX_BYTES) {
-        clearTimeout(timer);
         return reply.code(413).send({ error: `content-length ${contentLength} exceeds limit` });
       }
 
       if (!res.body) {
-        clearTimeout(timer);
         return reply.code(400).send({ error: 'empty response body' });
       }
 
@@ -226,8 +233,6 @@ export default async function adminRoutes(
         const code = /exceeded limit/.test(msg) ? 413 : 400;
         request.log.error({ err, url }, 'url-import failed');
         return reply.code(code).send({ error: msg });
-      } finally {
-        clearTimeout(timer);
       }
     }
   );
