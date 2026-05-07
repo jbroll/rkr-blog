@@ -12,7 +12,13 @@
 // original's full resolution when the source decodes; the browser
 // scales the resulting <img> to fit the editor frame.
 
-import { clampInt, computeResampleSize, normalizeRotation } from './canvas-math';
+import {
+  clampInt,
+  computeResampleSize,
+  normalizeRotation,
+  opsEqual,
+  reorderForExecution
+} from './canvas-math';
 
 /** A sidecar op as it arrives from /admin/sidecar/:id/meta — the
  * server validates shape, so we accept the loose type here and narrow
@@ -30,16 +36,70 @@ export interface CanvasSource {
   height: number;
 }
 
-/** Apply a list of ops, in order, returning the final canvas. The input
- * is left untouched. Throws on op shapes the renderer can't handle —
- * the server already validated shape at POST time, so this is a
- * defensive fallback rather than the primary line of defense. */
+/** Apply a list of ops, returning the final canvas. The input is left
+ * untouched. Ops are executed in their click order BUT with one
+ * rewrite: any resample is hoisted to the start and crop coords on
+ * ops that originally preceded it are scaled by the resample ratio.
+ * This keeps every subsequent op operating on a small canvas. Storage
+ * (sidecar.ops) stays in click order; only execution reorders. */
 export function applyOps(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
+  const exec = reorderForExecution(ops, source.width, source.height);
   let canvas = drawSource(source);
-  for (const op of ops) {
+  for (const op of exec) {
     canvas = applyOne(canvas, op);
   }
   return canvas;
+}
+
+/** Per-image incremental pipeline cache. Holds the last execution-order
+ * op list and its result canvas. On a subsequent apply with the same
+ * ops + one new op appended, applies just the new op to the cached
+ * canvas — fulfilling the "only execute the last step on each change"
+ * directive for the common case of clicking a new op button. Any
+ * other change (delete, undo/redo, resample insertion that triggers a
+ * reorder) misses cache and re-executes from source. */
+export class PipelineCache {
+  private lastResult: HTMLCanvasElement | null = null;
+  private lastExec: SidecarOp[] = [];
+
+  apply(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
+    const exec = reorderForExecution(ops, source.width, source.height);
+
+    // Cache hit: new exec is previous exec + exactly one appended op.
+    if (
+      this.lastResult !== null &&
+      exec.length === this.lastExec.length + 1 &&
+      this.lastExec.every((op, i) => {
+        const next = exec[i];
+        return next !== undefined && opsEqual(op, next);
+      })
+    ) {
+      const newOp = exec[exec.length - 1];
+      if (newOp) {
+        const next = applyOne(this.lastResult, newOp);
+        this.lastResult = next;
+        this.lastExec = [...exec];
+        return next;
+      }
+    }
+
+    // Cache miss (insertion in the middle, deletion, undo/redo,
+    // reorder-triggering resample, first call, source change): re-run.
+    let canvas = drawSource(source);
+    for (const op of exec) {
+      canvas = applyOne(canvas, op);
+    }
+    this.lastResult = canvas;
+    this.lastExec = [...exec];
+    return canvas;
+  }
+
+  /** Drop the cache. Call when the source image (the master) has been
+   * replaced — e.g. the user navigates between different images. */
+  invalidate(): void {
+    this.lastResult = null;
+    this.lastExec = [];
+  }
 }
 
 function drawSource(source: CanvasSource): HTMLCanvasElement {

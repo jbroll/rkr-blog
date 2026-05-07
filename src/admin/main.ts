@@ -9,7 +9,7 @@ import Cropper from 'cropperjs';
 // into static/admin/main.js (no separate CSS file at runtime).
 import 'cropperjs/dist/cropper.css';
 
-import { applyOps, type SidecarOp } from './canvas';
+import { PipelineCache, type SidecarOp } from './canvas';
 
 type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
 
@@ -394,6 +394,20 @@ function describeOp(op: SidecarOp): string {
 
 const originalCache = new Map<string, Promise<HTMLImageElement>>();
 const previewBlobUrls = new Map<string, string>();
+// One pipeline cache per image id. On the common "added one op" case
+// it lets us apply just the new op to the previously-cached canvas
+// instead of re-executing the whole chain from the master. See
+// canvas.ts → PipelineCache.
+const pipelineCaches = new Map<string, PipelineCache>();
+
+function getPipelineCache(id: string): PipelineCache {
+  let c = pipelineCaches.get(id);
+  if (!c) {
+    c = new PipelineCache();
+    pipelineCaches.set(id, c);
+  }
+  return c;
+}
 
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -450,11 +464,22 @@ function setEditorImageSrc(editor: Editor, id: string, src: string): void {
 /** Re-render the editor preview for one image. Tries client-side bake
  * first (canvas pipeline against the master); on any failure (decode
  * unsupported format, fetch error) falls back to the server-baked
- * /admin/preview/<id> with a cache-buster. */
-async function refreshImagePreview(editor: Editor, id: string, ops: SidecarOp[]): Promise<void> {
+ * /admin/preview/<id> with a cache-buster.
+ *
+ * Returns the produced WebP blob so callers can upload it to the
+ * server's bake endpoint (sharp out of the request hot path) — null
+ * when the client-side path failed and we fell through to the server. */
+async function refreshImagePreview(
+  editor: Editor,
+  id: string,
+  ops: SidecarOp[]
+): Promise<Blob | null> {
   try {
     const original = await loadOriginal(id);
-    const canvas = applyOps(
+    // Per-image pipeline cache: when the new ops list is the previous
+    // list plus one appended op, only that op runs (cache.apply); any
+    // other change re-executes from source.
+    const canvas = getPipelineCache(id).apply(
       {
         drawable: original,
         width: original.naturalWidth,
@@ -463,22 +488,33 @@ async function refreshImagePreview(editor: Editor, id: string, ops: SidecarOp[])
       ops
     );
     // WebP, not PNG: a 24MP camera image is ~30 MB as PNG vs ~2-3 MB as
-    // WebP at q=0.95 with no perceptible quality loss. Quality matters
-    // here only for the in-editor preview; the save-time bake uses the
-    // same format with the same quality (Phase 3).
+    // WebP at q=0.95 with no perceptible quality loss. The same blob
+    // is uploaded to the server as the bake (Phase 3) so derivative
+    // renders can skip applyOp.
     const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
     const url = URL.createObjectURL(blob);
     const old = previewBlobUrls.get(id);
     if (old) URL.revokeObjectURL(old);
     previewBlobUrls.set(id, url);
     setEditorImageSrc(editor, id, url);
+    return blob;
   } catch {
     // Fallback: ask the server. The cache-buster query forces a 302
     // re-resolve so a stale derivative URL isn't reused. The new ops
     // are already on the sidecar, so the server's /admin/preview will
     // resolve to a fresh derivative.
     setEditorImageSrc(editor, id, `/admin/preview/${id}?v=${Date.now()}`);
+    return null;
   }
+}
+
+async function uploadBake(id: string, blob: Blob): Promise<void> {
+  const res = await fetch(`/admin/sidecar/${id}/bake`, {
+    method: 'POST',
+    headers: { 'content-type': 'image/webp' },
+    body: blob
+  });
+  if (!res.ok) throw new Error(`bake: ${res.status} ${await res.text()}`);
 }
 
 let activeCropper: Cropper | null = null;
@@ -1009,15 +1045,28 @@ function mount(): void {
   }
 
   /** Re-fetch sidecar meta, re-render the edits list / reset state,
-   * and repaint the editor's <img> via the client-side canvas pipeline.
-   * One round-trip + one canvas bake per call.
+   * repaint the editor's <img> via the client-side canvas pipeline,
+   * and upload the resulting WebP bake to the server so future
+   * /img/ requests can skip applyOp in sharp.
    * Best-effort: on failure we leave whatever was on screen. */
   async function refreshAfterEdit(id: string): Promise<void> {
     try {
       const meta = await fetchSidecarMeta(id);
       attrResetBtn.hidden = meta.ops.length === 0;
       renderEditsPanel(id, meta);
-      await refreshImagePreview(editor, id, meta.ops);
+      const blob = await refreshImagePreview(editor, id, meta.ops);
+      // Upload the bake. Failures are non-blocking — derivative
+      // requests fall back to the original + applyOp path.
+      if (blob) {
+        try {
+          await uploadBake(id, blob);
+        } catch (err) {
+          // Non-fatal; the editor preview is correct, the server just
+          // misses the optimization. Log to status so the author knows
+          // the round-trip-skip didn't take.
+          setStatus(`bake upload: ${(err as Error).message}`);
+        }
+      }
     } catch {
       /* best-effort */
     }
