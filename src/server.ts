@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import Fastify from 'fastify';
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { paths, serverConfig } from './lib/config.ts';
+import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
@@ -43,6 +44,11 @@ export interface BuildAppOpts {
     secureCookies?: boolean;
     /** When true, skip the requireUser preHandler so admin routes stay open (legacy tests). */
     skipGate?: boolean;
+    /** CSRF allow-list. When set, every state-changing request must have a
+     * matching Origin/Referer. Production startServer derives this from
+     * PUBLIC_BASE_URL; tests pass ['http://localhost'] (or whatever they
+     * use as a synthetic origin). When undefined, CSRF check is skipped. */
+    allowedOrigins?: string[];
   };
   /**
    * When set (and auth is wired), Google Drive picker integration routes
@@ -81,6 +87,9 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
   // session-cookie middleware before admin routes so request.user is
   // populated, then register the auth flow routes.
   if (opts.db && opts.auth) {
+    if (opts.auth.allowedOrigins && opts.auth.allowedOrigins.length > 0) {
+      registerCsrfGuard(app, { allowedOrigins: opts.auth.allowedOrigins });
+    }
     await registerAuthMiddleware(app, opts.db);
     await app.register(authRoutes, {
       db: opts.db,
@@ -142,11 +151,18 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
   const p = paths();
   const db = open(p.db);
 
+  const publicBaseUrl = process.env.PUBLIC_BASE_URL;
+  if (!publicBaseUrl) {
+    throw new Error('PUBLIC_BASE_URL must be set (used for OAuth callback + CSRF allowlist)');
+  }
   const app = await buildApp({
     logger: { level: cfg.logLevel },
     siteRoot: opts.siteRoot,
     db,
-    auth: { secureCookies: true }
+    auth: {
+      secureCookies: true,
+      allowedOrigins: [new URL(publicBaseUrl).origin]
+    }
   });
   app.addHook('onClose', () => {
     db.close();

@@ -287,6 +287,40 @@ test('POST /admin/logout clears the session cookie', async (t) => {
   assert.ok(setCookie.some((c) => c.startsWith('rkr_session=') && /Max-Age=0|Expires=/.test(c)));
 });
 
+// ---- CSRF (Origin/Referer guard, when allowedOrigins is configured) -----
+
+test('POST /admin/logout 403s on a cross-origin request when CSRF is wired', async (t) => {
+  // Build an app with allowedOrigins set — this is what production
+  // startServer does when PUBLIC_BASE_URL is configured.
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: {
+      exchange: stubExchange({ idTokenPayload: {} }),
+      verifier: stubVerifier({ idTokenPayload: {} }),
+      secureCookies: false,
+      allowedOrigins: ['http://localhost']
+    }
+  });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/logout',
+    headers: {
+      cookie: 'rkr_session=anything',
+      origin: 'https://attacker.example'
+    }
+  });
+  assert.equal(res.statusCode, 403);
+  assert.match(res.json<ErrorBody>().error, /cross-origin/);
+});
+
 // ---- /admin/* gating ---------------------------------------------------
 
 test('GET /admin/editor 401s without a session cookie', async (t) => {
