@@ -10,9 +10,13 @@ import { test } from 'node:test';
 
 import {
   clampInt,
+  computeHomography,
   computeResampleSize,
+  invertMatrix3,
   normalizeRotation,
   opsEqual,
+  type Point,
+  perspectiveOutputSize,
   simplifyOps
 } from '../../src/admin/canvas-math.ts';
 
@@ -209,6 +213,154 @@ test('simplifyOps: leaves crop and resample untouched', () => {
 
 test('simplifyOps: empty input → empty output', () => {
   assert.deepEqual(simplifyOps([]), []);
+});
+
+// ---- perspective rectify math -----------------------------------------
+// computeHomography solves an 8×8 linear system; round-trip the input
+// quadrilateral through H to verify it lands on the dest corners.
+
+function applyH(h: readonly number[], p: Point): [number, number] {
+  const [x, y] = p;
+  const wx = (h[0] as number) * x + (h[1] as number) * y + (h[2] as number);
+  const wy = (h[3] as number) * x + (h[4] as number) * y + (h[5] as number);
+  const w = (h[6] as number) * x + (h[7] as number) * y + (h[8] as number);
+  return [wx / w, wy / w];
+}
+
+function approx(a: number, b: number, eps = 1e-6): boolean {
+  return Math.abs(a - b) < eps;
+}
+
+test('computeHomography: maps four src corners onto four dst corners', () => {
+  // Source quadrilateral (a tilted region) → dest rectangle.
+  const src: [Point, Point, Point, Point] = [
+    [10, 20],
+    [110, 5],
+    [120, 95],
+    [5, 100]
+  ];
+  const dst: [Point, Point, Point, Point] = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100]
+  ];
+  const h = computeHomography(src, dst);
+  assert.ok(h, 'expected a non-null homography for non-degenerate quad');
+  for (let i = 0; i < 4; i++) {
+    const got = applyH(h as number[], src[i] as Point);
+    const want = dst[i] as Point;
+    assert.ok(approx(got[0], want[0] as number), `point ${i} x: got ${got[0]}, want ${want[0]}`);
+    assert.ok(approx(got[1], want[1] as number), `point ${i} y: got ${got[1]}, want ${want[1]}`);
+  }
+});
+
+test('computeHomography: identity quad maps to itself (h ≈ I)', () => {
+  // A degenerate-ish but valid case: src == dst → H is identity (up
+  // to scale). Round-trip validates: applying H gives back the input.
+  const corners: [Point, Point, Point, Point] = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100]
+  ];
+  const h = computeHomography(corners, corners);
+  assert.ok(h);
+  for (const p of corners) {
+    const got = applyH(h as number[], p);
+    assert.ok(approx(got[0], p[0] as number));
+    assert.ok(approx(got[1], p[1] as number));
+  }
+});
+
+test('computeHomography: returns null for degenerate (colinear) source points', () => {
+  // Three colinear src points → singular linear system → null.
+  const colinear: [Point, Point, Point, Point] = [
+    [0, 0],
+    [50, 0],
+    [100, 0], // all on y=0
+    [50, 100]
+  ];
+  const dst: [Point, Point, Point, Point] = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100]
+  ];
+  assert.equal(computeHomography(colinear, dst), null);
+});
+
+test('invertMatrix3: H · H⁻¹ ≈ I for a non-singular matrix', () => {
+  const h = computeHomography(
+    [
+      [10, 20],
+      [110, 5],
+      [120, 95],
+      [5, 100]
+    ],
+    [
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100]
+    ]
+  );
+  assert.ok(h);
+  const inv = invertMatrix3(h as number[]);
+  assert.ok(inv, 'non-singular H should be invertible');
+  // Multiply h * inv and check it's approximately I.
+  function mul(a: readonly number[], b: readonly number[]): number[] {
+    const r = new Array<number>(9).fill(0);
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++) {
+        let s = 0;
+        for (let k = 0; k < 3; k++) s += (a[i * 3 + k] as number) * (b[k * 3 + j] as number);
+        r[i * 3 + j] = s;
+      }
+    return r;
+  }
+  const I = mul(h as number[], inv as number[]);
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) {
+      const want = i === j ? 1 : 0;
+      assert.ok(
+        approx(I[i * 3 + j] as number, want, 1e-6),
+        `I[${i},${j}]: got ${I[i * 3 + j]}, want ${want}`
+      );
+    }
+});
+
+test('invertMatrix3: returns null for a singular matrix', () => {
+  // Rank-deficient: rows 2 and 3 are identical → det = 0.
+  const m = [1, 2, 3, 4, 5, 6, 4, 5, 6];
+  assert.equal(invertMatrix3(m), null);
+});
+
+test('perspectiveOutputSize: averages top/bottom and left/right edges', () => {
+  // tl=(0,0) tr=(100,0) br=(100,80) bl=(0,80) → 100×80 axis-aligned.
+  const out = perspectiveOutputSize([
+    [0, 0],
+    [100, 0],
+    [100, 80],
+    [0, 80]
+  ]);
+  assert.deepEqual(out, { w: 100, h: 80 });
+});
+
+test('perspectiveOutputSize: tilted square produces square-ish output', () => {
+  // A 100-unit square rotated 30°: edge lengths stay 100, so output
+  // should be 100×100 regardless of the AABB (which would be larger).
+  const c = Math.cos(Math.PI / 6);
+  const s = Math.sin(Math.PI / 6);
+  const corners: [Point, Point, Point, Point] = [
+    [0, 0],
+    [100 * c, 100 * s],
+    [100 * c - 100 * s, 100 * s + 100 * c],
+    [-100 * s, 100 * c]
+  ];
+  const out = perspectiveOutputSize(corners);
+  assert.equal(out.w, 100);
+  assert.equal(out.h, 100);
 });
 
 test('simplifyOps: simplification cascades after combining', () => {

@@ -990,6 +990,144 @@ test('POST /admin/sidecar/:id/ops validates redoStack op shapes the same as ops'
   assert.match(res.json<{ error: string }>().error, /redoStack:/);
 });
 
+// ---- perspective op validation ----------------------------------------
+// Perspective is the only op that doesn't run server-side: sharp can't
+// apply a homography, so the client bakes the result and uploads it.
+// The server validates op shape so a sidecar that round-trips through
+// /sidecar/:id/ops carries an authentic perspective op the client
+// (and any future server-side fallback) can execute.
+
+test('POST /admin/sidecar/:id/ops accepts a valid perspective op', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const op = {
+    type: 'perspective',
+    corners: [
+      [10, 20],
+      [700, 5],
+      [780, 590],
+      [50, 580]
+    ]
+  };
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [op] }
+  });
+  assert.equal(res.statusCode, 200);
+  const ops = res.json<OpsResponse>().ops;
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0]?.type, 'perspective');
+  // Coords are rounded to integers on store.
+  assert.deepEqual(ops[0]?.corners, [
+    [10, 20],
+    [700, 5],
+    [780, 590],
+    [50, 580]
+  ]);
+});
+
+test('POST /admin/sidecar/:id/ops rejects perspective with wrong corner count', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [
+        {
+          type: 'perspective',
+          corners: [
+            [0, 0],
+            [100, 0],
+            [100, 100]
+          ]
+        }
+      ]
+    }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /4 points/);
+});
+
+test('POST /admin/sidecar/:id/ops rejects perspective with non-numeric / malformed corners', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Wrong inner shape (single number not a pair).
+  const wrongPair = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [{ type: 'perspective', corners: [[0, 0], [100, 0], [100, 100], 5] }]
+    }
+  });
+  assert.equal(wrongPair.statusCode, 400);
+  assert.match(wrongPair.json<{ error: string }>().error, /\[x, y\] pair/);
+
+  // Non-numeric coord (a string that can't be coerced).
+  const nonNumeric = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [
+        {
+          type: 'perspective',
+          corners: [
+            [0, 0],
+            ['oops', 0],
+            [100, 100],
+            [0, 100]
+          ]
+        }
+      ]
+    }
+  });
+  assert.equal(nonNumeric.statusCode, 400);
+  assert.match(nonNumeric.json<{ error: string }>().error, /finite/);
+
+  // Negative coord.
+  const neg = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: {
+      ops: [
+        {
+          type: 'perspective',
+          corners: [
+            [-1, 0],
+            [100, 0],
+            [100, 100],
+            [0, 100]
+          ]
+        }
+      ]
+    }
+  });
+  assert.equal(neg.statusCode, 400);
+  assert.match(neg.json<{ error: string }>().error, /non-negative/);
+});
+
 test('POST /admin/sidecar/:id/ops 400s when body.redoStack is not an array', async (t) => {
   const root = freshSiteRoot(t);
   const ingest = await ingestStream({

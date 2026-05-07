@@ -704,10 +704,46 @@ function validateOps(raw: unknown, metadata: { width?: number; height?: number }
       if (w !== undefined) norm.w = Math.floor(w);
       if (h !== undefined) norm.h = Math.floor(h);
       out.push(norm);
+    } else if (type === 'perspective') {
+      // Perspective rectify is a client-only execution path: the
+      // canvas pipeline produces the rectified result and uploads it
+      // as the bake. Sharp doesn't apply perspective ops; if a render
+      // request hits a sidecar with perspective in ops AND the bake is
+      // missing, renderDerivative will error out. Validate shape only.
+      const corners = op.corners;
+      if (!Array.isArray(corners) || corners.length !== 4) {
+        return { ok: false, error: `ops[${i}] perspective corners must be an array of 4 points` };
+      }
+      const normCorners: [number, number][] = [];
+      for (let k = 0; k < 4; k++) {
+        const c = corners[k];
+        if (!Array.isArray(c) || c.length !== 2) {
+          return {
+            ok: false,
+            error: `ops[${i}] perspective corners[${k}] must be a [x, y] pair`
+          };
+        }
+        const x = Number(c[0]);
+        const y = Number(c[1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          return {
+            ok: false,
+            error: `ops[${i}] perspective corners[${k}] must be finite numbers`
+          };
+        }
+        if (x < 0 || y < 0) {
+          return {
+            ok: false,
+            error: `ops[${i}] perspective corners[${k}] must be non-negative`
+          };
+        }
+        normCorners.push([Math.round(x), Math.round(y)]);
+      }
+      out.push({ type: 'perspective', corners: normCorners });
     } else {
       return {
         ok: false,
-        error: `ops[${i}].type must be 'crop' | 'rotate' | 'flip' | 'resample' (got ${String(type)})`
+        error: `ops[${i}].type must be 'crop' | 'rotate' | 'flip' | 'resample' | 'perspective' (got ${String(type)})`
       };
     }
   }
