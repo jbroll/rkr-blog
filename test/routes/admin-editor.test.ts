@@ -35,6 +35,13 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<div id="rkroll-admin-root"><\/div>/);
   assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js"><\/script>/);
+
+  // Security headers: CSP restricts script-src to self + esm.sh (the
+  // editor's import map host); X-Content-Type-Options blocks MIME sniffing.
+  const csp = res.headers['content-security-policy'] as string;
+  assert.match(csp, /script-src 'self' https:\/\/esm\.sh/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.equal(res.headers['x-content-type-options'], 'nosniff');
 });
 
 test('GET /static/admin/main.js serves the compiled bundle when present', async (t) => {

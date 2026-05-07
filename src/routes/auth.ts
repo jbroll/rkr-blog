@@ -74,6 +74,37 @@ export default async function authRoutes(
     await fastify.register(cookiePlugin);
   }
 
+  // PKCE verifier is stored server-side, keyed by state, NOT in the
+  // client cookie. PKCE's threat model assumes the verifier never leaves
+  // the server; storing it in a (HttpOnly) cookie made it round-trip
+  // through the browser, which defeats the original purpose. This map
+  // is in-process; multi-process deployments would need a DB-backed or
+  // Redis-backed store.
+  const pendingFlows = new Map<string, { codeVerifier: string; expiresAt: number }>();
+
+  function rememberFlow(state: string, codeVerifier: string): void {
+    sweepExpiredFlows();
+    pendingFlows.set(state, {
+      codeVerifier,
+      expiresAt: Date.now() + OAUTH_STATE_TTL_S * 1000
+    });
+  }
+
+  function takeFlow(state: string): string | null {
+    sweepExpiredFlows();
+    const entry = pendingFlows.get(state);
+    if (!entry) return null;
+    pendingFlows.delete(state);
+    return entry.codeVerifier;
+  }
+
+  function sweepExpiredFlows(): void {
+    const now = Date.now();
+    for (const [k, v] of pendingFlows) {
+      if (v.expiresAt < now) pendingFlows.delete(k);
+    }
+  }
+
   fastify.get(
     '/admin/auth/google/start',
     {
@@ -87,7 +118,11 @@ export default async function authRoutes(
       const codeVerifier = generateCodeVerifier();
       const url = exchange.authorizationUrl(state, codeVerifier, ['openid', 'profile', 'email']);
 
-      setCookie(reply, OAUTH_STATE_COOKIE, JSON.stringify({ state, codeVerifier }), {
+      rememberFlow(state, codeVerifier);
+      // The cookie now holds only the state — the verifier stays on the
+      // server. Cookie still required so the callback can prove the same
+      // browser initiated the flow (CSRF protection on the OAuth dance).
+      setCookie(reply, OAUTH_STATE_COOKIE, state, {
         maxAge: OAUTH_STATE_TTL_S,
         secure: secureCookies
       });
@@ -106,23 +141,21 @@ export default async function authRoutes(
       if (typeof code !== 'string' || typeof incomingState !== 'string') {
         return reply.code(400).send({ error: 'missing code or state' });
       }
-      const cookieRaw = readCookie(req, OAUTH_STATE_COOKIE);
-      if (!cookieRaw) return reply.code(400).send({ error: 'no oauth state cookie' });
-
-      let parsed: { state: string; codeVerifier: string };
-      try {
-        parsed = JSON.parse(cookieRaw);
-      } catch {
-        return reply.code(400).send({ error: 'malformed oauth state cookie' });
-      }
-      if (parsed.state !== incomingState) {
+      const stateCookie = readCookie(req, OAUTH_STATE_COOKIE);
+      if (!stateCookie) return reply.code(400).send({ error: 'no oauth state cookie' });
+      if (stateCookie !== incomingState) {
         return reply.code(400).send({ error: 'oauth state mismatch' });
       }
       clearCookie(reply, OAUTH_STATE_COOKIE, { secure: secureCookies });
 
+      const codeVerifier = takeFlow(incomingState);
+      if (!codeVerifier) {
+        return reply.code(400).send({ error: 'oauth flow expired or unknown' });
+      }
+
       let tokens: OAuth2Tokens;
       try {
-        tokens = await exchange.exchange(code, parsed.codeVerifier);
+        tokens = await exchange.exchange(code, codeVerifier);
       } catch (err) {
         req.log.warn({ err }, 'token exchange failed');
         return reply.code(400).send({ error: 'token exchange failed' });

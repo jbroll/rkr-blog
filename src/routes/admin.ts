@@ -77,6 +77,9 @@ export default async function adminRoutes(
   fastify.get('/admin/editor', { ...guard }, async (_req, reply) => {
     return reply
       .type('text/html; charset=utf-8')
+      .header('Content-Security-Policy', ADMIN_EDITOR_CSP)
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(renderAdminPage({ bundleUrl: '/static/admin/main.js' }));
   });
 
@@ -91,8 +94,12 @@ export default async function adminRoutes(
   }>('/admin/posts', { ...guard }, async (request, reply) => {
     const { slug, title, status, date, body } = request.body ?? {};
 
-    if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]*$/i.test(slug)) {
-      return reply.code(400).send({ error: 'slug must be a kebab-case identifier' });
+    if (
+      typeof slug !== 'string' ||
+      slug.length > MAX_SLUG_LENGTH ||
+      !/^[a-z0-9][a-z0-9-]*$/i.test(slug)
+    ) {
+      return reply.code(400).send({ error: 'slug must be a kebab-case identifier (max 100)' });
     }
     if (typeof title !== 'string' || !title.trim()) {
       return reply.code(400).send({ error: 'title is required' });
@@ -240,6 +247,30 @@ export default async function adminRoutes(
 
 const URL_FETCH_TIMEOUT_MS = 30_000;
 const URL_FETCH_MAX_BYTES = 50 * 1024 * 1024; // 50 MiB per spec §13
+
+/** Cap slug length so a 50KB attacker slug can't be written to disk and
+ * indexed. The kebab-case regex permits a-z/0-9/-; this just bounds it. */
+const MAX_SLUG_LENGTH = 100;
+
+/**
+ * CSP for /admin/editor. Allows TipTap modules from esm.sh (the editor's
+ * import map) and inline styles/importmap JSON. `'unsafe-inline'` for
+ * scripts is unfortunately required for the inline `<script
+ * type="importmap">` block; tighten to a nonce when we move off
+ * template-literal HTML. esm.sh trust is documented in spec §17 — long-
+ * term plan is to vendor or pin via SRI.
+ */
+const ADMIN_EDITOR_CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://esm.sh 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "connect-src 'self' https://esm.sh",
+  "font-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'"
+].join('; ');
 
 function deriveName(url: string, contentType: string): string {
   try {

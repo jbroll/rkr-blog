@@ -125,4 +125,16 @@ test('POST /admin/posts rejects bad slug / missing title / missing body', async 
   });
   assert.equal(bad3.statusCode, 400);
   assert.match(bad3.json<{ error: string }>().error, /ProseMirror doc/);
+
+  // Slug length cap: 200-char slug is rejected even though every char is
+  // a valid kebab-case character. Without this, a 50KB slug would be
+  // accepted, written to disk as a filename, and indexed.
+  const longSlug = 'a'.repeat(200);
+  const bad4 = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: longSlug, title: 'X', status: 'draft', body: { type: 'doc', content: [] } }
+  });
+  assert.equal(bad4.statusCode, 400);
+  assert.match(bad4.json<{ error: string }>().error, /slug/);
 });

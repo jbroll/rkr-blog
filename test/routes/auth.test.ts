@@ -80,6 +80,25 @@ function stubVerifier(opts: StubExchangeOpts): IdTokenVerifier {
   };
 }
 
+/** Drive /admin/auth/google/start to seed the in-process PKCE state map.
+ * Returns the state value and the cookie header to feed into /callback.
+ * (PKCE verifier is now server-side, so direct callback hits are no
+ * longer hermetic without going through /start first.) */
+async function primeStartFlow(app: Awaited<ReturnType<typeof buildApp>>): Promise<{
+  state: string;
+  cookie: string;
+}> {
+  const res = await app.inject({ method: 'GET', url: '/admin/auth/google/start' });
+  if (res.statusCode !== 302) {
+    throw new Error(`expected 302 from /start, got ${res.statusCode}: ${res.body}`);
+  }
+  const setCookies = ([] as string[]).concat(res.headers['set-cookie'] as string | string[]);
+  const stateCookieFull = setCookies.find((c) => c.startsWith('rkr_oauth_state=')) ?? '';
+  const cookie = stateCookieFull.split(';')[0] ?? '';
+  const state = new URL(res.headers.location as string).searchParams.get('state') ?? '';
+  return { state, cookie };
+}
+
 async function setup(
   t: TestContext,
   opts: StubExchangeOpts
@@ -132,12 +151,11 @@ test('callback: bootstrap user (no users yet) becomes owner', async (t) => {
     idTokenPayload: { sub: 'g-1', email: 'first@example.com', name: 'First', email_verified: true }
   });
 
-  // Drive the state cookie ourselves rather than wiring two requests.
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=abc&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=abc&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 302);
   assert.equal(res.headers.location, '/admin/editor');
@@ -162,11 +180,11 @@ test('callback: invited email logs in successfully (uses invite role)', async (t
   ).run('owner@example.com', new Date().toISOString());
   inviteEmail(db, 'editor@example.com', 'editor');
 
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=c&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 302);
   assert.equal(findUserByEmail(db, 'editor@example.com')?.role, 'editor');
@@ -178,14 +196,31 @@ test('callback: state mismatch → 400', async (t) => {
   const { app } = await setup(t, {
     idTokenPayload: { sub: 'g-1', email: 'a@x.com', email_verified: true }
   });
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'expected', codeVerifier: 'cv' }));
+  const { cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=different',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: '/admin/auth/google/callback?code=c&state=different-state-not-in-cookie',
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorBody>().error, /state mismatch/);
+});
+
+test('callback: state cookie matches but server-side flow is unknown → 400', async (t) => {
+  // Defends the PKCE-off-cookie design: a cookie alone is no longer
+  // sufficient — the verifier must also be in the in-process map. If
+  // an attacker obtains/forges the cookie value but didn't drive /start
+  // (or the entry expired), the callback fails before any token exchange.
+  const { app } = await setup(t, {
+    idTokenPayload: { sub: 'g-1', email: 'a@x.com', email_verified: true }
+  });
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/auth/google/callback?code=c&state=ghost',
+    headers: { cookie: 'rkr_oauth_state=ghost' }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<ErrorBody>().error, /flow expired or unknown/);
 });
 
 test('callback: missing state cookie → 400', async (t) => {
@@ -209,11 +244,11 @@ test('callback: id token signature/aud/iss verification failure → 400', async 
     idTokenPayload: { sub: 'g-1', email: 'forger@evil.com', email_verified: true },
     verifierRejects: true
   });
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=c&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorBody>().error, /invalid id token/);
@@ -221,11 +256,11 @@ test('callback: id token signature/aud/iss verification failure → 400', async 
 
 test('callback: id token missing sub or email → 400', async (t) => {
   const { app } = await setup(t, { idTokenPayload: { email: 'a@x.com' } /* no sub */ });
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=c&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorBody>().error, /missing sub or email/);
@@ -245,11 +280,11 @@ test('callback: email_verified=false → 403', async (t) => {
   const { app } = await setup(t, {
     idTokenPayload: { sub: 'g-1', email: 'a@x.com', email_verified: false }
   });
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=c&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 403);
   assert.match(res.json<ErrorBody>().error, /email not verified/);
@@ -263,11 +298,11 @@ test('callback: not-invited email after bootstrap → 403', async (t) => {
     `INSERT INTO users (email, display_name, role, created_at) VALUES (?, NULL, 'owner', ?)`
   ).run('owner@x.com', new Date().toISOString());
 
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=c&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(res.statusCode, 403);
   assert.match(res.json<ErrorBody>().error, /not invited/);
@@ -335,11 +370,11 @@ test('GET /admin/editor succeeds with a valid session cookie', async (t) => {
   });
 
   // Sign in via the callback to mint a real session.
-  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const { state, cookie } = await primeStartFlow(app);
   const cb = await app.inject({
     method: 'GET',
-    url: '/admin/auth/google/callback?code=c&state=st',
-    headers: { cookie: `rkr_oauth_state=${stateCookie}` }
+    url: `/admin/auth/google/callback?code=c&state=${state}`,
+    headers: { cookie }
   });
   assert.equal(cb.statusCode, 302);
   const sessionCookie = ([] as string[])
