@@ -36,6 +36,16 @@ export function registerCsrfGuard(app: FastifyInstance, opts: CsrfOptions): void
   app.addHook('onRequest', async (request, reply) => {
     if (!STATE_CHANGING.has(request.method)) return;
 
+    // Bearer-token clients (the WP importer, scripted admin tools)
+    // don't carry cookies, so the CSRF threat (a browser auto-attaching
+    // a session cookie to a forged cross-origin POST) doesn't apply.
+    // Skip the Origin check for these requests and let auth-middleware
+    // be the sole gate. The token itself is a CSRF defense — an attacker
+    // who has it can already impersonate the admin.
+    if (typeof request.headers.authorization === 'string') {
+      return;
+    }
+
     const claimed = pickClaimedOrigin(request);
     if (claimed === null) {
       reply.code(403).send({ error: 'cross-origin request blocked: missing Origin/Referer' });

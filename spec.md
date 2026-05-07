@@ -367,6 +367,14 @@ deletes everything in the cache not in the set; idempotent.
   blocks the realistic threat model (top-level GET navigation,
   cross-site form POST); the Origin check is defense-in-depth in case
   a future browser-quirk or extension bypasses SameSite.
+- **Bearer-token bypass for scripted clients.** When the env var
+  `ADMIN_TOKEN` is set, requests carrying `Authorization: Bearer
+  <ADMIN_TOKEN>` skip the cookie path and attach a synthetic admin
+  user (constant-time match). CSRF guard is also skipped on these
+  requests since browsers don't auto-send `Authorization` headers; the
+  token itself is the CSRF defense. Used by the WordPress importer's
+  push mode and any future scripted admin tooling. Leave `ADMIN_TOKEN`
+  unset to disable the bridge entirely.
 
 ## 14. Deployment configuration
 
@@ -382,6 +390,7 @@ Per-deployment environment surface:
 | `PUBLIC_BASE_URL` | (required) | used to build OAuth redirect URI |
 | `GOOGLE_CLIENT_ID` | (required) | Google OAuth |
 | `GOOGLE_CLIENT_SECRET` | (required) | Google OAuth |
+| `ADMIN_TOKEN` | (unset) | when set, enables `Authorization: Bearer` admin auth for scripted clients (WP importer push mode); leave unset to disable |
 | `LOG_LEVEL` | `info` | server log threshold |
 
 The session-signing and token-encryption secret lives in

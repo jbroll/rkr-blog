@@ -1,6 +1,15 @@
 // Fastify hook that resolves the session cookie to a user and attaches
 // it to the request. `requireUser` is the per-route guard that returns
 // 401 when no user is present.
+//
+// Bearer-token path: when the env var ADMIN_TOKEN is set and a request
+// arrives with `Authorization: Bearer <ADMIN_TOKEN>`, we attach a
+// synthetic admin user (id=0, role=owner). This is for scripted
+// clients (the WordPress importer; future migration tooling). The
+// token is matched with timingSafeEqual to keep the comparison from
+// leaking length/prefix info under timing analysis.
+
+import { timingSafeEqual } from 'node:crypto';
 
 import cookiePlugin from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -15,6 +24,39 @@ declare module 'fastify' {
   }
 }
 
+const BEARER_USER: User = {
+  id: 0,
+  email: 'bearer-token@local',
+  display_name: 'admin (bearer token)',
+  role: 'owner',
+  created_at: '1970-01-01T00:00:00Z',
+  last_seen_at: null
+};
+
+export function bearerTokenFromHeader(req: FastifyRequest): string | undefined {
+  const raw = req.headers.authorization;
+  if (!raw) return undefined;
+  const m = /^Bearer\s+(.+)$/i.exec(raw);
+  return m?.[1]?.trim();
+}
+
+function bearerMatchesEnv(provided: string): boolean {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) return false;
+  // timingSafeEqual requires equal-length buffers. Length-pad both sides
+  // to the same length so an attacker can't probe expected-length via
+  // an early-return; compare the result AND the lengths.
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) {
+    // Run a same-length compare against a constant so the timing of the
+    // mismatch path doesn't differ noticeably from the match path.
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
 export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Promise<void> {
   // Register the cookie plugin FIRST so its onRequest parser runs before
   // ours; otherwise req.cookies would be undefined here.
@@ -25,6 +67,22 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
   app.decorateRequest('user', null);
 
   app.addHook('onRequest', async (req, reply) => {
+    // Bearer-token path takes precedence over the cookie path. A
+    // request that supplies both is treated as a bearer client (the
+    // typical case is a script that doesn't carry cookies anyway).
+    const bearer = bearerTokenFromHeader(req);
+    if (bearer !== undefined) {
+      if (bearerMatchesEnv(bearer)) {
+        req.user = BEARER_USER;
+      }
+      // Either the bearer matched (user attached) or it didn't (user
+      // stays null and requireUser will 401). In both cases skip the
+      // cookie path — a request that explicitly authenticates with a
+      // bearer header should not silently fall through to a cookie
+      // session, which would mask token-rotation bugs.
+      return;
+    }
+
     const sid = (req.cookies as Record<string, string | undefined> | undefined)?.[
       SESSION_COOKIE_NAME
     ];
