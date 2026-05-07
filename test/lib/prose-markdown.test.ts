@@ -149,6 +149,102 @@ test('markdownToProse: image without caption/position fills defaults', () => {
   assert.equal(img.attrs?.position, 'default');
 });
 
+// ---- multi-image directives (gallery / carousel / diptych / triptych) ----
+
+test('proseToMarkdown: gallery directive emits ids + layout + caption', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'gallery',
+        attrs: { ids: 'abc,def,012', layout: 'masonry', caption: 'Workbench shots' }
+      }
+    ]
+  };
+  const md = proseToMarkdown(doc);
+  assert.match(md, /::gallery\{ids="abc,def,012" layout=masonry caption="Workbench shots"\}/);
+});
+
+test('proseToMarkdown: gallery with default layout (justified) omits the layout attr', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'gallery', attrs: { ids: 'a,b', layout: 'justified' } }]
+  };
+  const md = proseToMarkdown(doc);
+  assert.equal(md.includes('layout='), false);
+});
+
+test('proseToMarkdown: carousel emits autoplay only when > 0', () => {
+  const off: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'carousel', attrs: { ids: 'a,b', autoplay: 0 } }]
+  };
+  assert.equal(proseToMarkdown(off).includes('autoplay='), false);
+
+  const on: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'carousel', attrs: { ids: 'a,b', autoplay: 5 } }]
+  };
+  assert.match(proseToMarkdown(on), /::carousel\{ids="a,b" autoplay=5\}/);
+});
+
+test('proseToMarkdown: diptych and triptych emit only ids + caption', () => {
+  const di: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'diptych', attrs: { ids: 'a,b', caption: 'Before / after' } }]
+  };
+  assert.match(proseToMarkdown(di), /::diptych\{ids="a,b" caption="Before \/ after"\}/);
+
+  const tri: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'triptych', attrs: { ids: 'a,b,c' } }]
+  };
+  assert.match(proseToMarkdown(tri), /::triptych\{ids="a,b,c"\}/);
+});
+
+test('proseToMarkdown: multi-image with empty ids drops the node silently', () => {
+  const doc: ProseDoc = { type: 'doc', content: [{ type: 'gallery', attrs: { ids: '' } }] };
+  assert.equal(proseToMarkdown(doc).includes('::gallery'), false);
+});
+
+test('proseToMarkdown: ids can be supplied as an array (joined to comma string)', () => {
+  // Editor may store ids as a JSON array in some flows; accept it.
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'gallery', attrs: { ids: ['a', 'b', 'c'] } }]
+  };
+  assert.match(proseToMarkdown(doc), /ids="a,b,c"/);
+});
+
+test('markdownToProse: gallery directive becomes a gallery prose node with all attrs', () => {
+  const md = '::gallery{ids="abc,def" layout=masonry caption="Two shots"}\n';
+  const doc = markdownToProse(md);
+  const g = doc.content[0]!;
+  assert.equal(g.type, 'gallery');
+  assert.equal(g.attrs?.ids, 'abc,def');
+  assert.equal(g.attrs?.layout, 'masonry');
+  assert.equal(g.attrs?.caption, 'Two shots');
+});
+
+test('markdownToProse: gallery without layout fills layout="justified" default', () => {
+  const md = '::gallery{ids="abc,def"}\n';
+  const doc = markdownToProse(md);
+  assert.equal(doc.content[0]?.attrs?.layout, 'justified');
+});
+
+test('markdownToProse: carousel autoplay parses to a number', () => {
+  const md = '::carousel{ids="a,b" autoplay=5}\n';
+  const doc = markdownToProse(md);
+  assert.equal(doc.content[0]?.attrs?.autoplay, 5);
+});
+
+test('markdownToProse: diptych and triptych become typed prose nodes', () => {
+  const md = '::diptych{ids="a,b"}\n\n::triptych{ids="a,b,c"}\n';
+  const doc = markdownToProse(md);
+  assert.equal(doc.content[0]?.type, 'diptych');
+  assert.equal(doc.content[1]?.type, 'triptych');
+});
+
 test('round-trip: prose → markdown → prose preserves structure on a representative doc', () => {
   const original: ProseDoc = {
     type: 'doc',

@@ -52,15 +52,32 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
-  /* Image-attribute panel: shown only when an image node is selected. */
-  #rkr-image-attrs[hidden] { display: none; }
-  #rkr-image-attrs {
+  /* Attribute panels: shown only when a matching node is selected. */
+  #rkr-image-attrs[hidden], #rkr-multi-attrs[hidden] { display: none; }
+  #rkr-image-attrs, #rkr-multi-attrs {
     display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
     align-items: center; margin: .75rem 0;
     padding: .5rem .75rem; border: 1px solid #ccc; border-radius: 4px; background: #f7f7f7;
   }
-  #rkr-image-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #555; }
-  #rkr-image-attrs input, #rkr-image-attrs select { padding: .25rem; }
+  #rkr-image-attrs h3, #rkr-multi-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #555; }
+  #rkr-image-attrs input, #rkr-image-attrs select,
+  #rkr-multi-attrs input, #rkr-multi-attrs select { padding: .25rem; }
+  /* Editor-side previews of multi-image directives: a labelled chip + a
+     thumbnail strip, just enough that the author sees what's grouped. */
+  #rkroll-admin-root .rkr-multi {
+    margin: 1rem 0; padding: .5rem; border: 1px dashed #aaa; border-radius: 4px; background: #fafafa;
+  }
+  #rkroll-admin-root .rkr-multi-label {
+    font-family: ui-monospace, monospace; font-size: .8rem; color: #666; margin-bottom: .25rem;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  #rkroll-admin-root .rkr-multi-thumbs { display: flex; flex-wrap: wrap; gap: .35rem; }
+  #rkroll-admin-root .rkr-multi-thumb {
+    width: 6rem; height: 4rem; object-fit: cover; border-radius: 2px;
+  }
+  #rkroll-admin-root .rkr-multi-caption {
+    margin-top: .35rem; color: #666; font-size: .85rem; font-style: italic;
+  }
 </style>
 </head>
 <body>
@@ -89,6 +106,21 @@ export function renderAdminPage(data: AdminPageData): string {
     <option value="right">right (float, prose wraps left)</option>
     <option value="inline">inline (small, in text flow)</option>
   </select>
+</div>
+<div id="rkr-multi-attrs" hidden>
+  <h3 id="rkr-multi-attrs-label">Multi-image attributes</h3>
+  <label for="rkr-multi-ids">IDs</label>
+  <input id="rkr-multi-ids" type="text" readonly placeholder="comma-separated; populated by upload"/>
+  <label for="rkr-multi-caption">Caption</label>
+  <input id="rkr-multi-caption" type="text" placeholder="optional caption"/>
+  <label for="rkr-multi-layout" id="rkr-multi-layout-label">Layout</label>
+  <select id="rkr-multi-layout">
+    <option value="justified">justified (Flickr-style rows)</option>
+    <option value="masonry">masonry (Pinterest columns)</option>
+    <option value="matrix">matrix (uniform grid)</option>
+  </select>
+  <label for="rkr-multi-autoplay" id="rkr-multi-autoplay-label">Autoplay (s)</label>
+  <input id="rkr-multi-autoplay" type="number" min="0" max="60" step="1"/>
 </div>
 <div id="rkroll-admin-root"></div>
 <div id="rkroll-admin-status"></div>

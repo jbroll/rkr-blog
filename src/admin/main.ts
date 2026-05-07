@@ -120,6 +120,76 @@ const ImageNode = Node.create({
   }
 });
 
+// Multi-image directive nodes: gallery, carousel, diptych, triptych.
+// Each is a block atom whose attrs round-trip through prose-markdown to
+// the matching `::<kind>{...}` directive on the public side. The editor
+// renders a placeholder containing thumbnail <img>s pointing at
+// /admin/preview/<id> so the author sees which photos are included.
+type MultiImageKind = 'gallery' | 'carousel' | 'diptych' | 'triptych';
+
+interface MultiImageAttrs {
+  ids: string;
+  caption: string;
+  layout?: string;
+  autoplay?: number;
+}
+
+function makeMultiImageNode(kind: MultiImageKind) {
+  return Node.create({
+    name: kind,
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+    addAttributes() {
+      const base = {
+        ids: { default: '' },
+        caption: { default: '' }
+      };
+      if (kind === 'gallery') {
+        return { ...base, layout: { default: 'justified' } };
+      }
+      if (kind === 'carousel') {
+        return { ...base, autoplay: { default: 0 } };
+      }
+      return base;
+    },
+    parseHTML() {
+      return [{ tag: `div.rkr-${kind}-placeholder` }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      const attrs = HTMLAttributes as Partial<MultiImageAttrs>;
+      const idList = (attrs.ids ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const thumbs: unknown[] = idList.map((id) => [
+        'img',
+        { src: `/admin/preview/${id}`, alt: '', class: 'rkr-multi-thumb' }
+      ]);
+      const captionLine = attrs.caption
+        ? ['div', { class: 'rkr-multi-caption' }, attrs.caption]
+        : '';
+      return [
+        'div',
+        mergeAttributes(HTMLAttributes, {
+          class: `rkr-multi rkr-${kind}-placeholder`,
+          'data-kind': kind,
+          'data-count': String(idList.length)
+        }),
+        ['div', { class: 'rkr-multi-label' }, `${kind} (${idList.length})`],
+        ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
+        captionLine
+      ];
+    }
+  });
+}
+
+const GalleryNode = makeMultiImageNode('gallery');
+const CarouselNode = makeMultiImageNode('carousel');
+const DiptychNode = makeMultiImageNode('diptych');
+const TriptychNode = makeMultiImageNode('triptych');
+
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`#${id} not found`);
@@ -145,6 +215,41 @@ async function uploadImage(file: File): Promise<UploadResponse> {
   const res = await fetch('/admin/upload', { method: 'POST', body: fd });
   if (!res.ok) throw new Error(`upload failed: ${res.status}`);
   return (await res.json()) as UploadResponse;
+}
+
+/** Upload a list of files in series, returning the ids in input order.
+ * Errors abort the batch — partial state stays out of the editor. */
+async function uploadMany(files: File[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const f of files) {
+    setStatus(`uploading ${f.name} (${ids.length + 1}/${files.length})…`);
+    const r = await uploadImage(f);
+    ids.push(r.id);
+  }
+  return ids;
+}
+
+/** Open a hidden file input with `multiple` set, await the user's
+ * selection, and resolve to the chosen File array (empty if cancelled). */
+function pickMany(): Promise<File[]> {
+  return new Promise<File[]>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+    input.addEventListener(
+      'change',
+      () => {
+        const files = input.files ? Array.from(input.files) : [];
+        document.body.removeChild(input);
+        resolve(files);
+      },
+      { once: true }
+    );
+    document.body.appendChild(input);
+    input.click();
+  });
 }
 
 // ---- Google Drive picker helpers --------------------------------------
@@ -286,12 +391,45 @@ function mount(): void {
   const attrCaption = $<HTMLInputElement>('rkr-image-caption');
   const attrPosition = $<HTMLSelectElement>('rkr-image-position');
 
+  const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
+  const multiLabel = $<HTMLHeadingElement>('rkr-multi-attrs-label');
+  const multiIds = $<HTMLInputElement>('rkr-multi-ids');
+  const multiCaption = $<HTMLInputElement>('rkr-multi-caption');
+  const multiLayout = $<HTMLSelectElement>('rkr-multi-layout');
+  const multiLayoutLabel = $<HTMLLabelElement>('rkr-multi-layout-label');
+  const multiAutoplay = $<HTMLInputElement>('rkr-multi-autoplay');
+  const multiAutoplayLabel = $<HTMLLabelElement>('rkr-multi-autoplay-label');
+
   const editor = new Editor({
     element: root,
-    extensions: [StarterKit, ImageNode],
+    extensions: [StarterKit, ImageNode, GalleryNode, CarouselNode, DiptychNode, TriptychNode],
     content: '<p></p>',
     autofocus: 'end'
   });
+
+  async function insertMultiImage(kind: MultiImageKind): Promise<void> {
+    const files = await pickMany();
+    if (files.length === 0) return;
+    const min = kind === 'diptych' ? 2 : kind === 'triptych' ? 3 : 1;
+    const max = kind === 'diptych' ? 2 : kind === 'triptych' ? 3 : Number.POSITIVE_INFINITY;
+    if (files.length < min) {
+      setStatus(`${kind} needs at least ${min} image(s); got ${files.length}`);
+      return;
+    }
+    if (files.length > max) {
+      setStatus(`${kind} accepts at most ${max}; using the first ${max}`);
+    }
+    try {
+      const ids = await uploadMany(files.slice(0, max));
+      const attrs: Record<string, unknown> = { ids: ids.join(','), caption: '' };
+      if (kind === 'gallery') attrs.layout = 'justified';
+      if (kind === 'carousel') attrs.autoplay = 0;
+      editor.chain().focus().insertContent({ type: kind, attrs }).run();
+      setStatus(`inserted ${kind} with ${ids.length} image(s)`);
+    } catch (err) {
+      setStatus(`${kind} insert failed: ${(err as Error).message}`);
+    }
+  }
 
   toolbar.replaceChildren(
     makeButton('B', () => editor.chain().focus().toggleBold().run(), 'bold'),
@@ -308,6 +446,10 @@ function mount(): void {
       'link'
     ),
     makeButton('Image', () => fileInput.click(), 'image'),
+    makeButton('Gallery', () => void insertMultiImage('gallery'), 'gallery'),
+    makeButton('Carousel', () => void insertMultiImage('carousel'), 'carousel'),
+    makeButton('Diptych', () => void insertMultiImage('diptych'), 'diptych'),
+    makeButton('Triptych', () => void insertMultiImage('triptych'), 'triptych'),
     makeButton(
       'Drive',
       () => {
@@ -349,6 +491,30 @@ function mount(): void {
     } else {
       attrPanel.hidden = true;
     }
+
+    const activeMulti: MultiImageKind | null =
+      (['gallery', 'carousel', 'diptych', 'triptych'] as MultiImageKind[]).find((k) =>
+        editor.isActive(k)
+      ) ?? null;
+    if (activeMulti) {
+      const a = editor.getAttributes(activeMulti) as Partial<MultiImageAttrs>;
+      populating = true;
+      multiLabel.textContent = `${activeMulti} attributes`;
+      multiIds.value = a.ids ?? '';
+      multiCaption.value = a.caption ?? '';
+      const showLayout = activeMulti === 'gallery';
+      multiLayout.style.display = showLayout ? '' : 'none';
+      multiLayoutLabel.style.display = showLayout ? '' : 'none';
+      if (showLayout) multiLayout.value = a.layout ?? 'justified';
+      const showAutoplay = activeMulti === 'carousel';
+      multiAutoplay.style.display = showAutoplay ? '' : 'none';
+      multiAutoplayLabel.style.display = showAutoplay ? '' : 'none';
+      if (showAutoplay) multiAutoplay.value = String(a.autoplay ?? 0);
+      populating = false;
+      multiPanel.hidden = false;
+    } else {
+      multiPanel.hidden = true;
+    }
   });
 
   function commitAttr(name: 'alt' | 'caption' | 'position', value: string): void {
@@ -362,6 +528,24 @@ function mount(): void {
   attrAlt.addEventListener('input', () => commitAttr('alt', attrAlt.value));
   attrCaption.addEventListener('input', () => commitAttr('caption', attrCaption.value));
   attrPosition.addEventListener('change', () => commitAttr('position', attrPosition.value));
+
+  function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay', value: string): void {
+    if (populating) return;
+    const activeKind: MultiImageKind | null =
+      (['gallery', 'carousel', 'diptych', 'triptych'] as MultiImageKind[]).find((k) =>
+        editor.isActive(k)
+      ) ?? null;
+    if (!activeKind) return;
+    const v: unknown = name === 'autoplay' ? Math.max(0, Math.floor(Number(value) || 0)) : value;
+    editor
+      .chain()
+      .focus()
+      .updateAttributes(activeKind, { [name]: v })
+      .run();
+  }
+  multiCaption.addEventListener('input', () => commitMultiAttr('caption', multiCaption.value));
+  multiLayout.addEventListener('change', () => commitMultiAttr('layout', multiLayout.value));
+  multiAutoplay.addEventListener('input', () => commitMultiAttr('autoplay', multiAutoplay.value));
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];

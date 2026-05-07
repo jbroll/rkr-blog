@@ -99,6 +99,11 @@ function emitBlock(node: ProseNode): string {
       const attrPart = parts.length > 0 ? ` ${parts.join(' ')}` : '';
       return `::image{#${id}${attrPart}}`;
     }
+    case 'gallery':
+    case 'carousel':
+    case 'diptych':
+    case 'triptych':
+      return emitMultiImage(node.type, node.attrs ?? {});
     /* c8 ignore next 2 -- defensive: editor schema prevents unknown block node types */
     default:
       return '';
@@ -164,6 +169,48 @@ function quote(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * Emit a multi-image directive (gallery / carousel / diptych / triptych).
+ * `ids` may be either a comma-separated string or a string array; the
+ * editor stores it as a string for round-trip simplicity. Empty/zero
+ * extras are omitted so the round-trip stays minimal.
+ */
+function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
+  const idsRaw = attrs.ids;
+  const ids =
+    typeof idsRaw === 'string'
+      ? idsRaw
+      : Array.isArray(idsRaw)
+        ? idsRaw.filter((s): s is string => typeof s === 'string').join(',')
+        : '';
+  if (!ids.trim()) return '';
+
+  const parts: string[] = [`ids=${quote(ids)}`];
+
+  if (kind === 'gallery') {
+    const layout = attrs.layout;
+    // Only emit when set to a non-default value; the public renderer's
+    // default is 'justified'.
+    if (typeof layout === 'string' && layout.length > 0 && layout !== 'justified') {
+      parts.push(`layout=${layout}`);
+    }
+  }
+
+  if (kind === 'carousel') {
+    const autoplay = Number(attrs.autoplay ?? 0);
+    if (Number.isFinite(autoplay) && autoplay > 0) {
+      parts.push(`autoplay=${Math.floor(autoplay)}`);
+    }
+  }
+
+  const caption = attrs.caption;
+  if (typeof caption === 'string' && caption.length > 0) {
+    parts.push(`caption=${quote(caption)}`);
+  }
+
+  return `::${kind}{${parts.join(' ')}}`;
+}
+
 function clampHeadingLevel(level: unknown): number {
   const n = Number(level);
   if (!Number.isFinite(n)) return 1;
@@ -209,6 +256,30 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
           position: attrs.position ?? 'default'
         }
       };
+    }
+    if (
+      d.name === 'gallery' ||
+      d.name === 'carousel' ||
+      d.name === 'diptych' ||
+      d.name === 'triptych'
+    ) {
+      const attrs = d.attributes ?? {};
+      const node: ProseNode = {
+        type: d.name,
+        attrs: {
+          ids: attrs.ids ?? '',
+          caption: attrs.caption ?? ''
+        }
+      };
+      if (d.name === 'gallery') {
+        // Same default as the public renderer in src/widgets/gallery.ts.
+        (node.attrs as Record<string, unknown>).layout = attrs.layout ?? 'justified';
+      }
+      if (d.name === 'carousel') {
+        const ap = Number(attrs.autoplay ?? 0);
+        (node.attrs as Record<string, unknown>).autoplay = Number.isFinite(ap) ? ap : 0;
+      }
+      return node;
     }
     return null;
   }
