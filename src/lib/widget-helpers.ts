@@ -13,6 +13,35 @@ import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
 
+/** Cap caption / alt length on widget render. Sidecar storage is
+ * unbounded, but a 10 MB caption would render as a 10 MB <figcaption>
+ * — that's neither useful nor accidental. Truncate with an ellipsis
+ * so the rendered output stays bounded and the author can fix the
+ * source. */
+export const MAX_CAPTION_LEN = 4096;
+export const MAX_ALT_LEN = 4096;
+
+export function clampCaption(s: unknown): string {
+  if (typeof s !== 'string') return '';
+  return s.length > MAX_CAPTION_LEN ? `${s.slice(0, MAX_CAPTION_LEN - 1)}…` : s;
+}
+
+export function clampAlt(s: unknown): string {
+  if (typeof s !== 'string') return '';
+  return s.length > MAX_ALT_LEN ? `${s.slice(0, MAX_ALT_LEN - 1)}…` : s;
+}
+
+/** Read a directive's `caption` attribute, clamped to MAX_CAPTION_LEN.
+ * Returns null when the caption is unset or empty so the renderer
+ * can omit the `<figcaption>` element entirely. */
+export function extractDirectiveCaption(node: {
+  attributes?: Record<string, string | null | undefined>;
+}): string | null {
+  const c = node.attributes?.caption;
+  if (typeof c !== 'string' || c.length === 0) return null;
+  return clampCaption(c);
+}
+
 export interface IdAndAlt {
   id: string;
   /** Raw alt text, NOT escaped — caller passes through escapeAttr
@@ -48,7 +77,7 @@ export function extractImageIdsAndAlts(idsRaw: unknown, altsRaw: unknown): IdAnd
     const t = splits[i]?.trim().toLowerCase() ?? '';
     if (HEX_PREFIX.test(t) && !seen.has(t)) {
       seen.add(t);
-      out.push({ id: t, alt: altsList[i] ?? '' });
+      out.push({ id: t, alt: clampAlt(altsList[i] ?? '') });
     }
   }
   return out;

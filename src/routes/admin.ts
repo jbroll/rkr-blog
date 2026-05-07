@@ -520,7 +520,12 @@ export default async function adminRoutes(
         res = await urlFetcher(url, { timeoutMs: URL_FETCH_TIMEOUT_MS });
       } catch (err) {
         if (err instanceof UnsafeUrlError) {
-          return reply.code(400).send({ error: `unsafe url: ${err.message}` });
+          // Detail (e.g. "address 169.254.169.254 is in restricted range:
+          // linkLocal") goes to the server log only — leaking it gives an
+          // authenticated attacker a small enumeration oracle for
+          // internal IPs / DNS wildcards. Client just sees "unsafe url".
+          request.log.warn({ url, reason: err.message }, 'url-import rejected');
+          return reply.code(400).send({ error: 'unsafe url' });
         }
         const msg =
           (err as { name?: string; message?: string }).name === 'AbortError'

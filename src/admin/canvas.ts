@@ -229,7 +229,10 @@ function parsePerspectiveCorners(op: SidecarOp): [Point, Point, Point, Point] | 
 
 function applyPerspective(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasElement {
   const corners = parsePerspectiveCorners(op);
-  if (!corners) return input;
+  if (!corners) {
+    console.warn('applyPerspective: malformed corners, op skipped', op);
+    return input;
+  }
   const { w: outW, h: outH } = perspectiveOutputSize(corners);
   // H maps source corners → output corners (0,0)-(outW,outH). Sampling
   // wants the inverse: for each output pixel, where in the source
@@ -241,9 +244,15 @@ function applyPerspective(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasEl
     [0, outH]
   ];
   const H = computeHomography(corners, dst);
-  if (!H) return input;
+  if (!H) {
+    console.warn('applyPerspective: degenerate quadrilateral, op skipped', corners);
+    return input;
+  }
   const Hinv = invertMatrix3(H);
-  if (!Hinv) return input;
+  if (!Hinv) {
+    console.warn('applyPerspective: singular homography, op skipped');
+    return input;
+  }
 
   // GL canvas drives the rasterization; we copy the result back to a
   // 2D canvas so downstream ops in the chain (which expect HTMLCanvasElement
@@ -254,6 +263,7 @@ function applyPerspective(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasEl
   // context loss before returning.
   const gl = createWebglCanvas(outW, outH);
   if (!gl) {
+    console.warn('applyPerspective: WebGL unavailable, op skipped');
     // WebGL unavailable in this browser. Fall back to passing the
     // input through unchanged — the server's bake will be wrong, but
     // the editor doesn't crash. (The perspective button is disabled

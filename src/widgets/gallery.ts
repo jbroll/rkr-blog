@@ -18,6 +18,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import {
+  extractDirectiveCaption,
   extractImageIdsAndAlts,
   getKnownIds,
   indent,
@@ -56,11 +57,6 @@ function extractLayout(node: DirectiveNode): Layout {
   return l as Layout;
 }
 
-function extractCaption(node: DirectiveNode): string | null {
-  const c = node.attributes?.caption;
-  return typeof c === 'string' && c.length > 0 ? c : null;
-}
-
 interface ItemRender {
   id: string;
   sidecar: Sidecar;
@@ -92,7 +88,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
     return '<!-- gallery: no valid ids -->';
   }
   const layout = extractLayout(node);
-  const caption = extractCaption(node);
+  const caption = extractDirectiveCaption(node);
 
   const known = getKnownIds(ctx);
   const resolved = resolveIds(

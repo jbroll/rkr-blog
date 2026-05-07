@@ -9,7 +9,7 @@
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
-import { indent, renderPicture } from '../lib/widget-helpers.ts';
+import { clampAlt, extractDirectiveCaption, indent, renderPicture } from '../lib/widget-helpers.ts';
 import type {
   DirectiveNode,
   FallbackSpec,
@@ -37,14 +37,7 @@ function extractId(node: DirectiveNode): string | null {
 }
 
 function extractAlt(node: DirectiveNode): string {
-  const a = node.attributes?.alt;
-  /* c8 ignore next -- remark-directive parses alt="..." as string; no test reaches the fallback */
-  return typeof a === 'string' ? a : '';
-}
-
-function extractCaption(node: DirectiveNode): string | null {
-  const c = node.attributes?.caption;
-  return typeof c === 'string' && c.length > 0 ? c : null;
+  return clampAlt(node.attributes?.alt);
 }
 
 const VALID_POSITIONS = new Set(['default', 'full', 'left', 'right', 'inline']);
@@ -64,7 +57,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   if (!sidecar) return `<!-- image: no sidecar for ${escapeAttr(id)} -->`;
 
   const alt = escapeAttr(extractAlt(node));
-  const caption = extractCaption(node);
+  const caption = extractDirectiveCaption(node);
   const position = extractPosition(node);
 
   const picture = indent(renderPicture({ id, sidecar, variants, fallback, alt }), '  ');

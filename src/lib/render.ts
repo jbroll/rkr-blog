@@ -18,23 +18,13 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
+import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
-/** Maximum pixel count any sharp pipeline will decode. Anti-DoS: caps
- * memory and CPU on a single render. 50 Mpx is comfortably above any
- * realistic camera sensor. */
-export const SHARP_PIXEL_LIMIT = 50_000_000;
-
-const FORMAT_TO_EXT: Record<string, string | undefined> = {
-  jpeg: 'jpg',
-  png: 'png',
-  webp: 'webp',
-  avif: 'avif',
-  gif: 'gif',
-  tiff: 'tiff',
-  heif: 'heif'
-};
+// Re-export so callers that historically imported SHARP_PIXEL_LIMIT
+// from render.ts continue to work (notably routes/admin.ts).
+export { SHARP_PIXEL_LIMIT };
 
 export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';
 

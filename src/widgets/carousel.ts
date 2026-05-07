@@ -12,6 +12,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import {
+  extractDirectiveCaption,
   extractImageIdsAndAlts,
   getKnownIds,
   indent,
@@ -39,11 +40,6 @@ export const variants: VariantSpec[] = [
 ];
 
 export const fallback: FallbackSpec = { w: 1200, format: 'jpeg', quality: 85 };
-
-function extractCaption(node: DirectiveNode): string | null {
-  const c = node.attributes?.caption;
-  return typeof c === 'string' && c.length > 0 ? c : null;
-}
 
 /**
  * Optional autoplay interval in seconds. Floors invalid values to 0
@@ -89,7 +85,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   if (inputs.length === 0) {
     return '<!-- carousel: no valid ids -->';
   }
-  const caption = extractCaption(node);
+  const caption = extractDirectiveCaption(node);
   const autoplay = extractAutoplay(node);
 
   const known = getKnownIds(ctx);

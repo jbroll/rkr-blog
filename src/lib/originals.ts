@@ -15,7 +15,7 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
-import { SHARP_PIXEL_LIMIT } from './render.ts';
+import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import {
   type Sidecar,
   sidecarPath,
@@ -23,18 +23,9 @@ import {
   write as sidecarWrite
 } from './sidecar.ts';
 
-/** Map Sharp/libvips format names to on-disk file extensions. Exported
- * so route handlers that resolve `originalPath` from a sidecar's
- * recorded format don't have to duplicate this table. */
-export const FORMAT_TO_EXT: Record<string, string | undefined> = {
-  jpeg: 'jpg',
-  png: 'png',
-  webp: 'webp',
-  avif: 'avif',
-  gif: 'gif',
-  tiff: 'tiff',
-  heif: 'heif'
-};
+// Re-export so callers that historically imported FORMAT_TO_EXT from
+// originals.ts continue to work (notably routes/admin.ts).
+export { FORMAT_TO_EXT };
 
 // Default derivative set on first ingest. Matches the image widget
 // defaults (spec.md §5 sidecar schema). Caller can rewrite via POST

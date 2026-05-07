@@ -13,6 +13,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import {
+  extractDirectiveCaption,
   extractImageIdsAndAlts,
   getKnownIds,
   indent,
@@ -38,11 +39,6 @@ export const variants: VariantSpec[] = [
 ];
 
 export const fallback: FallbackSpec = { w: 800, format: 'jpeg', quality: 82 };
-
-function extractCaption(node: DirectiveNode): string | null {
-  const c = node.attributes?.caption;
-  return typeof c === 'string' && c.length > 0 ? c : null;
-}
 
 interface ItemRender {
   id: string;
@@ -82,7 +78,7 @@ function makeRender(spec: PanelSpec) {
     if (inputs.length === 0) {
       return `<!-- ${spec.kind}: no valid ids -->`;
     }
-    const caption = extractCaption(node);
+    const caption = extractDirectiveCaption(node);
 
     // Truncate excess inputs early so we don't churn through resolution
     // for slots we'd just throw away. Surface the truncation as a comment.

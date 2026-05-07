@@ -213,7 +213,6 @@ function solveLinearSystem(
       const row = M[k] as number[];
       const factor = (row[i] as number) / (pivotRow[i] as number);
       for (let j = i; j <= n; j++) {
-        row[j] as number;
         row[j] = (row[j] as number) - factor * (pivotRow[j] as number);
       }
     }
