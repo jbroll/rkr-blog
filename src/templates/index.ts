@@ -44,7 +44,8 @@ export function renderIndexPage(data: IndexPageData): string {
 </head>
 <body>
 ${siteHead(data.site)}
-<main>
+<main id="main" tabindex="-1">
+<h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
 <ul class="post-list">
 ${items}
 </ul>

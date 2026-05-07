@@ -27,7 +27,7 @@ export function renderPostPage(post: PostPageData): string {
 </head>
 <body>
 ${siteHead(post.site)}
-<main>
+<main id="main" tabindex="-1">
 <article>
 <header>
 <h1>${escapeText(post.title)}</h1>

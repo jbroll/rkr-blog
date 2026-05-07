@@ -40,52 +40,67 @@ export function renderAdminPage(data: AdminPageData): string {
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
-  #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid #ccc; border-radius: 4px; }
+  /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
+     text / panel backgrounds so dark mode actually flips through. The
+     fallbacks (after the comma) cover the case where site.css fails
+     to load. */
+  #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid var(--rkr-rule); border-radius: 4px; }
   #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
-  #rkroll-admin-toolbar button.is-active { background: #333; color: white; }
+  #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
   /* Editor preview frame: the ProseMirror editable lives inside an
      <article>, so site.css's prose typography (max-width, font-family,
-     headings, blockquotes, code, hr) applies. We give it a visible
-     box-style border + min-height so it's obvious where you can edit. */
+     headings, blockquotes, code, hr) applies. */
   #rkroll-admin-root {
     margin-bottom: .5rem; padding: .25rem 1rem;
-    border: 1px solid #ccc; border-radius: 4px;
+    border: 1px solid var(--rkr-rule); border-radius: 4px;
   }
+  /* Visible focus ring on the editable region (WCAG 2.4.7). The
+     central control of the entire admin shouldn't be invisible. */
   #rkroll-admin-root .ProseMirror { min-height: 20rem; outline: none; }
+  #rkroll-admin-root .ProseMirror:focus-visible {
+    outline: 2px solid var(--rkr-link);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
   /* Site.css would normally constrain article width via max-width: --rkr-prose
      and hide overflow; in the editor we let it stretch to the editable box. */
   #rkroll-admin-root article { max-width: none; margin: 0; }
-  #rkroll-admin-status { margin-top: .5rem; color: #666; font-size: .9rem; }
+  #rkroll-admin-status { margin-top: .5rem; color: var(--rkr-muted); font-size: .9rem; }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
-  /* Attribute panels: shown only when a matching node is selected. */
+  /* Attribute panels: shown only when a matching node is selected.
+     Use a translucent overlay over --rkr-bg so dark mode works without
+     a separate color rule (color-mix maps to a slightly-darker neutral
+     in dark mode, slightly-lighter in light mode). */
   #rkr-image-attrs[hidden], #rkr-multi-attrs[hidden] { display: none; }
   #rkr-image-attrs, #rkr-multi-attrs {
     display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
     align-items: center; margin: .75rem 0;
-    padding: .5rem .75rem; border: 1px solid #ccc; border-radius: 4px; background: #f7f7f7;
+    padding: .5rem .75rem; border: 1px solid var(--rkr-rule); border-radius: 4px;
+    background: color-mix(in srgb, var(--rkr-text) 4%, var(--rkr-bg));
   }
-  #rkr-image-attrs h3, #rkr-multi-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #555; }
+  #rkr-image-attrs h3, #rkr-multi-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: var(--rkr-muted); }
   #rkr-image-attrs input, #rkr-image-attrs select,
   #rkr-multi-attrs input, #rkr-multi-attrs select,
   #rkr-multi-attrs textarea { padding: .25rem; }
   /* Per-image alts textarea: monospace so column position matches the
      comma-separated wire format. */
-  #rkr-multi-alts { font-family: ui-monospace, monospace; resize: vertical; }
+  #rkr-multi-alts { font-family: ui-monospace, monospace; resize: vertical; max-height: 12rem; }
   /* Browser-native :out-of-range styling for autoplay (input has
      min=0/max=60 attrs). Gives the author a visual cue that >60 will
      be silently clamped on save by emitMultiImage. */
   #rkr-multi-autoplay:out-of-range {
     border: 1px solid #c00;
-    background: #fee;
+    background: color-mix(in srgb, #c00 12%, var(--rkr-bg));
   }
   /* Editor-side previews of multi-image directives: a labelled chip + a
      thumbnail strip, just enough that the author sees what's grouped. */
   #rkroll-admin-root .rkr-multi {
-    margin: 1rem 0; padding: .5rem; border: 1px dashed #aaa; border-radius: 4px; background: #fafafa;
+    margin: 1rem 0; padding: .5rem; border: 1px dashed var(--rkr-rule); border-radius: 4px;
+    background: color-mix(in srgb, var(--rkr-text) 3%, var(--rkr-bg));
   }
   #rkroll-admin-root .rkr-multi-label {
-    font-family: ui-monospace, monospace; font-size: .8rem; color: #666; margin-bottom: .25rem;
+    font-family: ui-monospace, monospace; font-size: .8rem; color: var(--rkr-muted); margin-bottom: .25rem;
     text-transform: uppercase; letter-spacing: .05em;
   }
   #rkroll-admin-root .rkr-multi-thumbs { display: flex; flex-wrap: wrap; gap: .35rem; }
@@ -93,7 +108,7 @@ export function renderAdminPage(data: AdminPageData): string {
     width: 6rem; height: 4rem; object-fit: cover; border-radius: 2px;
   }
   #rkroll-admin-root .rkr-multi-caption {
-    margin-top: .35rem; color: #666; font-size: .85rem; font-style: italic;
+    margin-top: .35rem; color: var(--rkr-muted); font-size: .85rem; font-style: italic;
   }
   /* Site.css's image positioning rules (rkr-pos-default, rkr-pos-full,
      rkr-pos-left, rkr-pos-right) target the public-page <figure> wrapper
@@ -111,19 +126,28 @@ export function renderAdminPage(data: AdminPageData): string {
     height: auto;
     margin: .5rem 0;
   }
-  /* Image-attribute action row + crop modal. */
-  .rkr-image-actions { display: flex; gap: .5rem; }
+  /* Image-attribute action row + crop modal. flex-wrap so the dense
+     icon-button cluster wraps onto a second row on narrow viewports
+     instead of horizontally overflowing. */
+  .rkr-image-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
   .rkr-image-actions button { padding: .25rem .75rem; cursor: pointer; }
   #rkr-crop-modal {
-    border: 1px solid #ccc; border-radius: 6px; padding: 0;
+    border: 1px solid var(--rkr-rule); border-radius: 6px; padding: 0;
     width: min(80vw, 60rem); max-width: 95vw; max-height: 90vh;
-    background: #fff; color: #1a1a1a; box-shadow: 0 8px 32px rgba(0,0,0,.25);
+    background: var(--rkr-bg); color: var(--rkr-text);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
   }
   #rkr-crop-modal::backdrop { background: rgba(0,0,0,.6); }
+  #rkr-crop-modal h2 {
+    margin: 0; padding: .75rem 1rem;
+    font-size: 1rem; font-family: system-ui, sans-serif;
+    border-bottom: 1px solid var(--rkr-rule);
+  }
   #rkr-crop-modal .rkr-crop-stage {
     /* Cropper needs a contained stage that bounds the image so the
        handles render inside the modal rather than at full image size. */
-    height: 60vh; max-height: 32rem; background: #222;
+    height: 60vh; max-height: 32rem;
+    background: color-mix(in srgb, var(--rkr-text) 90%, var(--rkr-bg));
   }
   #rkr-crop-modal .rkr-crop-stage img {
     /* Cropper.js requires display:block + width:100% to attach handles. */
@@ -131,9 +155,9 @@ export function renderAdminPage(data: AdminPageData): string {
   }
   #rkr-crop-modal .rkr-crop-actions {
     display: flex; gap: .5rem; align-items: center; padding: .75rem;
-    border-top: 1px solid #eee; justify-content: flex-end;
+    border-top: 1px solid var(--rkr-rule); justify-content: flex-end;
   }
-  #rkr-crop-modal #rkr-crop-status { flex: 1; color: #666; font-size: .9rem; }
+  #rkr-crop-modal #rkr-crop-status { flex: 1; color: var(--rkr-muted); font-size: .9rem; }
   #rkr-crop-modal button { padding: .35rem .85rem; cursor: pointer; }
 </style>
 </head>
@@ -166,10 +190,10 @@ export function renderAdminPage(data: AdminPageData): string {
   <span></span>
   <span class="rkr-image-actions">
     <button type="button" id="rkr-image-crop-btn">Crop…</button>
-    <button type="button" id="rkr-image-rotate-l-btn" title="Rotate 90° counter-clockwise">↺</button>
-    <button type="button" id="rkr-image-rotate-r-btn" title="Rotate 90° clockwise">↻</button>
-    <button type="button" id="rkr-image-flip-h-btn" title="Flip horizontally">⇋</button>
-    <button type="button" id="rkr-image-flip-v-btn" title="Flip vertically">⇕</button>
+    <button type="button" id="rkr-image-rotate-l-btn" aria-label="Rotate 90 degrees counter-clockwise" title="Rotate 90° counter-clockwise">↺</button>
+    <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
+    <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
+    <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
     <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
   </span>
   <label for="rkr-image-resample">Max width (px)</label>
@@ -178,7 +202,8 @@ export function renderAdminPage(data: AdminPageData): string {
     <button type="button" id="rkr-image-resample-btn">Apply</button>
   </span>
 </div>
-<dialog id="rkr-crop-modal" aria-label="Crop image">
+<dialog id="rkr-crop-modal" aria-labelledby="rkr-crop-modal-title">
+  <h2 id="rkr-crop-modal-title">Crop image</h2>
   <div class="rkr-crop-stage">
     <img id="rkr-crop-img" alt=""/>
   </div>

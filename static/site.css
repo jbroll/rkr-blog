@@ -57,9 +57,45 @@ body {
   line-height: var(--rkr-line-height);
   color: var(--rkr-text);
   background: var(--rkr-bg);
+  /* rkr-pos-full breaks out via `width: 100vw; margin-left: calc(-50vw + 50%)`.
+     On browsers with always-present scrollbars 100vw is wider than the
+     viewport's content area, producing a 1-px horizontal scroll. Clip
+     here so the breakout never overflows. */
+  overflow-x: clip;
 }
 
 /* ---- site chrome -------------------------------------------------- */
+
+/* Skip-to-content link: hidden until focused, then visible at top-left.
+   First tab stop on every page lets keyboard users jump past the chrome. */
+.rkr-skip {
+  position: absolute;
+  left: 0; top: 0;
+  padding: .5rem .75rem;
+  background: var(--rkr-bg);
+  color: var(--rkr-link);
+  border: 2px solid var(--rkr-link);
+  border-radius: var(--rkr-radius);
+  text-decoration: none;
+  /* Off-screen until focused. */
+  transform: translateY(-200%);
+}
+.rkr-skip:focus, .rkr-skip:focus-visible {
+  transform: translateY(0);
+  z-index: 1000;
+  outline: none;
+}
+
+/* Global keyboard-focus indicator. Without this, links and buttons on
+   the public side have no visible focus state — WCAG 2.4.7 fail. */
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--rkr-link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* main is focusable for skip-link target — hide its outline (the focus
+   ring on the post body would be more confusing than helpful). */
+main:focus-visible { outline: none; }
 
 .rkr-site-head {
   border-bottom: 1px solid var(--rkr-rule);
@@ -405,6 +441,12 @@ article hr {
   border-radius: var(--rkr-radius);
 }
 .rkr-carousel-track::-webkit-scrollbar { display: none; }
+/* WCAG 2.3.3: respect prefers-reduced-motion. Auto-scroll instead of
+   smooth keeps the carousel functional without animating motion the
+   user explicitly opted out of. */
+@media (prefers-reduced-motion: reduce) {
+  .rkr-carousel-track { scroll-behavior: auto; }
+}
 
 .rkr-carousel-slide {
   flex: 0 0 100%;
@@ -457,19 +499,34 @@ article hr {
 
 .rkr-carousel-dots {
   display: inline-flex;
-  gap: .35rem;
+  gap: .25rem;
   align-items: center;
 }
+/* WCAG 2.5.8 (AA, 2.2): 24x24px hit area. The visible dot stays small
+   for design; padding + box-shadow make the dot itself, but the
+   button is sized for the touch/click target. */
 .rkr-carousel-dot {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rkr-carousel-dot::after {
+  content: '';
+  display: block;
   width: .55rem;
   height: .55rem;
-  padding: 0;
   border-radius: 50%;
   border: 1px solid var(--rkr-muted);
   background: transparent;
-  cursor: pointer;
 }
-.rkr-carousel-dot.is-active {
+.rkr-carousel-dot.is-active::after {
   background: var(--rkr-text);
   border-color: var(--rkr-text);
 }
@@ -522,6 +579,16 @@ article hr {
 }
 
 /* ---- index page --------------------------------------------------- */
+
+/* Visually-hidden but accessible — the index has site chrome that already
+   shows the title, but every page needs a document-level <h1>. */
+.rkr-index-heading {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
 
 .post-list {
   list-style: none;

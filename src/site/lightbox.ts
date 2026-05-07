@@ -33,6 +33,20 @@ const STYLE = `
   font-style: italic;
 }
 .rkr-figure:not(.rkr-pos-inline) img { cursor: zoom-in; }
+/* Lightbox trigger: an unstyled <button> wrapping each clickable img
+   so keyboard users can activate it. Inherits sizing from the figure
+   layout; the visible chrome is the img alone. */
+.rkr-lightbox-trigger {
+  display: contents;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: zoom-in;
+}
+.rkr-lightbox-trigger:focus-visible {
+  outline: 2px solid var(--rkr-link, #1a4f7f);
+  outline-offset: 2px;
+}
 `;
 
 interface OpenArgs {
@@ -134,10 +148,28 @@ function init(): void {
     }
   });
 
+  // Wrap each clickable image in a <button> so keyboard users can
+  // open the lightbox with Enter / Space. Bare <img> isn't focusable
+  // and has no role that announces "activatable" to screen readers
+  // (WCAG 2.1.1). The button is unstyled — just a transparent shell
+  // around the existing img — so visual layout doesn't change.
   for (const figure of figures) {
     const img = figure.querySelector('img');
     if (!img) continue;
-    img.addEventListener('click', (e) => {
+    if (img.parentElement?.classList.contains('rkr-lightbox-trigger')) continue;
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'rkr-lightbox-trigger';
+    const caption = captionFor(figure);
+    const label = caption
+      ? `Enlarge image: ${caption}`
+      : img.alt
+        ? `Enlarge image: ${img.alt}`
+        : 'Enlarge image';
+    trigger.setAttribute('aria-label', label);
+    img.parentNode?.insertBefore(trigger, img);
+    trigger.appendChild(img);
+    trigger.addEventListener('click', (e) => {
       e.stopPropagation();
       openOverlay(el, overlayImg, overlayCap, {
         src: img.currentSrc || img.src,

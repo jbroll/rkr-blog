@@ -819,7 +819,10 @@ function mount(): void {
       const altsList = (a.alts ?? '').split(',').map((s) => s.trim());
       while (altsList.length < idCount) altsList.push('');
       multiAlts.value = altsList.slice(0, Math.max(idCount, altsList.length)).join('\n');
-      multiAlts.rows = Math.max(3, idCount);
+      // Cap the visible row count so a 30-image gallery doesn't shove
+      // every other panel control off the bottom of the viewport. The
+      // textarea is `resize: vertical` if the author needs more.
+      multiAlts.rows = Math.min(8, Math.max(3, idCount));
       multiCaption.value = a.caption ?? '';
       const showLayout = activeMulti === 'gallery';
       multiLayout.style.display = showLayout ? '' : 'none';
