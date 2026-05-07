@@ -4,6 +4,12 @@
 //
 // Loaded by post.ts and index.ts via <script type="module" defer>.
 // No-ops on pages with no figures, so it's safe to include globally.
+//
+// Accessibility (WCAG 2.1.2 / dialog pattern):
+//   - role=dialog + aria-modal=true announce the overlay to screen readers
+//   - the overlay is `tabindex=-1` and we focus it on open
+//   - we trap Tab inside the overlay so focus can't escape behind it
+//   - the previously-focused element is captured and restored on close
 
 export {};
 
@@ -53,6 +59,7 @@ function makeOverlay(): {
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
   el.setAttribute('aria-hidden', 'true');
+  el.tabIndex = -1; // focusable target for openOverlay()
 
   const img = document.createElement('img');
   img.alt = '';
@@ -66,9 +73,16 @@ function makeOverlay(): {
   return { el, img, caption };
 }
 
+let previousFocus: HTMLElement | null = null;
+
 function closeOverlay(el: HTMLElement): void {
   el.classList.remove('is-open');
   el.setAttribute('aria-hidden', 'true');
+  // Restore focus to the element that was focused before we opened.
+  if (previousFocus && document.contains(previousFocus)) {
+    previousFocus.focus({ preventScroll: true });
+  }
+  previousFocus = null;
 }
 
 function openOverlay(
@@ -77,6 +91,7 @@ function openOverlay(
   caption: HTMLElement,
   args: OpenArgs
 ): void {
+  previousFocus = (document.activeElement as HTMLElement | null) ?? null;
   img.src = args.src;
   img.alt = args.alt;
   if (args.caption) {
@@ -88,6 +103,8 @@ function openOverlay(
   }
   el.classList.add('is-open');
   el.setAttribute('aria-hidden', 'false');
+  // Move focus into the dialog so Tab cycles and screen readers announce.
+  el.focus({ preventScroll: true });
 }
 
 function captionFor(figure: HTMLElement): string | null {
@@ -105,8 +122,15 @@ function init(): void {
 
   el.addEventListener('click', () => closeOverlay(el));
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && el.classList.contains('is-open')) {
+    if (!el.classList.contains('is-open')) return;
+    if (e.key === 'Escape') {
       closeOverlay(el);
+    } else if (e.key === 'Tab') {
+      // Focus trap: only the overlay itself is focusable inside, so Tab
+      // and Shift+Tab both keep focus on it. Prevents focus from leaking
+      // back to the article behind.
+      e.preventDefault();
+      el.focus({ preventScroll: true });
     }
   });
 

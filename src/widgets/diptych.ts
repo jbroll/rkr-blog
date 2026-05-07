@@ -12,9 +12,9 @@
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { listSidecarIds } from '../lib/posts.ts';
 import type { OutputFormat } from '../lib/render.ts';
 import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
+import { extractImageIds, getKnownIds, resolveIds } from '../lib/widget-helpers.ts';
 import type {
   DirectiveNode,
   FallbackSpec,
@@ -41,28 +41,9 @@ const QUALITY_BY_FORMAT: Record<string, number> = {
   png: 0
 };
 
-const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
-
-function extractIds(node: DirectiveNode): string[] {
-  const raw = node.attributes?.ids;
-  if (typeof raw !== 'string') return [];
-  return raw
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter((s) => HEX_PREFIX.test(s));
-}
-
 function extractCaption(node: DirectiveNode): string | null {
   const c = node.attributes?.caption;
   return typeof c === 'string' && c.length > 0 ? c : null;
-}
-
-function resolveIds(inputs: string[], known: string[]): (string | null)[] {
-  return inputs.map((input) => {
-    if (input.length === 64) return known.includes(input) ? input : null;
-    const matches = known.filter((id) => id.startsWith(input));
-    return matches.length === 1 ? (matches[0] ?? null) : null;
-  });
 }
 
 interface ItemRender {
@@ -121,7 +102,7 @@ interface PanelSpec {
 
 function makeRender(spec: PanelSpec) {
   return async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
-    const inputs = extractIds(node);
+    const inputs = extractImageIds(node.attributes?.ids);
     if (inputs.length === 0) {
       return `<!-- ${spec.kind}: no valid ids -->`;
     }
@@ -138,7 +119,7 @@ function makeRender(spec: PanelSpec) {
       trimmed = inputs.slice(0, spec.count);
     }
 
-    const known = listSidecarIds(ctx.siteRoot);
+    const known = getKnownIds(ctx);
     const resolved = resolveIds(trimmed, known);
 
     const items: ItemRender[] = [];

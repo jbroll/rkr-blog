@@ -139,6 +139,14 @@ test('gallery returns the missing-id comments only, when zero items resolve', as
   assert.equal(html.includes('rkr-gallery-item'), false);
 });
 
+test('gallery dedupes repeated ids (renders one item, not many)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 1);
+  const html = await dispatch(root, { ids: `${ids[0]},${ids[0]},${ids[0]}` });
+  // Three references → one rendered item, not three.
+  assert.equal((html.match(/class="rkr-gallery-item"/g) ?? []).length, 1);
+});
+
 test('gallery silently drops short prefixes that match more than one id', async (t) => {
   const root = freshSiteRoot(t);
   // Both ids will start with their own first two hex chars; we can't
