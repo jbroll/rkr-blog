@@ -234,8 +234,8 @@ async function uploadImage(file: File): Promise<UploadResponse> {
   return (await res.json()) as UploadResponse;
 }
 
-/** Upload a list of files in series, returning the ids in input order.
- * Errors abort the batch — partial state stays out of the editor. */
+// In series so a partial-batch failure doesn't dribble half the ids
+// into the editor before throwing.
 async function uploadMany(files: File[]): Promise<string[]> {
   const ids: string[] = [];
   for (const f of files) {
@@ -246,11 +246,10 @@ async function uploadMany(files: File[]): Promise<string[]> {
   return ids;
 }
 
-/** Open a hidden file input with `multiple` set, await the user's
- * selection, and resolve to the chosen File array (empty if cancelled).
- * Without the `cancel` listener (and the focus-return fallback for
- * older browsers) the Promise would hang and the input would leak
- * into the DOM if the user dismissed the dialog without choosing. */
+// `cancel` + focus-return fallback are both needed: browsers that
+// don't fire `cancel` (older Safari/Firefox) only signal a dismissed
+// picker via the focus event; without one of these the Promise hangs
+// and the input leaks into the DOM.
 function pickMany(): Promise<File[]> {
   return new Promise<File[]>((resolve) => {
     const input = document.createElement('input');

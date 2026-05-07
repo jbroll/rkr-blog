@@ -68,6 +68,13 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkr-image-attrs h3, #rkr-multi-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: #555; }
   #rkr-image-attrs input, #rkr-image-attrs select,
   #rkr-multi-attrs input, #rkr-multi-attrs select { padding: .25rem; }
+  /* Browser-native :out-of-range styling for autoplay (input has
+     min=0/max=60 attrs). Gives the author a visual cue that >60 will
+     be silently clamped on save by emitMultiImage. */
+  #rkr-multi-autoplay:out-of-range {
+    border: 1px solid #c00;
+    background: #fee;
+  }
   /* Editor-side previews of multi-image directives: a labelled chip + a
      thumbnail strip, just enough that the author sees what's grouped. */
   #rkroll-admin-root .rkr-multi {

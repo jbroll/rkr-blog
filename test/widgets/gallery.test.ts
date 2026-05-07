@@ -149,21 +149,30 @@ test('gallery dedupes repeated ids (renders one item, not many)', async (t) => {
 
 test('gallery silently drops short prefixes that match more than one id', async (t) => {
   const root = freshSiteRoot(t);
-  // Both ids will start with their own first two hex chars; we can't
-  // synthesize a guaranteed-ambiguous prefix from random hashes. Instead,
-  // ingest two images that share a prefix by manipulating the sidecar
-  // listing directly. Simpler: make the prefix shorter than 6 (invalid)
-  // — that's already filtered out by HEX_PREFIX. So we just verify the
-  // "ambiguous" code path via a test fixture that synthesizes the case.
-  await ingestN(root, 2);
-  // Use a 6-char prefix that's almost certainly NOT unique among 2 ids
-  // unless they happen to start the same — overwhelmingly likely to NOT
-  // match either, so result is "no match" rather than "ambiguous".
-  // The ambiguous-prefix branch is exercised at the same code path
-  // (matches.length !== 1 → null) by either the no-match or multi-match
-  // case, so this test guards both arms structurally.
-  const html = await dispatch(root, { ids: '000000' });
-  // Either zero matches → comment, or it happens to match → item.
-  // Both outcomes are acceptable; the assertion is just that we don't crash.
-  assert.ok(html.includes('rkr-gallery-item') || html.includes('no match for'));
+  // Plant two hand-crafted sidecars sharing a prefix so the ambiguous
+  // branch (matches.length > 1 → null) is genuinely exercised. Ingest-
+  // generated ids are sha256 hashes that won't reliably collide on a
+  // short prefix, which is why the previous version of this test could
+  // only assert "doesn't crash".
+  const idA = `aaaaaa${'1'.repeat(58)}`;
+  const idB = `aaaaaa${'2'.repeat(58)}`;
+  for (const id of [idA, idB]) {
+    fs.writeFileSync(
+      path.join(root, 'sidecars', `${id}.json`),
+      JSON.stringify({
+        version: 1,
+        original: id,
+        source: { kind: 'upload', fetched: '2030-01-01T00:00:00Z' },
+        metadata: { width: 100, height: 75, format: 'jpeg' },
+        ops: [],
+        outputs: [{ format: 'jpeg', quality: 85 }],
+        variants: [{ w: 1200 }]
+      })
+    );
+  }
+  // 'aaaaaa' is a valid 6-hex prefix, matches both ids, so resolveIds
+  // returns null → emits the no-match comment; no item is rendered.
+  const html = await dispatch(root, { ids: 'aaaaaa' });
+  assert.match(html, /<!-- gallery: no match for "aaaaaa" -->/);
+  assert.equal(html.includes('rkr-gallery-item'), false);
 });

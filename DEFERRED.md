@@ -39,20 +39,6 @@ deployment. Specifically:
 
 ## Code-review findings (Step 9 series)
 
-### 9a — c8 ignore vs `Widget.fallback` optionality
-**What.** `src/lib/widgets.ts` types `Widget.fallback` as optional, but
-`/admin/preview/:id` asserts at runtime that imageWidget always has one
-(with a c8 ignore on the guard). Either drop the optional in the interface
-(image is the only fallback consumer) or remove the c8 ignore so coverage
-tracks reality.
-
-**Why deferred.** Judgment call; the runtime guard is correct defense and
-the c8 ignore documents why coverage doesn't reach it. Other widget types
-might legitimately not need a fallback in the future.
-
-**Trigger.** When we add a new widget that does need a fallback, or when
-someone asks why the optional is there.
-
 ### 9a — Per-keystroke transactions in image attribute panel
 **What.** `commitAttr` in the editor fires on every input event for alt and
 caption, creating one TipTap transaction (and one undo entry) per character.
@@ -78,26 +64,6 @@ saves, not clipboard. Cross-session paste isn't a current use case.
 
 **Trigger.** If we add a "duplicate post" or "paste from preview" feature,
 or if authors start losing data via clipboard round-trips.
-
-### 9b — Carousel autoplay UI feedback
-**What.** The autoplay input has `max="60"` (advisory only). With the clamp
-fix in `emitMultiImage`, an out-of-range value silently clamps on emit; the
-author gets no UI signal that 999 became 60.
-
-**Why deferred.** Low priority — typing 999 is unusual; the published page
-will look correct.
-
-**Trigger.** First user confusion. Or when we add other clamped numeric
-inputs and want a shared "out-of-range" indicator.
-
-### 9b — Comment density
-**What.** Some new comments in `src/admin/main.ts` (e.g. JSDoc on `uploadMany`/
-`pickMany`) are descriptive rather than non-obvious — borderline against
-"no comments unless WHY is non-obvious".
-
-**Why deferred.** Subjective. Easy to trim during the next adjacent edit.
-
-**Trigger.** Next time those functions are touched.
 
 ## Step 7 follow-ups
 

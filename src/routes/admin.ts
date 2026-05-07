@@ -27,7 +27,12 @@ import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
-import imageWidget from '../widgets/image.ts';
+// Import the fallback as a named, non-optional export so the runtime
+// guard (and its c8 ignore) goes away. Widget.fallback is `?:` on the
+// interface to allow future widgets that don't render images; for the
+// only image-fallback consumer we know about today, we can pin the
+// type to FallbackSpec directly.
+import { fallback as imageFallback } from '../widgets/image.ts';
 
 /** Production default fetcher used by /admin/import/url. Injectable from
  * tests so a fixture server on 127.0.0.1 doesn't trip the SSRF guard. */
@@ -129,17 +134,16 @@ export default async function adminRoutes(
       const sidecar = await sidecarRead(siteRoot, fullId);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
 
-      const fb = imageWidget.fallback;
-      /* c8 ignore next 3 -- imageWidget always declares a fallback */
-      if (!fb) return reply.code(500).send({ error: 'no fallback configured' });
-
       const ophash = cacheKey({
         originalId: fullId,
         ops: sidecar.ops as Parameters<typeof cacheKey>[0]['ops'],
-        variant: { w: fb.w },
-        output: { format: fb.format as OutputFormat, quality: fb.quality }
+        variant: { w: imageFallback.w },
+        output: {
+          format: imageFallback.format as OutputFormat,
+          quality: imageFallback.quality
+        }
       });
-      return reply.redirect(`/img/${fullId}.${ophash}.${fb.format}`, 302);
+      return reply.redirect(`/img/${fullId}.${ophash}.${imageFallback.format}`, 302);
     }
   );
 
