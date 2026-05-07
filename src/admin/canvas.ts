@@ -14,9 +14,13 @@
 
 import {
   clampInt,
+  computeHomography,
   computeResampleSize,
+  invertMatrix3,
   normalizeRotation,
   opsEqual,
+  type Point,
+  perspectiveOutputSize,
   simplifyOps
 } from './canvas-math';
 
@@ -122,6 +126,8 @@ function applyOne(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasElement {
       return applyFlip(input, op);
     case 'resample':
       return applyResample(input, op);
+    case 'perspective':
+      return applyPerspective(input, op);
     default:
       // Unknown op — pass through. The server validates shapes; this
       // is a soft-fail so a future op type the client doesn't yet
@@ -195,4 +201,216 @@ function applyResample(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasEleme
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(input, 0, 0, width, height);
   return out;
+}
+
+// ---- perspective rectify ---------------------------------------------
+// Canvas2D's setTransform is affine — no projective component — so we
+// can't do perspective with the 2D context alone. WebGL is the right
+// tool: pass the source canvas as a texture, draw a fullscreen quad
+// at the rectified output size, and let a fragment shader sample the
+// source via the inverse homography per pixel.
+
+function parsePerspectiveCorners(op: SidecarOp): [Point, Point, Point, Point] | null {
+  const c = op.corners;
+  if (!Array.isArray(c) || c.length !== 4) return null;
+  const out: Point[] = [];
+  for (const p of c) {
+    if (!Array.isArray(p) || p.length !== 2) return null;
+    const x = Number(p[0]);
+    const y = Number(p[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    out.push([x, y]);
+  }
+  return out as [Point, Point, Point, Point];
+}
+
+function applyPerspective(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasElement {
+  const corners = parsePerspectiveCorners(op);
+  if (!corners) return input;
+  const { w: outW, h: outH } = perspectiveOutputSize(corners);
+  // H maps source corners → output corners (0,0)-(outW,outH). Sampling
+  // wants the inverse: for each output pixel, where in the source
+  // texture does it come from?
+  const dst: [Point, Point, Point, Point] = [
+    [0, 0],
+    [outW, 0],
+    [outW, outH],
+    [0, outH]
+  ];
+  const H = computeHomography(corners, dst);
+  if (!H) return input;
+  const Hinv = invertMatrix3(H);
+  if (!Hinv) return input;
+
+  // GL canvas drives the rasterization; we copy the result back to a
+  // 2D canvas so downstream ops in the chain (which expect HTMLCanvasElement
+  // sources) can keep using getContext('2d').
+  const gl = createWebglCanvas(outW, outH);
+  if (!gl) {
+    // WebGL unavailable in this browser. Fall back to passing the
+    // input through unchanged — the server's bake will be wrong, but
+    // the editor doesn't crash.
+    return input;
+  }
+
+  drawPerspective(gl, input, Hinv, outW, outH);
+
+  // Snapshot to a 2D canvas so the downstream pipeline (and toBlob)
+  // can consume it without WebGL knowledge.
+  const out = document.createElement('canvas');
+  out.width = outW;
+  out.height = outH;
+  const ctx = out.getContext('2d');
+  if (!ctx) throw new Error('canvas: 2d context unavailable');
+  ctx.drawImage(gl.canvas, 0, 0);
+  return out;
+}
+
+interface GlContext {
+  canvas: HTMLCanvasElement;
+  gl: WebGLRenderingContext;
+  program: WebGLProgram;
+  texture: WebGLTexture;
+  positionBuf: WebGLBuffer;
+  uHinvLoc: WebGLUniformLocation;
+  uTexSizeLoc: WebGLUniformLocation;
+}
+
+// We flip Y in the vertex shader so that v_dst follows the canvas
+// (Y-down) convention: v_dst.y=0 at the visual top of the output
+// canvas, =1 at the bottom. The texture is uploaded WITHOUT
+// UNPACK_FLIP_Y_WEBGL so its UV maps the same way (UV.y=0 at top).
+// All coordinate math in the fragment shader is then plain
+// canvas-pixel space; no extra flips.
+const VERTEX_SRC = `
+attribute vec2 a_pos;
+varying vec2 v_dst;
+void main() {
+  v_dst = (a_pos + 1.0) * 0.5; // [-1,1] → [0,1]
+  gl_Position = vec4(a_pos.x, -a_pos.y, 0.0, 1.0);
+}`;
+
+// For each output pixel: compute the inverse-homographied source pixel,
+// divide by w, sample. Pixels that map outside the source bounds are
+// transparent (the user's quadrilateral may extend past source edges).
+const FRAGMENT_SRC = `
+precision mediump float;
+varying vec2 v_dst;
+uniform sampler2D u_src;
+uniform vec2 u_outSize;
+uniform vec2 u_srcSize;
+uniform mat3 u_hinv;
+void main() {
+  vec2 p = v_dst * u_outSize;
+  vec3 src = u_hinv * vec3(p, 1.0);
+  vec2 srcPx = src.xy / src.z;
+  vec2 srcUv = srcPx / u_srcSize;
+  if (srcUv.x < 0.0 || srcUv.x > 1.0 || srcUv.y < 0.0 || srcUv.y > 1.0) {
+    gl_FragColor = vec4(0.0);
+    return;
+  }
+  gl_FragColor = texture2D(u_src, srcUv);
+}`;
+
+function createWebglCanvas(width: number, height: number): GlContext | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const gl = canvas.getContext('webgl', { premultipliedAlpha: false });
+  if (!gl) return null;
+
+  const program = compileProgram(gl, VERTEX_SRC, FRAGMENT_SRC);
+  if (!program) return null;
+  gl.useProgram(program);
+
+  // Fullscreen triangle pair covering [-1,1] × [-1,1].
+  const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+  const positionBuf = gl.createBuffer();
+  if (!positionBuf) return null;
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+  const aPosLoc = gl.getAttribLocation(program, 'a_pos');
+  gl.enableVertexAttribArray(aPosLoc);
+  gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+  const texture = gl.createTexture();
+  if (!texture) return null;
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  const uHinvLoc = gl.getUniformLocation(program, 'u_hinv');
+  const uTexSizeLoc = gl.getUniformLocation(program, 'u_srcSize');
+  const uOutSizeLoc = gl.getUniformLocation(program, 'u_outSize');
+  if (!uHinvLoc || !uTexSizeLoc || !uOutSizeLoc) return null;
+  gl.uniform2f(uOutSizeLoc, width, height);
+
+  return { canvas, gl, program, texture, positionBuf, uHinvLoc, uTexSizeLoc };
+}
+
+function drawPerspective(
+  ctx: GlContext,
+  source: HTMLCanvasElement,
+  Hinv: readonly number[],
+  outW: number,
+  outH: number
+): void {
+  const { gl, texture, uHinvLoc, uTexSizeLoc } = ctx;
+  gl.viewport(0, 0, outW, outH);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.uniform2f(uTexSizeLoc, source.width, source.height);
+
+  // mat3 uniforms in WebGL are column-major. Hinv is row-major; transpose.
+  const colMajor = new Float32Array([
+    Hinv[0] as number,
+    Hinv[3] as number,
+    Hinv[6] as number,
+    Hinv[1] as number,
+    Hinv[4] as number,
+    Hinv[7] as number,
+    Hinv[2] as number,
+    Hinv[5] as number,
+    Hinv[8] as number
+  ]);
+  gl.uniformMatrix3fv(uHinvLoc, false, colMajor);
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+function compileShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
+  const sh = gl.createShader(type);
+  if (!sh) return null;
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    gl.deleteShader(sh);
+    return null;
+  }
+  return sh;
+}
+
+function compileProgram(
+  gl: WebGLRenderingContext,
+  vertSrc: string,
+  fragSrc: string
+): WebGLProgram | null {
+  const vs = compileShader(gl, gl.VERTEX_SHADER, vertSrc);
+  const fs = compileShader(gl, gl.FRAGMENT_SHADER, fragSrc);
+  if (!vs || !fs) return null;
+  const program = gl.createProgram();
+  if (!program) return null;
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    gl.deleteProgram(program);
+    return null;
+  }
+  return program;
 }

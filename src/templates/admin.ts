@@ -191,6 +191,50 @@ export function renderAdminPage(data: AdminPageData): string {
   }
   #rkr-crop-modal #rkr-crop-status { flex: 1; color: var(--rkr-muted); font-size: .9rem; }
   #rkr-crop-modal button { padding: .35rem .85rem; cursor: pointer; }
+  /* Perspective modal: same outer shell as the crop modal, but the
+     stage is custom (no Cropper.js). 4 absolutely-positioned handles
+     over the image, plus an SVG that draws the connecting quad. */
+  #rkr-persp-modal {
+    border: 1px solid var(--rkr-rule); border-radius: 6px; padding: 0;
+    width: min(80vw, 60rem); max-width: 95vw; max-height: 90vh;
+    background: var(--rkr-bg); color: var(--rkr-text);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  #rkr-persp-modal::backdrop { background: rgba(0,0,0,.6); }
+  #rkr-persp-modal h2 {
+    margin: 0; padding: .75rem 1rem; font-size: 1rem;
+    font-family: system-ui, sans-serif;
+    border-bottom: 1px solid var(--rkr-rule);
+  }
+  #rkr-persp-modal .rkr-persp-stage {
+    position: relative; height: 60vh; max-height: 32rem;
+    background: color-mix(in srgb, var(--rkr-text) 90%, var(--rkr-bg));
+    overflow: hidden;
+  }
+  #rkr-persp-modal .rkr-persp-stage img {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: 100%; max-height: 100%;
+    user-select: none; pointer-events: none;
+  }
+  #rkr-persp-modal .rkr-persp-stage svg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  #rkr-persp-modal .rkr-persp-handle {
+    position: absolute; width: 1.25rem; height: 1.25rem;
+    margin: -.625rem 0 0 -.625rem;
+    background: var(--rkr-link); border: 2px solid var(--rkr-bg);
+    border-radius: 50%; cursor: grab;
+    box-shadow: 0 0 0 1px var(--rkr-rule);
+    touch-action: none;
+  }
+  #rkr-persp-modal .rkr-persp-handle:active { cursor: grabbing; }
+  #rkr-persp-modal .rkr-persp-actions {
+    display: flex; gap: .5rem; align-items: center; padding: .75rem;
+    border-top: 1px solid var(--rkr-rule); justify-content: flex-end;
+  }
+  #rkr-persp-modal #rkr-persp-status { flex: 1; color: var(--rkr-muted); font-size: .9rem; }
+  #rkr-persp-modal button { padding: .35rem .85rem; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -226,6 +270,7 @@ export function renderAdminPage(data: AdminPageData): string {
     <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
     <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
     <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
+    <button type="button" id="rkr-image-perspective-btn" aria-label="Perspective rectify" title="Straighten a tilted region (de-skew)">⌐</button>
     <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
     <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
     <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
@@ -248,6 +293,18 @@ export function renderAdminPage(data: AdminPageData): string {
     <span id="rkr-crop-status"></span>
     <button type="button" id="rkr-crop-cancel">Cancel</button>
     <button type="button" id="rkr-crop-save">Save crop</button>
+  </div>
+</dialog>
+<dialog id="rkr-persp-modal" aria-labelledby="rkr-persp-modal-title">
+  <h2 id="rkr-persp-modal-title">Perspective rectify</h2>
+  <div class="rkr-persp-stage" id="rkr-persp-stage">
+    <img id="rkr-persp-img" alt=""/>
+    <svg id="rkr-persp-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+  <div class="rkr-persp-actions">
+    <span id="rkr-persp-status">Drag the four handles to the corners of the region to straighten</span>
+    <button type="button" id="rkr-persp-cancel">Cancel</button>
+    <button type="button" id="rkr-persp-save">Save perspective</button>
   </div>
 </dialog>
 <div id="rkr-multi-attrs" hidden>
