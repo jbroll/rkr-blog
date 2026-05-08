@@ -13,7 +13,9 @@
     "src/site/carousel.ts",
     "src/site/img-retry.ts",
     "scripts/check-duplicate-types.ts",
-    "test/**/*.test.ts"
+    "test/**/*.test.ts",
+    "test-e2e/server-runner.ts",
+    "test-e2e/**/*.spec.ts"
   ],
   "ignore": [
     "src/admin/css.d.ts"

@@ -383,34 +383,36 @@ naturally avoids one disruptive commit and keeps the queue moving.
 of `scripts/check-duplicate-types.ts` once the rename or extract
 ships. Empty allowlist → simplify the script.
 
-### Playwright UI testing
+### Playwright UI test coverage (expand)
 
 **Source.** User request, 2026-05-08.
 
-**What.** The editor's UI binding code in `src/admin/main.ts`
-(toolbar, attribute panel, cropper, integrations) has no
-automated test coverage today — it's verifiable only by hand.
-Add Playwright with a small headless suite covering the golden
-paths:
+**What.** Playwright infrastructure shipped (`playwright.config.ts`,
+`test-e2e/server-runner.ts`, `npm run test:e2e`, chromium installed).
+Initial suite covers the token-login golden path:
+
+- ✅ `/admin/login` renders both options
+- ✅ token-login → /admin/editor lands on the SPA shell
+- ✅ wrong token → 401, no session
+
+The editor's UI binding code in `src/admin/main.ts` (toolbar,
+attribute panel, cropper, integrations) is the still-uncovered
+surface. Outstanding cases:
 
 - Open a post, type, save → reload → content matches
 - Insert each figure shape (image / gallery / carousel / diptych /
   triptych), edit attributes, save → markdown matches expected
   directive
 - Crop a single-image figure, save → sidecar ops persist
-- OAuth callback (Google) lands on admin dashboard
-- Login button (once the admin-token entry above ships)
+- OAuth callback (Google) lands on admin dashboard (needs an inject
+  hook to stub the exchange/verifier inside the long-running
+  webServer; the unit suite already covers the data layer)
 
-Wire it to run in CI behind `npm run test:e2e` so the unit suite
-stays fast (`npm test` ≈ a few seconds) and the e2e suite runs on
-push / PR.
+**Why deferred.** Each editor-flow test needs fixture data (a
+saved post with images) plus assertions tied to TipTap's DOM,
+which is fragile across upgrades. Worth doing alongside the
+`main.ts` refactor so each split has a regression net.
 
-**Why deferred.** Real new infrastructure: Playwright dependency,
-test database / fixture setup, CI runner, headless browser
-install. Worth doing as a focused commit so the setup is readable
-later. Strongly complementary to the `main.ts` refactor — UI tests
-make the split safer.
-
-**Trigger.** Land before or alongside the `main.ts` split so the
-refactor has a regression net. Or first time a UI bug ships
-because there was no automated check.
+**Trigger.** Land alongside the `main.ts` split so the refactor
+has a regression net, or first time a UI bug ships because there
+was no automated check.
