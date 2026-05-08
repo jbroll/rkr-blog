@@ -3,7 +3,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { type SiteChrome, siteFoot, siteHead } from './layout.ts';
 
-export interface IndexEntry {
+interface IndexEntry {
   slug: string;
   title: string;
   date?: string;

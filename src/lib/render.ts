@@ -24,7 +24,7 @@ import { read as sidecarRead } from './sidecar.ts';
 
 export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';
 
-export interface CropOp {
+interface CropOp {
   type: 'crop';
   x: number;
   y: number;
@@ -32,14 +32,14 @@ export interface CropOp {
   h: number;
 }
 
-export interface ResampleOp {
+interface ResampleOp {
   type: 'resample';
   w?: number;
   h?: number;
   fit?: 'inside' | 'outside' | 'cover' | 'contain' | 'fill';
 }
 
-export interface RotateOp {
+interface RotateOp {
   type: 'rotate';
   degrees?: number;
 }
@@ -47,7 +47,7 @@ export interface RotateOp {
 /** Mirror across an axis. `horizontal` flips left↔right (sharp.flop),
  * `vertical` flips top↔bottom (sharp.flip). We normalise the naming
  * because sharp's flip/flop API is famously easy to confuse. */
-export interface FlipOp {
+interface FlipOp {
   type: 'flip';
   axis: 'horizontal' | 'vertical';
 }
@@ -59,7 +59,7 @@ export interface FlipOp {
  * applyOp throws and the request returns an error. The op is in the
  * union so the exhaustiveness check at applyOp's `default` branch is
  * a real type-level guarantee rather than a runtime-only string match. */
-export interface PerspectiveOp {
+interface PerspectiveOp {
   type: 'perspective';
   corners: ReadonlyArray<readonly [number, number]>;
 }

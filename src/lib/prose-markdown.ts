@@ -32,12 +32,12 @@ import { safeLinkUrl } from './safe-url.ts';
 
 // ---- ProseMirror JSON shape (subset) ----------------------------------
 
-export interface ProseMark {
+interface ProseMark {
   type: string;
   attrs?: Record<string, unknown>;
 }
 
-export interface ProseNode {
+interface ProseNode {
   type: string;
   attrs?: Record<string, unknown>;
   content?: ProseNode[];

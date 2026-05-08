@@ -22,7 +22,7 @@ export const events = new EventEmitter();
 
 const POLL_INTERVAL_MS = 250;
 
-export type JobKind = 'render';
+type JobKind = 'render';
 
 export interface RenderPayload extends DerivativeArgs {}
 

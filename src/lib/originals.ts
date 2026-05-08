@@ -16,7 +16,8 @@ import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
 import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
-import { type Sidecar, read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
+import { read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
+import type { Sidecar } from './sidecar-types.ts';
 
 // Default derivative set on first ingest. Matches the image widget
 // defaults (spec.md §5 sidecar schema). Caller can rewrite via POST
@@ -46,7 +47,7 @@ export const DEFAULT_VARIANTS = [
   { w: 1600 } // image/carousel srcset
 ];
 
-export interface IngestSource {
+interface IngestSource {
   kind: string;
   originalName?: string | null;
   // Provider-specific fields (e.g. fileId for gdrive) are allowed.

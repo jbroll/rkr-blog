@@ -6,7 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { type Sidecar, read as sidecarRead } from './sidecar.ts';
+import { read as sidecarRead } from './sidecar.ts';
+import type { Sidecar } from './sidecar-types.ts';
 
 /** Iterate every sidecar id present in $SITE_ROOT/sidecars/. */
 export function listSidecarIds(siteRoot: string): string[] {

@@ -1,9 +1,8 @@
 // Sidecar type declarations, separated from lib/sidecar.ts so the
 // browser bundle (admin/canvas.ts → admin/main.ts) can import them
-// without dragging in node:fs / node:crypto / node:path. lib/sidecar.ts
-// re-exports these for server-side compatibility.
+// without dragging in node:fs / node:crypto / node:path.
 
-export interface SidecarSource {
+interface SidecarSource {
   kind: string;
   fetched?: string;
   originalName?: string | null;
@@ -11,7 +10,7 @@ export interface SidecarSource {
   [k: string]: unknown;
 }
 
-export interface SidecarMetadata {
+interface SidecarMetadata {
   width?: number;
   height?: number;
   format?: string;
@@ -24,13 +23,13 @@ export interface SidecarOp {
   [k: string]: unknown;
 }
 
-export interface SidecarOutput {
+interface SidecarOutput {
   format: string;
   quality?: number;
   [k: string]: unknown;
 }
 
-export interface SidecarVariant {
+interface SidecarVariant {
   w?: number;
   h?: number;
   fit?: string;

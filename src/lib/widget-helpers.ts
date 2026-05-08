@@ -8,7 +8,7 @@
 import { cacheKey } from './hash.ts';
 import { listSidecarIds } from './posts.ts';
 import type { OutputFormat } from './render.ts';
-import type { Sidecar } from './sidecar.ts';
+import type { Sidecar } from './sidecar-types.ts';
 import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;

@@ -48,7 +48,8 @@ import {
   type OutputFormat,
   renderDerivative
 } from '../lib/render.ts';
-import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
+import { read as sidecarRead } from '../lib/sidecar.ts';
+import type { Sidecar } from '../lib/sidecar-types.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderIndexPage } from '../templates/index.ts';
 import { renderPostPage } from '../templates/post.ts';

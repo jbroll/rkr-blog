@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 
 const DRIVE_FILE_BASE = 'https://www.googleapis.com/drive/v3/files';
 
-export interface DriveFile {
+interface DriveFile {
   id: string;
   name: string;
   mimeType: string;

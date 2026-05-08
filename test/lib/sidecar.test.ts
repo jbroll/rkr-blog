@@ -4,14 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
-import {
-  CURRENT_VERSION,
-  read,
-  type Sidecar,
-  sidecarPath,
-  validate,
-  write
-} from '../../src/lib/sidecar.ts';
+import { CURRENT_VERSION, read, sidecarPath, validate, write } from '../../src/lib/sidecar.ts';
+import type { Sidecar } from '../../src/lib/sidecar-types.ts';
 
 const HEX64 = 'a'.repeat(64);
 

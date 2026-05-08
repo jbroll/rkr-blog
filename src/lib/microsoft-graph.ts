@@ -12,7 +12,7 @@ import { Readable } from 'node:stream';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 
-export interface OneDriveFile {
+interface OneDriveFile {
   id: string;
   name: string;
   /** Sometimes called `file.mimeType` on Graph; always returned at the

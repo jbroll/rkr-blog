@@ -9,15 +9,6 @@ import path from 'node:path';
 
 import type { Sidecar } from './sidecar-types.ts';
 
-export type {
-  Sidecar,
-  SidecarMetadata,
-  SidecarOp,
-  SidecarOutput,
-  SidecarSource,
-  SidecarVariant
-} from './sidecar-types.ts';
-
 export const CURRENT_VERSION = 1;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 

@@ -1,16 +1,11 @@
-// Unified `::figure` directive widget. See spec.md §9 — one directive
-// for image / diptych / triptych / gallery / carousel layouts, with
-// `matrix=NxM | justified[:H] | masonry[:N]` controlling the layout
-// algorithm and `justify=center|left|right|full|bleed|inline`
-// controlling block placement.
-//
-// Phase 1+2+3 (this file): `matrix=NxM` (with carousel-on-overflow
-// when `len(ids) > matrix.rows * matrix.cols`), `matrix=justified[:H]`
-// (Flickr-style flex rows at row-height H), and `matrix=masonry[:N]`
-// (Pinterest-style multi-column flow with N columns). The flow modes
-// are CSS-only (flexbox + columns) — each image keeps its native
-// aspect, which is the whole point of these layouts; `aspect` and
-// `fit` are silently ignored under flow modes per spec.
+// Unified `::figure` directive widget (spec.md §9). One widget for
+// every image layout — single image, diptych, triptych, gallery,
+// carousel — controlled by `matrix=NxM | justified[:H] | masonry[:N]`
+// and `justify=center|left|right|full|bleed|inline`.
+// `matrix=NxM` is grid-with-carousel-on-overflow; `justified[:H]` is
+// Flickr-style flex rows at row-height H; `masonry[:N]` is
+// Pinterest-style multi-column flow. Flow modes are CSS-only
+// (flexbox + columns); `aspect` and `fit` silently ignored there.
 //
 // Forgiving-attributes rule (spec.md §9): parameters that don't apply
 // to the chosen mode (e.g. `aspect` / `fit` under flow modes; `width`
@@ -18,7 +13,8 @@
 // ignored. The directive should be cheap to author.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
+import { read as sidecarRead } from '../lib/sidecar.ts';
+import type { Sidecar } from '../lib/sidecar-types.ts';
 import {
   clampAlt,
   extractDirectiveCaption,

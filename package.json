@@ -19,7 +19,7 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "knip": "knip",
-    "knip:gate": "knip --include files,dependencies,unlisted --no-progress",
+    "knip:gate": "knip --no-progress",
     "circular": "dpdm --circular --no-warning --no-tree --exit-code circular:1 'src/**/*.ts'",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",

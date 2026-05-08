@@ -28,7 +28,8 @@ import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
 import { bakePath, ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import type { OutputFormat } from '../lib/render.ts';
-import { type SidecarOp, read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
+import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
+import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 // Import the fallback as a named, non-optional export so the runtime
@@ -111,7 +112,6 @@ export default async function adminRoutes(
   // would serve for this image's <img> fallback. The editor uses this
   // as the `src` for image nodes in TipTap so it doesn't have to
   // reproduce the cache-key calculation client-side.
-  //
   // Short-prefix lookup needs the sidecar listing. listSidecarIds() is
   // a synchronous fs.readdirSync; an editor session that re-renders a
   // post with N image directives would otherwise scan once per image.

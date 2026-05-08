@@ -54,19 +54,18 @@ function* walk(dir: string): Generator<string> {
 }
 
 // Match: `export { … } from '…'` and `export type { … } from '…'`.
-// Anchor at column 0 so we only catch top-level statements (skips
-// inside-function or inside-namespace declarations).
-const RE_NAMED_REEXPORT_FROM = /^export\s+(?:type\s+)?\{[^}]*\}\s*from\s+['"]/;
+// Multi-line aware ([\s\S]*? handles newlines); `gm` finds every
+// occurrence anchored at column 0 (skips inside-function declarations).
+const RE_NAMED_REEXPORT_FROM = /^export\s+(?:type\s+)?\{[\s\S]*?\}\s*from\s+['"]/gm;
 // Match: `export { x };` (no `from`). Combined with the imports scan
 // below, names that also appear in an import are flagged as re-exports.
 // Pure local exports (e.g. `function foo() {}` followed by
 // `export { foo };`) are caught too — they're a smell vs. inlining the
-// `export` keyword on the declaration; cleanup is mechanical.
-const RE_NAMED_EXPORT_NO_FROM = /^export\s+(?:type\s+)?\{([^}]*)\}\s*;?\s*$/;
-// Match: `import { a, b as c, type d } from '…'`. We collect imported
-// names so we can distinguish re-export-via-named-export from local
-// named-export.
-const RE_IMPORT_NAMED = /^import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]/;
+// `export` keyword on the declaration; cleanup is mechanical. The
+// negative lookahead on `from` avoids double-matching the `from` form.
+const RE_NAMED_EXPORT_NO_FROM = /^export\s+(?:type\s+)?\{([\s\S]*?)\}\s*;?\s*$(?!\s*from)/gm;
+// Match: `import { a, b as c, type d } from '…'`. Multi-line aware.
+const RE_IMPORT_NAMED = /^import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+['"]/gm;
 
 function parseSpecifierNames(raw: string): string[] {
   // Each specifier is `x`, `x as y`, `type x`, or `type x as y`.
@@ -88,33 +87,45 @@ interface Finding {
   text: string;
 }
 
+function lineNumberAt(src: string, offset: number): number {
+  let line = 1;
+  for (let i = 0; i < offset; i++) if (src[i] === '\n') line++;
+  return line;
+}
+
+function firstLine(snippet: string): string {
+  const nl = snippet.indexOf('\n');
+  return (nl < 0 ? snippet : snippet.slice(0, nl)).trim();
+}
+
 const findings: Finding[] = [];
 for (const root of ROOTS) {
   for (const file of walk(root)) {
     if (ALLOWLIST.has(file)) continue;
-    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    const src = fs.readFileSync(file, 'utf8');
     // Pass 1: collect imported names so the named-export-no-from check
     // can distinguish "export of imported symbol" (a re-export) from
     // "export of locally-declared symbol" (style smell, but not a
     // re-export). Both are flagged; the message just clarifies why.
     const imported = new Set<string>();
-    for (const line of lines) {
-      const m = line.match(RE_IMPORT_NAMED);
-      if (m?.[1]) for (const n of parseSpecifierNames(m[1])) imported.add(n);
+    for (const m of src.matchAll(RE_IMPORT_NAMED)) {
+      if (m[1]) for (const n of parseSpecifierNames(m[1])) imported.add(n);
     }
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line) continue;
-      if (RE_NAMED_REEXPORT_FROM.test(line)) {
-        findings.push({ file, line: i + 1, text: line.trim() });
-        continue;
-      }
-      const m = line.match(RE_NAMED_EXPORT_NO_FROM);
-      if (m?.[1]) {
-        const names = parseSpecifierNames(m[1]);
-        if (names.some((n) => imported.has(n))) {
-          findings.push({ file, line: i + 1, text: line.trim() });
-        }
+    for (const m of src.matchAll(RE_NAMED_REEXPORT_FROM)) {
+      findings.push({
+        file,
+        line: lineNumberAt(src, m.index ?? 0),
+        text: firstLine(m[0])
+      });
+    }
+    for (const m of src.matchAll(RE_NAMED_EXPORT_NO_FROM)) {
+      const names = parseSpecifierNames(m[1] ?? '');
+      if (names.some((n) => imported.has(n))) {
+        findings.push({
+          file,
+          line: lineNumberAt(src, m.index ?? 0),
+          text: firstLine(m[0])
+        });
       }
     }
   }
