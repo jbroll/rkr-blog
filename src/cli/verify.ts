@@ -7,18 +7,9 @@ import fs from 'node:fs';
 
 import { paths } from '../lib/config.ts';
 import { sha256File } from '../lib/hash.ts';
+import { FORMAT_TO_EXT } from '../lib/image-constants.ts';
 import { originalPath } from '../lib/originals.ts';
 import { listSidecars } from '../lib/posts.ts';
-
-const FORMAT_TO_EXT: Record<string, string | undefined> = {
-  jpeg: 'jpg',
-  png: 'png',
-  webp: 'webp',
-  avif: 'avif',
-  gif: 'gif',
-  tiff: 'tiff',
-  heif: 'heif'
-};
 
 export interface VerifyMismatch {
   id: string;

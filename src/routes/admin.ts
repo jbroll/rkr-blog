@@ -1,5 +1,4 @@
-// Admin routes. Authentication added in Step 7b (social login + sessions).
-//
+// Admin routes (gated by social login + sessions; see auth-middleware.ts).
 // Routes:
 //   GET  /admin/editor       → SPA shell (loads /static/admin/main.js)
 //   GET  /static/*           → public + admin static assets (CSS, admin bundle)
@@ -25,9 +24,10 @@ import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { bakePath, FORMAT_TO_EXT, ingestStream, originalPath } from '../lib/originals.ts';
+import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
+import { bakePath, ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
-import { type OutputFormat, SHARP_PIXEL_LIMIT } from '../lib/render.ts';
+import type { OutputFormat } from '../lib/render.ts';
 import { type SidecarOp, read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { type SafeFetchOptions, safeFetch, UnsafeUrlError } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';

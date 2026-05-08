@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parsePost, renderPostHtml, safeLinkUrl, serializePost } from '../../src/lib/content.ts';
+import { parsePost, renderPostHtml, serializePost } from '../../src/lib/content.ts';
+import { safeLinkUrl } from '../../src/lib/safe-url.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
 
 type AnyDirective = {

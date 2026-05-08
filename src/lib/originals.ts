@@ -18,10 +18,6 @@ import sharp from 'sharp';
 import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { type Sidecar, read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
 
-// Re-export so callers that historically imported FORMAT_TO_EXT from
-// originals.ts continue to work (notably routes/admin.ts).
-export { FORMAT_TO_EXT };
-
 // Default derivative set on first ingest. Matches the image widget
 // defaults (spec.md §5 sidecar schema). Caller can rewrite via POST
 // /admin/sidecar/:id.

@@ -22,10 +22,6 @@ import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
-// Re-export so callers that historically imported SHARP_PIXEL_LIMIT
-// from render.ts continue to work (notably routes/admin.ts).
-export { SHARP_PIXEL_LIMIT };
-
 export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';
 
 export interface CropOp {

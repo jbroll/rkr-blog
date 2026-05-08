@@ -19,7 +19,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 
-import { FORMAT_TO_EXT, originalPath } from './originals.ts';
+import { FORMAT_TO_EXT } from './image-constants.ts';
+import { originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
 import { importPost } from './wp-import.ts';
 import type { WpPost } from './wp-import-types.ts';

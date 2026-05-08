@@ -33,8 +33,6 @@ import { parse as yamlParse } from 'yaml';
 import { safeLinkUrl } from './safe-url.ts';
 import type { WidgetRegistry } from './widgets.ts';
 
-export { safeLinkUrl };
-
 export interface PostFrontmatter {
   title: string;
   slug: string;
