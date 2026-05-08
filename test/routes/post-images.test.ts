@@ -26,12 +26,31 @@ import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
 import { buildApp } from '../../src/server.ts';
 
-async function makeJpeg(): Promise<Buffer> {
+async function makeJpeg(seed = 0): Promise<Buffer> {
   return sharp({
-    create: { width: 320, height: 240, channels: 3, background: { r: 90, g: 30, b: 200 } }
+    create: {
+      width: 320 + seed,
+      height: 240 + seed,
+      channels: 3,
+      background: { r: 90 + (seed % 100), g: 30, b: 200 - (seed % 100) }
+    }
   })
     .jpeg({ quality: 80 })
     .toBuffer();
+}
+
+async function ingestN(t: TestContext, root: string, n: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = await ingestStream({
+      stream: Readable.from([await makeJpeg(i)]),
+      siteRoot: root,
+      source: { kind: 'upload', originalName: `pic-${i}.jpg` }
+    });
+    ids.push(r.id);
+  }
+  void t; // siteRoot cleanup is owned by freshSiteRoot's t.after
+  return ids;
 }
 
 function freshSiteRoot(t: TestContext): string {
@@ -198,5 +217,36 @@ test('::figure (matrix=2x2): rendered URLs resolve (sample one per image)', asyn
   // Sanity: the new directive renders the new shell + grid markers.
   assert.match(page.body, /class="rkr-figure rkr-justify-center rkr-fit-cover"/);
   assert.match(page.body, /<div class="rkr-figure-grid"/);
+  await assertSampledImagesResolve(app, page.body);
+});
+
+test('::figure carousel (overflow): rendered URLs resolve across all pages', async (t) => {
+  // Phase 2: matrix=1x2 with 5 distinct ids → 3 pages, the last with
+  // 1 empty cell. Distinct ids matter — extractImageIdsAndAlts dedupes
+  // before render, so passing the same id 5× collapses to 1 cell. The
+  // carousel uses .rkr-carousel-* classes so the existing carousel.js
+  // controller picks it up. End-to-end test verifies every page's
+  // image URLs resolve via /img/.
+  const { app, root } = await setup(t);
+  const ids = await ingestN(t, root, 5);
+  const post = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'fig-carousel-roundtrip',
+      title: 'Figure carousel',
+      status: 'published',
+      markdown: `::figure{ids="${ids.join(',')}" matrix=1x2 timer=10}\n`
+    }
+  });
+  assert.equal(post.statusCode, 200, post.body);
+
+  const page = await app.inject({ method: 'GET', url: '/fig-carousel-roundtrip' });
+  assert.equal(page.statusCode, 200);
+  assert.match(page.body, /class="rkr-figure rkr-figure-carousel rkr-carousel /);
+  assert.match(page.body, /data-autoplay="10"/);
+  // 3 pages × matrix.cells - empty trailing = 5 cells across all pages.
+  const slides = (page.body.match(/<div class="rkr-carousel-slide rkr-figure-page"/g) ?? []).length;
+  assert.equal(slides, 3);
   await assertSampledImagesResolve(app, page.body);
 });

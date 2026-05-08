@@ -110,14 +110,68 @@ test('::figure over-allocated matrix renders empty cells (no auto-shrink)', asyn
   assert.equal(cellCount, 2);
 });
 
-test('::figure overflow (more ids than cells) drops excess, leaves a comment', async (t) => {
+test('::figure overflow → carousel mode (rows fixed, paginated by matrix.cells)', async (t) => {
+  // Phase 2: 5 ids in matrix=1x2 → 2 cells per page → ceil(5/2) = 3 pages.
+  // Page 1: ids 0,1; page 2: ids 2,3; page 3: id 4 (one empty cell).
   const root = freshSiteRoot(t);
   const ids = await ingestN(root, 5);
   const html = await dispatch(root, { ids: ids.join(','), matrix: '1x2' });
 
-  const cellCount = (html.match(/<div class="rkr-figure-cell"/g) ?? []).length;
-  assert.equal(cellCount, 2);
-  assert.match(html, /<!-- figure: 3 ids exceed matrix capacity; carousel mode/);
+  // Carousel shell: classes for both the figure CSS layer and the
+  // legacy carousel.js controller it reuses.
+  assert.match(html, /class="rkr-figure rkr-figure-carousel rkr-carousel /);
+  assert.match(html, /aria-roledescription="carousel"/);
+  // Track + nav present.
+  assert.match(html, /<div class="rkr-carousel-track" role="list">/);
+  assert.match(html, /<nav class="rkr-carousel-nav"/);
+
+  // 3 pages.
+  const slides = (html.match(/<div class="rkr-carousel-slide rkr-figure-page"/g) ?? []).length;
+  assert.equal(slides, 3);
+  // Page 3 has one fewer cell (no auto-pad).
+  const cells = (html.match(/<div class="rkr-figure-cell"/g) ?? []).length;
+  assert.equal(cells, 5);
+  // 3 dots.
+  const dots = (html.match(/class="rkr-carousel-dot"/g) ?? []).length;
+  assert.equal(dots, 3);
+  // No autoplay attribute when timer is unset.
+  assert.doesNotMatch(html, /data-autoplay=/);
+  assert.doesNotMatch(html, /class="rkr-carousel-play"/);
+});
+
+test('::figure carousel with timer → data-autoplay + play/pause control', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 7);
+  const html = await dispatch(root, { ids: ids.join(','), matrix: '2x3', timer: '5' });
+
+  // 7 ids in 2×3 grid (6 cells/page) → 2 pages.
+  const slides = (html.match(/rkr-carousel-slide/g) ?? []).length;
+  assert.equal(slides, 2);
+  // Autoplay attribute + play/pause control present.
+  assert.match(html, /data-autoplay="5"/);
+  assert.match(html, /class="rkr-carousel-play"/);
+});
+
+test('::figure carousel timer cap (>60 → 60)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 3);
+  const html = await dispatch(root, { ids: ids.join(','), matrix: '1x1', timer: '999' });
+  assert.match(html, /data-autoplay="60"/);
+});
+
+test('::figure carousel page shape preserves matrix rows/cols on every page', async (t) => {
+  // matrix=2x3 with 8 ids: 2 pages, both with grid-template-columns:
+  // repeat(3, 1fr); grid-template-rows: repeat(2, auto). Page 2 has
+  // 2 cells in the 6-cell grid → empty cells stay empty (no auto-shrink).
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 8);
+  const html = await dispatch(root, { ids: ids.join(','), matrix: '2x3' });
+
+  const pageStyleMatches =
+    html.match(
+      /<div class="rkr-carousel-slide rkr-figure-page"[^>]*style="grid-template-columns: repeat\(3, 1fr\); grid-template-rows: repeat\(2, auto\)"/g
+    ) ?? [];
+  assert.equal(pageStyleMatches.length, 2);
 });
 
 test('::figure justify=full, fit=contain, width ignored under full', async (t) => {

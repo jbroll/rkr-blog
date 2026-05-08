@@ -4,10 +4,10 @@
 // algorithm and `justify=center|left|right|full|bleed|inline`
 // controlling block placement.
 //
-// Phase 1 (this file): `matrix=NxM` only. `justified` / `masonry`
-// layouts and carousel-on-overflow render as HTML comments noting the
-// future support — once they land we delete the legacy widgets per
-// the migration plan in spec.md §9.
+// Phase 1+2 (this file): `matrix=NxM` with carousel-on-overflow when
+// `len(ids) > matrix.rows * matrix.cols`. `justified` / `masonry`
+// layouts still render as HTML comments + a 1×N grid fallback —
+// they land in Phase 3.
 //
 // Forgiving-attributes rule (spec.md §9): parameters that don't apply
 // to the chosen mode (e.g. `aspect` / `fit` under flow modes; `width`
@@ -146,6 +146,16 @@ function parsePerImageCaptions(raw: unknown): (string | null)[] {
   });
 }
 
+/** Carousel autoplay seconds. 0 = manual advance only. Capped at 60
+ * (anything bigger reads as "the author meant ms or made a typo"). */
+const TIMER_CAP_SECONDS = 60;
+function parseTimer(raw: unknown): number {
+  if (typeof raw !== 'string') return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(TIMER_CAP_SECONDS, Math.floor(n));
+}
+
 interface CellInput {
   id: string | null; // null → unresolved id; render as a placeholder comment
   rawId: string;
@@ -251,6 +261,26 @@ async function renderInline(
   });
 }
 
+async function resolveAutoAspect(
+  cells: CellInput[],
+  ctx: WidgetCtx,
+  aspectCss: string | null
+): Promise<string | null> {
+  if (aspectCss !== null) return aspectCss;
+  const firstSidecar = await loadFirstSidecar(cells, ctx);
+  if (!firstSidecar) return null;
+  const w = firstSidecar.metadata.width ?? 1;
+  const h = firstSidecar.metadata.height ?? 1;
+  return `${w}/${h}`;
+}
+
+function gridStyle(rows: number, cols: number): string {
+  return [
+    `grid-template-columns: repeat(${cols}, 1fr)`,
+    `grid-template-rows: repeat(${rows}, auto)`
+  ].join('; ');
+}
+
 async function renderGrid(
   matrix: MatrixGrid,
   cells: CellInput[],
@@ -261,37 +291,18 @@ async function renderGrid(
   aspectCss: string | null,
   blockCaption: string | null
 ): Promise<string> {
-  const visibleCount = matrix.rows * matrix.cols;
-  const visibleCells = cells.slice(0, visibleCount);
-  const overflowCount = cells.length - visibleCells.length;
-
-  // Resolve the auto-aspect from the first resolvable image when no
-  // explicit aspect was given.
-  let resolvedAspectCss = aspectCss;
-  if (resolvedAspectCss === null) {
-    const firstSidecar = await loadFirstSidecar(visibleCells, ctx);
-    if (firstSidecar) {
-      const w = firstSidecar.metadata.width ?? 1;
-      const h = firstSidecar.metadata.height ?? 1;
-      resolvedAspectCss = `${w}/${h}`;
-    }
-  }
+  // No-overflow grid: spec says over-allocated matrices render the
+  // empty cells (no auto-shrink). Excess ids beyond cell count never
+  // reach this function — render() routes those to renderCarousel.
+  const visibleCells = cells.slice(0, matrix.rows * matrix.cols);
+  const resolvedAspectCss = await resolveAutoAspect(visibleCells, ctx, aspectCss);
 
   const rendered = await Promise.all(visibleCells.map((c) => renderCell(c, ctx)));
-  const overflowComment =
-    overflowCount > 0
-      ? `\n  <!-- figure: ${overflowCount} ids exceed matrix capacity; carousel mode lands in a follow-up commit -->`
-      : '';
-
-  const gridStyle = [
-    `grid-template-columns: repeat(${matrix.cols}, 1fr)`,
-    `grid-template-rows: repeat(${matrix.rows}, auto)`
-  ].join('; ');
 
   const inner = [
-    `  <div class="rkr-figure-grid" style="${gridStyle}">`,
+    `  <div class="rkr-figure-grid" style="${gridStyle(matrix.rows, matrix.cols)}">`,
     indent(rendered.join('\n'), '    '),
-    `  </div>${overflowComment}`
+    '  </div>'
   ].join('\n');
 
   return renderShell({
@@ -302,6 +313,101 @@ async function renderGrid(
     inner,
     blockCaption
   });
+}
+
+/**
+ * Carousel mode: `len(ids) > matrix.rows * matrix.cols`. Slice the
+ * cells into pages of `matrix.rows × matrix.cols` and render each page
+ * as one `.rkr-carousel-slide` (the same class the legacy ::carousel
+ * widget uses), so static/site/carousel.js drives prev/next/dots/keyboard
+ * /autoplay unmodified. The last page may have fewer cells — empty
+ * grid slots stay empty per the no-auto-shrink rule.
+ *
+ * The author-controlled `aspect` and `fit` apply per cell within each
+ * page; pages themselves all share the same matrix dimensions, so the
+ * viewport never resizes between slides.
+ */
+async function renderCarousel(
+  matrix: MatrixGrid,
+  cells: CellInput[],
+  ctx: WidgetCtx,
+  justify: Justify,
+  fit: Fit,
+  widthCss: string | null,
+  aspectCss: string | null,
+  blockCaption: string | null,
+  timer: number
+): Promise<string> {
+  const cellsPerPage = matrix.rows * matrix.cols;
+  const pageCount = Math.ceil(cells.length / cellsPerPage);
+  const pages: CellInput[][] = [];
+  for (let i = 0; i < pageCount; i++) {
+    pages.push(cells.slice(i * cellsPerPage, (i + 1) * cellsPerPage));
+  }
+
+  const resolvedAspectCss = await resolveAutoAspect(cells, ctx, aspectCss);
+  const pageGridStyle = gridStyle(matrix.rows, matrix.cols);
+
+  // Render pages in parallel — each page renders its cells in parallel
+  // too. ctx-level sidecar caching means the underlying FS work is
+  // bounded.
+  const renderedPages = await Promise.all(
+    pages.map(async (pageCells, pageIdx) => {
+      const renderedCells = await Promise.all(pageCells.map((c) => renderCell(c, ctx)));
+      return [
+        `    <div class="rkr-carousel-slide rkr-figure-page" data-index="${pageIdx}" role="listitem" style="${pageGridStyle}">`,
+        indent(renderedCells.join('\n'), '      '),
+        '    </div>'
+      ].join('\n');
+    })
+  );
+
+  const dotsHtml = pages
+    .map(
+      (_p, i) =>
+        `      <button type="button" class="rkr-carousel-dot" data-target="${i}" aria-label="Page ${i + 1}"></button>`
+    )
+    .join('\n');
+  const playPauseHtml = timer
+    ? `      <button type="button" class="rkr-carousel-play" aria-label="Pause slideshow" aria-pressed="true">⏸</button>\n`
+    : '';
+  const autoplayAttr = timer ? ` data-autoplay="${timer}"` : '';
+
+  // The class list intentionally carries BOTH `rkr-carousel` (so the
+  // existing browser-side controller picks it up) AND `rkr-figure` /
+  // `rkr-figure-carousel` (so figure-specific CSS targets it). When
+  // we delete the legacy carousel widget, the JS stays — only the
+  // legacy widget file goes.
+  const inner = [
+    `  <div class="rkr-carousel-track" role="list">`,
+    renderedPages.join('\n'),
+    '  </div>',
+    `  <nav class="rkr-carousel-nav" aria-label="Carousel controls">`,
+    `    <button type="button" class="rkr-carousel-prev" aria-label="Previous page">&larr;</button>`,
+    `    <div class="rkr-carousel-dots" role="tablist">`,
+    dotsHtml,
+    '    </div>',
+    `${playPauseHtml}    <button type="button" class="rkr-carousel-next" aria-label="Next page">&rarr;</button>`,
+    '  </nav>'
+  ].join('\n');
+
+  // Custom shell — adds carousel classes + ARIA + autoplay data attr.
+  const cls = [
+    'rkr-figure',
+    'rkr-figure-carousel',
+    'rkr-carousel',
+    `rkr-justify-${justify}`,
+    `rkr-fit-${fit}`
+  ].join(' ');
+  const styleParts: string[] = [];
+  if (widthCss) styleParts.push(`width: ${widthCss}`);
+  if (resolvedAspectCss) styleParts.push(`--rkr-cell-aspect: ${resolvedAspectCss}`);
+  const style = styleParts.length ? ` style="${styleParts.join('; ')}"` : '';
+  const captionBlock = blockCaption
+    ? `\n  <figcaption>${escapeText(blockCaption)}</figcaption>`
+    : '';
+
+  return `<figure class="${cls}" tabindex="0" aria-roledescription="carousel"${autoplayAttr}${style}>\n${inner}${captionBlock}\n</figure>`;
 }
 
 async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
@@ -318,6 +424,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const widthCss = parseWidth(node.attributes?.width).css;
   const aspectCss = parseAspect(node.attributes?.aspect).css;
   const blockCaption = extractDirectiveCaption(node);
+  const timer = parseTimer(node.attributes?.timer);
 
   if (justify === 'inline') {
     return renderInline(cells, ctx, justify, fit);
@@ -330,6 +437,20 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const matrix = parseMatrix(node.attributes?.matrix);
 
   if (matrix.kind === 'grid') {
+    const cellsPerPage = matrix.rows * matrix.cols;
+    if (cells.length > cellsPerPage) {
+      return renderCarousel(
+        matrix,
+        cells,
+        ctx,
+        justify,
+        fit,
+        effectiveWidth,
+        aspectCss,
+        blockCaption,
+        timer
+      );
+    }
     return renderGrid(matrix, cells, ctx, justify, fit, effectiveWidth, aspectCss, blockCaption);
   }
   // Phase 1 stub: justified / masonry render as a comment + a 1xN

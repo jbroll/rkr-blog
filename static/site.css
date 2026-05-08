@@ -565,6 +565,36 @@ span.rkr-justify-inline img {
   object-fit: contain;
 }
 
+/* ---- ::figure carousel (multi-cell pages) ------------------------- */
+/* When a figure overflows its matrix, each "slide" is a page containing
+   `matrix.rows × matrix.cols` cells. Pages compose with the legacy
+   .rkr-carousel-* CSS for the track + nav + dots; only the page contents
+   differ (a grid instead of a single centered image). */
+
+.rkr-figure-page {
+  /* Override the single-image-slide assumptions inherited from
+     .rkr-carousel-slide. Pages are grids; the inline `style` from the
+     widget sets grid-template-rows/columns to the matrix shape. */
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  aspect-ratio: auto;
+  background: transparent;
+  gap: var(--rkr-gap);
+  padding: 0;
+}
+.rkr-figure-page .rkr-figure-cell {
+  /* Each cell behaves the same as in the non-carousel grid path. */
+  aspect-ratio: var(--rkr-cell-aspect, var(--rkr-image-aspect, 1));
+}
+/* Object-fit on the cell image itself is determined by the figure's
+   rkr-fit-* class; the picture/img inside the page stretches to the cell. */
+.rkr-figure-page picture,
+.rkr-figure-page img {
+  width: 100%;
+  height: 100%;
+}
+
 /* Nav row sits below the track; on hover, prev/next overlay the image. */
 .rkr-carousel-nav {
   display: flex;
