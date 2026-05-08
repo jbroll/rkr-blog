@@ -4,7 +4,9 @@
 #
 # Runs:
 #   1. biome check on staged JS files (formatting + lint).
-#   2. full test suite (`npm test`).
+#   2. tsc --noEmit type check.
+#   3. per-file 500-line size limit (warn on existing, fail on new/growing).
+#   4. full test suite (`npm test`).
 #
 # Failures abort the commit. To bypass deliberately, use `git commit --no-verify`.
 
@@ -26,6 +28,54 @@ fi
 if compgen -G "src/**/*.ts" > /dev/null || compgen -G "test/**/*.ts" > /dev/null; then
   echo "==> tsc --noEmit"
   npx --no-install tsc --noEmit
+fi
+
+# Per-file 500-line size limit.
+#
+# Policy:
+#   * NEW source file > 500 lines: FAIL.
+#   * EXISTING file that was <= 500 in HEAD and is > 500 staged: FAIL
+#     (don't let a file cross the threshold).
+#   * EXISTING file that was already > 500 in HEAD and grew further: FAIL
+#     (don't make a known offender worse).
+#   * EXISTING file that was already > 500 in HEAD and didn't grow: WARN
+#     (work continues; refactor is tracked in DEFERRED.md).
+#
+# Applies to source code only — tests + production .ts/.js under src/ test/ bin/.
+echo "==> 500-line size check"
+size_limit=500
+size_failures=0
+staged_src=$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '^(src|test|bin)/.*\.(ts|js)$' || true)
+
+for f in $staged_src; do
+  staged_lines=$(git show ":$f" | wc -l | tr -d ' ')
+  if [ "$staged_lines" -le "$size_limit" ]; then
+    continue
+  fi
+  if git cat-file -e "HEAD:$f" 2>/dev/null; then
+    head_lines=$(git show "HEAD:$f" | wc -l | tr -d ' ')
+  else
+    head_lines=0
+  fi
+  if [ "$head_lines" -eq 0 ]; then
+    echo "  FAIL  $f: $staged_lines lines (new file, limit $size_limit)"
+    size_failures=$((size_failures + 1))
+  elif [ "$head_lines" -le "$size_limit" ]; then
+    echo "  FAIL  $f: $staged_lines lines (was $head_lines, crossed $size_limit)"
+    size_failures=$((size_failures + 1))
+  elif [ "$staged_lines" -gt "$head_lines" ]; then
+    echo "  FAIL  $f: $staged_lines lines (was $head_lines, already over $size_limit and grew)"
+    size_failures=$((size_failures + 1))
+  else
+    echo "  warn  $f: $staged_lines lines (over $size_limit, not growing — see DEFERRED.md)"
+  fi
+done
+
+if [ "$size_failures" -gt 0 ]; then
+  echo "size check failed: $size_failures file(s) over $size_limit lines."
+  echo "split the file into smaller modules, or use --no-verify if you have explicit reason."
+  exit 1
 fi
 
 echo "==> npm test"

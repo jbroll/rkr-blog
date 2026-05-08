@@ -52,23 +52,28 @@ modules — e.g. `src/admin/figure-node.ts`, `src/admin/toolbar.ts`,
 **Why deferred.** The editor refactor is mechanical but extensive
 and benefits from in-browser smoke testing after each split.
 
-**Trigger.** Land alongside the toolbar UX refresh, or before adding
-the per-file size hook.
+**Trigger.** Land alongside the toolbar UX refresh, or before
+tightening the size hook to fail-on-existing.
 
-## Per-file size limit pre-commit hook
+## Tighten the per-file size hook to fail-on-existing
 
-**What.** A pre-commit hook that flags any source file over 500
-lines so growing files get refactored rather than accumulating
-indefinitely. Prefers warn-on-existing-violations + fail-on-new-
-files initially so it doesn't immediately block commits to the
-existing oversized files (main.ts, etc.). Tightens once those
-are split.
+**What.** `.githooks/pre-commit` already enforces the 500-line
+ceiling for new files and rejects any growth in already-oversized
+files (warn-on-existing). Once the existing offenders are split
+(`src/admin/main.ts`, `src/routes/admin.ts`, `src/lib/wp-import.ts`,
+`src/widgets/figure.ts`, and the four oversized test files), the
+hook should be tightened so the warn-on-existing branch becomes a
+FAIL. That removes the special case and keeps the codebase under
+the limit.
 
-**Why deferred.** The current main.ts (~1900 lines) would force a
-disruptive split into the same commit; better to land the split
-deliberately first.
+**Why deferred.** Eight source files are over 500 lines today.
+Failing on them all immediately would block every commit until
+they're refactored — a disruptive forced march.
 
-**Trigger.** Right after the main.ts split lands, add the hook.
+**Trigger.** When the last warn-on-existing file drops below 500
+lines (i.e., `wc -l` of every staged source file in `git ls-files
+'src/*.ts' 'test/*.ts' 'bin/*'` returns ≤ 500). At that point flip
+the warn branch in `.githooks/pre-commit` to `exit 1`.
 
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
