@@ -16,7 +16,6 @@ import { escapeAttr, escapeText } from '../lib/content.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import {
-  clampAlt,
   extractDirectiveCaption,
   extractImageIdsAndAlts,
   getKnownIds,
@@ -50,109 +49,19 @@ export const variants: VariantSpec[] = [
 
 export const fallback: FallbackSpec = { w: 1200, format: 'jpeg', quality: 85 };
 
-const VALID_JUSTIFY = new Set(['center', 'left', 'right', 'full', 'bleed', 'inline'] as const);
-type Justify = typeof VALID_JUSTIFY extends Set<infer T> ? T : never;
-
-const VALID_FIT = new Set(['cover', 'contain'] as const);
-type Fit = typeof VALID_FIT extends Set<infer T> ? T : never;
-
-interface MatrixGrid {
-  kind: 'grid';
-  rows: number;
-  cols: number;
-}
-interface MatrixFlow {
-  kind: 'justified' | 'masonry';
-  /** Row height (justified) / column count (masonry). */
-  param: number;
-}
-type MatrixSpec = MatrixGrid | MatrixFlow;
-
-const MATRIX_DEFAULT: MatrixGrid = { kind: 'grid', rows: 1, cols: 1 };
-const FLOW_DEFAULTS = { justified: 240, masonry: 3 } as const;
-const MAX_MATRIX_DIM = 12; // sanity cap; 12×12=144 cells is more than any sane post
-
-function parseMatrix(raw: unknown): MatrixSpec {
-  if (typeof raw !== 'string') return MATRIX_DEFAULT;
-  const s = raw.trim().toLowerCase();
-  const grid = /^(\d+)x(\d+)$/.exec(s);
-  if (grid) {
-    const rows = clampDim(Number(grid[1]));
-    const cols = clampDim(Number(grid[2]));
-    return { kind: 'grid', rows, cols };
-  }
-  const flow = /^(justified|masonry)(?::(\d+))?$/.exec(s);
-  if (flow) {
-    const kind = flow[1] as 'justified' | 'masonry';
-    const param = flow[2] ? Number(flow[2]) : FLOW_DEFAULTS[kind];
-    return { kind, param };
-  }
-  return MATRIX_DEFAULT;
-}
-
-function clampDim(n: number): number {
-  if (!Number.isFinite(n) || n < 1) return 1;
-  return Math.min(MAX_MATRIX_DIM, Math.floor(n));
-}
-
-function parseJustify(raw: unknown): Justify {
-  if (typeof raw === 'string' && VALID_JUSTIFY.has(raw as Justify)) return raw as Justify;
-  return 'center';
-}
-
-function parseFit(raw: unknown): Fit {
-  if (typeof raw === 'string' && VALID_FIT.has(raw as Fit)) return raw as Fit;
-  return 'cover';
-}
-
-interface ParsedWidth {
-  /** CSS-ready value, e.g. "60%" or "400px". null means "use justify default". */
-  css: string | null;
-}
-
-function parseWidth(raw: unknown): ParsedWidth {
-  if (typeof raw !== 'string') return { css: null };
-  // Explicit unit only — `width=200` is ambiguous (px? %?) and we won't guess.
-  const m = /^(\d+)(px|%)$/.exec(raw.trim());
-  if (!m) return { css: null };
-  return { css: `${m[1]}${m[2]}` };
-}
-
-interface ParsedAspect {
-  /** "W/H" string ready for the CSS `aspect-ratio` property. null → derive
-   * from the first image's sidecar. */
-  css: string | null;
-}
-
-function parseAspect(raw: unknown): ParsedAspect {
-  if (typeof raw !== 'string') return { css: null };
-  const m = /^(\d+)\s*[:x]\s*(\d+)$/.exec(raw.trim());
-  if (!m) return { css: null };
-  const w = Number(m[1]);
-  const h = Number(m[2]);
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return { css: null };
-  return { css: `${w}/${h}` };
-}
-
-/** Per-image captions: pipe-separated to avoid colliding with the comma
- * separators used by `ids` / `alts`. Trim each entry; empty → null. */
-function parsePerImageCaptions(raw: unknown): (string | null)[] {
-  if (typeof raw !== 'string') return [];
-  return raw.split('|').map((s) => {
-    const t = s.trim();
-    return t.length > 0 ? clampAlt(t) : null;
-  });
-}
-
-/** Carousel autoplay seconds. 0 = manual advance only. Capped at 60
- * (anything bigger reads as "the author meant ms or made a typo"). */
-const TIMER_CAP_SECONDS = 60;
-function parseTimer(raw: unknown): number {
-  if (typeof raw !== 'string') return 0;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(TIMER_CAP_SECONDS, Math.floor(n));
-}
+import {
+  type Fit,
+  type Justify,
+  type MatrixFlow,
+  type MatrixGrid,
+  parseAspect,
+  parseFit,
+  parseJustify,
+  parseMatrix,
+  parsePerImageCaptions,
+  parseTimer,
+  parseWidth
+} from './figure-attrs.ts';
 
 interface CellInput {
   id: string | null; // null → unresolved id; render as a placeholder comment
@@ -466,8 +375,8 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
 
   const justify = parseJustify(node.attributes?.justify);
   const fit = parseFit(node.attributes?.fit);
-  const widthCss = parseWidth(node.attributes?.width).css;
-  const aspectCss = parseAspect(node.attributes?.aspect).css;
+  const widthCss = parseWidth(node.attributes?.width);
+  const aspectCss = parseAspect(node.attributes?.aspect);
   const blockCaption = extractDirectiveCaption(node);
   const timer = parseTimer(node.attributes?.timer);
 
