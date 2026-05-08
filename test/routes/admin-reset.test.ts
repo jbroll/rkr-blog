@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
-import { runReset } from '../../src/cli/reset.ts';
+import resetCmd, { runReset } from '../../src/cli/reset.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
@@ -230,4 +230,63 @@ test('site-admin reset CLI strips trailing slash on target URL', async (t) => {
     fetcher: fetch
   });
   assert.equal(result.ok, true);
+});
+
+// ---- resetCmd default export (parseArgs + happy path) -----------------
+
+test('resetCmd: missing --to throws usage error', async () => {
+  await assert.rejects(() => resetCmd(['--token', 'tok', '--force']), /usage:/);
+});
+
+test('resetCmd: missing token (no --token, no ADMIN_TOKEN env) throws', async (t) => {
+  const prev = process.env.ADMIN_TOKEN;
+  delete process.env.ADMIN_TOKEN;
+  t.after(() => {
+    if (prev !== undefined) process.env.ADMIN_TOKEN = prev;
+  });
+  await assert.rejects(
+    () => resetCmd(['--to', 'http://127.0.0.1:1', '--force']),
+    /bearer token required/
+  );
+});
+
+test('resetCmd: --token flag drives the bearer header', async (t) => {
+  // Validates that parseArgs picks up `--token <value>` (the
+  // stringFlag helper). The token must match the server's
+  // ADMIN_TOKEN since the middleware reads process.env at request
+  // time (in-process tests share env with the SUT).
+  const { app } = await setup(t, { adminToken: 'tok-via-flag' });
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const url = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  const log = console.log;
+  console.log = () => {};
+  t.after(() => {
+    console.log = log;
+  });
+  await resetCmd(['--to', url, '--token', 'tok-via-flag', '--force']);
+});
+
+test('resetCmd: -f short flag is accepted as --force', async (t) => {
+  const { app } = await setup(t, { adminToken: 'tok' });
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const url = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  const log = console.log;
+  console.log = () => {};
+  t.after(() => {
+    console.log = log;
+  });
+  await resetCmd(['--to', url, '--token', 'tok', '-f']);
+});
+
+test('resetCmd: ADMIN_TOKEN env supplies the token when --token absent', async (t) => {
+  const { app } = await setup(t, { adminToken: 'env-tok' });
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const url = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  // setup() sets process.env.ADMIN_TOKEN = 'env-tok' for the test scope.
+  const log = console.log;
+  console.log = () => {};
+  t.after(() => {
+    console.log = log;
+  });
+  await resetCmd(['--to', url, '--force']);
 });
