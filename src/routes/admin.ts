@@ -9,26 +9,22 @@
 //   POST /admin/upload       → multipart image ingest (routed to ingestStream)
 //   POST /admin/import/url   → server-side fetch + ingest from a URL
 
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
-import sharp from 'sharp';
-
 import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
-import { bakePath, ingestStream, originalPath } from '../lib/originals.ts';
+import { FORMAT_TO_EXT } from '../lib/image-constants.ts';
+import { ingestStream, originalPath } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import type { OutputFormat } from '../lib/render.ts';
-import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
-import type { SidecarOp } from '../lib/sidecar-types.ts';
+import { read as sidecarRead } from '../lib/sidecar.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 // Import the fallback as a named, non-optional export so the runtime
@@ -38,7 +34,7 @@ import { renderAdminPage } from '../templates/admin.ts';
 // type to FallbackSpec directly.
 import { fallback as imageFallback } from '../widgets/figure.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
-import { validateOps } from './admin-ops-validation.ts';
+import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,15 +71,6 @@ export default async function adminRoutes(
     opts.staticDir ?? (opts.adminBundleDir ? path.dirname(opts.adminBundleDir) : REPO_STATIC_DIR);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
   const urlFetcher: UrlFetcher = opts.urlFetcher ?? safeFetch;
-
-  // Raw-body parser for /admin/sidecar/:id/bake. The editor POSTs a
-  // WebP blob; without an explicit parser fastify rejects unknown
-  // content types. Capped at BAKE_MAX_BYTES (matches the route limit).
-  fastify.addContentTypeParser(
-    'image/webp',
-    { parseAs: 'buffer', bodyLimit: BAKE_MAX_BYTES },
-    (_req, body, done) => done(null, body)
-  );
 
   // One static handler at /static/. Public CSS lives at /static/site.css;
   // the admin bundle at /static/admin/main.js. Apache vhost (implementation.md §7)
@@ -232,180 +219,7 @@ export default async function adminRoutes(
     }
   );
 
-  // Replace a sidecar's ops array. Used by the crop / rotate / flip /
-  // resample buttons in the image attribute panel.
-  // Edit ops live on the SIDECAR, not per-instance: changing a sidecar's
-  // ops affects every post that references this image. That's the
-  // existing render-pipeline design (sidecar.ops is the source of truth).
-  fastify.post<{
-    Params: { id: string };
-    Body: { ops?: unknown; redoStack?: unknown };
-  }>('/admin/sidecar/:id/ops', { ...guard }, async (req, reply) => {
-    const { id } = req.params;
-    if (!/^[0-9a-f]{64}$/.test(id)) {
-      return reply.code(400).send({ error: 'invalid id' });
-    }
-    const sidecar = await sidecarRead(siteRoot, id);
-    if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
-
-    const validation = validateOps(req.body?.ops, sidecar.metadata);
-    if (!validation.ok) return reply.code(400).send({ error: validation.error });
-
-    // redoStack uses the same op-shape validator. The bounds check
-    // against metadata is shared — popping an undone crop later
-    // shouldn't suddenly produce out-of-bounds coords.
-    let redoStackOut: SidecarOp[] = [];
-    if (req.body?.redoStack !== undefined) {
-      const rsValidation = validateOps(req.body.redoStack, sidecar.metadata);
-      if (!rsValidation.ok) {
-        return reply.code(400).send({ error: `redoStack: ${rsValidation.error}` });
-      }
-      redoStackOut = rsValidation.ops;
-    }
-
-    // Snapshot existing derivative filenames BEFORE writing the new
-    // sidecar. After the write, every derivative still on disk is
-    // bound to the OLD ops (different cacheKey from anything we'd
-    // generate now). Unlink them so a previously-shared
-    //   /img/<id>.<oldHash>.<fmt>
-    // URL stops serving the stale uncropped image. Snapshotting
-    // first avoids racing a render-in-flight that's about to rename
-    // its tmp into final position with the new ops.
-    const cacheImgDir = path.join(siteRoot, 'cache', 'img');
-    const stalePrefix = `${id}.`;
-    let staleNames: string[] = [];
-    try {
-      staleNames = (await fs.promises.readdir(cacheImgDir)).filter((n) =>
-        n.startsWith(stalePrefix)
-      );
-    } catch (err) {
-      /* c8 ignore next 3 -- ENOENT is fine; directory may not exist yet */
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    }
-
-    sidecar.ops = validation.ops;
-    // Persist redoStack only when the client supplied one. Omitting
-    // body.redoStack preserves whatever was on disk (e.g. a different
-    // editor surface POSTing only ops).
-    if (req.body?.redoStack !== undefined) {
-      if (redoStackOut.length === 0) {
-        delete sidecar.redoStack;
-      } else {
-        sidecar.redoStack = redoStackOut;
-      }
-    }
-    try {
-      await sidecarWrite(siteRoot, id, sidecar);
-    } catch (err) {
-      req.log.error({ err, id }, 'sidecar write failed');
-      return reply.code(500).send({ error: 'sidecar write failed' });
-    }
-
-    // Best-effort cleanup; failures don't block the response.
-    for (const name of staleNames) {
-      await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
-    }
-    // Also drop the client-baked post-ops image (if any). The bake
-    // corresponds to the *previous* ops; the editor will re-upload
-    // a fresh bake right after this POST returns. Until then, the
-    // render pipeline falls back to the original.
-    await fs.promises.unlink(bakePath(siteRoot, id)).catch(() => {});
-
-    return { ops: sidecar.ops, redoStack: sidecar.redoStack ?? [] };
-  });
-
-  // Receive the editor's client-baked post-ops image for this id. The
-  // canvas pipeline is now the authority on pixel results — this endpoint
-  // just persists what the browser produced. The render pipeline reads
-  // the bake instead of re-applying ops via sharp, taking ops out of
-  // the per-request hot path.
-  //
-  // Body is the raw WebP bytes (image/webp content type). 25 MB cap
-  // is well above realistic bakes (a 50 MP camera image at q=0.95 is
-  // ~5-10 MB) but tight enough that a runaway / misused client can't
-  // wedge a multi-GB upload through.
-  fastify.post<{
-    Params: { id: string };
-  }>('/admin/sidecar/:id/bake', { ...guard, bodyLimit: BAKE_MAX_BYTES }, async (req, reply) => {
-    const { id } = req.params;
-    if (!/^[0-9a-f]{64}$/.test(id)) {
-      return reply.code(400).send({ error: 'invalid id' });
-    }
-    const ct = (req.headers['content-type'] ?? '').toLowerCase();
-    if (!ct.startsWith('image/webp')) {
-      return reply.code(415).send({ error: 'content-type must be image/webp' });
-    }
-    const sidecar = await sidecarRead(siteRoot, id);
-    if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
-
-    const body = req.body;
-    if (!Buffer.isBuffer(body) || body.length === 0) {
-      return reply.code(400).send({ error: 'empty body' });
-    }
-    // Magic-byte check: WebP files start with "RIFF????WEBP". Cheap
-    // sanity check that the client posted what it claimed.
-    if (
-      body.length < 12 ||
-      body.slice(0, 4).toString('ascii') !== 'RIFF' ||
-      body.slice(8, 12).toString('ascii') !== 'WEBP'
-    ) {
-      return reply.code(400).send({ error: 'body is not a WebP file' });
-    }
-    // Full decode-side validation. The magic-byte check above is cheap
-    // but a malformed WebP (truncated chunks, oversized declared dims)
-    // would only fail at first render time. Run sharp.metadata() now
-    // so corrupt or decompression-bomb uploads are rejected at the
-    // boundary rather than landing on disk and 500-ing every public
-    // image request that hits this id.
-    try {
-      const meta = await sharp(body, {
-        failOn: 'error',
-        limitInputPixels: SHARP_PIXEL_LIMIT
-      }).metadata();
-      if (meta.format !== 'webp') {
-        return reply.code(400).send({ error: 'body did not decode as WebP' });
-      }
-      const w = meta.width ?? 0;
-      const h = meta.height ?? 0;
-      if (w * h > SHARP_PIXEL_LIMIT) {
-        return reply
-          .code(400)
-          .send({ error: `bake exceeds pixel limit (${w}×${h} > ${SHARP_PIXEL_LIMIT})` });
-      }
-    } catch (err) {
-      req.log.warn({ err, id }, 'bake decode failed');
-      return reply.code(400).send({ error: 'body is not a decodable WebP' });
-    }
-
-    const finalPath = bakePath(siteRoot, id);
-    await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
-    const tmp = `${finalPath}.${randomSuffix()}.tmp`;
-    try {
-      await fs.promises.writeFile(tmp, body);
-      await fs.promises.rename(tmp, finalPath);
-    } catch (err) {
-      await fs.promises.unlink(tmp).catch(() => {});
-      req.log.error({ err, id }, 'bake write failed');
-      return reply.code(500).send({ error: 'bake write failed' });
-    }
-
-    // Drop any stale derivatives keyed off the prior bake / prior
-    // ops. /ops also does this when ops change, but /bake catches the
-    // case where ops didn't change (e.g. user re-baked at higher
-    // quality) so previously-cached derivatives still match the
-    // current cacheKey.
-    const cacheImgDir = path.join(siteRoot, 'cache', 'img');
-    try {
-      const stale = (await fs.promises.readdir(cacheImgDir)).filter((n) => n.startsWith(`${id}.`));
-      for (const name of stale) {
-        await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
-      }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    }
-
-    return { bytes: body.length };
-  });
+  registerSidecarEditRoutes(fastify, { siteRoot, guard });
 
   fastify.post<{
     Body: {
@@ -648,16 +462,6 @@ const MAX_SLUG_LENGTH = 100;
  * prefix within a few seconds; long enough that a post with many
  * images doesn't scan the directory once per request. */
 const SIDECAR_LIST_TTL_MS = 5_000;
-
-/** Max bytes accepted by /admin/sidecar/:id/bake. WebP at q=0.95 for a
- * 50 MP camera photo runs ~5-10 MB; 25 MB leaves headroom for unusual
- * sources (panoramas, scanner output) while keeping the upload bounded
- * tight enough that a runaway client can't wedge a multi-GB POST. */
-const BAKE_MAX_BYTES = 25 * 1024 * 1024;
-
-function randomSuffix(): string {
-  return crypto.randomBytes(6).toString('hex');
-}
 
 /** Map a Sharp/libvips format name to an HTTP Content-Type for serving
  * the original file. Limited to formats the ingest accepts. The rarely-
