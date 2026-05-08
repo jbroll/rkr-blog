@@ -90,18 +90,10 @@ function emitBlock(node: ProseNode): string {
     case 'orderedList':
     case 'ordered_list':
       return emitList(node, '1.');
-    // Editor's legacy node types are kept as a UI abstraction (richer
-    // toolbar / cropper / attribute panels per shape) but the wire
-    // format is uniformly `::figure` per spec.md §9. Each legacy case
-    // maps to figure-shaped attrs and goes through the same emitter so
-    // the constants-alignment / validation guards stay in one place.
-    case 'image':
-      return emitFigure(legacyImageToFigureAttrs(node.attrs ?? {}));
-    case 'gallery':
-    case 'carousel':
-    case 'diptych':
-    case 'triptych':
-      return emitFigure(legacyMultiImageToFigureAttrs(node.type, node.attrs ?? {}));
+    // The unified `figure` is the only image-bearing node type in the
+    // editor (spec.md §9 — legacy ImageNode/GalleryNode/CarouselNode/
+    // DiptychNode/TriptychNode were removed). The figure attribute set
+    // covers every prior shape via matrix/justify/etc.
     case 'figure':
       return emitFigure(node.attrs ?? {});
     /* c8 ignore next 2 -- defensive: editor schema prevents unknown block node types */
@@ -173,94 +165,9 @@ function quote(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-/** Carousel autoplay cap; the figure widget caps timer at 60s (any
- * larger reads as "the author meant ms or made a typo"). The editor's
- * legacy CarouselNode allows free-typed autoplay; cap on emit so
- * markdown round-trip stays stable. */
+/** Carousel timer cap — anything larger reads as "the author meant ms
+ * or made a typo." Mirrors the figure widget's TIMER_CAP_SECONDS. */
 const CAROUSEL_AUTOPLAY_CAP = 60;
-
-/**
- * Map legacy ImageNode attrs `{id, alt, caption, position}` to the
- * unified figure attribute shape. The legacy single-image position
- * names are a subset of the figure's `justify` values:
- *   default → omit (figure default)   full / left / right / inline → same
- */
-function legacyImageToFigureAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
-  const id = String(attrs.id ?? '').trim();
-  if (!id || !/^[0-9a-f]{6,64}$/.test(id)) return { ids: '' };
-  const out: Record<string, unknown> = { ids: id };
-  const alt = attrs.alt;
-  if (typeof alt === 'string' && alt.length > 0) out.alts = alt;
-  const caption = attrs.caption;
-  if (typeof caption === 'string' && caption.length > 0) out.caption = caption;
-  const position = attrs.position;
-  if (
-    typeof position === 'string' &&
-    position !== 'default' &&
-    (position === 'full' || position === 'left' || position === 'right' || position === 'inline')
-  ) {
-    out.justify = position;
-  }
-  return out;
-}
-
-/**
- * Map legacy multi-image node attrs (gallery / carousel / diptych /
- * triptych) to the unified figure shape. The kind selects a default
- * `matrix` value:
- *   gallery  → `matrix=<layout>` (justified | masonry | matrix-omitted)
- *   carousel → `matrix=1x1` + `timer=<autoplay>` (legacy carousel was 1-at-a-time)
- *   diptych  → `matrix=1x2`
- *   triptych → `matrix=1x3`
- */
-function legacyMultiImageToFigureAttrs(
-  kind: string,
-  attrs: Record<string, unknown>
-): Record<string, unknown> {
-  const idsRaw = attrs.ids;
-  const ids =
-    typeof idsRaw === 'string'
-      ? idsRaw
-      : Array.isArray(idsRaw)
-        ? idsRaw.filter((s): s is string => typeof s === 'string').join(',')
-        : '';
-  if (!ids.trim()) return { ids: '' };
-
-  const out: Record<string, unknown> = { ids };
-
-  // Alts (parallel array, comma-separated).
-  const altsRaw = attrs.alts;
-  const altsList: string[] =
-    typeof altsRaw === 'string'
-      ? altsRaw.split(',').map((s) => s.trim())
-      : Array.isArray(altsRaw)
-        ? altsRaw.map((s) => (typeof s === 'string' ? s.trim() : ''))
-        : [];
-  if (altsList.some((a) => a.length > 0)) out.alts = altsList.join(',');
-
-  const caption = attrs.caption;
-  if (typeof caption === 'string' && caption.length > 0) out.caption = caption;
-
-  if (kind === 'gallery') {
-    const layout = attrs.layout;
-    if (typeof layout === 'string' && layout.length > 0 && layout !== 'matrix') {
-      out.matrix = layout; // 'justified' | 'masonry'
-    }
-    // layout=matrix had no shape under the legacy widget; drop on emit.
-  } else if (kind === 'carousel') {
-    out.matrix = '1x1';
-    const autoplay = Number(attrs.autoplay ?? 0);
-    if (Number.isFinite(autoplay) && autoplay > 0) {
-      out.timer = Math.min(CAROUSEL_AUTOPLAY_CAP, Math.floor(autoplay));
-    }
-  } else if (kind === 'diptych') {
-    out.matrix = '1x2';
-  } else if (kind === 'triptych') {
-    out.matrix = '1x3';
-  }
-
-  return out;
-}
 
 /**
  * Emit a `::figure{...}` directive for the unified widget. Mirrors
@@ -423,99 +330,15 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
 }
 
 /**
- * Parse a `::figure{...}` directive's attributes and pick the best
- * matching editor node type. The editor keeps the legacy 5 node types
- * as a UI abstraction (each has its own toolbar / cropper / panel
- * affordances); we map figure attribute shapes back to those:
- *
- *   matrix=1x2                         → diptych
- *   matrix=1x3                         → triptych
- *   matrix=justified | masonry         → gallery
- *   matrix=1x1 with timer              → carousel
- *   single id, no matrix               → image
- *   anything else (NxM grid, custom    → figure (generic UI; new in
- *   width/aspect/fit, etc.)              Phase 5, used as a catch-all)
- *
- * The mapping is asymmetric on purpose: we prefer the legacy node
- * type when it exists because its editor UI is richer. For figures
- * with attrs that don't fit (`width=`, `aspect=`, `fit=`, multi-row
- * matrices), we use the generic figure node.
+ * Parse a `::figure{...}` directive's attributes into the unified
+ * `figure` ProseMirror node. The editor's UI surface (toolbar buttons,
+ * attribute panel) discriminates between image / gallery / carousel /
+ * diptych / triptych modes by inspecting the figure's `matrix` + `ids`
+ * count at the UI layer (see src/admin/main.ts figureKind helper) —
+ * the prose document keeps a single node type so the wire format and
+ * the editor model stay aligned.
  */
 function parseFigureToEditorNode(attrs: Record<string, string | null | undefined>): ProseNode {
-  const ids = attrs.ids ?? '';
-  const idList = ids
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const matrix = (attrs.matrix ?? '').toLowerCase();
-  const hasCustomLayout =
-    (attrs.width && attrs.width.length > 0) ||
-    (attrs.aspect && attrs.aspect.length > 0) ||
-    (attrs.fit && attrs.fit.length > 0);
-
-  // Figures with custom layout attrs → generic figure node (the
-  // legacy nodes don't carry these fields).
-  if (hasCustomLayout) {
-    return buildGenericFigureNode(attrs);
-  }
-
-  // matrix=1x2 with 2 ids → DiptychNode (legacy editor UI for 2-up).
-  if (matrix === '1x2' && idList.length === 2) {
-    return {
-      type: 'diptych',
-      attrs: { ids, alts: attrs.alts ?? '', caption: attrs.caption ?? '' }
-    };
-  }
-  if (matrix === '1x3' && idList.length === 3) {
-    return {
-      type: 'triptych',
-      attrs: { ids, alts: attrs.alts ?? '', caption: attrs.caption ?? '' }
-    };
-  }
-  if (matrix === 'justified' || matrix === 'masonry') {
-    return {
-      type: 'gallery',
-      attrs: {
-        ids,
-        alts: attrs.alts ?? '',
-        caption: attrs.caption ?? '',
-        layout: matrix
-      }
-    };
-  }
-  if (matrix === '1x1' && idList.length > 1) {
-    // Multi-id with 1×1 visible cell → carousel (legacy 1-at-a-time).
-    return {
-      type: 'carousel',
-      attrs: {
-        ids,
-        alts: attrs.alts ?? '',
-        caption: attrs.caption ?? '',
-        autoplay: Number(attrs.timer ?? 0) || 0
-      }
-    };
-  }
-  if (idList.length === 1 && (matrix === '' || matrix === '1x1')) {
-    // Single id, default-shaped figure → ImageNode (legacy single-image
-    // UI: cropper, ops editor, alt/caption/position attribute panel).
-    return {
-      type: 'image',
-      attrs: {
-        id: idList[0] ?? '',
-        alt: attrs.alts ?? '',
-        caption: attrs.caption ?? '',
-        position:
-          attrs.justify && /^(default|full|left|right|inline)$/.test(attrs.justify)
-            ? attrs.justify
-            : 'default'
-      }
-    };
-  }
-  // Anything else (NxM grid, atypical id count) → generic figure node.
-  return buildGenericFigureNode(attrs);
-}
-
-function buildGenericFigureNode(attrs: Record<string, string | null | undefined>): ProseNode {
   return {
     type: 'figure',
     attrs: {

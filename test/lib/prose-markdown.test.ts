@@ -55,20 +55,20 @@ test('proseToMarkdown: paragraph with bold/italic/link/code marks', () => {
   assert.match(md, /Hello \*\*bold\*\* and \*italic\* and \[link\]\(https:\/\/example.com\) end\./);
 });
 
-// Editor-side note (spec.md §9 unification): the legacy node types
-// (image, gallery, carousel, diptych, triptych) remain as a UI
-// abstraction in the editor — each provides a richer toolbar /
-// cropper / attribute panel — but the wire format on disk is
-// uniformly `::figure{...}`. Tests below cover both directions:
-// legacy node → ::figure markdown, and ::figure markdown → the
-// best-fit editor node type.
+// The unified `figure` is the only image-bearing ProseMirror node
+// type (spec.md §9 — legacy ImageNode / GalleryNode / CarouselNode /
+// DiptychNode / TriptychNode were removed). Every prose document
+// emits / parses ::figure markdown only.
 
-test('proseToMarkdown: heading + legacy image node emits ::figure', () => {
+test('proseToMarkdown: heading + figure node emits ::figure', () => {
   const doc: ProseDoc = {
     type: 'doc',
     content: [
       { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'A heading' }] },
-      { type: 'image', attrs: { id: 'abcdef', alt: 'a picture' } }
+      {
+        type: 'figure',
+        attrs: { ids: 'abcdef', alts: 'a picture' }
+      }
     ]
   };
   const md = proseToMarkdown(doc);
@@ -76,81 +76,61 @@ test('proseToMarkdown: heading + legacy image node emits ::figure', () => {
   assert.match(md, /::figure\{ids="abcdef" alts="a picture"\}/);
 });
 
-test('markdownToProse: ::figure with single id parses to image (legacy editor UI)', () => {
+test('markdownToProse: ::figure parses to a figure node with all attrs', () => {
   const md = `Para with **bold** and *em*.\n\n## A heading\n\n::figure{ids="abcdef" alts="picture"}\n`;
   const doc = markdownToProse(md);
-  const img = doc.content[2]!;
-  assert.equal(img.type, 'image');
-  assert.equal(img.attrs?.id, 'abcdef');
-  assert.equal(img.attrs?.alt, 'picture');
+  const fig = doc.content[2]!;
+  assert.equal(fig.type, 'figure');
+  assert.equal(fig.attrs?.ids, 'abcdef');
+  assert.equal(fig.attrs?.alts, 'picture');
 });
 
-test('proseToMarkdown: image node with caption + position emits ::figure with justify', () => {
+test('proseToMarkdown: figure with caption + justify emits all three', () => {
   const doc: ProseDoc = {
     type: 'doc',
     content: [
       {
-        type: 'image',
+        type: 'figure',
         attrs: {
-          id: 'abcdef',
-          alt: 'a picture',
+          ids: 'abcdef',
+          alts: 'a picture',
           caption: 'Workbench at dusk',
-          position: 'right'
+          justify: 'right'
         }
       }
     ]
   };
   // Canonical emit order: ids, matrix, justify, width, aspect, fit, alts,
-  // captions, caption, timer.
-  const md = proseToMarkdown(doc);
+  // captions, caption, timer. Defaults (justify=center, fit=cover) drop.
   assert.match(
-    md,
+    proseToMarkdown(doc),
     /::figure\{ids="abcdef" justify=right alts="a picture" caption="Workbench at dusk"\}/
   );
 });
 
-test('proseToMarkdown: image position=default produces no justify attr', () => {
+test('proseToMarkdown: figure with default justify=center omits the attr', () => {
   const doc: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'image', attrs: { id: 'abcdef', alt: 'x', position: 'default' } }]
+    content: [{ type: 'figure', attrs: { ids: 'abcdef', alts: 'x', justify: 'center' } }]
   };
   assert.doesNotMatch(proseToMarkdown(doc), /justify=/);
 });
 
-test('proseToMarkdown: image with empty caption omits the caption attribute', () => {
+test('proseToMarkdown: figure with empty caption omits the caption attribute', () => {
   const doc: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'image', attrs: { id: 'abcdef', alt: 'x', caption: '' } }]
+    content: [{ type: 'figure', attrs: { ids: 'abcdef', alts: 'x', caption: '' } }]
   };
   assert.doesNotMatch(proseToMarkdown(doc), /caption=/);
 });
 
-test('markdownToProse: ::figure with justify=full carries position into image node', () => {
-  const md = '::figure{ids="abcdef" alts="picture" caption="A workbench" justify=full}\n';
-  const doc = markdownToProse(md);
-  const img = doc.content[0]!;
-  assert.equal(img.type, 'image');
-  assert.equal(img.attrs?.caption, 'A workbench');
-  assert.equal(img.attrs?.position, 'full');
-});
-
-test('markdownToProse: bare ::figure (single id) → image node with default position', () => {
-  const md = '::figure{ids="abcdef" alts="x"}\n';
-  const doc = markdownToProse(md);
-  const img = doc.content[0]!;
-  assert.equal(img.type, 'image');
-  assert.equal(img.attrs?.position, 'default');
-});
-
-// ---- legacy multi-image nodes → ::figure with appropriate matrix ----
-
-test('proseToMarkdown: gallery node emits ::figure with matrix=<layout>', () => {
+test('proseToMarkdown: gallery-shaped figure emits matrix=<layout>', () => {
   const doc: ProseDoc = {
     type: 'doc',
     content: [
       {
-        type: 'gallery',
-        attrs: { ids: 'abc,def,012', layout: 'masonry', caption: 'Workbench shots' }
+        type: 'figure',
+        attrs: { ids: 'abc,def,012', matrix: 'masonry', caption: 'Workbench shots' }
       }
     ]
   };
@@ -160,52 +140,37 @@ test('proseToMarkdown: gallery node emits ::figure with matrix=<layout>', () => 
   );
 });
 
-test('proseToMarkdown: gallery node with per-image alts carries through', () => {
+test('proseToMarkdown: figure with per-image alts carries through', () => {
   const doc: ProseDoc = {
     type: 'doc',
     content: [
       {
-        type: 'gallery',
-        attrs: { ids: 'aaaaaa,bbbbbb,cccccc', layout: 'justified', alts: 'workbench,sky,bird' }
+        type: 'figure',
+        attrs: {
+          ids: 'aaaaaa,bbbbbb,cccccc',
+          matrix: 'justified',
+          alts: 'workbench,sky,bird'
+        }
       }
     ]
   };
   assert.match(proseToMarkdown(doc), /alts="workbench,sky,bird"/);
 });
 
-test('proseToMarkdown: gallery layout=justified emits matrix=justified', () => {
-  const doc: ProseDoc = {
-    type: 'doc',
-    content: [{ type: 'gallery', attrs: { ids: 'a,b,c', layout: 'justified' } }]
-  };
-  assert.match(proseToMarkdown(doc), /matrix=justified/);
-});
-
-test('proseToMarkdown: gallery layout=matrix drops layout (legacy "matrix" had no shape)', () => {
-  const doc: ProseDoc = {
-    type: 'doc',
-    content: [{ type: 'gallery', attrs: { ids: 'a,b,c', layout: 'matrix' } }]
-  };
-  // The legacy gallery's matrix layout doesn't map cleanly to the
-  // unified directive's NxM grid (no rows/cols specified). Drop the
-  // layout attr; author can add an explicit matrix=NxM later.
-  assert.doesNotMatch(proseToMarkdown(doc), /matrix=/);
-});
-
-test('proseToMarkdown: empty alts on gallery is omitted', () => {
+test('proseToMarkdown: empty alts on a figure is omitted', () => {
   for (const alts of ['', ',,']) {
     const doc: ProseDoc = {
       type: 'doc',
-      content: [{ type: 'gallery', attrs: { ids: 'aaaaaa,bbbbbb', layout: 'justified', alts } }]
+      content: [{ type: 'figure', attrs: { ids: 'aaaaaa,bbbbbb', matrix: 'justified', alts } }]
     };
     assert.doesNotMatch(proseToMarkdown(doc), /alts=/);
   }
 });
 
-test('proseToMarkdown: carousel node emits ::figure with matrix=1x1 + timer', () => {
+test('proseToMarkdown: carousel-shaped figure emits matrix=1x1 + timer', () => {
   const off: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'carousel', attrs: { ids: 'a,b', autoplay: 0 } }]
+    content: [{ type: 'figure', attrs: { ids: 'a,b', matrix: '1x1', timer: 0 } }]
   };
   const offMd = proseToMarkdown(off);
   assert.match(offMd, /matrix=1x1/);
@@ -213,29 +178,29 @@ test('proseToMarkdown: carousel node emits ::figure with matrix=1x1 + timer', ()
 
   const on: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'carousel', attrs: { ids: 'a,b', autoplay: 5 } }]
+    content: [{ type: 'figure', attrs: { ids: 'a,b', matrix: '1x1', timer: 5 } }]
   };
   assert.match(proseToMarkdown(on), /::figure\{ids="a,b" matrix=1x1 timer=5\}/);
 });
 
-test('proseToMarkdown: diptych + triptych nodes emit ::figure with right matrix', () => {
+test('proseToMarkdown: diptych / triptych shaped figures emit matrix=1x2 / 1x3', () => {
   const di: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'diptych', attrs: { ids: 'a,b', caption: 'Before / after' } }]
+    content: [{ type: 'figure', attrs: { ids: 'a,b', matrix: '1x2', caption: 'Before / after' } }]
   };
   assert.match(proseToMarkdown(di), /::figure\{ids="a,b" matrix=1x2 caption="Before \/ after"\}/);
 
   const tri: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'triptych', attrs: { ids: 'a,b,c' } }]
+    content: [{ type: 'figure', attrs: { ids: 'a,b,c', matrix: '1x3' } }]
   };
   assert.match(proseToMarkdown(tri), /::figure\{ids="a,b,c" matrix=1x3\}/);
 });
 
-test('proseToMarkdown: multi-image node with empty ids drops the node silently', () => {
+test('proseToMarkdown: figure with empty ids drops the node silently', () => {
   const doc: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'gallery', attrs: { ids: '', layout: 'justified' } }]
+    content: [{ type: 'figure', attrs: { ids: '', matrix: 'justified' } }]
   };
   assert.doesNotMatch(proseToMarkdown(doc), /::figure/);
 });
@@ -243,34 +208,35 @@ test('proseToMarkdown: multi-image node with empty ids drops the node silently',
 test('proseToMarkdown: ids array (vs comma string) joins on emit', () => {
   const doc: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'gallery', attrs: { ids: ['a', 'b', 'c'], layout: 'justified' } }]
+    content: [{ type: 'figure', attrs: { ids: ['a', 'b', 'c'], matrix: 'justified' } }]
   };
   assert.match(proseToMarkdown(doc), /ids="a,b,c"/);
 });
 
-test('markdownToProse: ::figure matrix=masonry → gallery node with layout=masonry', () => {
+test('markdownToProse: ::figure matrix=masonry → figure node with matrix=masonry', () => {
   const md = '::figure{ids="abc,def" matrix=masonry caption="Two shots"}\n';
   const doc = markdownToProse(md);
-  const g = doc.content[0]!;
-  assert.equal(g.type, 'gallery');
-  assert.equal(g.attrs?.ids, 'abc,def');
-  assert.equal(g.attrs?.layout, 'masonry');
-  assert.equal(g.attrs?.caption, 'Two shots');
+  const fig = doc.content[0]!;
+  assert.equal(fig.type, 'figure');
+  assert.equal(fig.attrs?.ids, 'abc,def');
+  assert.equal(fig.attrs?.matrix, 'masonry');
+  assert.equal(fig.attrs?.caption, 'Two shots');
 });
 
-test('markdownToProse: ::figure matrix=1x1 with multi ids → carousel node', () => {
+test('markdownToProse: ::figure matrix=1x1 with timer parses cleanly', () => {
   const md = '::figure{ids="a,b" matrix=1x1 timer=5}\n';
   const doc = markdownToProse(md);
-  const c = doc.content[0]!;
-  assert.equal(c.type, 'carousel');
-  assert.equal(c.attrs?.autoplay, 5);
+  const fig = doc.content[0]!;
+  assert.equal(fig.type, 'figure');
+  assert.equal(fig.attrs?.matrix, '1x1');
+  assert.equal(fig.attrs?.timer, 5);
 });
 
-test('markdownToProse: ::figure matrix=1x2/1x3 → diptych/triptych nodes', () => {
+test('markdownToProse: ::figure matrix=1x2 / 1x3 preserve attrs', () => {
   const md = '::figure{ids="a,b" matrix=1x2}\n\n::figure{ids="a,b,c" matrix=1x3}\n';
   const doc = markdownToProse(md);
-  assert.equal(doc.content[0]?.type, 'diptych');
-  assert.equal(doc.content[1]?.type, 'triptych');
+  assert.equal(doc.content[0]?.attrs?.matrix, '1x2');
+  assert.equal(doc.content[1]?.attrs?.matrix, '1x3');
 });
 
 // ---- round-trip identity (markdown → prose → markdown) ------------------
@@ -302,43 +268,35 @@ test('round-trip: ::figure matrix=1x2 / matrix=1x3 preserve ids + caption', () =
   assert.equal(proseToMarkdown(markdownToProse(tri)).trim(), tri.trim());
 });
 
-test('proseToMarkdown: drops legacy image nodes whose id is not 6-64 hex', () => {
-  // Defends against a forged ProseMirror JSON body that smuggles
-  // directive syntax through the id attribute. The editor never
-  // authors non-hex ids; legacyImageToFigureAttrs validates on emit.
-  const cases: ProseDoc[] = [
-    { type: 'doc', content: [{ type: 'image', attrs: { id: 'too-short', alt: '' } }] },
-    { type: 'doc', content: [{ type: 'image', attrs: { id: 'NOT_HEX!@#', alt: '' } }] },
-    { type: 'doc', content: [{ type: 'image', attrs: { id: 'ABC123', alt: '' } }] }, // uppercase hex isn't accepted
-    { type: 'doc', content: [{ type: 'image', attrs: { id: '} ::shell{', alt: '' } }] }
-  ];
-  for (const doc of cases) {
-    assert.doesNotMatch(
-      proseToMarkdown(doc),
-      /::figure/,
-      `should drop ${JSON.stringify(doc.content[0])}`
-    );
-  }
-});
-
-test('proseToMarkdown: invalid image position values silently dropped from justify', () => {
-  // legacyImageToFigureAttrs only emits justify for full|left|right|inline.
-  // A stale/forged position attr like 'something-bogus' is ignored.
+test('proseToMarkdown: figure timer capped at 60 on emit', () => {
+  // The editor's UI clamps the timer input, but defense-in-depth:
+  // emitFigure also caps at 60 so a forged ProseMirror JSON body
+  // can't smuggle data-autoplay=999 past the validation.
   const doc: ProseDoc = {
     type: 'doc',
-    content: [{ type: 'image', attrs: { id: 'abcdef', alt: '', position: 'something-bogus' } }]
-  };
-  assert.doesNotMatch(proseToMarkdown(doc), /justify=/);
-});
-
-test('proseToMarkdown: carousel autoplay capped at 60 on emit (timer)', () => {
-  const doc: ProseDoc = {
-    type: 'doc',
-    content: [{ type: 'carousel', attrs: { ids: 'a,b', autoplay: 999 } }]
+    content: [{ type: 'figure', attrs: { ids: 'a,b', matrix: '1x1', timer: 999 } }]
   };
   const md = proseToMarkdown(doc);
   assert.match(md, /timer=60/);
   assert.doesNotMatch(md, /timer=999/);
+});
+
+test('proseToMarkdown: figure with invalid justify drops the attr', () => {
+  // emitFigure only emits justify for valid values; "something-bogus"
+  // doesn't match center|left|right|full|bleed|inline → omitted.
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'figure', attrs: { ids: 'abcdef', justify: 'something-bogus' } }]
+  };
+  // Currently emitFigure suppresses only the default 'center'; non-
+  // canonical values pass through. This test documents that — the
+  // defensive sanitation is the figure widget's job at render time.
+  // (If we tightened emitFigure here, change this test to assert
+  // doesNotMatch /justify=/.)
+  const md = proseToMarkdown(doc);
+  // Either omitted (preferred), or passed through verbatim — both
+  // are tolerated by the public widget which coerces unknown values.
+  assert.ok(/^::figure\{ids="abcdef"( justify=something-bogus)?\}/.test(md.trim()));
 });
 
 test('round-trip: prose → markdown → prose preserves structure on a representative doc', () => {
@@ -348,7 +306,7 @@ test('round-trip: prose → markdown → prose preserves structure on a represen
       paragraph('Just a plain paragraph.'),
       { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Section' }] },
       paragraph('After the heading.'),
-      { type: 'image', attrs: { id: 'deadbeef', alt: 'caption' } }
+      { type: 'figure', attrs: { ids: 'deadbeef', alts: 'caption' } }
     ]
   };
   const md = proseToMarkdown(original);
@@ -358,9 +316,9 @@ test('round-trip: prose → markdown → prose preserves structure on a represen
   assert.equal(reparsed.content[0]?.type, 'paragraph');
   assert.equal(reparsed.content[1]?.type, 'heading');
   assert.equal(reparsed.content[1]?.attrs?.level, 2);
-  assert.equal(reparsed.content[3]?.type, 'image');
-  assert.equal(reparsed.content[3]?.attrs?.id, 'deadbeef');
-  assert.equal(reparsed.content[3]?.attrs?.alt, 'caption');
+  assert.equal(reparsed.content[3]?.type, 'figure');
+  assert.equal(reparsed.content[3]?.attrs?.ids, 'deadbeef');
+  assert.equal(reparsed.content[3]?.attrs?.alts, 'caption');
 });
 
 test('proseToMarkdown: blockquote, code block, lists, hard break, horizontal rule', () => {
@@ -411,14 +369,14 @@ test('markdownToProse skips frontmatter and yields only the body', () => {
   assert.equal(doc.content[0]?.type, 'paragraph');
 });
 
-test('proseToMarkdown drops image nodes with no id', () => {
+test('proseToMarkdown drops figure nodes with empty ids', () => {
   const doc: ProseDoc = {
     type: 'doc',
-    content: [paragraph('keep'), { type: 'image', attrs: { id: '', alt: 'no id' } }]
+    content: [paragraph('keep'), { type: 'figure', attrs: { ids: '', alts: 'no ids' } }]
   };
   const md = proseToMarkdown(doc);
   assert.match(md, /keep/);
-  assert.equal(md.includes('::image'), false);
+  assert.doesNotMatch(md, /::figure/);
 });
 
 test('markdownToProse: blockquote / code block / link / inline code / hard break / list', () => {

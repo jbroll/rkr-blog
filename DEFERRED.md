@@ -12,35 +12,63 @@ the queue is searchable.
 
 ## ::figure editor toolbar UX refresh
 
-**Source.** Spec.md §9 unification, follow-up after the wire-format
-transition completed.
+**Source.** Spec.md §9 unification, follow-up after the legacy
+ProseMirror node types were removed.
 
-**What.** The editor still uses its 5 legacy ProseMirror node types
-(image, gallery, carousel, diptych, triptych) as a UI abstraction —
-each has its own toolbar button, attribute panel, and (for image)
-the cropper / ops integration. The wire format on save is
-uniformly `::figure` and parses pick the best-fit editor node on
-load. There's no functional gap; what's missing is the *unified*
-toolbar UX:
+**What.** The editor now stores all images as a single `figure`
+node. The toolbar still has 5 buttons (Image / Gallery / Carousel /
+Diptych / Triptych) — each one pre-fills different `matrix` /
+`timer` defaults via the `figureForImage` and `figureForMulti`
+adapters in main.ts. A unified UX would collapse these into:
 
 - "Insert figure" button with a matrix selector (1x1, 1x2, 1x3,
   NxM, justified, masonry, carousel)
 - A single attribute panel surfacing matrix / justify / width /
   aspect / fit / alts / captions / caption / timer
-- Per-image alt + caption slot management when matrix > 1x1
-- Selected-cell cropper for figures whose ids has more than one entry
+- Per-image alt + caption slot management
+- Selected-cell cropper for multi-image figures (currently the
+  cropper / ops UI engages only when the figure resolves to single-
+  image mode via figureKind)
 
 **Why deferred.** This is genuine UX work that benefits from
-in-browser iteration. The current 5-node-type toolbar has no
-correctness issues (round-trip is verified by tests); the only cost
-is interface clutter for the author and code that the unified
-toolbar would simplify.
+in-browser iteration; the current 5-button toolbar has no
+correctness issues (round-trip is verified by tests).
 
 **Trigger.** When there's an in-browser iteration loop available
 for the operator (real photos, real preview), or when adding a new
-multi-image affordance (e.g. crop within a gallery cell) tempts a
-sixth legacy node type — at which point unifying first is cheaper
-than extending the zoo.
+multi-image affordance.
+
+## src/admin/main.ts is too large
+
+**What.** The editor entry point is ~1900 lines and covers many
+concerns: ProseMirror node + toolbar + attribute panel + cropper +
+ops pipeline + Drive integration + OneDrive integration + save flow.
+A 500-line per-file commit hook (DEFERRED entry below) would block
+any commit that touches it. The right shape is to split into
+modules — e.g. `src/admin/figure-node.ts`, `src/admin/toolbar.ts`,
+`src/admin/attribute-panel.ts`, `src/admin/image-edit.ts`,
+`src/admin/integrations/{gdrive,onedrive}.ts`.
+
+**Why deferred.** The editor refactor is mechanical but extensive
+and benefits from in-browser smoke testing after each split.
+
+**Trigger.** Land alongside the toolbar UX refresh, or before adding
+the per-file size hook.
+
+## Per-file size limit pre-commit hook
+
+**What.** A pre-commit hook that flags any source file over 500
+lines so growing files get refactored rather than accumulating
+indefinitely. Prefers warn-on-existing-violations + fail-on-new-
+files initially so it doesn't immediately block commits to the
+existing oversized files (main.ts, etc.). Tightens once those
+are split.
+
+**Why deferred.** The current main.ts (~1900 lines) would force a
+disruptive split into the same commit; better to land the split
+deliberately first.
+
+**Trigger.** Right after the main.ts split lands, add the hook.
 
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 

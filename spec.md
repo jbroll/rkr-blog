@@ -387,14 +387,13 @@ The legacy directives (`::image`, `::diptych`, `::triptych`,
    their CSS, and the WidgetRegistry registrations. The figure widget
    becomes the only image directive the public renderer recognises.
    Constants-alignment test shrinks to one widget × one fallback. ✅
-7. **Editor wire-format unification**: prose-markdown's emit cases
-   for the legacy 5 ProseMirror node types now go through `emitFigure`
-   with mapped attrs, and `markdownToProse` for `::figure` picks the
-   best-fit editor node by attribute shape (single id → image; matrix
-   1x2/1x3 → diptych/triptych; matrix=justified|masonry → gallery;
-   matrix=1x1 with multi ids → carousel; everything else / custom
-   layout attrs → generic FigureNode). Editor UI / toolbar / cropper
-   stays intact as a UI abstraction. ✅
+7. **Editor unification**: legacy ProseMirror node types
+   (ImageNode/GalleryNode/CarouselNode/DiptychNode/TriptychNode) are
+   removed. The editor uses a single `figure` node; the toolbar /
+   attribute-panel UI discriminates between image / gallery / carousel
+   / diptych / triptych modes by inspecting the figure's `matrix` +
+   `ids` count via the `figureKind` adapter (src/admin/main.ts). All
+   prose-markdown emit / parse goes through one path. ✅
 
 The unification is fully complete: every directive on disk is
 `::figure`, the public renderer has only one image widget, and the
