@@ -7,13 +7,20 @@
 #     (a second machine getting a new volume), not on the first deploy.
 #   - Without terminal access we can't run `fly volumes create` locally.
 #
-# Setup once (in browser):
-#   1. Fly dashboard → Tokens → "Create deploy token"
-#      (deploy tokens have volume:write scope on the app they're issued for)
-#      Name it whatever, copy the token.
+# Two ways to trigger this:
+#   (a) Mobile-friendly: push a tag matching `fly-volume-create-*` (any
+#       suffix). Defaults to volume name `rkr_data`, 1 GB, region `ord`.
+#       Example: `git tag fly-volume-create-1 && git push origin
+#       fly-volume-create-1`. The workflow runs once on the tag's
+#       commit, no UI clicks required.
+#   (b) Desktop-friendly: GitHub Actions tab → workflow_dispatch with
+#       customizable inputs.
+#
+# Setup once before either trigger:
+#   1. Fly dashboard → Tokens → "Create deploy token" (deploy tokens
+#      have volume:write scope on the app they're issued for); copy.
 #   2. GitHub repo → Settings → Secrets and variables → Actions →
 #      New repository secret. Name = FLY_API_TOKEN, value = paste.
-#   3. GitHub Actions tab → "Create Fly volume (one-shot)" → Run workflow.
 #
 # After the workflow exits successfully, the volume exists. Re-trigger
 # the Fly GitHub App deploy (push any commit, or "Redeploy" from the
@@ -39,6 +46,11 @@ on:
         description: 'Fly region (must match primary_region in fly.toml)'
         required: true
         default: 'ord'
+  push:
+    tags:
+      # Any tag that starts with this prefix triggers the workflow.
+      # Suffix lets you push multiple times without re-using a tag.
+      - 'fly-volume-create-*'
 
 jobs:
   create-volume:
@@ -53,28 +65,33 @@ jobs:
       - name: Create volume (idempotent)
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          # Inputs are only present on workflow_dispatch; fall back to
+          # the same defaults so a tag-push run gets the right values.
+          NAME: ${{ inputs.volume_name || 'rkr_data' }}
+          SIZE: ${{ inputs.size_gb || '1' }}
+          REGION: ${{ inputs.region || 'ord' }}
         run: |
           set -euo pipefail
-          name='${{ inputs.volume_name }}'
-          size='${{ inputs.size_gb }}'
-          region='${{ inputs.region }}'
           app=rkr-blog
+          echo "Trigger: ${{ github.event_name }} ; ref: ${{ github.ref }}"
+          echo "Volume='$NAME' Size='$SIZE'GB Region='$REGION' App='$app'"
 
           # If a volume with this name already exists, exit 0 — re-running
           # the workflow shouldn't double-allocate.
           if flyctl volumes list --app "$app" --json \
-            | jq -e --arg n "$name" '.[] | select(.Name == $n)' >/dev/null; then
-            echo "Volume '$name' already exists on $app; nothing to do."
+            | jq -e --arg n "$NAME" '.[] | select(.Name == $n)' >/dev/null; then
+            echo "Volume '$NAME' already exists on $app; nothing to do."
             flyctl volumes list --app "$app"
             exit 0
           fi
 
-          echo "Creating volume '$name' ${size}GB in $region for $app..."
-          flyctl volumes create "$name" \
+          echo "Creating volume '$NAME' ${SIZE}GB in $REGION for $app..."
+          flyctl volumes create "$NAME" \
             --app "$app" \
-            --size "$size" \
-            --region "$region" \
+            --size "$SIZE" \
+            --region "$REGION" \
             --yes
 
           echo "Done. Current volumes:"
           flyctl volumes list --app "$app"
+
