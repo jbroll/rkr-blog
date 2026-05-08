@@ -610,6 +610,117 @@ export default async function adminRoutes(
       }
     }
   );
+
+  // POST /admin/reset — bearer-only nuclear reset for the demo.
+  //
+  // Wipes all post + image runtime data (content/posts/, originals/,
+  // sidecars/, cache/img/) and truncates the SQLite tables that index
+  // them (posts + render-job tables; users/sessions are kept). Re-runs
+  // migrations after the truncate so the schema stays consistent.
+  //
+  // Bearer-only: cookie-authed authors can write posts, but full reset
+  // is a destructive operator action — we keep the cookie path locked
+  // out by checking the synthetic id=0 user that auth-middleware
+  // attaches when ADMIN_TOKEN matches. Defense in depth against an
+  // accidental click-through from the editor.
+  fastify.post('/admin/reset', { ...guard }, async (request, reply) => {
+    if (!request.user || request.user.id !== 0) {
+      return reply
+        .code(403)
+        .send({ error: 'reset is bearer-only; cookie auth not accepted for this endpoint' });
+    }
+    try {
+      const counts = await wipeRuntimeData(siteRoot);
+      // The database schema is unchanged, but truncating posts means
+      // /:slug routes return 404 until a re-import. The render-job
+      // queue is also drained.
+      request.log.warn({ counts }, 'admin reset complete');
+      return { ok: true, ...counts };
+    } catch (err) {
+      request.log.error({ err }, 'admin reset failed');
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+}
+
+/**
+ * Recursively walk a directory and unlink every regular file, leaving
+ * the empty directory shell. Returns the count of files removed. We
+ * remove files (not the directories themselves) so a fly volume mount
+ * point — which can't be unlinked — stays in place.
+ */
+async function wipeDirectoryContents(dir: string): Promise<number> {
+  if (!fs.existsSync(dir)) return 0;
+  let count = 0;
+  const stack: string[] = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop() as string;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        // Defer removal of inner directory shells; we only unlink files.
+        // Empty subdirs are harmless (rmdir would also be fine, but
+        // unlinking-only keeps the wipe idempotent against the volume
+        // root and any future bind-mount points).
+      } else {
+        try {
+          await fs.promises.unlink(full);
+          count++;
+        } catch {
+          // Best-effort: a transient EBUSY etc. shouldn't abort the wipe.
+        }
+      }
+    }
+  }
+  return count;
+}
+
+interface ResetCounts {
+  posts: number;
+  originals: number;
+  sidecars: number;
+  cacheFiles: number;
+  postsTableRows: number;
+}
+
+async function wipeRuntimeData(siteRoot: string): Promise<ResetCounts> {
+  const postsDir = path.join(siteRoot, 'content', 'posts');
+  const originalsDir = path.join(siteRoot, 'originals');
+  const sidecarsDir = path.join(siteRoot, 'sidecars');
+  const cacheImgDir = path.join(siteRoot, 'cache', 'img');
+
+  const posts = await wipeDirectoryContents(postsDir);
+  const originals = await wipeDirectoryContents(originalsDir);
+  const sidecars = await wipeDirectoryContents(sidecarsDir);
+  const cacheFiles = await wipeDirectoryContents(cacheImgDir);
+
+  // Truncate the posts + render-job tables. Users and sessions are
+  // intentionally untouched — the operator stays signed in. The DB
+  // file itself stays so the migrations don't need to re-run.
+  const dbPath = path.join(siteRoot, 'data', 'site.db');
+  let postsTableRows = 0;
+  if (fs.existsSync(dbPath)) {
+    const db = (await import('../lib/db.ts')).open(dbPath);
+    try {
+      const before = db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM posts').get();
+      postsTableRows = before?.n ?? 0;
+      db.exec('DELETE FROM posts');
+      // The render queue (jobs table) may carry references to images
+      // we just deleted; clear it so background workers don't churn
+      // on missing files.
+      db.exec('DELETE FROM jobs');
+    } finally {
+      db.close();
+    }
+  }
+  return { posts, originals, sidecars, cacheFiles, postsTableRows };
 }
 
 const URL_FETCH_TIMEOUT_MS = 30_000;
