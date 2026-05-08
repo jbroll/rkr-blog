@@ -14,8 +14,6 @@ import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
 import { computeHomography, perspectiveOutputSize } from './canvas-math';
 
-type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
-
 interface SaveResponse {
   slug: string;
   inserted: boolean;
@@ -163,153 +161,18 @@ const FigureNode = Node.create({
   }
 });
 
-// ---- figure adapters ---------------------------------------------------
-// The editor's UX is per-shape (image, gallery, carousel, diptych,
-// triptych) — different toolbar buttons, different attribute panels,
-// different slot constraints. The on-disk node is always `figure`.
-// These adapters translate between the per-shape concept and figure
-// attrs so the existing UI can keep its shape-aware code paths while
-// the data layer is unified.
-
-type FigureKind = 'image' | 'gallery' | 'carousel' | 'diptych' | 'triptych';
-
-interface ImageAttrsAdapter {
-  id: string;
-  alt: string;
-  caption: string;
-  position: ImagePosition;
-}
-
-interface MultiImageAttrsAdapter {
-  ids: string;
-  alts: string;
-  caption: string;
-  layout: string; // gallery only
-  autoplay: number; // carousel only
-}
-
-const SLOT_SPEC: Record<Exclude<FigureKind, 'image'>, { min: number; max: number }> = {
-  gallery: { min: 1, max: Number.POSITIVE_INFINITY },
-  carousel: { min: 1, max: Number.POSITIVE_INFINITY },
-  diptych: { min: 2, max: 2 },
-  triptych: { min: 3, max: 3 }
-};
-
-/** Build a figure node's attrs from the legacy single-image input shape. */
-function figureForImage(input: Partial<ImageAttrsAdapter>): FigureAttrs {
-  const id = (input.id ?? '').trim();
-  return {
-    ...FIGURE_DEFAULTS,
-    ids: id,
-    alts: input.alt ?? '',
-    caption: input.caption ?? '',
-    justify: input.position && input.position !== 'default' ? input.position : 'center'
-  };
-}
-
-/** Build a figure node's attrs from a legacy multi-image-kind input. */
-function figureForMulti(
-  kind: Exclude<FigureKind, 'image'>,
-  input: Partial<MultiImageAttrsAdapter>
-): FigureAttrs {
-  const out: FigureAttrs = {
-    ...FIGURE_DEFAULTS,
-    ids: input.ids ?? '',
-    alts: input.alts ?? '',
-    caption: input.caption ?? ''
-  };
-  if (kind === 'gallery') {
-    out.matrix = input.layout && input.layout !== 'matrix' ? input.layout : 'justified';
-  } else if (kind === 'carousel') {
-    out.matrix = '1x1';
-    out.timer = Math.max(0, Math.floor(input.autoplay ?? 0));
-  } else if (kind === 'diptych') {
-    out.matrix = '1x2';
-  } else if (kind === 'triptych') {
-    out.matrix = '1x3';
-  }
-  return out;
-}
-
-/** Detect the editor's "kind" from a figure node's current attrs.
- * Mirrors prose-markdown's parseFigureToEditorNode logic. */
-function figureKind(attrs: Partial<FigureAttrs>): FigureKind {
-  const idCount = (attrs.ids ?? '')
+/** Count the comma-separated ids in a figure-attrs string. */
+function idCount(ids: string | undefined): number {
+  return (ids ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean).length;
-  const matrix = (attrs.matrix ?? '').toLowerCase();
-  if (matrix === '1x2' && idCount === 2) return 'diptych';
-  if (matrix === '1x3' && idCount === 3) return 'triptych';
-  if (matrix === 'justified' || matrix === 'masonry') return 'gallery';
-  if (matrix === '1x1' && idCount > 1) return 'carousel';
-  return 'image';
 }
 
-/** Project figure attrs back into the legacy single-image shape so the
- * existing attribute-panel form fields stay bound to a stable model. */
-function imageAttrsFromFigure(attrs: Partial<FigureAttrs>): ImageAttrsAdapter {
-  const id = (attrs.ids ?? '').split(',')[0]?.trim() ?? '';
-  const justify = attrs.justify ?? 'center';
-  const position: ImagePosition =
-    justify === 'full' || justify === 'left' || justify === 'right' || justify === 'inline'
-      ? justify
-      : 'default';
-  return {
-    id,
-    alt: (attrs.alts ?? '').split(',')[0]?.trim() ?? '',
-    caption: attrs.caption ?? '',
-    position
-  };
+/** Extract the single id from a figure that has exactly one. */
+function singleId(ids: string | undefined): string {
+  return (ids ?? '').split(',')[0]?.trim() ?? '';
 }
-
-function multiAttrsFromFigure(
-  kind: Exclude<FigureKind, 'image'>,
-  attrs: Partial<FigureAttrs>
-): MultiImageAttrsAdapter {
-  return {
-    ids: attrs.ids ?? '',
-    alts: attrs.alts ?? '',
-    caption: attrs.caption ?? '',
-    layout:
-      kind === 'gallery' && (attrs.matrix === 'masonry' || attrs.matrix === 'justified')
-        ? attrs.matrix
-        : 'justified',
-    autoplay: kind === 'carousel' ? Number(attrs.timer ?? 0) : 0
-  };
-}
-
-/** Map a single-image attribute name from the legacy shape to the
- * corresponding field on the figure node. */
-function patchImageField(
-  field: 'alt' | 'caption' | 'position',
-  value: string
-): Partial<FigureAttrs> {
-  if (field === 'alt') return { alts: value };
-  if (field === 'caption') return { caption: value };
-  // position = default → justify = center (drops the attr on emit).
-  const justify = value === 'default' ? 'center' : value;
-  return { justify };
-}
-
-/** Map a multi-image attribute name + active kind to a figure-node patch. */
-function patchMultiField(
-  kind: Exclude<FigureKind, 'image'>,
-  field: 'caption' | 'layout' | 'autoplay' | 'alts',
-  value: string | number
-): Partial<FigureAttrs> {
-  if (field === 'caption') return { caption: String(value) };
-  if (field === 'alts') return { alts: String(value) };
-  if (field === 'layout' && kind === 'gallery') {
-    return { matrix: String(value) };
-  }
-  if (field === 'autoplay' && kind === 'carousel') {
-    return { timer: Math.max(0, Math.floor(Number(value) || 0)) };
-  }
-  return {};
-}
-
-// ---- end figure adapters -----------------------------------------------
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -1223,8 +1086,11 @@ async function pickFromDrive(editor: Editor): Promise<void> {
         setStatus(`importing ${doc.name ?? doc.id} from Drive…`);
         try {
           const r = await importGdriveFile(doc.id);
-          const attrs = figureForImage({ id: r.id });
-          editor.chain().focus().insertContent({ type: 'figure', attrs }).run();
+          editor
+            .chain()
+            .focus()
+            .insertContent({ type: 'figure', attrs: { ids: r.id } })
+            .run();
           setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
         } catch (err) {
           setStatus(`Drive import error: ${(err as Error).message}`);
@@ -1288,8 +1154,11 @@ async function pickFromOneDrive(editor: Editor): Promise<void> {
   setStatus(`importing ${fileId.slice(0, 12)}… from OneDrive`);
   try {
     const r = await importOneDriveFile(fileId);
-    const attrs = figureForImage({ id: r.id });
-    editor.chain().focus().insertContent({ type: 'figure', attrs }).run();
+    editor
+      .chain()
+      .focus()
+      .insertContent({ type: 'figure', attrs: { ids: r.id } })
+      .run();
     setStatus(`imported from OneDrive (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`);
   } catch (err) {
     setStatus(`OneDrive import error: ${(err as Error).message}`);
@@ -1335,10 +1204,22 @@ function mount(): void {
   const root = $('rkroll-admin-article');
   const toolbar = $('rkroll-admin-toolbar');
   const fileInput = $<HTMLInputElement>('rkr-image-input');
-  const attrPanel = $<HTMLDivElement>('rkr-image-attrs');
-  const attrAlt = $<HTMLInputElement>('rkr-image-alt');
-  const attrCaption = $<HTMLInputElement>('rkr-image-caption');
-  const attrPosition = $<HTMLSelectElement>('rkr-image-position');
+
+  // Unified figure attribute panel.
+  const attrPanel = $<HTMLDivElement>('rkr-figure-attrs');
+  const attrIds = $<HTMLInputElement>('rkr-figure-ids');
+  const attrAlts = $<HTMLTextAreaElement>('rkr-figure-alts');
+  const attrCaption = $<HTMLInputElement>('rkr-figure-caption');
+  const attrMatrix = $<HTMLInputElement>('rkr-figure-matrix');
+  const attrJustify = $<HTMLSelectElement>('rkr-figure-justify');
+  const attrWidth = $<HTMLInputElement>('rkr-figure-width');
+  const attrAspect = $<HTMLInputElement>('rkr-figure-aspect');
+  const attrFit = $<HTMLSelectElement>('rkr-figure-fit');
+  const attrTimer = $<HTMLInputElement>('rkr-figure-timer');
+
+  // Image-edit pipeline section — visible when the figure has exactly
+  // one image (cropper / rotate / flip / perspective / resample / ops list).
+  const imageEditSection = $<HTMLDivElement>('rkr-image-edit');
   const attrCropBtn = $<HTMLButtonElement>('rkr-image-crop-btn');
   const attrRotateLBtn = $<HTMLButtonElement>('rkr-image-rotate-l-btn');
   const attrRotateRBtn = $<HTMLButtonElement>('rkr-image-rotate-r-btn');
@@ -1360,16 +1241,6 @@ function mount(): void {
   const attrResetBtn = $<HTMLButtonElement>('rkr-image-reset-btn');
   const attrSaveBtn = $<HTMLButtonElement>('rkr-image-save-btn');
   const attrEditsList = $<HTMLOListElement>('rkr-image-edits');
-
-  const multiPanel = $<HTMLDivElement>('rkr-multi-attrs');
-  const multiLabel = $<HTMLHeadingElement>('rkr-multi-attrs-label');
-  const multiIds = $<HTMLInputElement>('rkr-multi-ids');
-  const multiAlts = $<HTMLTextAreaElement>('rkr-multi-alts');
-  const multiCaption = $<HTMLInputElement>('rkr-multi-caption');
-  const multiLayout = $<HTMLSelectElement>('rkr-multi-layout');
-  const multiLayoutLabel = $<HTMLLabelElement>('rkr-multi-layout-label');
-  const multiAutoplay = $<HTMLInputElement>('rkr-multi-autoplay');
-  const multiAutoplayLabel = $<HTMLLabelElement>('rkr-multi-autoplay-label');
 
   const editor = new Editor({
     element: root,
@@ -1441,7 +1312,7 @@ function mount(): void {
       setStatus(`uploading ${f.name || 'image'} (${i + 1}/${files.length})…`);
       try {
         const r = await uploadImage(f);
-        const attrs = figureForImage({ id: r.id });
+        const attrs = { ids: r.id };
         const chain = ed.chain().focus();
         if (cursor !== null) {
           chain.insertContentAt(cursor, { type: 'figure', attrs });
@@ -1489,27 +1360,26 @@ function mount(): void {
     editorFrame.classList.remove('is-drag-over');
   });
 
-  async function insertMultiImage(kind: Exclude<FigureKind, 'image'>): Promise<void> {
+  /** Multi-upload helper: pick N files, upload, insert one figure with
+   * matrix=justified by default. Author edits matrix in the figure
+   * panel to convert to 1x1 (carousel), 1x2 (diptych), 1x3 (triptych),
+   * NxM, or masonry. */
+  async function insertGallery(): Promise<void> {
     const files = await pickMany();
     if (files.length === 0) return;
-    const { min, max } = SLOT_SPEC[kind];
-    if (files.length < min) {
-      setStatus(`${kind} needs at least ${min} image(s); got ${files.length}`);
-      return;
-    }
-    if (files.length > max) {
-      setStatus(`${kind} accepts at most ${max}; using the first ${max}`);
-    }
     try {
-      const ids = await uploadMany(files.slice(0, max));
-      // Always insert a figure node; `kind` only selects the default
-      // matrix / timer values (figureForMulti maps gallery → matrix=
-      // <layout>, carousel → matrix=1x1+timer, diptych/triptych → 1x2/1x3).
-      const attrs = figureForMulti(kind, { ids: ids.join(',') });
-      editor.chain().focus().insertContent({ type: 'figure', attrs }).run();
-      setStatus(`inserted ${kind} with ${ids.length} image(s)`);
+      const ids = await uploadMany(files);
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'figure',
+          attrs: { ids: ids.join(','), matrix: ids.length > 1 ? 'justified' : '' }
+        })
+        .run();
+      setStatus(`inserted figure with ${ids.length} image(s)`);
     } catch (err) {
-      setStatus(`${kind} insert failed: ${(err as Error).message}`);
+      setStatus(`gallery insert failed: ${(err as Error).message}`);
     }
   }
 
@@ -1528,10 +1398,7 @@ function mount(): void {
       'link'
     ),
     makeButton('Image', () => fileInput.click(), 'image'),
-    makeButton('Gallery', () => void insertMultiImage('gallery'), 'gallery'),
-    makeButton('Carousel', () => void insertMultiImage('carousel'), 'carousel'),
-    makeButton('Diptych', () => void insertMultiImage('diptych'), 'diptych'),
-    makeButton('Triptych', () => void insertMultiImage('triptych'), 'triptych'),
+    makeButton('Gallery', () => void insertGallery(), 'gallery'),
     makeButton(
       'Drive',
       () => {
@@ -1553,11 +1420,12 @@ function mount(): void {
     makeButton('Save', () => void handleSave(editor), 'save')
   );
 
-  // Sync active states on selection change. Also reveals the image-
-  // attribute panel when an image node is selected so the author can
-  // edit alt / caption / position. Programmatic updates from the panel
-  // re-trigger this handler; we guard against feedback loops via
-  // `populating`.
+  // Sync active states on selection change. Also reveals the figure
+  // attribute panel when a figure is selected, populates every editable
+  // field from the node's attrs, and reveals the image-edit pipeline
+  // section when the figure has exactly one image. Programmatic updates
+  // from panel inputs re-trigger this handler; we guard against
+  // feedback loops via `populating`.
   let populating = false;
   editor.on('selectionUpdate', () => {
     for (const b of toolbar.querySelectorAll<HTMLButtonElement>('button[data-cmd]')) {
@@ -1571,93 +1439,97 @@ function mount(): void {
       b.classList.toggle('is-active', active);
     }
 
-    // The selection is on a figure node iff the editor reports it. We
-    // then inspect the attrs to decide which panel to surface (single
-    // image with cropper / ops vs multi-image with slot list).
     const isFigure = editor.isActive('figure');
-    const figureAttrs: Partial<FigureAttrs> = isFigure
-      ? (editor.getAttributes('figure') as Partial<FigureAttrs>)
-      : {};
-    const activeKind: FigureKind | null = isFigure ? figureKind(figureAttrs) : null;
-
-    if (activeKind === 'image') {
-      const a = imageAttrsFromFigure(figureAttrs);
-      populating = true;
-      attrAlt.value = a.alt;
-      attrCaption.value = a.caption;
-      attrPosition.value = a.position;
-      populating = false;
-      attrPanel.hidden = false;
-      // Reset transient UI; populated below from local edit state.
-      attrResetBtn.hidden = true;
-      attrResampleInput.value = '';
-      attrUndoBtn.disabled = true;
-      attrRedoBtn.disabled = true;
-      attrSaveBtn.disabled = true;
-      attrEditsList.replaceChildren();
-      if (a.id) {
-        const id = a.id;
-        void ensureLocalState(id).then(
-          (s) => {
-            const resample = s.ops.find((o) => o.type === 'resample');
-            if (resample && typeof resample.w === 'number') {
-              attrResampleInput.value = String(resample.w);
-            }
-            renderEditsPanel(id, s);
-            // Repaint preview from local ops — there might be unsaved
-            // edits from a prior selection of this image in this session.
-            void refreshImagePreview(editor, id, s.ops);
-          },
-          () => {
-            /* best-effort */
-          }
-        );
-      }
-    } else {
+    if (!isFigure) {
       attrPanel.hidden = true;
+      return;
     }
+    const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
+    const ids = attrs.ids ?? '';
+    const idList = ids
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const altsList = (attrs.alts ?? '').split(',').map((s) => s.trim());
+    while (altsList.length < idList.length) altsList.push('');
 
-    if (activeKind && activeKind !== 'image') {
-      const a = multiAttrsFromFigure(activeKind, figureAttrs);
-      populating = true;
-      multiLabel.textContent = `${activeKind} attributes`;
-      multiIds.value = a.ids;
-      const idCount = a.ids.split(',').filter((s) => s.trim().length > 0).length;
-      const altsList = a.alts.split(',').map((s) => s.trim());
-      while (altsList.length < idCount) altsList.push('');
-      multiAlts.value = altsList.slice(0, Math.max(idCount, altsList.length)).join('\n');
-      multiAlts.rows = Math.min(8, Math.max(3, idCount));
-      multiCaption.value = a.caption;
-      const showLayout = activeKind === 'gallery';
-      multiLayout.style.display = showLayout ? '' : 'none';
-      multiLayoutLabel.style.display = showLayout ? '' : 'none';
-      if (showLayout) multiLayout.value = a.layout;
-      const showAutoplay = activeKind === 'carousel';
-      multiAutoplay.style.display = showAutoplay ? '' : 'none';
-      multiAutoplayLabel.style.display = showAutoplay ? '' : 'none';
-      if (showAutoplay) multiAutoplay.value = String(a.autoplay);
-      populating = false;
-      multiPanel.hidden = false;
-    } else {
-      multiPanel.hidden = true;
+    populating = true;
+    attrIds.value = ids;
+    attrAlts.value = altsList.slice(0, Math.max(idList.length, altsList.length)).join('\n');
+    attrAlts.rows = Math.min(8, Math.max(3, idList.length));
+    attrCaption.value = attrs.caption ?? '';
+    attrMatrix.value = attrs.matrix ?? '';
+    attrJustify.value = attrs.justify ?? 'center';
+    attrWidth.value = attrs.width ?? '';
+    attrAspect.value = attrs.aspect ?? '';
+    attrFit.value = attrs.fit ?? 'cover';
+    attrTimer.value = String(attrs.timer ?? 0);
+    populating = false;
+    attrPanel.hidden = false;
+
+    // Image-edit pipeline (crop/rotate/flip/perspective/resample) only
+    // applies to single-image figures — operations target one
+    // originals/<id>. Hide the section otherwise.
+    const isSingle = idList.length === 1;
+    imageEditSection.hidden = !isSingle;
+    attrResetBtn.hidden = true;
+    attrResampleInput.value = '';
+    attrUndoBtn.disabled = true;
+    attrRedoBtn.disabled = true;
+    attrSaveBtn.disabled = true;
+    attrEditsList.replaceChildren();
+    if (isSingle) {
+      const id = idList[0] as string;
+      void ensureLocalState(id).then(
+        (s) => {
+          const resample = s.ops.find((o) => o.type === 'resample');
+          if (resample && typeof resample.w === 'number') {
+            attrResampleInput.value = String(resample.w);
+          }
+          renderEditsPanel(id, s);
+          // Repaint preview from local ops — there might be unsaved
+          // edits from a prior selection of this image in this session.
+          void refreshImagePreview(editor, id, s.ops);
+        },
+        () => {
+          /* best-effort */
+        }
+      );
     }
   });
 
-  function commitAttr(name: 'alt' | 'caption' | 'position', value: string): void {
+  /** Patch a single figure attr. Field name maps directly to a
+   * FigureAttrs key; value is the raw input value (timer is coerced). */
+  function commitFigureAttr(name: keyof FigureAttrs, value: string): void {
     if (populating || !editor.isActive('figure')) return;
-    const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
-    if (figureKind(attrs) !== 'image') return;
-    editor.chain().focus().updateAttributes('figure', patchImageField(name, value)).run();
+    const patch: Partial<FigureAttrs> =
+      name === 'timer'
+        ? { timer: Math.max(0, Math.min(60, Math.floor(Number(value) || 0))) }
+        : ({ [name]: value } as Partial<FigureAttrs>);
+    editor.chain().focus().updateAttributes('figure', patch).run();
   }
-  attrAlt.addEventListener('input', () => commitAttr('alt', attrAlt.value));
-  attrCaption.addEventListener('input', () => commitAttr('caption', attrCaption.value));
-  attrPosition.addEventListener('change', () => commitAttr('position', attrPosition.value));
+  attrAlts.addEventListener('input', () =>
+    commitFigureAttr(
+      'alts',
+      attrAlts.value
+        .split('\n')
+        .map((s) => s.trim())
+        .join(',')
+    )
+  );
+  attrCaption.addEventListener('input', () => commitFigureAttr('caption', attrCaption.value));
+  attrMatrix.addEventListener('input', () => commitFigureAttr('matrix', attrMatrix.value));
+  attrJustify.addEventListener('change', () => commitFigureAttr('justify', attrJustify.value));
+  attrWidth.addEventListener('input', () => commitFigureAttr('width', attrWidth.value));
+  attrAspect.addEventListener('input', () => commitFigureAttr('aspect', attrAspect.value));
+  attrFit.addEventListener('change', () => commitFigureAttr('fit', attrFit.value));
+  attrTimer.addEventListener('input', () => commitFigureAttr('timer', attrTimer.value));
 
   function activeImageId(): string | null {
     if (!editor.isActive('figure')) return null;
     const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
-    if (figureKind(attrs) !== 'image') return null;
-    return imageAttrsFromFigure(attrs).id || null;
+    if (idCount(attrs.ids) !== 1) return null;
+    return singleId(attrs.ids) || null;
   }
 
   /** Render one row per op (in click order), plus per-row delete buttons,
@@ -1803,34 +1675,6 @@ function mount(): void {
     );
   });
 
-  function commitMultiAttr(name: 'caption' | 'layout' | 'autoplay' | 'alts', value: string): void {
-    if (populating || !editor.isActive('figure')) return;
-    const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
-    const kind = figureKind(attrs);
-    if (kind === 'image') return; // multi-attr panel is hidden in image mode
-    editor
-      .chain()
-      .focus()
-      .updateAttributes('figure', patchMultiField(kind, name, value))
-      .run();
-  }
-  multiCaption.addEventListener('input', () => commitMultiAttr('caption', multiCaption.value));
-  multiLayout.addEventListener('change', () => commitMultiAttr('layout', multiLayout.value));
-  multiAutoplay.addEventListener('input', () => commitMultiAttr('autoplay', multiAutoplay.value));
-  // Textarea is one-alt-per-line for clarity; serialize to the
-  // comma-separated wire format before committing. Trailing blank
-  // lines are preserved so an author who left a slot blank still gets
-  // the right index alignment with ids.
-  multiAlts.addEventListener('input', () =>
-    commitMultiAttr(
-      'alts',
-      multiAlts.value
-        .split('\n')
-        .map((s) => s.trim())
-        .join(',')
-    )
-  );
-
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
@@ -1838,10 +1682,13 @@ function mount(): void {
     setStatus(`uploading ${file.name}…`);
     try {
       const result = await uploadImage(file);
-      // Insert with empty attrs; author edits via the image-attribute
-      // panel that auto-reveals when the inserted node is selected.
-      const attrs = figureForImage({ id: result.id });
-      editor.chain().focus().insertContent({ type: 'figure', attrs }).run();
+      // Insert with just the id; author edits the rest via the figure
+      // panel that auto-reveals on selection.
+      editor
+        .chain()
+        .focus()
+        .insertContent({ type: 'figure', attrs: { ids: result.id } })
+        .run();
       setStatus(
         `uploaded ${file.name} (${result.bytes} bytes${result.deduplicated ? ', dedup' : ''})`
       );

@@ -10,33 +10,28 @@ When you fix one, delete the entry. When something gets worse than expected,
 promote it. Newly-discovered work goes here, not into commit messages, so
 the queue is searchable.
 
-## ::figure editor toolbar UX refresh
+## ::figure editor: per-cell cropper for multi-image figures
 
-**Source.** Spec.md §9 unification, follow-up after the legacy
-ProseMirror node types were removed.
+**Source.** Spec.md §9 unification follow-up. Most of the toolbar
+UX refresh that lived here previously was implemented (adapter
+helpers deleted, toolbar collapsed to Image/Gallery, attribute
+panel unified to read/write figure attrs directly, image-edit
+pipeline shows when ids count is 1).
 
-**What.** The editor now stores all images as a single `figure`
-node. The toolbar still has 5 buttons (Image / Gallery / Carousel /
-Diptych / Triptych) — each one pre-fills different `matrix` /
-`timer` defaults via the `figureForImage` and `figureForMulti`
-adapters in main.ts. A unified UX would collapse these into:
+**What.** What remains: when a figure has more than one image,
+there's no UI for cropping or applying ops to a *selected cell*.
+The image-edit section is hidden in multi mode; ops on a
+multi-image figure currently aren't expressible from the editor.
 
-- "Insert figure" button with a matrix selector (1x1, 1x2, 1x3,
-  NxM, justified, masonry, carousel)
-- A single attribute panel surfacing matrix / justify / width /
-  aspect / fit / alts / captions / caption / timer
-- Per-image alt + caption slot management
-- Selected-cell cropper for multi-image figures (currently the
-  cropper / ops UI engages only when the figure resolves to single-
-  image mode via figureKind)
+**Why deferred.** Requires per-instance cell selection in the
+editor's figure preview (a real interaction surface) plus a
+data-model decision: do per-cell ops live on the sidecar (one
+ops list per id) or on the directive? Sidecar.ops is the existing
+shape, so per-cell ops would naturally update the sidecar of the
+specific id. The cell-selection UI is the missing piece.
 
-**Why deferred.** This is genuine UX work that benefits from
-in-browser iteration; the current 5-button toolbar has no
-correctness issues (round-trip is verified by tests).
-
-**Trigger.** When there's an in-browser iteration loop available
-for the operator (real photos, real preview), or when adding a new
-multi-image affordance.
+**Trigger.** First time an author wants to crop one image inside
+a multi-image figure.
 
 ## src/admin/main.ts is too large
 

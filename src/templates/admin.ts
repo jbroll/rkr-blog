@@ -75,31 +75,33 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-status { margin-top: .5rem; color: var(--rkr-muted); font-size: .9rem; }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
-  /* Attribute panels: shown only when a matching node is selected.
+  /* Figure attribute panel: shown only when a figure node is selected.
      Use a translucent overlay over --rkr-bg so dark mode works without
      a separate color rule (color-mix maps to a slightly-darker neutral
      in dark mode, slightly-lighter in light mode). */
-  #rkr-image-attrs[hidden], #rkr-multi-attrs[hidden] { display: none; }
-  #rkr-image-attrs, #rkr-multi-attrs {
+  #rkr-figure-attrs[hidden] { display: none; }
+  #rkr-figure-attrs {
     display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
     align-items: center; margin: .75rem 0;
     padding: .5rem .75rem; border: 1px solid var(--rkr-rule); border-radius: 4px;
     background: color-mix(in srgb, var(--rkr-text) 4%, var(--rkr-bg));
   }
-  #rkr-image-attrs h3, #rkr-multi-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: var(--rkr-muted); }
-  #rkr-image-attrs input, #rkr-image-attrs select,
-  #rkr-multi-attrs input, #rkr-multi-attrs select,
-  #rkr-multi-attrs textarea { padding: .25rem; }
+  #rkr-figure-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: var(--rkr-muted); }
+  #rkr-figure-attrs input, #rkr-figure-attrs select, #rkr-figure-attrs textarea { padding: .25rem; }
   /* Per-image alts textarea: monospace so column position matches the
      comma-separated wire format. */
-  #rkr-multi-alts { font-family: ui-monospace, monospace; resize: vertical; max-height: 12rem; }
+  #rkr-figure-alts { font-family: ui-monospace, monospace; resize: vertical; max-height: 12rem; }
   /* Browser-native :out-of-range styling for autoplay (input has
      min=0/max=60 attrs). Gives the author a visual cue that >60 will
-     be silently clamped on save by emitMultiImage. */
-  #rkr-multi-autoplay:out-of-range {
+     be silently clamped on save. */
+  #rkr-figure-timer:out-of-range {
     border: 1px solid #c00;
     background: color-mix(in srgb, #c00 12%, var(--rkr-bg));
   }
+  /* Image-edit pipeline section nested inside the figure-attrs grid;
+     spans full width and stacks its own grid beneath. */
+  #rkr-image-edit { grid-column: 1 / -1; display: contents; }
+  #rkr-image-edit[hidden] { display: none; }
   /* Editor-side previews of multi-image directives: a labelled chip + a
      thumbnail strip, just enough that the author sees what's grouped. */
   #rkroll-admin-root .rkr-multi {
@@ -256,40 +258,61 @@ export function renderAdminPage(data: AdminPageData): string {
   </select>
 </div>
 <div id="rkroll-admin-toolbar"></div>
-<div id="rkr-image-attrs" hidden>
-  <h3>Image attributes</h3>
-  <label for="rkr-image-alt">Alt text</label>
-  <input id="rkr-image-alt" type="text" placeholder="describe the image for screen readers"/>
-  <label for="rkr-image-caption">Caption</label>
-  <input id="rkr-image-caption" type="text" placeholder="optional caption shown below"/>
-  <label for="rkr-image-position">Position</label>
-  <select id="rkr-image-position">
-    <option value="default">default (centered, breakout)</option>
+<div id="rkr-figure-attrs" hidden>
+  <h3>Figure attributes</h3>
+  <label for="rkr-figure-ids">IDs</label>
+  <input id="rkr-figure-ids" type="text" readonly placeholder="comma-separated; populated by upload"/>
+  <label for="rkr-figure-alts">Alt text</label>
+  <textarea id="rkr-figure-alts" rows="3" placeholder="one alt per line, in id order; leave blank for decorative"></textarea>
+  <label for="rkr-figure-caption">Caption</label>
+  <input id="rkr-figure-caption" type="text" placeholder="optional caption shown below"/>
+  <label for="rkr-figure-matrix">Matrix</label>
+  <input id="rkr-figure-matrix" type="text" placeholder="e.g. 1x2, 1x3, justified, masonry, 1x1 (carousel)"/>
+  <label for="rkr-figure-justify">Justify</label>
+  <select id="rkr-figure-justify">
+    <option value="center">center (default, breakout)</option>
     <option value="full">full (edge-to-edge)</option>
+    <option value="bleed">bleed (full-width, no padding)</option>
     <option value="left">left (float, prose wraps right)</option>
     <option value="right">right (float, prose wraps left)</option>
     <option value="inline">inline (small, in text flow)</option>
   </select>
-  <span></span>
-  <span class="rkr-image-actions">
-    <button type="button" id="rkr-image-crop-btn">Crop…</button>
-    <button type="button" id="rkr-image-rotate-l-btn" aria-label="Rotate 90 degrees counter-clockwise" title="Rotate 90° counter-clockwise">↺</button>
-    <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
-    <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
-    <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
-    <button type="button" id="rkr-image-perspective-btn" aria-label="Perspective rectify" title="Straighten a tilted region (de-skew)">⌐</button>
-    <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
-    <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
-    <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
-    <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>Save edits</button>
-  </span>
-  <label for="rkr-image-resample">Max width (px)</label>
-  <span class="rkr-image-actions">
-    <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
-    <button type="button" id="rkr-image-resample-btn">Apply</button>
-  </span>
-  <span id="rkr-image-edits-label">Edits</span>
-  <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
+  <label for="rkr-figure-width">Width</label>
+  <input id="rkr-figure-width" type="text" placeholder="e.g. 60%, 400px"/>
+  <label for="rkr-figure-aspect">Aspect</label>
+  <input id="rkr-figure-aspect" type="text" placeholder="e.g. 16:9 (empty: derive from first image)"/>
+  <label for="rkr-figure-fit">Fit</label>
+  <select id="rkr-figure-fit">
+    <option value="cover">cover</option>
+    <option value="contain">contain</option>
+  </select>
+  <label for="rkr-figure-timer">Autoplay (s)</label>
+  <input id="rkr-figure-timer" type="number" min="0" max="60" step="1"/>
+  <!-- Image-edit pipeline (crop / rotate / flip / perspective / resample
+       + ops list). Only meaningful for single-image figures; main.ts
+       reveals this section when the figure has exactly one id. -->
+  <div id="rkr-image-edit" hidden>
+    <span></span>
+    <span class="rkr-image-actions">
+      <button type="button" id="rkr-image-crop-btn">Crop…</button>
+      <button type="button" id="rkr-image-rotate-l-btn" aria-label="Rotate 90 degrees counter-clockwise" title="Rotate 90° counter-clockwise">↺</button>
+      <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
+      <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
+      <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
+      <button type="button" id="rkr-image-perspective-btn" aria-label="Perspective rectify" title="Straighten a tilted region (de-skew)">⌐</button>
+      <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
+      <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
+      <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
+      <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>Save edits</button>
+    </span>
+    <label for="rkr-image-resample">Max width (px)</label>
+    <span class="rkr-image-actions">
+      <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
+      <button type="button" id="rkr-image-resample-btn">Apply</button>
+    </span>
+    <span id="rkr-image-edits-label">Edits</span>
+    <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
+  </div>
 </div>
 <dialog id="rkr-crop-modal" aria-labelledby="rkr-crop-modal-title">
   <h2 id="rkr-crop-modal-title">Crop image</h2>
@@ -314,27 +337,6 @@ export function renderAdminPage(data: AdminPageData): string {
     <button type="button" id="rkr-persp-save">Save perspective</button>
   </div>
 </dialog>
-<div id="rkr-multi-attrs" hidden>
-  <h3 id="rkr-multi-attrs-label">Multi-image attributes</h3>
-  <label for="rkr-multi-ids">IDs</label>
-  <input id="rkr-multi-ids" type="text" readonly placeholder="comma-separated; populated by upload"/>
-  <label for="rkr-multi-alts">Alt text</label>
-  <textarea
-    id="rkr-multi-alts"
-    rows="3"
-    placeholder="one alt per line, in the same order as ids; leave blank for decorative"
-  ></textarea>
-  <label for="rkr-multi-caption">Caption</label>
-  <input id="rkr-multi-caption" type="text" placeholder="optional caption"/>
-  <label for="rkr-multi-layout" id="rkr-multi-layout-label">Layout</label>
-  <select id="rkr-multi-layout">
-    <option value="justified">justified (Flickr-style rows)</option>
-    <option value="masonry">masonry (Pinterest columns)</option>
-    <option value="matrix">matrix (uniform grid)</option>
-  </select>
-  <label for="rkr-multi-autoplay" id="rkr-multi-autoplay-label">Autoplay (s)</label>
-  <input id="rkr-multi-autoplay" type="number" min="0" max="60" step="1"/>
-</div>
 <div id="rkroll-admin-root">
   <article id="rkroll-admin-article"></article>
 </div>
