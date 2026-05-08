@@ -63,12 +63,15 @@ npm run --silent circular
 #   * EXISTING file that was already > 500 in HEAD and didn't grow: WARN
 #     (work continues; refactor is tracked in DEFERRED.md).
 #
-# Applies to source code only — tests + production .ts/.js under src/ test/ bin/.
+# Applies to production source only (src/, bin/). Tests (test/) are exempt:
+# test files legitimately grow with feature coverage, and forcing splits
+# for size reasons fragments the failure-pinpoint experience without
+# improving production code health.
 echo "==> 500-line size check"
 size_limit=500
 size_failures=0
 staged_src=$(git diff --cached --name-only --diff-filter=ACM \
-  | grep -E '^(src|test|bin)/.*\.(ts|js)$' || true)
+  | grep -E '^(src|bin)/.*\.(ts|js)$' || true)
 
 for f in $staged_src; do
   staged_lines=$(git show ":$f" | wc -l | tr -d ' ')

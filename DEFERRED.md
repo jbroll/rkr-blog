@@ -58,22 +58,23 @@ tightening the size hook to fail-on-existing.
 ## Tighten the per-file size hook to fail-on-existing
 
 **What.** `.githooks/pre-commit` already enforces the 500-line
-ceiling for new files and rejects any growth in already-oversized
-files (warn-on-existing). Once the existing offenders are split
-(`src/admin/main.ts`, `src/routes/admin.ts`, `src/lib/wp-import.ts`,
-`src/widgets/figure.ts`, and the four oversized test files), the
-hook should be tightened so the warn-on-existing branch becomes a
-FAIL. That removes the special case and keeps the codebase under
-the limit.
+ceiling for new files in production source (`src/`, `bin/`) and
+rejects any growth in already-oversized files (warn-on-existing).
+Tests are exempt from the size check — coverage growth is a feature.
+Once the existing production offenders are split (`src/admin/main.ts`,
+`src/routes/admin.ts`, `src/lib/wp-import.ts`, `src/widgets/figure.ts`),
+the hook should be tightened so the warn-on-existing branch becomes
+a FAIL. That removes the special case and keeps production code
+under the limit.
 
-**Why deferred.** Eight source files are over 500 lines today.
-Failing on them all immediately would block every commit until
-they're refactored — a disruptive forced march.
+**Why deferred.** Four production-source files are over 500 lines
+today. Failing on them all immediately would block every commit
+until they're refactored — a disruptive forced march.
 
-**Trigger.** When the last warn-on-existing file drops below 500
-lines (i.e., `wc -l` of every staged source file in `git ls-files
-'src/*.ts' 'test/*.ts' 'bin/*'` returns ≤ 500). At that point flip
-the warn branch in `.githooks/pre-commit` to `exit 1`.
+**Trigger.** When the last warn-on-existing production file drops
+below 500 lines (i.e., `wc -l` of every staged file under `src/`
+or `bin/` returns ≤ 500). At that point flip the warn branch in
+`.githooks/pre-commit` to `exit 1`.
 
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
@@ -258,23 +259,20 @@ job that's still in flight.
 **Trigger.** First user-visible image-load failure report, or
 when adding any caching CDN that adds variability.
 
-### Refactor all source files to under 500 lines
+### Refactor production source files to under 500 lines
 
 **Source.** User request, 2026-05-08; companion to the size-hook
 entries above.
 
-**What.** Eight files currently exceed the 500-line ceiling
-enforced by `.githooks/pre-commit`:
+**What.** Four production-source files currently exceed the
+500-line ceiling enforced by `.githooks/pre-commit` (tests are
+exempt from the size check):
 
 | File | Lines | Suggested split |
 |---|---|---|
 | `src/admin/main.ts` | 1900 | see "src/admin/main.ts is too large" entry |
-| `test/routes/admin-editor.test.ts` | 1189 | by feature: editor save / image upload / autosave / role gate |
 | `src/routes/admin.ts` | 1026 | extract `admin/upload.ts`, `admin/posts.ts`, `admin/reset.ts` route modules |
-| `test/lib/prose-markdown.test.ts` | 661 | by direction: emit / parse / round-trip |
 | `src/lib/wp-import.ts` | 580 | extract `wp-import/parse.ts`, `wp-import/push.ts`, `wp-import/media.ts` |
-| `test/routes/integrations-gdrive.test.ts` | 548 | by phase: connect / callback / pick / import |
-| `test/routes/integrations-onedrive.test.ts` | 516 | mirror gdrive split |
 | `src/widgets/figure.ts` | 512 | extract `figure/layout.ts` (matrix/justified/masonry) |
 
 Each split should preserve test coverage and be its own commit so
