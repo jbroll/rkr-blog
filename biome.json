@@ -54,6 +54,9 @@
       },
       "complexity": {
         "noForEach": "off"
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
       }
     }
   },
