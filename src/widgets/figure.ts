@@ -37,13 +37,12 @@ import type {
   WidgetCtx
 } from '../lib/widgets.ts';
 
-export const name = 'figure';
+const name = 'figure';
 
-// Variants × outputs intentionally union the existing widgets' shapes
-// so the constants-alignment test (test/lib/widget-fallback-alignment)
-// keeps every emitted (variant, output) pair backed by a sidecar
-// declaration. After legacy widgets are deleted we can prune unused
-// widths.
+// Variants × outputs cover every (matrix, justify) shape the figure
+// renderer can emit; the constants-alignment test
+// (test/lib/widget-fallback-alignment) keeps every emitted
+// (variant, output) pair backed by a sidecar declaration.
 export const variants: VariantSpec[] = [
   { w: 320, formats: ['webp', 'avif'] },
   { w: 400, formats: ['webp', 'avif'] },

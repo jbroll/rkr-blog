@@ -101,7 +101,7 @@ interface OAuthAccountRow {
   user_id: number;
 }
 
-export function findUserByOAuth(db: Db, provider: string, sub: string): User | undefined {
+function findUserByOAuth(db: Db, provider: string, sub: string): User | undefined {
   const row = db
     .prepare<OAuthAccountRow>(
       'SELECT user_id FROM oauth_accounts WHERE provider = ? AND provider_sub = ?'

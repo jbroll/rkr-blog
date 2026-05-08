@@ -32,7 +32,7 @@ const BEARER_USER: User = {
   last_seen_at: null
 };
 
-export function bearerTokenFromHeader(req: FastifyRequest): string | undefined {
+function bearerTokenFromHeader(req: FastifyRequest): string | undefined {
   const raw = req.headers.authorization;
   if (!raw) return undefined;
   const m = /^Bearer\s+(.+)$/i.exec(raw);

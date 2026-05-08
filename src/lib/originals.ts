@@ -16,12 +16,7 @@ import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
 import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
-import {
-  type Sidecar,
-  sidecarPath,
-  read as sidecarRead,
-  write as sidecarWrite
-} from './sidecar.ts';
+import { type Sidecar, read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
 
 // Re-export so callers that historically imported FORMAT_TO_EXT from
 // originals.ts continue to work (notably routes/admin.ts).
@@ -241,5 +236,3 @@ export function originalPath(siteRoot: string, id: string, ext: string): string 
 export function bakePath(siteRoot: string, id: string): string {
   return path.join(siteRoot, 'bakes', id.slice(0, 2), id.slice(2, 4), `${id}.webp`);
 }
-
-export { sidecarPath };

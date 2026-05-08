@@ -39,19 +39,6 @@ export interface CanvasSource {
   height: number;
 }
 
-/** Apply a list of ops, in click order, returning the final canvas. The
- * input is left untouched. Adjacent logical no-ops (e.g. rotate(90)
- * + rotate(-90)) are collapsed before execution via simplifyOps —
- * storage is unchanged, the executor just skips needless work. */
-export function applyOps(source: CanvasSource, ops: readonly SidecarOp[]): HTMLCanvasElement {
-  const simplified = simplifyOps(ops);
-  let canvas = drawSource(source);
-  for (const op of simplified) {
-    canvas = applyOne(canvas, op);
-  }
-  return canvas;
-}
-
 /** Per-image incremental pipeline cache. Holds the last simplified op
  * list and its result canvas. On a subsequent apply with the simplified
  * new ops being the previous simplified list + exactly one appended op,

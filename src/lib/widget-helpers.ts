@@ -18,10 +18,10 @@ const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
  * — that's neither useful nor accidental. Truncate with an ellipsis
  * so the rendered output stays bounded and the author can fix the
  * source. */
-export const MAX_CAPTION_LEN = 4096;
-export const MAX_ALT_LEN = 4096;
+const MAX_CAPTION_LEN = 4096;
+const MAX_ALT_LEN = 4096;
 
-export function clampCaption(s: unknown): string {
+function clampCaption(s: unknown): string {
   if (typeof s !== 'string') return '';
   return s.length > MAX_CAPTION_LEN ? `${s.slice(0, MAX_CAPTION_LEN - 1)}…` : s;
 }
