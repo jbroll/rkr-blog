@@ -87,6 +87,7 @@ test('GET /:slug includes the lightbox script tag', async (t) => {
   const res = await app.inject({ method: 'GET', url: '/lb' });
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /<script type="module" src="\/static\/site\/lightbox\.js" defer>/);
+  assert.match(res.body, /<script type="module" src="\/static\/site\/img-retry\.js" defer>/);
 });
 
 test('GET / does NOT include the lightbox script (no figures on index)', async (t) => {

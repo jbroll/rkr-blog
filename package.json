@@ -21,7 +21,7 @@
     "format": "biome format --write",
     "check": "npm run typecheck && biome check && npm run test:coverage",
     "build:admin": "esbuild src/admin/main.ts --bundle --format=esm --target=es2022 --outfile=static/admin/main.js --minify --sourcemap",
-    "build:site": "esbuild src/site/lightbox.ts src/site/carousel.ts --format=esm --target=es2022 --outdir=static/site --sourcemap",
+    "build:site": "esbuild src/site/lightbox.ts src/site/carousel.ts src/site/img-retry.ts --format=esm --target=es2022 --outdir=static/site --sourcemap",
     "build": "npm run build:admin && npm run build:site",
     "clean:admin": "rm -rf static/admin",
     "hooks:install": "git config core.hooksPath .githooks",

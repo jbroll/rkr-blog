@@ -22,6 +22,7 @@ export function renderPostPage(post: PostPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
 <link rel="stylesheet" href="/static/site.css"/>
+<script type="module" src="/static/site/img-retry.js" defer></script>
 <script type="module" src="/static/site/lightbox.js" defer></script>
 <script type="module" src="/static/site/carousel.js" defer></script>
 </head>

@@ -11,7 +11,7 @@
 //   - we trap Tab inside the overlay so focus can't escape behind it
 //   - the previously-focused element is captured and restored on close
 
-export {};
+import { instrument as instrumentImgRetry } from './img-retry.ts';
 
 const STYLE = `
 .rkr-lightbox-overlay {
@@ -77,6 +77,10 @@ function makeOverlay(): {
 
   const img = document.createElement('img');
   img.alt = '';
+  // Same retry-with-backoff as in-page imgs. The overlay img.src is set
+  // when the user opens the lightbox, so we wire the listener once at
+  // creation; instrument() captures img.src at error time, not now.
+  instrumentImgRetry(img);
   el.appendChild(img);
 
   const caption = document.createElement('figcaption');
