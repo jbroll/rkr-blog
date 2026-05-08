@@ -220,6 +220,31 @@ test('::figure (matrix=2x2): rendered URLs resolve (sample one per image)', asyn
   await assertSampledImagesResolve(app, page.body);
 });
 
+test('::figure (matrix=masonry): rendered URLs resolve', async (t) => {
+  // Phase 3: flow layout. Each cell renders a regular <picture>, so
+  // /img/ resolution path is identical to grid mode; this test just
+  // confirms the masonry branch reaches that path.
+  const { app, root } = await setup(t);
+  const ids = await ingestN(t, root, 4);
+  const post = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'fig-masonry-roundtrip',
+      title: 'Masonry roundtrip',
+      status: 'published',
+      markdown: `::figure{ids="${ids.join(',')}" matrix=masonry:3}\n`
+    }
+  });
+  assert.equal(post.statusCode, 200, post.body);
+
+  const page = await app.inject({ method: 'GET', url: '/fig-masonry-roundtrip' });
+  assert.equal(page.statusCode, 200);
+  assert.match(page.body, /class="rkr-figure rkr-figure-masonry/);
+  assert.match(page.body, /--rkr-cols: 3/);
+  await assertSampledImagesResolve(app, page.body);
+});
+
 test('::figure carousel (overflow): rendered URLs resolve across all pages', async (t) => {
   // Phase 2: matrix=1x2 with 5 distinct ids → 3 pages, the last with
   // 1 empty cell. Distinct ids matter — extractImageIdsAndAlts dedupes

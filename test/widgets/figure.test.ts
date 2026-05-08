@@ -299,20 +299,76 @@ test('::figure with empty ids returns a single comment', async (t) => {
   assert.match(html, /<!-- figure: no valid ids -->/);
 });
 
-test('::figure matrix=justified emits a stub comment + 1xN grid (Phase 1)', async (t) => {
+test('::figure matrix=justified renders flexbox flow with default row height', async (t) => {
   const root = freshSiteRoot(t);
   const ids = await ingestN(root, 3);
   const html = await dispatch(root, { ids: ids.join(','), matrix: 'justified' });
-  assert.match(html, /<!-- figure: matrix=justified not yet implemented/);
-  assert.match(
-    html,
-    /grid-template-columns: repeat\(3, 1fr\); grid-template-rows: repeat\(1, auto\)/
-  );
+
+  assert.match(html, /class="rkr-figure rkr-figure-justified rkr-justify-center"/);
+  assert.match(html, /style="--rkr-row-height: 240px"/);
+  assert.match(html, /<div class="rkr-figure-flow">/);
+  // No grid markup; no rkr-fit-* class (fit is ignored under flow).
+  assert.doesNotMatch(html, /rkr-figure-grid/);
+  assert.doesNotMatch(html, /rkr-fit-/);
+  // 3 cells.
+  const cells = (html.match(/<div class="rkr-figure-cell"/g) ?? []).length;
+  assert.equal(cells, 3);
 });
 
-test('::figure matrix=masonry:5 emits a stub comment + 1xN grid (Phase 1)', async (t) => {
+test('::figure matrix=justified:300 overrides row height', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 2);
+  const html = await dispatch(root, { ids: ids.join(','), matrix: 'justified:300' });
+  assert.match(html, /--rkr-row-height: 300px/);
+});
+
+test('::figure matrix=masonry renders column-count flow with default col count', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 4);
+  const html = await dispatch(root, { ids: ids.join(','), matrix: 'masonry' });
+
+  assert.match(html, /class="rkr-figure rkr-figure-masonry rkr-justify-center"/);
+  assert.match(html, /style="--rkr-cols: 3"/);
+  assert.match(html, /<div class="rkr-figure-flow">/);
+  assert.doesNotMatch(html, /rkr-fit-/);
+  const cells = (html.match(/<div class="rkr-figure-cell"/g) ?? []).length;
+  assert.equal(cells, 4);
+});
+
+test('::figure matrix=masonry:5 overrides column count', async (t) => {
   const root = freshSiteRoot(t);
   const ids = await ingestN(root, 4);
   const html = await dispatch(root, { ids: ids.join(','), matrix: 'masonry:5' });
-  assert.match(html, /<!-- figure: matrix=masonry not yet implemented/);
+  assert.match(html, /--rkr-cols: 5/);
+});
+
+test('::figure flow modes ignore aspect + fit', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 3);
+  const html = await dispatch(root, {
+    ids: ids.join(','),
+    matrix: 'justified',
+    aspect: '16:9',
+    fit: 'contain'
+  });
+
+  // The figure-level CSS variable for cell-aspect must not appear (the
+  // image-level --rkr-image-aspect on each cell is fine — that's the
+  // native aspect that drives flow layout).
+  assert.doesNotMatch(html, /--rkr-cell-aspect/);
+  assert.doesNotMatch(html, /rkr-fit-/);
+});
+
+test('::figure flow modes respect width + justify (left/right/full/bleed)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ids = await ingestN(root, 3);
+  const html = await dispatch(root, {
+    ids: ids.join(','),
+    matrix: 'masonry:4',
+    justify: 'left',
+    width: '50%'
+  });
+  assert.match(html, /class="rkr-figure rkr-figure-masonry rkr-justify-left"/);
+  // width applies under left/right/center.
+  assert.match(html, /style="width: 50%; --rkr-cols: 4"/);
 });

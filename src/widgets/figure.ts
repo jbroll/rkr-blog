@@ -4,10 +4,13 @@
 // algorithm and `justify=center|left|right|full|bleed|inline`
 // controlling block placement.
 //
-// Phase 1+2 (this file): `matrix=NxM` with carousel-on-overflow when
-// `len(ids) > matrix.rows * matrix.cols`. `justified` / `masonry`
-// layouts still render as HTML comments + a 1×N grid fallback —
-// they land in Phase 3.
+// Phase 1+2+3 (this file): `matrix=NxM` (with carousel-on-overflow
+// when `len(ids) > matrix.rows * matrix.cols`), `matrix=justified[:H]`
+// (Flickr-style flex rows at row-height H), and `matrix=masonry[:N]`
+// (Pinterest-style multi-column flow with N columns). The flow modes
+// are CSS-only (flexbox + columns) — each image keeps its native
+// aspect, which is the whole point of these layouts; `aspect` and
+// `fit` are silently ignored under flow modes per spec.
 //
 // Forgiving-attributes rule (spec.md §9): parameters that don't apply
 // to the chosen mode (e.g. `aspect` / `fit` under flow modes; `width`
@@ -410,6 +413,53 @@ async function renderCarousel(
   return `<figure class="${cls}" tabindex="0" aria-roledescription="carousel"${autoplayAttr}${style}>\n${inner}${captionBlock}\n</figure>`;
 }
 
+/**
+ * Flow layouts (justified / masonry). Each image keeps its native
+ * aspect — the whole point of these layouts — so we render every
+ * resolvable cell into a flex / multi-column container. `aspect` and
+ * `fit` are silently ignored per spec; the figure-level CSS class
+ * picks the algorithm.
+ *
+ * Unresolved cells become `<!-- ... -->` comments rather than empty
+ * grid slots: in flow modes there's no slot to leave empty, so a
+ * dropped image just shrinks the row / column count.
+ */
+async function renderFlow(
+  matrix: MatrixFlow,
+  cells: CellInput[],
+  ctx: WidgetCtx,
+  justify: Justify,
+  widthCss: string | null,
+  blockCaption: string | null
+): Promise<string> {
+  const renderedCells = await Promise.all(cells.map((c) => renderCell(c, ctx)));
+
+  // The flow modes' algorithm-tunable goes on the figure-level style
+  // as a CSS variable; CSS reads it. Names mirror the directive's
+  // attribute meaning ("row height" / "column count") rather than
+  // collapsing to a generic --rkr-flow-param.
+  const algoVar =
+    matrix.kind === 'justified'
+      ? `--rkr-row-height: ${matrix.param}px`
+      : `--rkr-cols: ${matrix.param}`;
+
+  const cls = ['rkr-figure', `rkr-figure-${matrix.kind}`, `rkr-justify-${justify}`].join(' ');
+  const styleParts: string[] = [algoVar];
+  if (widthCss) styleParts.unshift(`width: ${widthCss}`);
+  const style = ` style="${styleParts.join('; ')}"`;
+  const captionBlock = blockCaption
+    ? `\n  <figcaption>${escapeText(blockCaption)}</figcaption>`
+    : '';
+
+  const inner = [
+    `  <div class="rkr-figure-flow">`,
+    indent(renderedCells.join('\n'), '    '),
+    '  </div>'
+  ].join('\n');
+
+  return `<figure class="${cls}"${style}>\n${inner}${captionBlock}\n</figure>`;
+}
+
 async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const cells = buildCells(node, ctx);
   if (cells.length === 0) {
@@ -453,25 +503,9 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
     }
     return renderGrid(matrix, cells, ctx, justify, fit, effectiveWidth, aspectCss, blockCaption);
   }
-  // Phase 1 stub: justified / masonry render as a comment + a 1xN
-  // grid fallback so the page doesn't lose the images entirely.
-  // The flow algorithms land in a follow-up commit.
-  const fallbackGrid: MatrixGrid = {
-    kind: 'grid',
-    rows: 1,
-    cols: Math.min(MAX_MATRIX_DIM, Math.max(1, cells.filter((c) => c.id).length))
-  };
-  const stub = await renderGrid(
-    fallbackGrid,
-    cells,
-    ctx,
-    justify,
-    fit,
-    effectiveWidth,
-    aspectCss,
-    blockCaption
-  );
-  return `<!-- figure: matrix=${matrix.kind} not yet implemented; rendering as a 1×N grid -->\n${stub}`;
+  // Flow modes — aspect / fit are ignored per spec; the layout is
+  // intrinsically based on each image's native aspect.
+  return renderFlow(matrix, cells, ctx, justify, effectiveWidth, blockCaption);
 }
 
 const widget: Widget = { name, variants, fallback, render };

@@ -420,6 +420,67 @@ span.rkr-justify-inline img {
   text-align: center;
 }
 
+/* ---- ::figure flow layouts (justified, masonry) ------------------- */
+/* Both modes are CSS-only. Each image keeps its native aspect;
+   `aspect` / `fit` are ignored at the directive level. */
+
+.rkr-figure-justified .rkr-figure-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rkr-gap);
+}
+.rkr-figure-justified .rkr-figure-cell {
+  /* Each cell is a fixed-height row item; aspect-ratio drives intrinsic
+     width. flex-grow with a basis of auto makes rows fill the container
+     by stretching items proportionally — the standard CSS flex-justified
+     trick. The visual compromise is that the LAST row also stretches
+     (Flickr's original behaviour leaves it un-stretched); pure CSS
+     can't distinguish "last incomplete row" without JS. Acceptable
+     trade-off for now. */
+  height: var(--rkr-row-height, 240px);
+  flex: 1 1 auto;
+  aspect-ratio: var(--rkr-image-aspect, 1.5);
+  /* Override the grid-mode defaults that would force a fixed cell
+     aspect from --rkr-cell-aspect. */
+  background: transparent;
+  overflow: hidden;
+  border-radius: var(--rkr-radius);
+}
+.rkr-figure-justified .rkr-figure-cell picture,
+.rkr-figure-justified .rkr-figure-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* fill the row-height box; aspect mismatch is rare */
+}
+
+.rkr-figure-masonry .rkr-figure-flow {
+  /* Multi-column layout with the column count from --rkr-cols. Modern
+     browsers (Firefox 110+, Chrome 119+, Safari 18+) also support
+     `grid-template-rows: masonry` — when adoption is broad enough we
+     can switch for a more Pinterest-faithful "shortest column" layout.
+     `column-count` flows top-to-bottom which is visually similar. */
+  column-count: var(--rkr-cols, 3);
+  column-gap: var(--rkr-gap);
+  display: block;
+}
+.rkr-figure-masonry .rkr-figure-cell {
+  display: block;
+  break-inside: avoid;
+  margin: 0 0 var(--rkr-gap) 0;
+  /* Override grid-mode aspect-ratio so each masonry cell's height
+     follows its image's native aspect. */
+  aspect-ratio: var(--rkr-image-aspect, 1);
+  background: transparent;
+  overflow: hidden;
+  border-radius: var(--rkr-radius);
+}
+.rkr-figure-masonry .rkr-figure-cell picture,
+.rkr-figure-masonry .rkr-figure-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ---- gallery widget ----------------------------------------------- */
 /* Shared shell: galleries always live in the wide content column.
    Individual layouts differ only in how items are arranged. */
