@@ -178,11 +178,11 @@ test('pushPost: WP fixture → target via bearer; markdown + originals land', as
   assert.match(md, /title: Two Images/);
   assert.match(md, /status: published/);
   assert.match(md, /Opening prose\./);
-  // Two top-level figures (not a nested gallery) → two separate ::image
-  // directives, each with its own sha256 id, alt, and (for the first)
-  // caption from the figcaption.
-  assert.match(md, /::image\{#[0-9a-f]{64} alt="one" caption="first"\}/);
-  assert.match(md, /::image\{#[0-9a-f]{64} alt="two"\}/);
+  // Two top-level figures (not a nested gallery) → two separate
+  // ::figure directives, each with its own sha256 id, alt, and (for
+  // the first) caption from the figcaption.
+  assert.match(md, /::figure\{ids="[0-9a-f]{64}" alts="one" caption="first"\}/);
+  assert.match(md, /::figure\{ids="[0-9a-f]{64}" alts="two"\}/);
 
   // Walk the sharded originals tree on the target — should find 2
   // image files (originals/<id[0:2]>/<id[2:4]>/<id>.<ext>).

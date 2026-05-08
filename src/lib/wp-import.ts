@@ -1,7 +1,8 @@
 // WordPress import: fetch posts from a WP REST API, ingest every
 // `<img>` they contain into our originals/sidecars, and emit one
-// markdown file per post with `::image` / `::gallery` / `::diptych` /
-// `::triptych` directives in place of the WP block markup.
+// markdown file per post using the unified `::figure` directive
+// (spec.md §9). Each WP `<figure>` block maps to a single ::figure
+// directive with `matrix=` chosen by image count.
 //
 // Surface:
 //   listPosts(baseUrl, { page, perPage })  → { posts, totalPages, total }
@@ -356,20 +357,21 @@ function directiveForFigure(fig: CollectedFigure, idsByImg: Map<unknown, string>
 
   const outerCaption = fig.outerCaption ?? fig.items[0]?.caption ?? null;
   const captionAttr = outerCaption ? ` caption="${escapeAttr(outerCaption)}"` : '';
-
-  if (fig.kind === 'image' || ids.length === 1) {
-    const altAttr = alts[0] ? ` alt="${escapeAttr(alts[0])}"` : '';
-    return `\n\n::image{#${ids[0]}${altAttr}${captionAttr}}\n\n`;
-  }
-
   const altsAttr = alts.some((a) => a.length > 0) ? ` alts="${escapeAttr(alts.join(','))}"` : '';
-  if (ids.length === 2) {
-    return `\n\n::diptych{ids="${ids.join(',')}"${altsAttr}${captionAttr}}\n\n`;
-  }
-  if (ids.length === 3) {
-    return `\n\n::triptych{ids="${ids.join(',')}"${altsAttr}${captionAttr}}\n\n`;
-  }
-  return `\n\n::gallery{ids="${ids.join(',')}" layout=justified${altsAttr}${captionAttr}}\n\n`;
+
+  // Layout selection mirrors the legacy widget mapping so existing
+  // visual expectations carry over:
+  //   1 image  → no matrix (default 1x1)            ← legacy ::image
+  //   2 images → matrix=1x2                          ← legacy ::diptych
+  //   3 images → matrix=1x3                          ← legacy ::triptych
+  //   4+       → matrix=justified                    ← legacy ::gallery{layout=justified}
+  let matrixAttr: string;
+  if (ids.length === 1) matrixAttr = '';
+  else if (ids.length === 2) matrixAttr = ' matrix=1x2';
+  else if (ids.length === 3) matrixAttr = ' matrix=1x3';
+  else matrixAttr = ' matrix=justified';
+
+  return `\n\n::figure{ids="${ids.join(',')}"${matrixAttr}${altsAttr}${captionAttr}}\n\n`;
 }
 
 function escapeAttr(s: string): string {

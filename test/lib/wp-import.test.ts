@@ -102,7 +102,7 @@ function makePost(content: string, slug = 'test-post'): WpPost {
   };
 }
 
-test('importPost: gallery of 4 → ::gallery directive with 4 ids + ingests 4 images', async (t) => {
+test('importPost: gallery of 4 → ::figure matrix=justified with 4 ids', async (t) => {
   const root = freshSiteRoot(t);
   const result = await importPost(makePost(POST_HTML_GALLERY), {
     siteRoot: root,
@@ -111,7 +111,8 @@ test('importPost: gallery of 4 → ::gallery directive with 4 ids + ingests 4 im
   assert.equal(result.imagesIngested.length, 4);
   assert.equal(result.imageErrors.length, 0);
   assert.match(result.markdown, /^---\n/);
-  assert.match(result.markdown, /::gallery\{ids="[0-9a-f,]+" layout=justified/);
+  // 4+ images map to matrix=justified per the importer's mapping.
+  assert.match(result.markdown, /::figure\{ids="[0-9a-f,]+" matrix=justified/);
   // Prose around the directive is preserved.
   assert.match(result.markdown, /Opening paragraph with \*\*bold\*\* and \*italic\*/);
   assert.match(result.markdown, /Closing paragraph\./);
@@ -122,34 +123,40 @@ test('importPost: gallery of 4 → ::gallery directive with 4 ids + ingests 4 im
   assert.deepEqual(ids, result.imagesIngested);
 });
 
-test('importPost: standalone figure → ::image directive with caption', async (t) => {
+test('importPost: standalone figure → ::figure (1 id, default 1x1)', async (t) => {
   const root = freshSiteRoot(t);
   const result = await importPost(makePost(POST_HTML_SINGLE), {
     siteRoot: root,
     fetchImage: stubFetcher()
   });
   assert.equal(result.imagesIngested.length, 1);
-  assert.match(result.markdown, /::image\{#[0-9a-f]{64} alt="solo" caption="The caption"\}/);
+  // Single id → no matrix attribute (defaults to 1x1). Single alt
+  // still goes through `alts=` since the unified directive uses a
+  // parallel-array model.
+  assert.match(result.markdown, /::figure\{ids="[0-9a-f]{64}" alts="solo" caption="The caption"\}/);
 });
 
-test('importPost: 2-image gallery → ::diptych', async (t) => {
+test('importPost: 2-image figure → ::figure matrix=1x2', async (t) => {
   const root = freshSiteRoot(t);
   const result = await importPost(makePost(POST_HTML_DIPTYCH), {
     siteRoot: root,
     fetchImage: stubFetcher()
   });
   assert.equal(result.imagesIngested.length, 2);
-  assert.match(result.markdown, /::diptych\{ids="[0-9a-f]{64},[0-9a-f]{64}"/);
+  assert.match(result.markdown, /::figure\{ids="[0-9a-f]{64},[0-9a-f]{64}" matrix=1x2/);
 });
 
-test('importPost: 3-image gallery → ::triptych', async (t) => {
+test('importPost: 3-image figure → ::figure matrix=1x3', async (t) => {
   const root = freshSiteRoot(t);
   const result = await importPost(makePost(POST_HTML_TRIPTYCH), {
     siteRoot: root,
     fetchImage: stubFetcher()
   });
   assert.equal(result.imagesIngested.length, 3);
-  assert.match(result.markdown, /::triptych\{ids="[0-9a-f]{64},[0-9a-f]{64},[0-9a-f]{64}"/);
+  assert.match(
+    result.markdown,
+    /::figure\{ids="[0-9a-f]{64},[0-9a-f]{64},[0-9a-f]{64}" matrix=1x3/
+  );
 });
 
 test('importPost: legacy theme figure (no wp-block-image class) still ingests', async (t) => {
@@ -162,7 +169,10 @@ test('importPost: legacy theme figure (no wp-block-image class) still ingests', 
     fetchImage: stubFetcher()
   });
   assert.equal(result.imagesIngested.length, 1);
-  assert.match(result.markdown, /::image\{#[0-9a-f]{64} alt="legacy" caption="Older WP block"/);
+  assert.match(
+    result.markdown,
+    /::figure\{ids="[0-9a-f]{64}" alts="legacy" caption="Older WP block"/
+  );
   assert.doesNotMatch(result.markdown, /dropped non-WP figure/);
 });
 
@@ -200,10 +210,10 @@ test('importPost: imported markdown round-trips through parsePost', async (t) =>
   assert.equal(parsed.frontmatter.slug, 'test-post');
   assert.equal(parsed.frontmatter.status, 'draft');
   assert.equal(parsed.frontmatter.source_kind, 'wordpress');
-  // The ::gallery directive should be in the AST as a leafDirective.
+  // The ::figure directive should be in the AST as a leafDirective.
   const directives = parsed.ast.children.filter((n) => n.type === 'leafDirective');
   assert.equal(directives.length, 1);
-  assert.equal((directives[0] as unknown as { name: string }).name, 'gallery');
+  assert.equal((directives[0] as unknown as { name: string }).name, 'figure');
 });
 
 test('importPost: image fetch failures are reported, post still imports', async (t) => {
