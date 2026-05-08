@@ -133,7 +133,10 @@ async function assertSampledImagesResolve(
   }
 }
 
-test('::image: rendered <img>/<srcset> URLs resolve (sample one per image)', async (t) => {
+test('::figure single image: rendered <img>/<srcset> URLs resolve', async (t) => {
+  // Per spec.md §9 unification, ::figure is the only image directive
+  // the public renderer recognises. Single-id figure replaces the
+  // legacy ::image directive.
   const { app, imageId } = await setup(t);
 
   const post = await app.inject({
@@ -143,52 +146,12 @@ test('::image: rendered <img>/<srcset> URLs resolve (sample one per image)', asy
       slug: 'pic-roundtrip',
       title: 'Pic roundtrip',
       status: 'published',
-      markdown: `Body before.\n\n::image{#${imageId} alt="hi"}\n\nBody after.\n`
+      markdown: `Body before.\n\n::figure{ids="${imageId}" alts="hi"}\n\nBody after.\n`
     }
   });
   assert.equal(post.statusCode, 200, post.body);
 
   const page = await app.inject({ method: 'GET', url: '/pic-roundtrip' });
-  assert.equal(page.statusCode, 200);
-  await assertSampledImagesResolve(app, page.body);
-});
-
-test('::diptych: rendered URLs resolve (sample one per image)', async (t) => {
-  const { app, imageId } = await setup(t);
-  // Reuse the same id twice — the post will reference one logical image
-  // for both diptych slots, which is enough to exercise the widget.
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'dip-roundtrip',
-      title: 'Diptych roundtrip',
-      status: 'published',
-      markdown: `::diptych{ids="${imageId},${imageId}"}\n`
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
-
-  const page = await app.inject({ method: 'GET', url: '/dip-roundtrip' });
-  assert.equal(page.statusCode, 200);
-  await assertSampledImagesResolve(app, page.body);
-});
-
-test('::gallery: rendered URLs resolve (sample one per image)', async (t) => {
-  const { app, imageId } = await setup(t);
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'gal-roundtrip',
-      title: 'Gallery roundtrip',
-      status: 'published',
-      markdown: `::gallery{ids="${imageId},${imageId},${imageId}"}\n`
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
-
-  const page = await app.inject({ method: 'GET', url: '/gal-roundtrip' });
   assert.equal(page.statusCode, 200);
   await assertSampledImagesResolve(app, page.body);
 });

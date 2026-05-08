@@ -382,21 +382,24 @@ The legacy directives (`::image`, `::diptych`, `::triptych`,
 5. **One-shot migration tool** (`site-admin migrate-figures`) rewrites
    legacy directives in `content/posts/*.md` to `::figure` form.
    Idempotent; default dry-run; --write applies. ✅
-6. **Editor toolbar UI refactor**: insert / attribute-panel UI for
-   `figure` nodes (collapse 5 insert flows into one). Until this
-   lands, the editor's "insert image" buttons still emit legacy
-   directive markdown — operator runs `migrate-figures --write` after
-   any editor save that introduces legacy directives. ⏳ DEFERRED
-   (tracked in DEFERRED.md).
-7. **Delete legacy widgets** once step 6 is done. Both server-side
-   widget files (src/widgets/{image,diptych,gallery,carousel}.ts) and
-   editor-side legacy nodes go in one commit; constants-alignment
-   test shrinks to one widget × one fallback. ⏳ DEFERRED on step 6.
+6. **Server-side legacy widget deletion**: drop
+   `src/widgets/{image,diptych,gallery,carousel}.ts`, their tests,
+   their CSS, and the WidgetRegistry registrations. The figure widget
+   becomes the only image directive the public renderer recognises.
+   Constants-alignment test shrinks to one widget × one fallback. ✅
+7. **Editor wire-format unification**: prose-markdown's emit cases
+   for the legacy 5 ProseMirror node types now go through `emitFigure`
+   with mapped attrs, and `markdownToProse` for `::figure` picks the
+   best-fit editor node by attribute shape (single id → image; matrix
+   1x2/1x3 → diptych/triptych; matrix=justified|masonry → gallery;
+   matrix=1x1 with multi ids → carousel; everything else / custom
+   layout attrs → generic FigureNode). Editor UI / toolbar / cropper
+   stays intact as a UI abstraction. ✅
 
-The migration is functionally complete after step 5 — operators can
-run `migrate-figures --write` on their content and serve everything
-via `::figure`. Steps 6-7 are cleanup that requires the editor UI
-refactor first.
+The unification is fully complete: every directive on disk is
+`::figure`, the public renderer has only one image widget, and the
+editor save/load flow round-trips through `::figure` markdown while
+preserving the existing per-node-type editing affordances.
 
 ## 10. Remote image import
 

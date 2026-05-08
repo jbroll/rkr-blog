@@ -36,7 +36,7 @@ import { renderAdminPage } from '../templates/admin.ts';
 // interface to allow future widgets that don't render images; for the
 // only image-fallback consumer we know about today, we can pin the
 // type to FallbackSpec directly.
-import { fallback as imageFallback } from '../widgets/image.ts';
+import { fallback as imageFallback } from '../widgets/figure.ts';
 
 /** Production default fetcher used by /admin/import/url. Injectable from
  * tests so a fixture server on 127.0.0.1 doesn't trip the SSRF guard. */

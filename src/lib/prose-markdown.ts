@@ -90,45 +90,18 @@ function emitBlock(node: ProseNode): string {
     case 'orderedList':
     case 'ordered_list':
       return emitList(node, '1.');
-    case 'image': {
-      const id = String(node.attrs?.id ?? '').trim();
-      // Validate hex shape on emit — the editor's upload flow only ever
-      // produces 64-hex ids, but a forged ProseMirror JSON body submitted
-      // via POST /admin/posts could otherwise inject directive syntax
-      // through the id (e.g. `id="abc} ::shell{cmd=rm` would round-trip
-      // verbatim into the markdown). The public-side widget rejects
-      // bad ids defensively too, but blocking at emit is cheaper and
-      // matches the validation already present for multi-image directives.
-      if (!id || !/^[0-9a-f]{6,64}$/.test(id)) return '';
-      const parts: string[] = [];
-      const alt = node.attrs?.alt;
-      if (typeof alt === 'string' && alt.length > 0) parts.push(`alt=${quote(alt)}`);
-      const caption = node.attrs?.caption;
-      if (typeof caption === 'string' && caption.length > 0) {
-        parts.push(`caption=${quote(caption)}`);
-      }
-      // Position values are constrained to the same set the public renderer
-      // recognises (src/widgets/image.ts extractPosition). Validate on emit
-      // so a stale/forged prose doc can't round-trip an unknown value into
-      // markdown — `position=foo` would be silently coerced to 'default'
-      // by the widget anyway, breaking round-trip identity. Unquoted
-      // because every valid position is slug-safe (no spaces/specials).
-      const position = node.attrs?.position;
-      if (
-        typeof position === 'string' &&
-        position !== 'default' &&
-        VALID_IMAGE_POSITIONS.has(position)
-      ) {
-        parts.push(`position=${position}`);
-      }
-      const attrPart = parts.length > 0 ? ` ${parts.join(' ')}` : '';
-      return `::image{#${id}${attrPart}}`;
-    }
+    // Editor's legacy node types are kept as a UI abstraction (richer
+    // toolbar / cropper / attribute panels per shape) but the wire
+    // format is uniformly `::figure` per spec.md §9. Each legacy case
+    // maps to figure-shaped attrs and goes through the same emitter so
+    // the constants-alignment / validation guards stay in one place.
+    case 'image':
+      return emitFigure(legacyImageToFigureAttrs(node.attrs ?? {}));
     case 'gallery':
     case 'carousel':
     case 'diptych':
     case 'triptych':
-      return emitMultiImage(node.type, node.attrs ?? {});
+      return emitFigure(legacyMultiImageToFigureAttrs(node.type, node.attrs ?? {}));
     case 'figure':
       return emitFigure(node.attrs ?? {});
     /* c8 ignore next 2 -- defensive: editor schema prevents unknown block node types */
@@ -200,23 +173,50 @@ function quote(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-/** Mirrors VALID_POSITIONS in src/widgets/image.ts. Kept locally rather
- * than importing to keep prose-markdown free of widget-side dependencies. */
-const VALID_IMAGE_POSITIONS = new Set(['default', 'full', 'left', 'right', 'inline']);
-
-/** Carousel autoplay cap; mirrors src/widgets/carousel.ts extractAutoplay.
- * Without this, the editor could store autoplay=999, emit it verbatim,
- * and the public renderer would silently cap to 60 — breaking round-trip
- * identity (markdown→prose→markdown wouldn't be stable). */
+/** Carousel autoplay cap; the figure widget caps timer at 60s (any
+ * larger reads as "the author meant ms or made a typo"). The editor's
+ * legacy CarouselNode allows free-typed autoplay; cap on emit so
+ * markdown round-trip stays stable. */
 const CAROUSEL_AUTOPLAY_CAP = 60;
 
 /**
- * Emit a multi-image directive (gallery / carousel / diptych / triptych).
- * `ids` may be either a comma-separated string or a string array; the
- * editor stores it as a string for round-trip simplicity. Empty/zero
- * extras are omitted so the round-trip stays minimal.
+ * Map legacy ImageNode attrs `{id, alt, caption, position}` to the
+ * unified figure attribute shape. The legacy single-image position
+ * names are a subset of the figure's `justify` values:
+ *   default → omit (figure default)   full / left / right / inline → same
  */
-function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
+function legacyImageToFigureAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
+  const id = String(attrs.id ?? '').trim();
+  if (!id || !/^[0-9a-f]{6,64}$/.test(id)) return { ids: '' };
+  const out: Record<string, unknown> = { ids: id };
+  const alt = attrs.alt;
+  if (typeof alt === 'string' && alt.length > 0) out.alts = alt;
+  const caption = attrs.caption;
+  if (typeof caption === 'string' && caption.length > 0) out.caption = caption;
+  const position = attrs.position;
+  if (
+    typeof position === 'string' &&
+    position !== 'default' &&
+    (position === 'full' || position === 'left' || position === 'right' || position === 'inline')
+  ) {
+    out.justify = position;
+  }
+  return out;
+}
+
+/**
+ * Map legacy multi-image node attrs (gallery / carousel / diptych /
+ * triptych) to the unified figure shape. The kind selects a default
+ * `matrix` value:
+ *   gallery  → `matrix=<layout>` (justified | masonry | matrix-omitted)
+ *   carousel → `matrix=1x1` + `timer=<autoplay>` (legacy carousel was 1-at-a-time)
+ *   diptych  → `matrix=1x2`
+ *   triptych → `matrix=1x3`
+ */
+function legacyMultiImageToFigureAttrs(
+  kind: string,
+  attrs: Record<string, unknown>
+): Record<string, unknown> {
   const idsRaw = attrs.ids;
   const ids =
     typeof idsRaw === 'string'
@@ -224,15 +224,11 @@ function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
       : Array.isArray(idsRaw)
         ? idsRaw.filter((s): s is string => typeof s === 'string').join(',')
         : '';
-  if (!ids.trim()) return '';
+  if (!ids.trim()) return { ids: '' };
 
-  const parts: string[] = [`ids=${quote(ids)}`];
+  const out: Record<string, unknown> = { ids };
 
-  // Per-image alts (parallel array, comma-separated). Only emit when at
-  // least one slot has non-empty alt text — bare `alts=",,,"` is noise.
-  // Each alt's commas would break this format; the spec's
-  // `:::gallery{...}` container directive form is the path for that
-  // case (DEFERRED.md).
+  // Alts (parallel array, comma-separated).
   const altsRaw = attrs.alts;
   const altsList: string[] =
     typeof altsRaw === 'string'
@@ -240,32 +236,30 @@ function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
       : Array.isArray(altsRaw)
         ? altsRaw.map((s) => (typeof s === 'string' ? s.trim() : ''))
         : [];
-  if (altsList.some((a) => a.length > 0)) {
-    parts.push(`alts=${quote(altsList.join(','))}`);
-  }
+  if (altsList.some((a) => a.length > 0)) out.alts = altsList.join(',');
+
+  const caption = attrs.caption;
+  if (typeof caption === 'string' && caption.length > 0) out.caption = caption;
 
   if (kind === 'gallery') {
     const layout = attrs.layout;
-    // Only emit when set to a non-default value; the public renderer's
-    // default is 'justified'.
-    if (typeof layout === 'string' && layout.length > 0 && layout !== 'justified') {
-      parts.push(`layout=${layout}`);
+    if (typeof layout === 'string' && layout.length > 0 && layout !== 'matrix') {
+      out.matrix = layout; // 'justified' | 'masonry'
     }
-  }
-
-  if (kind === 'carousel') {
+    // layout=matrix had no shape under the legacy widget; drop on emit.
+  } else if (kind === 'carousel') {
+    out.matrix = '1x1';
     const autoplay = Number(attrs.autoplay ?? 0);
     if (Number.isFinite(autoplay) && autoplay > 0) {
-      parts.push(`autoplay=${Math.min(CAROUSEL_AUTOPLAY_CAP, Math.floor(autoplay))}`);
+      out.timer = Math.min(CAROUSEL_AUTOPLAY_CAP, Math.floor(autoplay));
     }
+  } else if (kind === 'diptych') {
+    out.matrix = '1x2';
+  } else if (kind === 'triptych') {
+    out.matrix = '1x3';
   }
 
-  const caption = attrs.caption;
-  if (typeof caption === 'string' && caption.length > 0) {
-    parts.push(`caption=${quote(caption)}`);
-  }
-
-  return `::${kind}{${parts.join(' ')}}`;
+  return out;
 }
 
 /**
@@ -380,70 +374,10 @@ export function markdownToProse(body: string): ProseDoc {
 function mdBlockToProse(node: RootContent): ProseNode | null {
   if (DIRECTIVE_TYPES.has(node.type)) {
     const d = node as unknown as DirectiveLike;
-    if (d.name === 'image') {
-      const attrs = d.attributes ?? {};
-      return {
-        type: 'image',
-        attrs: {
-          id: attrs.id ?? '',
-          alt: attrs.alt ?? '',
-          caption: attrs.caption ?? '',
-          // Default to 'default' so the editor's position select always has
-          // a non-empty value, matching the public renderer's fallback.
-          position: attrs.position ?? 'default'
-        }
-      };
-    }
     if (d.name === 'figure') {
-      const attrs = d.attributes ?? {};
-      // Build a figure node with all spec'd attributes; defaults match
-      // src/admin/main.ts FIGURE_DEFAULTS so the editor round-trip
-      // stays stable.
-      const figureNode: ProseNode = {
-        type: 'figure',
-        attrs: {
-          ids: attrs.ids ?? '',
-          alts: attrs.alts ?? '',
-          captions: attrs.captions ?? '',
-          caption: attrs.caption ?? '',
-          matrix: attrs.matrix ?? '',
-          justify: attrs.justify ?? 'center',
-          width: attrs.width ?? '',
-          aspect: attrs.aspect ?? '',
-          fit: attrs.fit ?? 'cover',
-          timer: Number(attrs.timer ?? 0)
-        }
-      };
-      return figureNode;
+      return parseFigureToEditorNode(d.attributes ?? {});
     }
-    if (
-      d.name === 'gallery' ||
-      d.name === 'carousel' ||
-      d.name === 'diptych' ||
-      d.name === 'triptych'
-    ) {
-      const attrs = d.attributes ?? {};
-      const node: ProseNode = {
-        type: d.name,
-        attrs: {
-          ids: attrs.ids ?? '',
-          // Parallel alt-text array, same comma-separated convention as
-          // ids. Empty string means "no alts authored".
-          alts: attrs.alts ?? '',
-          caption: attrs.caption ?? ''
-        }
-      };
-      if (d.name === 'gallery') {
-        // Same default as the public renderer in src/widgets/gallery.ts.
-        (node.attrs as Record<string, unknown>).layout = attrs.layout ?? 'justified';
-      }
-      if (d.name === 'carousel') {
-        const ap = Number(attrs.autoplay ?? 0);
-        (node.attrs as Record<string, unknown>).autoplay = Number.isFinite(ap) ? ap : 0;
-      }
-      return node;
-    }
-    return null;
+    return null; // unknown directive → drop silently
   }
   switch (node.type) {
     case 'paragraph':
@@ -486,6 +420,117 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
     default:
       return null;
   }
+}
+
+/**
+ * Parse a `::figure{...}` directive's attributes and pick the best
+ * matching editor node type. The editor keeps the legacy 5 node types
+ * as a UI abstraction (each has its own toolbar / cropper / panel
+ * affordances); we map figure attribute shapes back to those:
+ *
+ *   matrix=1x2                         → diptych
+ *   matrix=1x3                         → triptych
+ *   matrix=justified | masonry         → gallery
+ *   matrix=1x1 with timer              → carousel
+ *   single id, no matrix               → image
+ *   anything else (NxM grid, custom    → figure (generic UI; new in
+ *   width/aspect/fit, etc.)              Phase 5, used as a catch-all)
+ *
+ * The mapping is asymmetric on purpose: we prefer the legacy node
+ * type when it exists because its editor UI is richer. For figures
+ * with attrs that don't fit (`width=`, `aspect=`, `fit=`, multi-row
+ * matrices), we use the generic figure node.
+ */
+function parseFigureToEditorNode(attrs: Record<string, string | null | undefined>): ProseNode {
+  const ids = attrs.ids ?? '';
+  const idList = ids
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const matrix = (attrs.matrix ?? '').toLowerCase();
+  const hasCustomLayout =
+    (attrs.width && attrs.width.length > 0) ||
+    (attrs.aspect && attrs.aspect.length > 0) ||
+    (attrs.fit && attrs.fit.length > 0);
+
+  // Figures with custom layout attrs → generic figure node (the
+  // legacy nodes don't carry these fields).
+  if (hasCustomLayout) {
+    return buildGenericFigureNode(attrs);
+  }
+
+  // matrix=1x2 with 2 ids → DiptychNode (legacy editor UI for 2-up).
+  if (matrix === '1x2' && idList.length === 2) {
+    return {
+      type: 'diptych',
+      attrs: { ids, alts: attrs.alts ?? '', caption: attrs.caption ?? '' }
+    };
+  }
+  if (matrix === '1x3' && idList.length === 3) {
+    return {
+      type: 'triptych',
+      attrs: { ids, alts: attrs.alts ?? '', caption: attrs.caption ?? '' }
+    };
+  }
+  if (matrix === 'justified' || matrix === 'masonry') {
+    return {
+      type: 'gallery',
+      attrs: {
+        ids,
+        alts: attrs.alts ?? '',
+        caption: attrs.caption ?? '',
+        layout: matrix
+      }
+    };
+  }
+  if (matrix === '1x1' && idList.length > 1) {
+    // Multi-id with 1×1 visible cell → carousel (legacy 1-at-a-time).
+    return {
+      type: 'carousel',
+      attrs: {
+        ids,
+        alts: attrs.alts ?? '',
+        caption: attrs.caption ?? '',
+        autoplay: Number(attrs.timer ?? 0) || 0
+      }
+    };
+  }
+  if (idList.length === 1 && (matrix === '' || matrix === '1x1')) {
+    // Single id, default-shaped figure → ImageNode (legacy single-image
+    // UI: cropper, ops editor, alt/caption/position attribute panel).
+    return {
+      type: 'image',
+      attrs: {
+        id: idList[0] ?? '',
+        alt: attrs.alts ?? '',
+        caption: attrs.caption ?? '',
+        position:
+          attrs.justify && /^(default|full|left|right|inline)$/.test(attrs.justify)
+            ? attrs.justify
+            : 'default'
+      }
+    };
+  }
+  // Anything else (NxM grid, atypical id count) → generic figure node.
+  return buildGenericFigureNode(attrs);
+}
+
+function buildGenericFigureNode(attrs: Record<string, string | null | undefined>): ProseNode {
+  return {
+    type: 'figure',
+    attrs: {
+      ids: attrs.ids ?? '',
+      alts: attrs.alts ?? '',
+      captions: attrs.captions ?? '',
+      caption: attrs.caption ?? '',
+      matrix: attrs.matrix ?? '',
+      justify: attrs.justify ?? 'center',
+      width: attrs.width ?? '',
+      aspect: attrs.aspect ?? '',
+      fit: attrs.fit ?? 'cover',
+      timer: Number(attrs.timer ?? 0)
+    }
+  };
 }
 
 function inlinesToProse(nodes: PhrasingContent[]): ProseNode[] {

@@ -228,109 +228,13 @@ article hr {
   width: 8ch;
 }
 
-/* ---- figures: image positions ------------------------------------- */
-
-/* Common picture/img styling: the figure controls layout, the picture
-   element is the image container, the img is what's actually drawn. */
-.rkr-figure {
-  margin: 2.5rem auto;
-}
-.rkr-figure picture {
-  display: block;
-}
-.rkr-figure img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--rkr-radius);
-  box-shadow: 0 1px 3px var(--rkr-shadow);
-}
-.rkr-figure figcaption {
-  margin: .75rem auto 0;
-  color: var(--rkr-muted);
-  font-size: 0.9rem;
-  font-style: italic;
-  line-height: 1.45;
-}
-
-/* default: wide centered, breaks out of the prose column */
-.rkr-pos-default {
-  display: block;
-  width: 100%;
-  max-width: var(--rkr-content);
-  text-align: center;
-}
-.rkr-pos-default img { margin: 0 auto; }
-.rkr-pos-default figcaption {
-  max-width: var(--rkr-prose);
-  text-align: left;
-}
-
-/* full: edge-to-edge of the viewport */
-.rkr-pos-full {
-  display: block;
-  width: 100vw;
-  max-width: 100vw;
-  margin-left: calc(-50vw + 50%);   /* breakout from the centered main column */
-  margin-right: calc(-50vw + 50%);
-  text-align: center;
-}
-.rkr-pos-full img {
-  border-radius: 0;
-  box-shadow: none;
-  width: 100%;
-  margin: 0;
-}
-.rkr-pos-full figcaption {
-  max-width: var(--rkr-prose);
-  margin-left: auto;
-  margin-right: auto;
-  padding: 0 1rem;
-  text-align: center;
-}
-
-/* left: float left, text wraps right (desktop only) */
-.rkr-pos-left {
-  float: left;
-  width: 40%;
-  max-width: 18rem;
-  margin: .35rem 1.5rem 1rem 0;
-}
-.rkr-pos-left figcaption { text-align: left; }
-
-/* right: mirror of left */
-.rkr-pos-right {
-  float: right;
-  width: 40%;
-  max-width: 18rem;
-  margin: .35rem 0 1rem 1.5rem;
-}
-.rkr-pos-right figcaption { text-align: left; }
-
-/* inline: small image in text flow, baseline-aligned (no figure breakout) */
-.rkr-pos-inline {
-  display: inline-block;
-  margin: 0 0.25em;
-  vertical-align: text-bottom;
-}
-.rkr-pos-inline img {
-  display: inline-block;
-  height: 1.5em;
-  width: auto;
-  border-radius: 0;
-  box-shadow: none;
-}
-.rkr-pos-inline figcaption { display: none; } /* inline images don't show captions */
-
 /* ---- ::figure widget (unified, spec.md §9) ----------------------- */
-/* The unified directive ships alongside the legacy widgets above. Phase 1
-   supports matrix=NxM only; flow modes (justified/masonry) and carousel-
-   on-overflow render via a comment + 1×N grid fallback for now. */
+/* The only image directive (legacy widgets removed). Grid mode for
+   uniform NxM layouts; flow modes for justified / masonry; carousel
+   mode kicks in when len(ids) exceeds matrix capacity. Per-cell styles
+   live below; figure-level shell + caption styling here. */
 
 .rkr-figure {
-  /* Re-declared because rkr-figure already exists above for the legacy
-     widgets — these properties don't conflict but we keep the section
-     self-contained for the future deletion of the legacy block. */
   display: block;
   margin: 2rem auto;
 }
@@ -479,87 +383,6 @@ span.rkr-justify-inline img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-/* ---- gallery widget ----------------------------------------------- */
-/* Shared shell: galleries always live in the wide content column.
-   Individual layouts differ only in how items are arranged. */
-
-.rkr-gallery {
-  display: block;
-  width: 100%;
-  max-width: var(--rkr-content);
-  margin: 2.5rem auto;
-}
-.rkr-gallery > figcaption {
-  margin-top: .75rem;
-  text-align: center;
-  color: var(--rkr-muted);
-  font-size: 0.9rem;
-  font-style: italic;
-  max-width: var(--rkr-prose);
-  margin-left: auto;
-  margin-right: auto;
-}
-.rkr-gallery-item {
-  margin: 0;
-  overflow: hidden;
-}
-.rkr-gallery-item picture {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.rkr-gallery-item img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--rkr-radius);
-  box-shadow: 0 1px 3px var(--rkr-shadow);
-}
-
-/* Justified (Flickr-style): items keep their aspect ratio, fill rows
-   uniformly via flex-grow weighted by --aspect, last row left-aligned. */
-.rkr-gallery-justified {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.rkr-gallery-justified .rkr-gallery-item {
-  --row-h: 220px;
-  flex-grow: 1;
-  flex-basis: calc(var(--aspect, 1) * var(--row-h));
-  height: var(--row-h);
-  /* Cap any single item at the content width so a panoramic shot doesn't
-     dominate a row. */
-  max-width: 100%;
-}
-
-/* Masonry (Pinterest-style): variable-height columns via CSS columns.
-   No JS, no library. break-inside avoids items splitting across columns. */
-.rkr-gallery-masonry {
-  column-count: 3;
-  column-gap: 0.5rem;
-}
-.rkr-gallery-masonry .rkr-gallery-item {
-  break-inside: avoid;
-  margin-bottom: 0.5rem;
-  height: auto;
-}
-.rkr-gallery-masonry .rkr-gallery-item img {
-  height: auto;       /* let the natural aspect drive height in masonry */
-  object-fit: contain;
-}
-
-/* Matrix (uniform grid): equal-sized cells. Good for contact-sheet style. */
-.rkr-gallery-matrix {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 0.5rem;
-}
-.rkr-gallery-matrix .rkr-gallery-item {
-  aspect-ratio: 1 / 1;
 }
 
 /* ---- carousel widget ---------------------------------------------- */
@@ -720,53 +543,6 @@ span.rkr-justify-inline img {
   border-color: var(--rkr-text);
 }
 
-/* ---- diptych / triptych ------------------------------------------- */
-/* Two- or three-image side-by-side panels for art-directed pairings.
-   Equal-width columns; each cell keeps its natural aspect ratio (so the
-   row baseline aligns at the top, not at matched heights — photographers
-   crop in advance if matched heights matter). Stack to one column on
-   narrow screens. */
-
-.rkr-diptych,
-.rkr-triptych {
-  display: grid;
-  gap: 0.5rem;
-  width: 100%;
-  max-width: var(--rkr-content);
-  margin: 2.5rem auto;
-}
-.rkr-diptych  { grid-template-columns: 1fr 1fr; }
-.rkr-triptych { grid-template-columns: 1fr 1fr 1fr; }
-
-.rkr-diptych > figure,
-.rkr-triptych > figure {
-  margin: 0;
-}
-.rkr-diptych picture,
-.rkr-triptych picture {
-  display: block;
-}
-.rkr-diptych img,
-.rkr-triptych img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: var(--rkr-radius);
-  box-shadow: 0 1px 3px var(--rkr-shadow);
-}
-.rkr-diptych > figcaption,
-.rkr-triptych > figcaption {
-  grid-column: 1 / -1;
-  margin-top: .25rem;
-  text-align: center;
-  color: var(--rkr-muted);
-  font-size: 0.9rem;
-  font-style: italic;
-  max-width: var(--rkr-prose);
-  margin-left: auto;
-  margin-right: auto;
-}
-
 /* ---- index page --------------------------------------------------- */
 
 /* Visually-hidden but accessible — the index has site chrome that already
@@ -837,10 +613,10 @@ nav[aria-label="pagination"] a {
     grid-template-columns: 1fr;
     gap: 0.25rem;
   }
-  /* Wrap-positioned images stack at mobile widths — wrapping prose
+  /* Wrap-positioned figures stack at mobile widths — wrapping prose
      around tiny images on narrow screens is unreadable. */
-  .rkr-pos-left,
-  .rkr-pos-right {
+  .rkr-justify-left,
+  .rkr-justify-right {
     float: none;
     width: 100%;
     max-width: var(--rkr-prose);
@@ -848,14 +624,11 @@ nav[aria-label="pagination"] a {
   }
   /* Full-bleed clamps to viewport (already 100vw); keep as-is. */
 
-  /* Galleries: shrink to one or two columns on narrow screens. */
-  .rkr-gallery-masonry { column-count: 2; }
-  .rkr-gallery-matrix {
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  }
-  .rkr-gallery-justified .rkr-gallery-item {
-    --row-h: 140px;
-  }
+  /* Masonry shrinks to two columns on narrow screens. */
+  .rkr-figure-masonry .rkr-figure-flow { column-count: 2; }
+  /* Justified: shorter rows for narrower viewports. */
+  .rkr-figure-justified .rkr-figure-cell { height: 140px; }
+
   /* Carousel: keep slides full-width; shrink nav buttons. */
   .rkr-carousel-prev,
   .rkr-carousel-next,
@@ -864,13 +637,8 @@ nav[aria-label="pagination"] a {
     height: 1.75rem;
     font-size: 0.9rem;
   }
-  /* Diptych / triptych: collapse to a single column on narrow screens. */
-  .rkr-diptych,
-  .rkr-triptych {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 400px) {
-  .rkr-gallery-masonry { column-count: 1; }
+  .rkr-figure-masonry .rkr-figure-flow { column-count: 1; }
 }

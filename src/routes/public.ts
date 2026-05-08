@@ -52,11 +52,7 @@ import { type Sidecar, read as sidecarRead } from '../lib/sidecar.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderIndexPage } from '../templates/index.ts';
 import { renderPostPage } from '../templates/post.ts';
-import carouselWidget from '../widgets/carousel.ts';
-import { diptychWidget, triptychWidget } from '../widgets/diptych.ts';
 import figureWidget from '../widgets/figure.ts';
-import galleryWidget from '../widgets/gallery.ts';
-import imageWidget from '../widgets/image.ts';
 
 const FILENAME_RE = /^([0-9a-f]{64})\.([0-9a-f]{12})\.(webp|avif|jpeg|jpg|png)$/;
 const PAGE_SIZE = 20;
@@ -85,15 +81,12 @@ export default async function publicRoutes(
   const site = opts.site ?? siteConfig();
 
   const widgets = new WidgetRegistry();
-  widgets.register(imageWidget);
-  widgets.register(galleryWidget);
-  widgets.register(carouselWidget);
-  widgets.register(diptychWidget);
-  widgets.register(triptychWidget);
-  // ::figure is the unified replacement for the five widgets above
-  // (spec.md §9). Phase 1 ships ::figure alongside the legacy widgets;
-  // legacy directives stay parseable so existing post markdown keeps
-  // rendering until the migration tool runs.
+  // ::figure is the only image widget (spec.md §9 unification).
+  // Legacy ::image / ::gallery / ::carousel / ::diptych / ::triptych
+  // directives in posts on disk render as `<!-- unknown widget: X -->`
+  // comments — content authored before the unification must be
+  // migrated via `site-admin migrate-figures --write` (or simply
+  // re-imported through the WP importer, which now emits ::figure).
   widgets.register(figureWidget);
 
   // ---- index: GET / -----------------------------------------------------
