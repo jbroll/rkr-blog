@@ -164,6 +164,11 @@ export async function renderDerivative(
   // malicious 64Kpx-square WebP can decompress to gigabytes of memory.
   // 50 Mpx covers any realistic camera sensor; reject larger originals
   // up front. Mirror the same cap in originals.ingestStream.
+  //
+  // No EXIF auto-orient here: ingestStream normalizes orientation on
+  // upload, so on-disk originals are already in display orientation.
+  // (Sharp 0.33 has a "one rotate per pipeline" constraint that breaks
+  // composition with editor rotate ops; baking on ingest sidesteps it.)
   let pipeline = sharp(sourcePath, { failOn: 'error', limitInputPixels: SHARP_PIXEL_LIMIT });
   // Only apply ops when sourcing from the original — the bake already
   // has them baked in.

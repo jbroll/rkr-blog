@@ -234,6 +234,38 @@ test('renderDerivative honours resample with explicit dimensions', async (t) => 
   assert.equal(meta.height, 150); // aspect preserved by 'inside' fit
 });
 
+test('renderDerivative auto-applies EXIF Orientation=6 (encoded 100×40 → display 40×100)', async (t) => {
+  const root = freshSiteRoot(t);
+  // Phone-portrait pattern: encoded landscape with orientation=6 means
+  // "rotate 90° CW for display." Without auto-rotate the pixel buffer
+  // emerges sideways; with auto-rotate the derivative reflects display.
+  const bytes = await sharp({
+    create: { width: 100, height: 40, channels: 3, background: { r: 30, g: 60, b: 120 } }
+  })
+    .withMetadata({ orientation: 6 })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const r = await ingest(root, bytes);
+  const result = await renderDerivative({
+    ...baseArgs,
+    originalId: r.id,
+    ops: [],
+    variant: {}, // skip resize so we can compare against the post-rotation source dims
+    siteRoot: root
+  });
+
+  const meta = await sharp(result.path).metadata();
+  assert.equal(meta.width, 40, 'rendered width should match display orientation');
+  assert.equal(meta.height, 100, 'rendered height should match display orientation');
+  // Sharp strips the orientation tag when .rotate() runs; the output should
+  // not need a second rotation client-side.
+  assert.ok(
+    !meta.orientation || meta.orientation === 1,
+    `rendered orientation should be normalized, got ${meta.orientation}`
+  );
+});
+
 test('renderDerivative composes crop + rotate + flip + resample in order', async (t) => {
   const root = freshSiteRoot(t);
   const r = await ingest(root, await makeJpeg({ width: 800, height: 600 }));

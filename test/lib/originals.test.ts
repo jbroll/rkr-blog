@@ -174,3 +174,47 @@ test('ingestStream rejects oversized images (decompression-bomb defense)', async
     assert.deepEqual(fs.readdirSync(tmpDir), []);
   }
 });
+
+test('ingestStream stores display dimensions for EXIF Orientation=6 (portrait)', async (t) => {
+  const root = freshSiteRoot(t);
+  // 100×40 landscape buffer with orientation=6 → displayed as 40×100 portrait.
+  // Phones save portrait shots this way (encoded sideways, tag rotates them).
+  const bytes = await sharp({
+    create: { width: 100, height: 40, channels: 3, background: { r: 30, g: 60, b: 120 } }
+  })
+    .withMetadata({ orientation: 6 })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const result = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'portrait.jpg' }
+  });
+
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.metadata.width, 40, 'sidecar width should match display orientation');
+  assert.equal(sidecar.metadata.height, 100, 'sidecar height should match display orientation');
+});
+
+test('ingestStream leaves dimensions untouched for EXIF Orientation=1 (default)', async (t) => {
+  const root = freshSiteRoot(t);
+  const bytes = await sharp({
+    create: { width: 100, height: 40, channels: 3, background: { r: 30, g: 60, b: 120 } }
+  })
+    .withMetadata({ orientation: 1 })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const result = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'landscape.jpg' }
+  });
+
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.metadata.width, 100);
+  assert.equal(sidecar.metadata.height, 40);
+});

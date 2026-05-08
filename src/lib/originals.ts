@@ -143,6 +143,30 @@ export async function ingestStream({
     deduplicated = true;
     await safeUnlink(tmpPath);
   } else {
+    // Normalize EXIF Orientation so on-disk pixels match display orientation.
+    // Phone portraits typically arrive as encoded landscape with orientation=6
+    // ("rotate 90° CW for display"); we re-encode here so every downstream
+    // reader (render pipeline, dimension-aware layout, editor preview) can
+    // ignore EXIF entirely. Sharp 0.33 has a "one rotate per pipeline"
+    // constraint that prevents chaining auto-orient with editor rotate ops,
+    // so baking on ingest is the only composable place for this work.
+    // Re-encoding is lossy but only runs on the write path — dedup hits
+    // skip it.
+    if (meta.orientation && meta.orientation > 1) {
+      const normTmp = `${tmpPath}.norm.${ext}`;
+      try {
+        await sharp(tmpPath, { limitInputPixels: SHARP_PIXEL_LIMIT }).rotate().toFile(normTmp);
+      } catch (err) {
+        await safeUnlink(tmpPath);
+        await safeUnlink(normTmp);
+        throw new Error(
+          `ingestStream: orientation normalization failed: ${(err as Error).message}`
+        );
+      }
+      await safeUnlink(tmpPath);
+      await fs.promises.rename(normTmp, tmpPath);
+      meta = await sharp(tmpPath, { limitInputPixels: SHARP_PIXEL_LIMIT }).metadata();
+    }
     await fs.promises.mkdir(finalDir, { recursive: true });
     await fs.promises.rename(tmpPath, finalPath);
   }
@@ -173,7 +197,10 @@ export async function ingestStream({
 
 function pickMetadata(meta: sharp.Metadata): Sidecar['metadata'] {
   // Sharp returns exif as a Buffer; defer parsing until needed (Step 3+).
-  // Keep the sidecar JSON-safe by omitting raw buffers here.
+  // Keep the sidecar JSON-safe by omitting raw buffers here. By the time
+  // ingestStream calls this, EXIF Orientation has been baked into pixels
+  // (see the orientation > 1 branch above), so width/height already match
+  // display orientation.
   return {
     width: meta.width,
     height: meta.height,
