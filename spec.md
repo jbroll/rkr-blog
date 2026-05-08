@@ -372,22 +372,31 @@ image `captions[i]` — appears as the lightbox caption.
 The legacy directives (`::image`, `::diptych`, `::triptych`,
 `::gallery`, `::carousel`) ship in posts on disk today. Transition:
 
-1. **Spec freeze** (this document) defines the target syntax.
-2. **Implement `::figure`** as a new widget alongside the legacy ones.
+1. **Spec freeze** (this document) defines the target syntax. ✅
+2. **Implement `::figure`** as a new widget alongside the legacy ones. ✅
 3. **Migrate the WP importer** to emit `::figure` for all imported
    posts. Existing imported posts on disk keep working via legacy
-   widgets.
-4. **Editor (TipTap) refactor**: the 5 node types collapse to one
-   `figure` node with attribute panel for matrix / justify / aspect.
+   widgets. ✅
+4. **Editor (TipTap) round-trip plumbing**: figure node with full
+   attribute set + markdown ⇄ figure conversion in prose-markdown. ✅
 5. **One-shot migration tool** (`site-admin migrate-figures`) rewrites
    legacy directives in `content/posts/*.md` to `::figure` form.
-   Tested round-trip: legacy → figure → identical render output.
-6. **Delete legacy widgets** once content is fully migrated. Their
-   parsers stay for one release cycle as read-only fallback in case
-   someone restores an old post from backup.
+   Idempotent; default dry-run; --write applies. ✅
+6. **Editor toolbar UI refactor**: insert / attribute-panel UI for
+   `figure` nodes (collapse 5 insert flows into one). Until this
+   lands, the editor's "insert image" buttons still emit legacy
+   directive markdown — operator runs `migrate-figures --write` after
+   any editor save that introduces legacy directives. ⏳ DEFERRED
+   (tracked in DEFERRED.md).
+7. **Delete legacy widgets** once step 6 is done. Both server-side
+   widget files (src/widgets/{image,diptych,gallery,carousel}.ts) and
+   editor-side legacy nodes go in one commit; constants-alignment
+   test shrinks to one widget × one fallback. ⏳ DEFERRED on step 6.
 
-The constants-alignment test (test/lib/widget-fallback-alignment.test.ts)
-shrinks to one widget × one fallback after step 6.
+The migration is functionally complete after step 5 — operators can
+run `migrate-figures --write` on their content and serve everything
+via `::figure`. Steps 6-7 are cleanup that requires the editor UI
+refactor first.
 
 ## 10. Remote image import
 
