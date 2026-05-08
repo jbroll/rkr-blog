@@ -219,6 +219,85 @@ const CarouselNode = makeMultiImageNode('carousel');
 const DiptychNode = makeMultiImageNode('diptych');
 const TriptychNode = makeMultiImageNode('triptych');
 
+// Unified figure node — Phase 5 of the ::figure migration (spec §9).
+// One node type for what the legacy 5 nodes covered. Toolbar UI for
+// inserting / editing attributes is a separate follow-up; round-trip
+// works today (markdown ::figure ↔ figure node ↔ markdown ::figure).
+//
+// Attribute layout mirrors prose-markdown.ts emitFigure / parseFigure
+// so the wire format is single-source-of-truth.
+interface FigureAttrs {
+  ids: string;
+  /** Comma-separated parallel array of alts. */
+  alts: string;
+  /** Pipe-separated parallel array of per-image captions. */
+  captions: string;
+  /** Block-level caption (single, applies to whole figure). */
+  caption: string;
+  /** Matrix spec — `NxM` grid, or `justified[:H]`, or `masonry[:N]`. */
+  matrix: string;
+  /** center | left | right | full | bleed | inline */
+  justify: string;
+  /** CSS-ready width; e.g. "60%" or "400px". Empty = use justify default. */
+  width: string;
+  /** "W:H" cell aspect; empty = derive from first image. */
+  aspect: string;
+  /** cover | contain. Default cover. */
+  fit: string;
+  /** Carousel autoplay seconds (0 = manual). */
+  timer: number;
+}
+const FIGURE_DEFAULTS: FigureAttrs = {
+  ids: '',
+  alts: '',
+  captions: '',
+  caption: '',
+  matrix: '',
+  justify: 'center',
+  width: '',
+  aspect: '',
+  fit: 'cover',
+  timer: 0
+};
+
+const FigureNode = Node.create({
+  name: 'figure',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  draggable: true,
+  addAttributes() {
+    return Object.fromEntries(Object.entries(FIGURE_DEFAULTS).map(([k, v]) => [k, { default: v }]));
+  },
+  parseHTML() {
+    return [{ tag: 'div.rkr-figure-placeholder' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const attrs = HTMLAttributes as Partial<FigureAttrs>;
+    const idList = (attrs.ids ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const thumbs: unknown[] = idList.map((id) => [
+      'img',
+      { src: `/admin/preview/${id}`, alt: '', class: 'rkr-multi-thumb' }
+    ]);
+    const matrixLabel = attrs.matrix ? attrs.matrix : `1x${idList.length || 1}`;
+    return [
+      'div',
+      mergeAttributes(HTMLAttributes, {
+        class: 'rkr-multi rkr-figure-placeholder',
+        'data-kind': 'figure',
+        'data-matrix': attrs.matrix ?? '',
+        'data-count': String(idList.length)
+      }),
+      ['div', { class: 'rkr-multi-label' }, `figure ${matrixLabel} (${idList.length})`],
+      ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
+      ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])
+    ];
+  }
+});
+
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`#${id} not found`);
@@ -1281,7 +1360,15 @@ function mount(): void {
 
   const editor = new Editor({
     element: root,
-    extensions: [StarterKit, ImageNode, GalleryNode, CarouselNode, DiptychNode, TriptychNode],
+    extensions: [
+      StarterKit,
+      ImageNode,
+      GalleryNode,
+      CarouselNode,
+      DiptychNode,
+      TriptychNode,
+      FigureNode
+    ],
     content: '<p></p>',
     autofocus: 'end',
     editorProps: {

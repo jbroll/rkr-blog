@@ -129,6 +129,8 @@ function emitBlock(node: ProseNode): string {
     case 'diptych':
     case 'triptych':
       return emitMultiImage(node.type, node.attrs ?? {});
+    case 'figure':
+      return emitFigure(node.attrs ?? {});
     /* c8 ignore next 2 -- defensive: editor schema prevents unknown block node types */
     default:
       return '';
@@ -266,6 +268,86 @@ function emitMultiImage(kind: string, attrs: Record<string, unknown>): string {
   return `::${kind}{${parts.join(' ')}}`;
 }
 
+/**
+ * Emit a `::figure{...}` directive for the unified widget. Mirrors
+ * the spec.md §9 attribute table — only emit attributes whose values
+ * differ from the widget's defaults so the round-trip stays minimal
+ * and authored markdown reads cleanly.
+ */
+function emitFigure(attrs: Record<string, unknown>): string {
+  const idsRaw = attrs.ids;
+  const ids =
+    typeof idsRaw === 'string'
+      ? idsRaw
+      : Array.isArray(idsRaw)
+        ? idsRaw.filter((s): s is string => typeof s === 'string').join(',')
+        : '';
+  if (!ids.trim()) return '';
+
+  const parts: string[] = [`ids=${quote(ids)}`];
+
+  const matrix = attrs.matrix;
+  if (typeof matrix === 'string' && matrix.length > 0) {
+    parts.push(`matrix=${matrix}`);
+  }
+
+  const justify = attrs.justify;
+  if (typeof justify === 'string' && justify.length > 0 && justify !== 'center') {
+    parts.push(`justify=${justify}`);
+  }
+
+  const width = attrs.width;
+  if (typeof width === 'string' && /^\d+(px|%)$/.test(width)) {
+    parts.push(`width=${width}`);
+  }
+
+  const aspect = attrs.aspect;
+  if (typeof aspect === 'string' && /^\d+\s*[:x]\s*\d+$/.test(aspect)) {
+    parts.push(`aspect=${aspect}`);
+  }
+
+  const fit = attrs.fit;
+  if ((fit === 'cover' || fit === 'contain') && fit !== 'cover') {
+    parts.push(`fit=${fit}`);
+  }
+
+  // Per-image alts (parallel array, comma-separated).
+  const altsRaw = attrs.alts;
+  const altsList: string[] =
+    typeof altsRaw === 'string'
+      ? altsRaw.split(',').map((s) => s.trim())
+      : Array.isArray(altsRaw)
+        ? altsRaw.map((s) => (typeof s === 'string' ? s.trim() : ''))
+        : [];
+  if (altsList.some((a) => a.length > 0)) {
+    parts.push(`alts=${quote(altsList.join(','))}`);
+  }
+
+  // Per-image captions (pipe-separated).
+  const captionsRaw = attrs.captions;
+  const captionsList: string[] =
+    typeof captionsRaw === 'string'
+      ? captionsRaw.split('|').map((s) => s.trim())
+      : Array.isArray(captionsRaw)
+        ? captionsRaw.map((s) => (typeof s === 'string' ? s.trim() : ''))
+        : [];
+  if (captionsList.some((c) => c.length > 0)) {
+    parts.push(`captions=${quote(captionsList.join('|'))}`);
+  }
+
+  const caption = attrs.caption;
+  if (typeof caption === 'string' && caption.length > 0) {
+    parts.push(`caption=${quote(caption)}`);
+  }
+
+  const timer = Number(attrs.timer ?? 0);
+  if (Number.isFinite(timer) && timer > 0) {
+    parts.push(`timer=${Math.min(CAROUSEL_AUTOPLAY_CAP, Math.floor(timer))}`);
+  }
+
+  return `::figure{${parts.join(' ')}}`;
+}
+
 function clampHeadingLevel(level: unknown): number {
   const n = Number(level);
   if (!Number.isFinite(n)) return 1;
@@ -311,6 +393,28 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
           position: attrs.position ?? 'default'
         }
       };
+    }
+    if (d.name === 'figure') {
+      const attrs = d.attributes ?? {};
+      // Build a figure node with all spec'd attributes; defaults match
+      // src/admin/main.ts FIGURE_DEFAULTS so the editor round-trip
+      // stays stable.
+      const figureNode: ProseNode = {
+        type: 'figure',
+        attrs: {
+          ids: attrs.ids ?? '',
+          alts: attrs.alts ?? '',
+          captions: attrs.captions ?? '',
+          caption: attrs.caption ?? '',
+          matrix: attrs.matrix ?? '',
+          justify: attrs.justify ?? 'center',
+          width: attrs.width ?? '',
+          aspect: attrs.aspect ?? '',
+          fit: attrs.fit ?? 'cover',
+          timer: Number(attrs.timer ?? 0)
+        }
+      };
+      return figureNode;
     }
     if (
       d.name === 'gallery' ||

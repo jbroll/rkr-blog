@@ -552,3 +552,167 @@ test('proseToMarkdown: unknown marks fall through to plain text', () => {
   };
   assert.match(proseToMarkdown(doc), /plain/);
 });
+
+// ---- ::figure (unified directive, spec.md §9) -------------------------
+
+test('proseToMarkdown: figure node 1×1 with single id emits minimal directive', () => {
+  // No matrix (default), justify=center (default), fit=cover (default),
+  // empty alts/caption — emit just `ids="..."`.
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'figure',
+        attrs: {
+          ids: 'abcdef0123456789',
+          alts: '',
+          captions: '',
+          caption: '',
+          matrix: '',
+          justify: 'center',
+          width: '',
+          aspect: '',
+          fit: 'cover',
+          timer: 0
+        }
+      }
+    ]
+  };
+  assert.match(proseToMarkdown(doc), /^::figure\{ids="abcdef0123456789"\}\n$/);
+});
+
+test('proseToMarkdown: figure with full attribute set round-trips', () => {
+  const md = `::figure{ids="aaa,bbb,ccc,ddd" matrix=2x2 justify=full aspect=16:9 fit=contain alts="a,b,c,d" captions="cap a|cap b|cap c|cap d" caption="whole figure" timer=10}\n`;
+  const doc = markdownToProse(md);
+  assert.equal(doc.content.length, 1);
+  const node = doc.content[0];
+  if (!node) throw new Error('no node');
+  assert.equal(node.type, 'figure');
+  assert.deepEqual(node.attrs, {
+    ids: 'aaa,bbb,ccc,ddd',
+    alts: 'a,b,c,d',
+    captions: 'cap a|cap b|cap c|cap d',
+    caption: 'whole figure',
+    matrix: '2x2',
+    justify: 'full',
+    width: '',
+    aspect: '16:9',
+    fit: 'contain',
+    timer: 10
+  });
+  // Round-trip back to markdown — every emitted attribute should reappear.
+  const md2 = proseToMarkdown(doc);
+  for (const piece of [
+    'ids="aaa,bbb,ccc,ddd"',
+    'matrix=2x2',
+    'justify=full',
+    'aspect=16:9',
+    'fit=contain',
+    'alts="a,b,c,d"',
+    'captions="cap a|cap b|cap c|cap d"',
+    'caption="whole figure"',
+    'timer=10'
+  ]) {
+    assert.ok(md2.includes(piece), `expected ${piece} in ${md2}`);
+  }
+});
+
+test('proseToMarkdown: figure default fit/justify omitted from output', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'figure',
+        attrs: {
+          ids: 'abc,def',
+          matrix: '1x2',
+          justify: 'center',
+          fit: 'cover',
+          alts: '',
+          captions: '',
+          caption: '',
+          width: '',
+          aspect: '',
+          timer: 0
+        }
+      }
+    ]
+  };
+  const md = proseToMarkdown(doc);
+  // matrix=1x2 emitted; justify=center / fit=cover defaults dropped.
+  assert.match(md, /::figure\{ids="abc,def" matrix=1x2\}/);
+  assert.doesNotMatch(md, /justify=center/);
+  assert.doesNotMatch(md, /fit=cover/);
+});
+
+test('proseToMarkdown: figure malformed width/aspect dropped on emit', () => {
+  // The widget is forgiving on render, but the editor's serializer
+  // shouldn't emit malformed attribute values that the spec rejects.
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'figure',
+        attrs: {
+          ids: 'abc',
+          width: '100', // missing unit
+          aspect: 'not-an-aspect',
+          alts: '',
+          captions: '',
+          caption: '',
+          matrix: '',
+          justify: 'center',
+          fit: 'cover',
+          timer: 0
+        }
+      }
+    ]
+  };
+  const md = proseToMarkdown(doc);
+  assert.doesNotMatch(md, /width=/);
+  assert.doesNotMatch(md, /aspect=/);
+});
+
+test('proseToMarkdown: figure timer caps at 60 on emit', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'figure',
+        attrs: {
+          ids: 'a,b,c,d,e',
+          matrix: '1x2',
+          timer: 999,
+          alts: '',
+          captions: '',
+          caption: '',
+          justify: 'center',
+          fit: 'cover',
+          width: '',
+          aspect: ''
+        }
+      }
+    ]
+  };
+  assert.match(proseToMarkdown(doc), /timer=60/);
+});
+
+test('markdownToProse: bare ::figure (only ids) parses with all defaults', () => {
+  const md = `::figure{ids="abc"}\n`;
+  const doc = markdownToProse(md);
+  const node = doc.content[0];
+  if (!node) throw new Error('no node');
+  assert.equal(node.type, 'figure');
+  assert.deepEqual(node.attrs, {
+    ids: 'abc',
+    alts: '',
+    captions: '',
+    caption: '',
+    matrix: '',
+    justify: 'center',
+    width: '',
+    aspect: '',
+    fit: 'cover',
+    timer: 0
+  });
+});
