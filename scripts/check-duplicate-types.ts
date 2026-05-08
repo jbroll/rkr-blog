@@ -49,8 +49,6 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // Sub: import-wp.ts and user.ts CLI subcommand unions. Narrowly
   // scoped per command; rename to ImportWpSub / UserSub.
   'Sub',
-  // CliOpts: migrate-figures vs reset CLI option bags. Rename per command.
-  'CliOpts',
   // --- test-only (lower risk; cleanup = extract shared helpers) ---
   // JobRow: prod jobs.ts vs jobs.test.ts redeclaration. Test should import.
   'JobRow',

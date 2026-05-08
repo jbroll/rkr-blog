@@ -379,9 +379,10 @@ The legacy directives (`::image`, `::diptych`, `::triptych`,
    widgets. ✅
 4. **Editor (TipTap) round-trip plumbing**: figure node with full
    attribute set + markdown ⇄ figure conversion in prose-markdown. ✅
-5. **One-shot migration tool** (`site-admin migrate-figures`) rewrites
-   legacy directives in `content/posts/*.md` to `::figure` form.
-   Idempotent; default dry-run; --write applies. ✅
+5. **One-shot migration tool** (`site-admin migrate-figures`) was
+   shipped to rewrite legacy directives in `content/posts/*.md`. After
+   the editor unification + reseed, no legacy directives remain in any
+   live post; the tool was deleted as dead code. ✅
 6. **Server-side legacy widget deletion**: drop
    `src/widgets/{image,diptych,gallery,carousel}.ts`, their tests,
    their CSS, and the WidgetRegistry registrations. The figure widget
@@ -459,10 +460,6 @@ verify                  rehash originals; flag mismatches
 import-wp list <base-url>          list posts on a WordPress source
 import-wp post <base-url> <id>     import one WP post + every image it references
 import-wp push <base-url> <slug> --to <fly-url>  push one post to a remote rkroll-cms via /admin
-migrate-figures                    rewrite legacy ::image / ::diptych / ::triptych /
-                                   ::gallery / ::carousel directives to the unified ::figure
-                                   form; default mode is dry-run, --write applies, --backup
-                                   keeps a *.pre-migrate-figures.bak per file
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
 server [--port N]       run the application server

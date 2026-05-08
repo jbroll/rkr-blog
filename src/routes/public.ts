@@ -82,11 +82,10 @@ export default async function publicRoutes(
 
   const widgets = new WidgetRegistry();
   // ::figure is the only image widget (spec.md §9 unification).
-  // Legacy ::image / ::gallery / ::carousel / ::diptych / ::triptych
-  // directives in posts on disk render as `<!-- unknown widget: X -->`
-  // comments — content authored before the unification must be
-  // migrated via `site-admin migrate-figures --write` (or simply
-  // re-imported through the WP importer, which now emits ::figure).
+  // The figure widget is the only image directive recognised by the
+  // public renderer. Any older ::image / ::gallery / ::carousel /
+  // ::diptych / ::triptych on disk renders as a `<!-- unknown widget -->`
+  // placeholder; the WP importer emits ::figure directly.
   widgets.register(figureWidget);
 
   // ---- index: GET / -----------------------------------------------------

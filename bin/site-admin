@@ -14,7 +14,6 @@
 const COMMANDS = {
   init:              () => import('../src/cli/init.ts'),
   migrate:           () => import('../src/cli/migrate.ts'),
-  'migrate-figures': () => import('../src/cli/migrate-figures.ts'),
   render:            () => import('../src/cli/render.ts'),
   gc:                () => import('../src/cli/gc.ts'),
   verify:            () => import('../src/cli/verify.ts'),

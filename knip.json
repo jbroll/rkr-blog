@@ -3,7 +3,6 @@
   "entry": [
     "src/cli/init.ts",
     "src/cli/migrate.ts",
-    "src/cli/migrate-figures.ts",
     "src/cli/render.ts",
     "src/cli/gc.ts",
     "src/cli/server.ts",
