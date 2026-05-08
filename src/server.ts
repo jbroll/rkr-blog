@@ -12,7 +12,8 @@ import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
-import adminRoutes, { type UrlFetcher } from './routes/admin.ts';
+import adminRoutes from './routes/admin.ts';
+import type { UrlFetcher } from './routes/admin-import-url.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
 import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
 import integrationsOnedriveRoutes, {
