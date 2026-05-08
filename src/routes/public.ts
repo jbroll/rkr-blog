@@ -54,6 +54,7 @@ import { renderIndexPage } from '../templates/index.ts';
 import { renderPostPage } from '../templates/post.ts';
 import carouselWidget from '../widgets/carousel.ts';
 import { diptychWidget, triptychWidget } from '../widgets/diptych.ts';
+import figureWidget from '../widgets/figure.ts';
 import galleryWidget from '../widgets/gallery.ts';
 import imageWidget from '../widgets/image.ts';
 
@@ -89,6 +90,11 @@ export default async function publicRoutes(
   widgets.register(carouselWidget);
   widgets.register(diptychWidget);
   widgets.register(triptychWidget);
+  // ::figure is the unified replacement for the five widgets above
+  // (spec.md §9). Phase 1 ships ::figure alongside the legacy widgets;
+  // legacy directives stay parseable so existing post markdown keeps
+  // rendering until the migration tool runs.
+  widgets.register(figureWidget);
 
   // ---- index: GET / -----------------------------------------------------
 

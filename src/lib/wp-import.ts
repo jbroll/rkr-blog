@@ -300,12 +300,12 @@ function imageItemFromFigure(figure: HastNode): FigureImage | null {
   const img = findFirst(figure, (n) => n.tagName === 'img');
   if (!img) return null;
   const props = img.properties ?? {};
-  const dataSrc = String(props['dataSrc'] ?? '');
-  const src = String(props['src'] ?? '');
-  const dataSrcset = String(props['dataSrcset'] ?? '');
-  const srcset = String(props['srcset'] ?? '');
+  const dataSrc = String(props.dataSrc ?? '');
+  const src = String(props.src ?? '');
+  const dataSrcset = String(props.dataSrcset ?? '');
+  const srcset = String(props.srcset ?? '');
   const masterUrl = pickMasterUrl(dataSrc, src, dataSrcset, srcset);
-  const alt = String(props['alt'] ?? '');
+  const alt = String(props.alt ?? '');
   const caption = extractFigcaption(figure, false);
   return { imgNode: img, masterUrl, alt, caption };
 }
@@ -380,7 +380,7 @@ function escapeAttr(s: string): string {
 
 function hasClass(node: HastNode, cls: string): boolean {
   const props = node.properties ?? {};
-  const className = props['className'];
+  const className = props.className;
   if (Array.isArray(className)) return className.includes(cls);
   if (typeof className === 'string') return className.split(/\s+/).includes(cls);
   return false;
@@ -559,7 +559,7 @@ function renderInline(nodes: HastNode[]): string {
         out += '  \n';
         break;
       case 'a': {
-        const href = String((n.properties ?? {})['href'] ?? '');
+        const href = String(n.properties?.href ?? '');
         const text = renderInline(kids);
         out += href ? `[${text}](${href})` : text;
         break;

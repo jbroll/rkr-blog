@@ -173,3 +173,30 @@ test('::gallery: rendered URLs resolve (sample one per image)', async (t) => {
   assert.equal(page.statusCode, 200);
   await assertSampledImagesResolve(app, page.body);
 });
+
+test('::figure (matrix=2x2): rendered URLs resolve (sample one per image)', async (t) => {
+  // The unified directive (spec.md §9). Phase 1: matrix=NxM. Variants
+  // and fallback declared by the figure widget are union of the legacy
+  // widgets' shapes (constants-alignment test guards this), so emitted
+  // URLs all resolve via the standard /img/ pipeline — same plumbing
+  // the legacy ::image / ::diptych / ::gallery use.
+  const { app, imageId } = await setup(t);
+  const post = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'fig-roundtrip',
+      title: 'Figure roundtrip',
+      status: 'published',
+      markdown: `::figure{ids="${imageId},${imageId},${imageId},${imageId}" matrix=2x2}\n`
+    }
+  });
+  assert.equal(post.statusCode, 200, post.body);
+
+  const page = await app.inject({ method: 'GET', url: '/fig-roundtrip' });
+  assert.equal(page.statusCode, 200);
+  // Sanity: the new directive renders the new shell + grid markers.
+  assert.match(page.body, /class="rkr-figure rkr-justify-center rkr-fit-cover"/);
+  assert.match(page.body, /<div class="rkr-figure-grid"/);
+  await assertSampledImagesResolve(app, page.body);
+});

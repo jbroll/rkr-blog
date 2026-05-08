@@ -15,6 +15,7 @@ import { test } from 'node:test';
 import { DEFAULT_OUTPUTS, DEFAULT_VARIANTS } from '../../src/lib/originals.ts';
 import * as carouselWidget from '../../src/widgets/carousel.ts';
 import * as diptychWidget from '../../src/widgets/diptych.ts';
+import * as figureWidget from '../../src/widgets/figure.ts';
 import * as galleryWidget from '../../src/widgets/gallery.ts';
 import * as imageWidget from '../../src/widgets/image.ts';
 
@@ -25,7 +26,8 @@ const widgets = [
   { name: 'image', variants: imageWidget.variants, fallback: imageWidget.fallback },
   { name: 'gallery', variants: galleryWidget.variants, fallback: galleryWidget.fallback },
   { name: 'carousel', variants: carouselWidget.variants, fallback: carouselWidget.fallback },
-  { name: 'diptych', variants: diptychWidget.variants, fallback: diptychWidget.fallback }
+  { name: 'diptych', variants: diptychWidget.variants, fallback: diptychWidget.fallback },
+  { name: 'figure', variants: figureWidget.variants, fallback: figureWidget.fallback }
 ] as const;
 
 // Quality used for non-jpeg srcset entries. widget-helpers.ts derives

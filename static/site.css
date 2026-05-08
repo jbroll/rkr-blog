@@ -322,6 +322,104 @@ article hr {
 }
 .rkr-pos-inline figcaption { display: none; } /* inline images don't show captions */
 
+/* ---- ::figure widget (unified, spec.md §9) ----------------------- */
+/* The unified directive ships alongside the legacy widgets above. Phase 1
+   supports matrix=NxM only; flow modes (justified/masonry) and carousel-
+   on-overflow render via a comment + 1×N grid fallback for now. */
+
+.rkr-figure {
+  /* Re-declared because rkr-figure already exists above for the legacy
+     widgets — these properties don't conflict but we keep the section
+     self-contained for the future deletion of the legacy block. */
+  display: block;
+  margin: 2rem auto;
+}
+.rkr-figure-grid {
+  display: grid;
+  gap: var(--rkr-gap);
+  width: 100%;
+}
+.rkr-figure-cell {
+  display: block;
+  /* Reserve aspect-ratio per cell. Defaults to the figure-level
+     --rkr-cell-aspect (set on the <figure>); cells override with their
+     own --rkr-image-aspect when no explicit aspect is given on the
+     directive. */
+  aspect-ratio: var(--rkr-cell-aspect, var(--rkr-image-aspect, 1));
+  overflow: hidden;
+  border-radius: var(--rkr-radius);
+  background: var(--rkr-rule);
+}
+.rkr-figure-cell picture,
+.rkr-figure-cell img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+.rkr-fit-cover .rkr-figure-cell img { object-fit: cover; }
+.rkr-fit-contain .rkr-figure-cell img { object-fit: contain; }
+
+/* Block placement (mirrors rkr-pos-* but renamed per spec). */
+.rkr-justify-center {
+  width: 100%;
+  max-width: var(--rkr-content);
+  margin-left: auto;
+  margin-right: auto;
+}
+.rkr-justify-left {
+  float: left;
+  width: 40%;
+  margin: 0.5rem 1rem 0.5rem 0;
+  shape-margin: 0.5rem;
+}
+.rkr-justify-right {
+  float: right;
+  width: 40%;
+  margin: 0.5rem 0 0.5rem 1rem;
+  shape-margin: 0.5rem;
+}
+@media (max-width: 600px) {
+  .rkr-justify-left,
+  .rkr-justify-right { float: none; width: 100%; margin: 1rem 0; }
+}
+.rkr-justify-full {
+  width: 100%;
+  max-width: var(--rkr-content);
+  margin-left: auto;
+  margin-right: auto;
+}
+.rkr-justify-bleed {
+  /* Break out of the containing column to span the full viewport. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  max-width: none;
+}
+/* Inline mode wraps the picture in a <span> rather than <figure>; styling
+   matches the legacy rkr-pos-inline so authors get identical behaviour. */
+span.rkr-justify-inline {
+  display: inline-block;
+  margin: 0 0.25em;
+  vertical-align: text-bottom;
+}
+span.rkr-justify-inline img {
+  display: inline-block;
+  height: 1.5em;
+  width: auto;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.rkr-figure > figcaption {
+  margin-top: 0.5rem;
+  font-family: var(--rkr-display-font);
+  font-size: 0.875rem;
+  color: var(--rkr-muted);
+  text-align: center;
+}
+
 /* ---- gallery widget ----------------------------------------------- */
 /* Shared shell: galleries always live in the wide content column.
    Individual layouts differ only in how items are arranged. */
