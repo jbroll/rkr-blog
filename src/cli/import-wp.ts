@@ -6,8 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { paths } from '../lib/config.ts';
-import { fetchPost, importPost, listPosts } from '../lib/wp-import.ts';
+import { importPost } from '../lib/wp-import.ts';
 import { pushPost } from '../lib/wp-push.ts';
+import { fetchPost, listPosts } from '../lib/wp-rest.ts';
 
 const SUBCOMMANDS = ['list', 'post', 'push'] as const;
 type Sub = (typeof SUBCOMMANDS)[number];

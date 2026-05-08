@@ -1,18 +1,18 @@
-// Admin SPA: TipTap editor wired to /admin/upload (image insertion) and
-// /admin/posts (save). The editor never shows markdown to the user;
-// proseToMarkdown converts on save before POSTing — the server-side
-// /admin/posts endpoint just persists the markdown after validation.
+// Admin SPA: TipTap editor wired to /admin/upload (insert image) and
+// /admin/posts (save). proseToMarkdown converts on save before POST;
+// the server's /admin/posts persists the markdown after validation.
 
 import { Editor, mergeAttributes, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Cropper from 'cropperjs';
-// Cropper.js ships its CSS as a side-effect import; esbuild bundles it
-// into static/admin/main.js (no separate CSS file at runtime).
+// CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
 
+import { canonicalJson } from '../lib/canonical-json.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
-import { PipelineCache, type SidecarOp } from './canvas';
-import { canonicalJson, computeHomography, perspectiveOutputSize } from './canvas-math';
+import type { SidecarOp } from '../lib/sidecar-types.ts';
+import { PipelineCache } from './canvas';
+import { computeHomography, perspectiveOutputSize } from './canvas-math';
 
 type ImagePosition = 'default' | 'full' | 'left' | 'right' | 'inline';
 

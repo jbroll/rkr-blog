@@ -6,7 +6,8 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 
-import { cacheKey, canonicalJson, sha256File, sha256Stream } from '../../src/lib/hash.ts';
+import { canonicalJson } from '../../src/lib/canonical-json.ts';
+import { cacheKey, sha256File, sha256Stream } from '../../src/lib/hash.ts';
 
 // ---- canonicalJson -----------------------------------------------------
 

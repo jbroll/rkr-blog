@@ -12,6 +12,10 @@
 // original's full resolution when the source decodes; the browser
 // scales the resulting <img> to fit the editor frame.
 
+// SidecarOp lives in lib/sidecar-types.ts (a pure type module — no
+// node:fs / node:crypto, safe for the browser bundle). Callers import
+// from there directly; canvas.ts uses it internally.
+import type { SidecarOp } from '../lib/sidecar-types.ts';
 import {
   clampInt,
   computeHomography,
@@ -23,14 +27,6 @@ import {
   perspectiveOutputSize,
   simplifyOps
 } from './canvas-math';
-
-// Single SidecarOp shape shared by the canvas pipeline, the admin SPA,
-// and the server's route validator. lib/sidecar-types.ts is a pure
-// type module (no node:fs, no node:crypto), safe to import from the
-// browser bundle.
-export type { SidecarOp } from '../lib/sidecar-types.ts';
-
-import type { SidecarOp } from '../lib/sidecar-types.ts';
 
 export interface CanvasSource {
   /** The decoded source pixels — anything `drawImage` accepts. */

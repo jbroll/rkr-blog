@@ -13,6 +13,7 @@
     "src/site/carousel.ts",
     "src/site/img-retry.ts",
     "scripts/check-duplicate-types.ts",
+    "scripts/check-no-reexports.ts",
     "test/**/*.test.ts",
     "test-e2e/server-runner.ts",
     "test-e2e/**/*.spec.ts"

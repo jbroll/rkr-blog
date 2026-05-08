@@ -12,7 +12,9 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 import { parsePost } from '../../src/lib/content.ts';
-import { fetchPost, importPost, listPosts, type WpPost } from '../../src/lib/wp-import.ts';
+import { importPost } from '../../src/lib/wp-import.ts';
+import type { WpPost } from '../../src/lib/wp-import-types.ts';
+import { fetchPost, listPosts } from '../../src/lib/wp-rest.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-wp-import-'));

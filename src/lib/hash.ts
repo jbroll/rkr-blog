@@ -9,8 +9,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import type { Readable } from 'node:stream';
 
-export { type CanonicalValue, canonicalJson } from './canonical-json.ts';
-
 import { type CanonicalValue, canonicalJson } from './canonical-json.ts';
 
 export interface CacheKeyArgs {

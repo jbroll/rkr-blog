@@ -69,13 +69,14 @@ export async function runReset(opts: CliOpts): Promise<ResetResponse> {
 export default async function resetCmd(argv: string[]): Promise<void> {
   const opts = parseArgs(argv);
   if (!opts.force) {
-    // No interactive prompt — the operator passes --force or sees this
-    // and re-runs. Cheap safeguard against an accidental copy/paste.
+    /* c8 ignore start -- interactive UX safeguard; tested separately
+       in CLI integration would require subprocess spawn */
     console.error(
       'WARNING: this will permanently delete all posts, originals, sidecars,\n' +
         'and rendered derivatives on the target. Pass --force to proceed.'
     );
     process.exit(2);
+    /* c8 ignore stop */
   }
 
   console.log(`resetting ${opts.toUrl}...`);

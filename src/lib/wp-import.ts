@@ -4,8 +4,8 @@
 // maps to a single ::figure with `matrix=` chosen by image count.
 //
 // REST client (listPosts / fetchPost) lives in lib/wp-rest.ts; the WpPost
-// type lives in lib/wp-import-types.ts. Both are re-exported here for
-// callers that import them via the top-level path.
+// type lives in lib/wp-import-types.ts. Callers import directly from
+// the right module — no convenience re-exports here.
 //
 // Why not rehype-remark for the prose: WP block content is a small
 // vocabulary (p, figure, h2/h3, strong, em, a, br, ul/ol, blockquote,
@@ -18,10 +18,6 @@ import { unified } from 'unified';
 
 import { ingestStream } from './originals.ts';
 import { safeFetch } from './url-safety.ts';
-
-export type { WpPost } from './wp-import-types.ts';
-export { fetchPost, type ListResult, listPosts, type WpFetcher } from './wp-rest.ts';
-
 import type { WpPost } from './wp-import-types.ts';
 
 export interface ImportResult {

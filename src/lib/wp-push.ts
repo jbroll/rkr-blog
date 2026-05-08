@@ -21,7 +21,8 @@ import type { Readable } from 'node:stream';
 
 import { FORMAT_TO_EXT, originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
-import { importPost, type WpPost } from './wp-import.ts';
+import { importPost } from './wp-import.ts';
+import type { WpPost } from './wp-import-types.ts';
 
 export interface PushOpts {
   wpBaseUrl: string;

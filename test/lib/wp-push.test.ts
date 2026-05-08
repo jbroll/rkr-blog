@@ -13,7 +13,7 @@ import sharp from 'sharp';
 
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
-import type { WpPost } from '../../src/lib/wp-import.ts';
+import type { WpPost } from '../../src/lib/wp-import-types.ts';
 import { pushPost } from '../../src/lib/wp-push.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';

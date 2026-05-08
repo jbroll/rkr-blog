@@ -40,6 +40,14 @@ if compgen -G "src/**/*.ts" > /dev/null; then
     scripts/check-duplicate-types.ts
 fi
 
+# No re-exports. We control all callers; `export { x } from './y'` is just
+# a way to hide where x actually lives. Forces direct-import discipline.
+if compgen -G "src/**/*.ts" > /dev/null; then
+  echo "==> no-reexports check"
+  node --no-warnings=ExperimentalWarning --experimental-strip-types \
+    scripts/check-no-reexports.ts
+fi
+
 # Knip: gate on dead files / unused dependencies / unlisted dependencies.
 # Unused exports + unused exported types are not yet gated — they're a
 # real cleanup queue (DEFERRED.md). Run `npm run knip` for the full report.
