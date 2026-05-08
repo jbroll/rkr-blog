@@ -447,6 +447,11 @@ gc                      delete cache entries that no sidecar references
 verify                  rehash originals; flag mismatches
 import-wp list <base-url>          list posts on a WordPress source
 import-wp post <base-url> <id>     import one WP post + every image it references
+import-wp push <base-url> <slug> --to <fly-url>  push one post to a remote rkroll-cms via /admin
+migrate-figures                    rewrite legacy ::image / ::diptych / ::triptych /
+                                   ::gallery / ::carousel directives to the unified ::figure
+                                   form; default mode is dry-run, --write applies, --backup
+                                   keeps a *.pre-migrate-figures.bak per file
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
 server [--port N]       run the application server
