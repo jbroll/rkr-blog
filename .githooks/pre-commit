@@ -40,6 +40,12 @@ if compgen -G "src/**/*.ts" > /dev/null; then
     scripts/check-duplicate-types.ts
 fi
 
+# Knip: gate on dead files / unused dependencies / unlisted dependencies.
+# Unused exports + unused exported types are not yet gated — they're a
+# real cleanup queue (DEFERRED.md). Run `npm run knip` for the full report.
+echo "==> knip:gate"
+npm run --silent knip:gate
+
 # Per-file 500-line size limit.
 #
 # Policy:

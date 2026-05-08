@@ -316,6 +316,44 @@ review.
 **Trigger.** When the author wants to log in from a phone or a
 machine where setting an Authorization header is awkward.
 
+### Resolve knip's unused-exports queue
+
+**Source.** `npm run knip` introduced 2026-05-08.
+
+**What.** Knip's gate (files / dependencies / unlisted) is wired into
+the pre-commit hook. The other two report categories — unused
+exports and unused exported types — are NOT gated yet. As of the
+knip-adoption commit they list 8 exports and 21 types that nothing
+imports:
+
+**Unused exports (8):**
+- `applyOps` — src/admin/canvas.ts:50
+- `bearerTokenFromHeader` — src/lib/auth-middleware.ts:36
+- `sidecarPath` — src/lib/originals.ts:245
+- `findUserByOAuth` — src/lib/users.ts:104
+- `MAX_CAPTION_LEN`, `MAX_ALT_LEN`, `clampCaption` — src/lib/widget-helpers.ts:21-24
+- `name` getter — src/widgets/figure.ts:40
+
+**Unused exported types (21):** `DriveFile`, `CanonicalValue`,
+`JobKind`, `OneDriveFile`, `IngestSource`, `ProseMark`, `ProseNode`,
+`CropOp` / `ResampleOp` / `RotateOp` / `FlipOp` / `PerspectiveOp`,
+`SidecarSource` / `SidecarMetadata` / `SidecarOutput` / `SidecarVariant`
+(both in sidecar-types.ts AND re-exported via sidecar.ts → 4 dupes
+flagged in each), `IndexEntry`. The sidecar-types vs sidecar.ts
+duplication is the same pattern that drives several of the
+duplicate-type-check entries; one fix solves both.
+
+**Why deferred.** Each entry needs case-by-case judgment: drop the
+export, drop the symbol entirely, or add an opt-in test that
+imports it (preserving the export as a public API). 29 small fixes
+is its own commit — better as focused cleanup than slipped into
+unrelated work.
+
+**Trigger.** Pick up when refactoring or when extending one of the
+listed modules. After the queue empties, drop `--include
+files,dependencies,unlisted` from the pre-commit gate so knip runs
+the full report and the unused-export check becomes load-bearing.
+
 ### Resolve the duplicate-type-check allowlist
 
 **Source.** Companion to `scripts/check-duplicate-types.ts` introduced

@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "entry": [
+    "src/cli/init.ts",
+    "src/cli/migrate.ts",
+    "src/cli/migrate-figures.ts",
+    "src/cli/render.ts",
+    "src/cli/gc.ts",
+    "src/cli/server.ts",
+    "src/cli/user.ts",
+    "src/cli/import-wp.ts",
+    "src/cli/reset.ts",
+    "src/site/carousel.ts",
+    "src/site/img-retry.ts",
+    "scripts/check-duplicate-types.ts",
+    "test/**/*.test.ts"
+  ],
+  "ignore": [
+    "src/admin/css.d.ts"
+  ],
+  "ignoreDependencies": [
+    "typescript-language-server"
+  ]
+}
