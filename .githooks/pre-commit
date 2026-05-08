@@ -30,6 +30,16 @@ if compgen -G "src/**/*.ts" > /dev/null || compgen -G "test/**/*.ts" > /dev/null
   npx --no-install tsc --noEmit
 fi
 
+# Cross-file duplicate type/interface/enum names. Biome and tsc don't catch
+# this (TS scopes duplicate names per-module). The script below maintains
+# an explicit allowlist for known-existing dupes (warn-on-existing pattern,
+# same as the size hook); new dupes fail the commit.
+if compgen -G "src/**/*.ts" > /dev/null; then
+  echo "==> duplicate-type check"
+  node --no-warnings=ExperimentalWarning --experimental-strip-types \
+    scripts/check-duplicate-types.ts
+fi
+
 # Per-file 500-line size limit.
 #
 # Policy:

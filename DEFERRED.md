@@ -316,6 +316,37 @@ review.
 **Trigger.** When the author wants to log in from a phone or a
 machine where setting an Authorization header is awkward.
 
+### Resolve the duplicate-type-check allowlist
+
+**Source.** Companion to `scripts/check-duplicate-types.ts` introduced
+2026-05-08.
+
+**What.** The duplicate-type checker maintains an allowlist of 15
+known-existing dupes so it could ship without forcing a sweeping
+cross-codebase rename. Each entry is a target for incremental
+cleanup:
+
+- **Production (8):** `CallbackQuery` + `ImportBody` (gdrive vs
+  onedrive — extract to `src/routes/integrations-shared.ts`); `Op`
+  (canvas-math should rename to `OpInput`); `Point` (main.ts should
+  import the canonical readonly version from canvas-math);
+  `DirectiveNode` (content.ts vs widgets.ts — re-export from one);
+  `UploadResponse` (test should import the route's response type);
+  `Sub` (rename per-CLI: `ImportWpSub`, `UserSub`); `CliOpts`
+  (rename per-CLI: `MigrateFiguresCliOpts`, `ResetCliOpts`).
+- **Test-only (7):** `JobRow` (test should import prod type);
+  `AccessBody` / `StatusBody` / `ErrorBody` / `ErrorResponse` /
+  `StubOpts` / `StubTokens` (extract to
+  `test/helpers/oauth-fixtures.ts`).
+
+**Why deferred.** Sweeping rename + extraction is mechanical but
+touches many files. Resolving piecemeal as files are touched
+naturally avoids one disruptive commit and keeps the queue moving.
+
+**Trigger.** Each entry resolves by editing its allowlist line out
+of `scripts/check-duplicate-types.ts` once the rename or extract
+ships. Empty allowlist → simplify the script.
+
 ### Playwright UI testing
 
 **Source.** User request, 2026-05-08.
