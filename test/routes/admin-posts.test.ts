@@ -163,6 +163,36 @@ test('POST /admin/posts rejects bad slug / missing title / missing markdown', as
   assert.equal(badCr.statusCode, 400);
   assert.match(badCr.json<{ error: string }>().error, /frontmatter/);
 
+  // `---` followed by prose (no key:value, no closing `---`) is NOT
+  // frontmatter — the looksLikeFrontmatterDelimiter heuristic returns
+  // false for the first non-empty line that's neither `---` nor a yaml
+  // mapping. Accept the body as a normal post.
+  const proseAfterDashes = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'prose-dashes',
+      title: 'Prose with dashes',
+      status: 'draft',
+      markdown: '---\nplain prose line that is not yaml\nmore prose\n'
+    }
+  });
+  assert.equal(proseAfterDashes.statusCode, 200, proseAfterDashes.body);
+
+  // `---` with only whitespace lines after also isn't frontmatter (the
+  // for-loop completes without ever finding a delimiter or mapping).
+  const proseEmptyAfter = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'prose-empty',
+      title: 'Empty after dashes',
+      status: 'draft',
+      markdown: '---\n   \n\n   \n'
+    }
+  });
+  assert.equal(proseEmptyAfter.statusCode, 200, proseEmptyAfter.body);
+
   // Slug length cap: 200-char slug is rejected even though every char is
   // a valid kebab-case character. Without this, a 50KB slug would be
   // accepted, written to disk as a filename, and indexed.
