@@ -17,9 +17,14 @@ primary_region = "ord"
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  # Demo persistence: keep the single machine warm so /site (a Fly
+  # volume — see [[mounts]] below) stays attached. Without this,
+  # auto-stop after idle would recycle the machine and any state not
+  # on the volume would die. With the volume mounted at /site, posts
+  # + originals + sidecars + sqlite all survive.
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   # Cold-start hits the JIT cache + node:sqlite open + migrate; budget
   # for that without 502'ing the first request after wake.
   [http_service.concurrency]
@@ -33,8 +38,11 @@ primary_region = "ord"
   size = "shared-cpu-1x"
   memory = "512mb"
 
-# No [[mounts]] block: SITE_ROOT (/site) lives on the ephemeral root
-# filesystem. Posts, originals, derivatives, and the SQLite index are
-# wiped on machine restart. Acceptable for the demo because the WP
-# importer can re-seed in seconds; add a 1 GB volume here for
-# persistence.
+# Persistent data lives on a Fly volume mounted at SITE_ROOT (=/site).
+# The volume must exist before deploy: create it once in the Fly
+# dashboard (Volumes → New volume) or via `fly volumes create rkr_data
+# --size 1 --region ord`. Without the volume Fly refuses the deploy.
+[[mounts]]
+  source = "rkr_data"
+  destination = "/site"
+  initial_size = "1gb"
