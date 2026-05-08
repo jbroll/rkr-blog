@@ -1,7 +1,6 @@
-// Shared types between the WP importer (lib/wp-import.ts) and the
-// REST client (lib/wp-rest.ts). Splitting the type out avoids a cycle
-// (wp-rest.ts → wp-import.ts → wp-rest.ts) once the importer needs to
-// re-export the type for backward compatibility.
+// Shared types for the WP import pipeline. Split from lib/wp-import.ts
+// so the REST client (lib/wp-rest.ts) and the HTML→markdown emitter
+// (lib/wp-import-emit.ts) can pull just the types they need.
 
 /** Subset of WP /wp-json/wp/v2/posts response we depend on. */
 export interface WpPost {
@@ -16,4 +15,14 @@ export interface WpPost {
   link: string;
   categories?: number[];
   tags?: number[];
+}
+
+/** Minimal hast (HTML AST) node shape we walk during import. rehype-parse
+ * produces fuller nodes; we only access these fields. */
+export interface HastNode {
+  type: string;
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+  value?: string;
 }

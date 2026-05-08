@@ -262,6 +262,40 @@ test('importPost: renders <pre>, <div>, <section>, stray <figure>, unknown block
   assert.match(result.markdown, /aside text/);
 });
 
+test('importPost: renders <h1>-<h6>, <hr>, top-level <br>, <blockquote>', async (t) => {
+  const root = freshSiteRoot(t);
+  const html = `
+<h1>One</h1>
+<h2>Two</h2>
+<h3>Three</h3>
+<h4>Four</h4>
+<h5>Five</h5>
+<h6>Six</h6>
+<hr/>
+<br/>
+<blockquote>
+  <p>quoted line one</p>
+  <p>quoted line two</p>
+</blockquote>
+`;
+  const result = await importPost(makePost(html, 'block-vocab'), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  // Heading levels map to # repetitions.
+  assert.match(result.markdown, /^# One$/m);
+  assert.match(result.markdown, /^## Two$/m);
+  assert.match(result.markdown, /^### Three$/m);
+  assert.match(result.markdown, /^#### Four$/m);
+  assert.match(result.markdown, /^##### Five$/m);
+  assert.match(result.markdown, /^###### Six$/m);
+  // <hr/> → markdown rule.
+  assert.match(result.markdown, /^---$/m);
+  // <blockquote> wraps inner blocks with `> ` prefix.
+  assert.match(result.markdown, /^> quoted line one$/m);
+  assert.match(result.markdown, /^> quoted line two$/m);
+});
+
 test('importPost: renders <ol>/<ul>, <code>, <br>, <span> in body markdown', async (t) => {
   const root = freshSiteRoot(t);
   const html = `
