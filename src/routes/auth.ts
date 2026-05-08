@@ -8,6 +8,7 @@ import cookiePlugin from '@fastify/cookie';
 import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from 'arctic';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { adminTokenMatchesEnv } from '../lib/admin-token.ts';
 import type { Db } from '../lib/db.ts';
 import {
   type GoogleIdPayload,
@@ -18,6 +19,7 @@ import { createSession, deleteSession } from '../lib/sessions.ts';
 import {
   EmailLinkedError,
   findOrCreateOAuthUser,
+  findOrCreateTokenAdmin,
   NotInvitedError,
   type User
 } from '../lib/users.ts';
@@ -198,6 +200,70 @@ export default async function authRoutes(
     }
   );
 
+  // ---- token-login (browser flow) -------------------------------------
+  // Lets the operator log in via the browser using the ADMIN_TOKEN env
+  // var as a password. Mints a normal session cookie on the same code
+  // path Google OAuth uses; the synthetic admin user lives in the DB
+  // (findOrCreateTokenAdmin) so sessions.user_id FK holds.
+  //
+  // The bearer-header path (auth-middleware.ts) remains for stateless
+  // CLI clients; this is the addition for human browser use.
+
+  fastify.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      try {
+        const params = new URLSearchParams(body as string);
+        done(null, Object.fromEntries(params));
+      } catch (err) {
+        /* c8 ignore next 2 -- URLSearchParams accepts almost any string */
+        done(err as Error, undefined);
+      }
+    }
+  );
+
+  fastify.get('/admin/login', async (_req, reply) => {
+    const adminTokenAvailable = !!process.env.ADMIN_TOKEN;
+    return reply.type('text/html; charset=utf-8').send(renderLoginPage({ adminTokenAvailable }));
+  });
+
+  fastify.post<{ Body: { token?: string } }>(
+    '/admin/auth/token-login',
+    {
+      // Aggressive rate limit — auth endpoint with brute-force exposure.
+      // ADMIN_TOKEN is long-random so brute force is infeasible, but the
+      // limit keeps attempt logs sparse and observable.
+      config: { rateLimit: { max: 5, timeWindow: '5 minutes' } }
+    },
+    async (req, reply) => {
+      const provided = typeof req.body?.token === 'string' ? req.body.token : '';
+      if (!provided) {
+        req.log.warn({ ip: req.ip, ua: req.headers['user-agent'] }, 'token-login: empty token');
+        return reply.code(400).send({ error: 'token required' });
+      }
+      if (!process.env.ADMIN_TOKEN) {
+        req.log.warn({ ip: req.ip }, 'token-login: ADMIN_TOKEN not configured');
+        return reply.code(503).send({ error: 'token login not configured' });
+      }
+      if (!adminTokenMatchesEnv(provided)) {
+        req.log.warn({ ip: req.ip, ua: req.headers['user-agent'] }, 'token-login: token mismatch');
+        return reply.code(401).send({ error: 'invalid token' });
+      }
+
+      const user = findOrCreateTokenAdmin(db);
+      const ip = req.ip ?? null;
+      const userAgent = req.headers['user-agent'] ?? null;
+      const session = createSession(db, { userId: user.id, ip, userAgent });
+      setCookie(reply, SESSION_COOKIE, session.id, {
+        maxAge: Math.floor((Date.parse(session.expires_at) - Date.now()) / 1000),
+        secure: secureCookies
+      });
+      req.log.info({ userId: user.id, ip }, 'token-login: success');
+      return reply.redirect(postLoginPath, 302);
+    }
+  );
+
   fastify.post('/admin/logout', async (req, reply) => {
     const sid = readCookie(req, SESSION_COOKIE);
     if (sid) deleteSession(db, sid);
@@ -234,6 +300,40 @@ function clearCookie(reply: FastifyReply, name: string, attrs: { secure: boolean
 
 function readCookie(req: FastifyRequest, name: string): string | undefined {
   return (req.cookies as Record<string, string | undefined> | undefined)?.[name];
+}
+
+function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
+  const tokenForm = opts.adminTokenAvailable
+    ? `<form method="post" action="/admin/auth/token-login" class="rkr-login-form">
+  <label>Admin token<input type="password" name="token" autocomplete="current-password" required/></label>
+  <button type="submit">Sign in with token</button>
+</form>`
+    : '<p class="rkr-login-hint">Token login disabled (ADMIN_TOKEN not set).</p>';
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sign in — rkroll admin</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 4rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+  .rkr-login-google { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #888; border-radius: 4px; text-decoration: none; color: inherit; }
+  .rkr-login-form { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem; }
+  .rkr-login-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
+  .rkr-login-form input { padding: 0.5rem; font: inherit; border: 1px solid #aaa; border-radius: 4px; }
+  .rkr-login-form button { padding: 0.5rem 1rem; font: inherit; cursor: pointer; }
+  .rkr-login-hint { color: #666; font-size: 0.9rem; margin-top: 2rem; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+</style>
+</head>
+<body>
+<h1>Sign in to admin</h1>
+<a class="rkr-login-google" href="/admin/auth/google/start">Sign in with Google</a>
+<hr/>
+${tokenForm}
+</body>
+</html>`;
 }
 
 /* c8 ignore start -- production-only wiring; tests inject a stub TokenExchange */

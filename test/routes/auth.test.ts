@@ -430,3 +430,162 @@ test('GET /admin/editor succeeds with a valid session cookie', async (t) => {
   // Sanity: session and user actually exist in the db.
   assert.ok(findUserByEmail(db, 'first@example.com'));
 });
+
+// ---- token-login (browser) ---------------------------------------------
+
+async function postTokenLogin(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  token: string
+): Promise<ReturnType<typeof app.inject> extends Promise<infer R> ? R : never> {
+  return app.inject({
+    method: 'POST',
+    url: '/admin/auth/token-login',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: `token=${encodeURIComponent(token)}`
+  });
+}
+
+test('GET /admin/login renders the form when ADMIN_TOKEN is set', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'secret-token-value';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+  const res = await app.inject({ method: 'GET', url: '/admin/login' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers['content-type'] as string, /text\/html/);
+  assert.match(res.body, /<form method="post" action="\/admin\/auth\/token-login"/);
+  assert.match(res.body, /Sign in with Google/);
+});
+
+test('GET /admin/login hides the form when ADMIN_TOKEN is unset', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  delete process.env.ADMIN_TOKEN;
+  t.after(() => {
+    if (orig !== undefined) process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+  const res = await app.inject({ method: 'GET', url: '/admin/login' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Token login disabled/);
+  assert.doesNotMatch(res.body, /<form/);
+});
+
+test('POST /admin/auth/token-login: correct token → session cookie + 302', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { db, app } = await setup(t, { idTokenPayload: {} });
+  const res = await postTokenLogin(app, 'right-token');
+  assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/admin/editor');
+
+  const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as string | string[]);
+  const sessionCookie = setCookie.find((c) => c.startsWith('rkr_session='));
+  assert.ok(sessionCookie, 'session cookie set');
+  const sid = (sessionCookie ?? '').split(';')[0]?.split('=')[1] ?? '';
+
+  // The synthetic admin user exists in the db.
+  const admin = findUserByEmail(db, 'admin@token.local');
+  assert.ok(admin, 'token-admin user created');
+  assert.equal(admin?.role, 'owner');
+  // The session row points at the synthetic admin.
+  const sess = db
+    .prepare<{ user_id: number }>('SELECT user_id FROM sessions WHERE id = ?')
+    .get(sid);
+  assert.equal(sess?.user_id, admin?.id);
+});
+
+test('POST /admin/auth/token-login: wrong token → 401, no session', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { db, app } = await setup(t, { idTokenPayload: {} });
+  const res = await postTokenLogin(app, 'wrong-token');
+  assert.equal(res.statusCode, 401);
+  assert.equal((res.json() as ErrorBody).error, 'invalid token');
+  // No session cookie set.
+  const setCookieRaw = res.headers['set-cookie'];
+  const setCookie = setCookieRaw ? ([] as string[]).concat(setCookieRaw) : [];
+  assert.ok(
+    !setCookie.some((c) => c.startsWith('rkr_session=')),
+    'no session cookie on failed login'
+  );
+  // No synthetic admin row created.
+  assert.equal(findUserByEmail(db, 'admin@token.local'), undefined);
+});
+
+test('POST /admin/auth/token-login: empty token → 400', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+  const res = await postTokenLogin(app, '');
+  assert.equal(res.statusCode, 400);
+  assert.equal((res.json() as ErrorBody).error, 'token required');
+});
+
+test('POST /admin/auth/token-login: ADMIN_TOKEN unset → 503', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  delete process.env.ADMIN_TOKEN;
+  t.after(() => {
+    if (orig !== undefined) process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+  const res = await postTokenLogin(app, 'anything');
+  assert.equal(res.statusCode, 503);
+  assert.equal((res.json() as ErrorBody).error, 'token login not configured');
+});
+
+test('POST /admin/auth/token-login: second login is idempotent (one synthetic admin row)', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { db, app } = await setup(t, { idTokenPayload: {} });
+  const r1 = await postTokenLogin(app, 'right-token');
+  const r2 = await postTokenLogin(app, 'right-token');
+  assert.equal(r1.statusCode, 302);
+  assert.equal(r2.statusCode, 302);
+  const count = (
+    db
+      .prepare<{ n: number }>('SELECT COUNT(*) AS n FROM users WHERE email = ?')
+      .get('admin@token.local') ?? { n: 0 }
+  ).n;
+  assert.equal(count, 1, 'one synthetic admin row across multiple logins');
+});
+
+test('token-login session lets user reach /admin/editor', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+  const login = await postTokenLogin(app, 'right-token');
+  const setCookie = ([] as string[]).concat(login.headers['set-cookie'] as string | string[]);
+  const sessionLine = setCookie.find((c) => c.startsWith('rkr_session=')) ?? '';
+  const sid = sessionLine.split(';')[0]?.split('=')[1] ?? '';
+
+  const editor = await app.inject({
+    method: 'GET',
+    url: '/admin/editor',
+    headers: { cookie: `rkr_session=${sid}` }
+  });
+  assert.equal(editor.statusCode, 200, `body=${editor.body}`);
+  assert.match(editor.body, /<div id="rkroll-admin-root"/);
+});

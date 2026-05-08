@@ -9,11 +9,10 @@
 // token is matched with timingSafeEqual to keep the comparison from
 // leaking length/prefix info under timing analysis.
 
-import { timingSafeEqual } from 'node:crypto';
-
 import cookiePlugin from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { SESSION_COOKIE_NAME } from '../routes/auth.ts';
+import { adminTokenMatchesEnv } from './admin-token.ts';
 import type { Db } from './db.ts';
 import { deleteSession, readSessionUser, touchSession } from './sessions.ts';
 import { touchLastSeen, type User } from './users.ts';
@@ -40,23 +39,6 @@ export function bearerTokenFromHeader(req: FastifyRequest): string | undefined {
   return m?.[1]?.trim();
 }
 
-function bearerMatchesEnv(provided: string): boolean {
-  const expected = process.env.ADMIN_TOKEN;
-  if (!expected) return false;
-  // timingSafeEqual requires equal-length buffers. Length-pad both sides
-  // to the same length so an attacker can't probe expected-length via
-  // an early-return; compare the result AND the lengths.
-  const a = Buffer.from(provided, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  if (a.length !== b.length) {
-    // Run a same-length compare against a constant so the timing of the
-    // mismatch path doesn't differ noticeably from the match path.
-    timingSafeEqual(b, b);
-    return false;
-  }
-  return timingSafeEqual(a, b);
-}
-
 export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Promise<void> {
   // Register the cookie plugin FIRST so its onRequest parser runs before
   // ours; otherwise req.cookies would be undefined here.
@@ -72,7 +54,7 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
     // typical case is a script that doesn't carry cookies anyway).
     const bearer = bearerTokenFromHeader(req);
     if (bearer !== undefined) {
-      if (bearerMatchesEnv(bearer)) {
+      if (adminTokenMatchesEnv(bearer)) {
         req.user = BEARER_USER;
       }
       // Either the bearer matched (user attached) or it didn't (user

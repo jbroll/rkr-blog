@@ -155,6 +155,35 @@ export function userCount(db: Db): number {
   return (db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM users').get() ?? { n: 0 }).n;
 }
 
+// ---- token-login admin (browser flow) ----------------------------------
+
+/** Synthetic email used for the browser token-login admin user. The
+ * bearer-header path attaches a non-DB synthetic user (id=0); the
+ * token-login path needs a real DB row so sessions.user_id FK holds. */
+const TOKEN_ADMIN_EMAIL = 'admin@token.local';
+
+/** Find or create the admin user used by the browser token-login flow.
+ * Idempotent — repeated logins return the existing row. Creates with
+ * role=owner; the token's mere knowledge implies operator authority,
+ * matching the bearer flow's privilege level. */
+export function findOrCreateTokenAdmin(db: Db): User {
+  const existing = findUserByEmail(db, TOKEN_ADMIN_EMAIL);
+  if (existing) {
+    touchLastSeen(db, existing.id);
+    return existing;
+  }
+  const now = new Date().toISOString();
+  const r = db
+    .prepare(
+      'INSERT INTO users (email, display_name, role, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .run(TOKEN_ADMIN_EMAIL, 'Admin (token login)', 'owner', now, now);
+  const created = findUserById(db, r.lastInsertRowid);
+  /* c8 ignore next -- defensive: row we just inserted must exist */
+  if (!created) throw new Error('users insert returned no row');
+  return created;
+}
+
 // ---- the entry point used by the auth callback -------------------------
 
 /**
