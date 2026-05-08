@@ -45,7 +45,7 @@ on:
       region:
         description: 'Fly region (must match primary_region in fly.toml)'
         required: true
-        default: 'ord'
+        default: 'ams'
   push:
     branches: [main]
     paths:
@@ -73,18 +73,21 @@ jobs:
           # the same defaults so a tag-push run gets the right values.
           NAME: ${{ inputs.volume_name || 'rkr_data' }}
           SIZE: ${{ inputs.size_gb || '1' }}
-          REGION: ${{ inputs.region || 'ord' }}
+          REGION: ${{ inputs.region || 'ams' }}
         run: |
           set -euo pipefail
           app=rkr-blog
           echo "Trigger: ${{ github.event_name }} ; ref: ${{ github.ref }}"
           echo "Volume='$NAME' Size='$SIZE'GB Region='$REGION' App='$app'"
 
-          # If a volume with this name already exists, exit 0 — re-running
-          # the workflow shouldn't double-allocate.
+          # Idempotency: only skip when a volume of this name already
+          # exists in the TARGET region. A same-named volume in another
+          # region is a region-mismatch problem we'd rather surface by
+          # creating the right one (the orphan can be deleted later).
           if flyctl volumes list --app "$app" --json \
-            | jq -e --arg n "$NAME" '.[] | select(.Name == $n)' >/dev/null; then
-            echo "Volume '$NAME' already exists on $app; nothing to do."
+            | jq -e --arg n "$NAME" --arg r "$REGION" \
+                '.[] | select(.Name == $n and .Region == $r)' >/dev/null; then
+            echo "Volume '$NAME' already exists in $REGION on $app; nothing to do."
             flyctl volumes list --app "$app"
             exit 0
           fi

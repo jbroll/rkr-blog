@@ -3,7 +3,11 @@
 # the developer side.
 
 app = "rkr-blog"
-primary_region = "ord"
+# Fly auto-placed the initial machine in ams (closer to the operator),
+# so we keep the app pinned there. Changing primary_region after a
+# machine exists doesn't move the machine — but it does decide where
+# new machines land + where Fly looks for the volume to mount.
+primary_region = "ams"
 
 [build]
   dockerfile = "Dockerfile"
