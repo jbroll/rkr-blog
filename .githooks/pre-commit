@@ -5,8 +5,8 @@
 # Runs:
 #   1. biome check on staged JS files (formatting + lint).
 #   2. tsc --noEmit type check.
-#   3. per-file 500-line size limit (warn on existing, fail on new/growing).
-#   4. full test suite (`npm test`).
+#   3. duplicate-type / no-reexports / knip / circular-import / size guards.
+#   4. test suite under c8 with strict coverage thresholds.
 #
 # Failures abort the commit. To bypass deliberately, use `git commit --no-verify`.
 
@@ -48,9 +48,9 @@ if compgen -G "src/**/*.ts" > /dev/null; then
     scripts/check-no-reexports.ts
 fi
 
-# Knip: gate on dead files / unused dependencies / unlisted dependencies.
-# Unused exports + unused exported types are not yet gated — they're a
-# real cleanup queue (DEFERRED.md). Run `npm run knip` for the full report.
+# Knip: full dead-code report — unused files / dependencies / exports
+# / exported types / unlisted deps. The codebase landed at zero
+# findings in 17cd1fa; new dead exports fail the commit.
 echo "==> knip:gate"
 npm run --silent knip:gate
 
@@ -111,7 +111,10 @@ if [ "$size_failures" -gt 0 ]; then
   exit 1
 fi
 
-echo "==> npm test"
-npm test --silent
+# Test suite under c8 — strict per-file thresholds (lines=90 / branches=75 /
+# functions=90, see package.json#test:coverage). Adds ~2-3s vs npm test
+# alone; trade-off accepted to keep coverage from silently regressing.
+echo "==> npm test:coverage"
+npm run --silent test:coverage > /dev/null
 
 echo "==> precommit OK"
