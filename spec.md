@@ -276,7 +276,7 @@ quick.
 |---|---|
 | `NxM` | uniform grid: N rows × M cols, every cell at the same `aspect`. Default: `1x1`. |
 | `justified` | Flickr-style: rows of varying-width images at uniform row height. `:HHH` overrides row height (default ~240px). |
-| `masonry` | Pinterest-style: fixed-row layout with varying image heights. `:N` overrides row count (default 3). |
+| `masonry` | Pinterest-style: columns of varying-height images at uniform column width. `:N` overrides column count (default 3). |
 
 `aspect` and `fit` apply only to `NxM`. In flow modes (`justified`,
 `masonry`) each image renders at its native aspect — that's the whole
