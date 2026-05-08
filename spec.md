@@ -243,9 +243,9 @@ for the transition strategy from the legacy directives.
 ### Syntax
 
 ```
-::figure{ids="<id>[,<id>…]" [matrix=NxM] [justify=J] [width=…]
-         [aspect=W:H] [fit=cover|contain] [alts="…,…"]
-         [captions="…|…"] [caption="…"] [timer=N]}
+::figure{ids="<id>[,<id>…]" [matrix=NxM|justified[:H]|masonry[:N]]
+         [justify=J] [width=…] [aspect=W:H] [fit=cover|contain]
+         [alts="…,…"] [captions="…|…"] [caption="…"] [timer=N]}
 ```
 
 `ids` is the only required attribute; all others have defaults.
@@ -255,15 +255,32 @@ for the transition strategy from the legacy directives.
 | attribute | required | default | purpose |
 |---|---|---|---|
 | `ids` | **yes** | — | comma-separated sha256 hex (6+ char prefix or full 64) |
-| `matrix` | no | `1x1` | display grid as `rows`x`cols` (e.g. `2x3` = 2 rows, 3 cols) |
+| `matrix` | no | `1x1` | display layout; see Matrix table |
 | `justify` | no | `center` | block placement; see Justify table |
 | `width` | no | (justify default) | block width with explicit unit: `400px` or `60%` |
-| `aspect` | no | (image-derived) | per-cell display aspect ratio, e.g. `16:9` |
+| `aspect` | no | (first image's native aspect) | per-cell display aspect ratio, e.g. `16:9` |
 | `fit` | no | `cover` | how the image fills its cell: `cover` (fill, crop edges) or `contain` (letterbox) |
 | `alts` | no | — | comma-separated alt text, parallel to `ids` |
 | `captions` | no | — | pipe-separated per-image captions (pipe avoids comma collisions in alts) |
 | `caption` | no | — | one caption for the whole `<figure>` |
 | `timer` | no | — | autoplay seconds when carousel mode kicks in (cap 60) |
+
+Attributes that don't apply to the chosen `matrix` mode (e.g. `aspect`
++ `fit` under `justified` / `masonry`; `width` under `full` / `bleed`)
+are silently ignored — the directive is forgiving so authoring stays
+quick.
+
+### Matrix
+
+| value | meaning |
+|---|---|
+| `NxM` | uniform grid: N rows × M cols, every cell at the same `aspect`. Default: `1x1`. |
+| `justified` | Flickr-style: rows of varying-width images at uniform row height. `:HHH` overrides row height (default ~240px). |
+| `masonry` | Pinterest-style: fixed-row layout with varying image heights. `:N` overrides row count (default 3). |
+
+`aspect` and `fit` apply only to `NxM`. In flow modes (`justified`,
+`masonry`) each image renders at its native aspect — that's the whole
+point of the flow.
 
 ### Justify
 
@@ -272,52 +289,62 @@ for the transition strategy from the legacy directives.
 | `center` | block centered in the prose column; `width` defaults to 100% of column |
 | `left` | float left; prose wraps right; `width` defaults to 40% on desktop, 100% on mobile |
 | `right` | mirror of `left` |
-| `full` | spans the wider content-column width (breaks out of prose column) |
-| `bleed` | spans the full viewport width (breaks out of content column too) |
-
-`width` has effect only when `justify` is `left`, `right`, or `center`.
-On `full` / `bleed` the width is determined by the surrounding layout
-and any `width` value is silently ignored.
+| `full` | spans the wider content-column width (breaks out of prose column); ignores `width` |
+| `bleed` | spans the full viewport width (breaks out of content column too); ignores `width` |
+| `inline` | image flows inline with surrounding text at ~1.5em; `matrix`, `aspect`, `fit`, `width`, `caption` all ignored. Use only with a single `id` (extra ids are ignored). |
 
 ### Sizing semantics
 
 The image's native aspect ratio is always preserved. `aspect` controls
-the *cell* aspect ratio: the renderer reserves a box at `aspect` per
-matrix cell and fits the image inside per `fit`.
+the *cell* aspect ratio in `NxM` mode: the renderer reserves a box at
+`aspect` per matrix cell and fits the image inside per `fit`.
 
 - `fit=cover`: image fills the cell; if aspects differ, edges are
   cropped (typical photo-blog behavior).
 - `fit=contain`: image fits inside the cell; if aspects differ, the
   cell shows letterbox bars (technical / art images).
 
-When `aspect` is omitted, the cell aspect defaults to the median of
-the supplied images' native aspects (which collapses to "the image's
-own aspect" for a 1×1 figure with one image).
+When `aspect` is omitted, the cell aspect defaults to the first
+image's native aspect (read from its sidecar at render time).
 
-The whole figure's display aspect is `aspect × matrix.cols : matrix.rows`
-(used to reserve layout space and avoid CLS as images load).
+The whole figure's display aspect is `aspect × cols : rows` — used to
+reserve layout space and avoid CLS as images load.
 
 ### Carousel mode (overflow)
 
-If `len(ids) > matrix.rows * matrix.cols`, the figure becomes a
-carousel: the matrix is one slide; the remaining ids form additional
-slides displayed in source order. `timer=N` autoplays at N seconds
-per slide (cap 60). When omitted, the carousel is manual-advance only
-(prev/next, swipe, keyboard). Same accessibility constraints as
-today's `::carousel`: pauses on hover/focus/page-hidden,
-reduced-motion respected, accessible play/pause when `timer` is set.
+When `len(ids) > matrix.rows * matrix.cols` in `NxM` mode, the figure
+becomes a horizontal-scrolling carousel: **rows stay fixed**, columns
+expand to hold every image. The visible window is `matrix.cols` wide;
+scroll/swipe/click advances by that many columns.
+
+For example, `matrix=2x3` with 8 ids renders 2 rows × 4 cols (the
+last column is half-full); the viewport shows 3 cols at a time. Same
+attributes accepted in the visible-grid case (`aspect`, `fit`, etc.)
+apply per cell.
+
+`timer=N` autoplays the scroll at N seconds per page (cap 60). When
+omitted, advance is manual only (prev/next, swipe, keyboard). Same
+accessibility constraints as today's `::carousel`: pauses on
+hover/focus/page-hidden, reduced-motion respected, accessible
+play/pause when `timer` is set.
+
+`justified` / `masonry` modes don't carousel — they grow vertically
+to fit every image.
 
 ### Edge cases
 
-- `matrix` omitted with N images → equivalent to `matrix=1xN` for N≤3,
-  `matrix=ceil(sqrt(N))xceil(sqrt(N))` for larger; carousel kicks in
-  at N>9. (Smart default; author can always override.)
-- `matrix=2x3` with only 2 ids → matrix auto-shrinks to
-  `min(matrix, ceil(images / cols))` rows so we don't render empty
-  cells.
-- `matrix=1x1` with N>1 ids → carousel with one cell visible at a time.
+- `matrix` omitted with N images → default `1x1`. With `N>1` ids, the
+  excess overflows into carousel mode (so a single id list with no
+  matrix attribute renders sensibly even without a matrix override).
+- Over-allocated matrix (`matrix=2x3` with only 2 ids) → render the
+  excess cells empty; the author asked for that layout. No
+  auto-shrink — keeps the rendered result predictable.
+- `matrix=1x1` with N>1 ids → carousel with one cell visible at a
+  time; rows stay fixed at 1 → the carousel is a horizontal strip.
 - `ids` empty or all unresolvable → the figure is replaced by an HTML
   comment so authoring errors are visible without breaking the page.
+- Inline mode with multiple ids → second-and-later ids ignored; only
+  the first renders inline.
 
 ### Render output
 
