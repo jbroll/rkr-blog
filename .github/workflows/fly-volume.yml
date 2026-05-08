@@ -8,13 +8,11 @@
 #   - Without terminal access we can't run `fly volumes create` locally.
 #
 # Two ways to trigger this:
-#   (a) Mobile-friendly: push a tag matching `fly-volume-create-*` (any
-#       suffix). Defaults to volume name `rkr_data`, 1 GB, region `ord`.
-#       Example: `git tag fly-volume-create-1 && git push origin
-#       fly-volume-create-1`. The workflow runs once on the tag's
-#       commit, no UI clicks required.
+#   (a) Mobile-friendly: push a commit to main that touches either this
+#       workflow file or .github/triggers/fly-volume. The workflow runs
+#       once on that commit, no UI clicks required.
 #   (b) Desktop-friendly: GitHub Actions tab → workflow_dispatch with
-#       customizable inputs.
+#       customizable inputs (defaults to the right values).
 #
 # Setup once before either trigger:
 #   1. Fly dashboard → Tokens → "Create deploy token" (deploy tokens
@@ -27,7 +25,9 @@
 # dashboard) and it'll mount /site cleanly.
 #
 # Idempotent: re-running this workflow when the volume already exists
-# logs a message and exits 0. Safe to re-run.
+# logs a message and exits 0. Safe to re-run; safe that routine main
+# pushes don't trigger it (path filter excludes everything outside
+# this workflow + the trigger file).
 
 name: Create Fly volume (one-shot)
 
@@ -47,10 +47,14 @@ on:
         required: true
         default: 'ord'
   push:
-    tags:
-      # Any tag that starts with this prefix triggers the workflow.
-      # Suffix lets you push multiple times without re-using a tag.
-      - 'fly-volume-create-*'
+    branches: [main]
+    paths:
+      # Editing this workflow re-runs it (so the first deploy of the
+      # workflow itself triggers a run — no second commit needed).
+      - '.github/workflows/fly-volume.yml'
+      # An out-of-band trigger file. Touch it (any change) to force
+      # a new run without modifying the workflow.
+      - '.github/triggers/fly-volume'
 
 jobs:
   create-volume:
