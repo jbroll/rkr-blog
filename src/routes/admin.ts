@@ -19,20 +19,10 @@ import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
-import { cacheKey } from '../lib/hash.ts';
-import { FORMAT_TO_EXT } from '../lib/image-constants.ts';
-import { ingestStream, originalPath } from '../lib/originals.ts';
-import { listSidecarIds } from '../lib/posts.ts';
-import type { OutputFormat } from '../lib/render.ts';
-import { read as sidecarRead } from '../lib/sidecar.ts';
+import { ingestStream } from '../lib/originals.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
-// Import the fallback as a named, non-optional export so the runtime
-// guard (and its c8 ignore) goes away. Widget.fallback is `?:` on the
-// interface to allow future widgets that don't render images; for the
-// only image-fallback consumer we know about today, we can pin the
-// type to FallbackSpec directly.
-import { fallback as imageFallback } from '../widgets/figure.ts';
+import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 
@@ -92,132 +82,10 @@ export default async function adminRoutes(
       .send(renderAdminPage({ bundleUrl: '/static/admin/main.js' }));
   });
 
-  // Editor preview: redirect to the derivative URL the public renderer
-  // would serve for this image's <img> fallback. The editor uses this
-  // as the `src` for image nodes in TipTap so it doesn't have to
-  // reproduce the cache-key calculation client-side.
-  // Short-prefix lookup needs the sidecar listing. listSidecarIds() is
-  // a synchronous fs.readdirSync; an editor session that re-renders a
-  // post with N image directives would otherwise scan once per image.
-  // Cache for SIDECAR_LIST_TTL_MS so a burst stays cheap. Full-id
-  // requests skip the listing entirely.
-  let cachedIds: string[] | null = null;
-  let cachedAt = 0;
-  function getKnownIdsCached(): string[] {
-    const now = Date.now();
-    if (cachedIds && now - cachedAt < SIDECAR_LIST_TTL_MS) return cachedIds;
-    cachedIds = listSidecarIds(siteRoot);
-    cachedAt = now;
-    return cachedIds;
-  }
-  /** Drop the cached id list. Call after any path that creates a new
-   * sidecar (upload, url import, gdrive/onedrive import) so the next
-   * /admin/preview/<short-prefix> sees the new id immediately. */
-  function invalidateSidecarListCache(): void {
-    cachedIds = null;
-    cachedAt = 0;
-  }
-
-  fastify.get<{ Params: { id: string } }>(
-    '/admin/preview/:id',
-    { ...guard },
-    async (req, reply) => {
-      const { id } = req.params;
-      if (!/^[0-9a-f]{6,64}$/.test(id)) {
-        return reply.code(400).send({ error: 'invalid id' });
-      }
-      let fullId = id;
-      if (id.length !== 64) {
-        const known = getKnownIdsCached();
-        const matches = known.filter((k) => k.startsWith(id));
-        if (matches.length !== 1) {
-          return reply.code(404).send({ error: 'unknown or ambiguous id' });
-        }
-        fullId = matches[0] as string;
-      }
-      const sidecar = await sidecarRead(siteRoot, fullId);
-      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
-
-      const ophash = cacheKey({
-        originalId: fullId,
-        ops: sidecar.ops as Parameters<typeof cacheKey>[0]['ops'],
-        variant: { w: imageFallback.w },
-        output: {
-          format: imageFallback.format as OutputFormat,
-          quality: imageFallback.quality
-        }
-      });
-      return reply.redirect(`/img/${fullId}.${ophash}.${imageFallback.format}`, 302);
-    }
-  );
-
-  // Stream the master original bytes. The editor's client-side canvas
-  // pipeline downloads this once per editing session and re-applies ops
-  // locally so live preview is round-trip-free. Browsers can't decode
-  // every format Sharp can ingest (notably HEIC on most browsers); the
-  // client falls back to /admin/preview/:id when decoding fails.
-  fastify.get<{ Params: { id: string } }>(
-    '/admin/original/:id',
-    { ...guard },
-    async (req, reply) => {
-      const { id } = req.params;
-      if (!/^[0-9a-f]{64}$/.test(id)) {
-        return reply.code(400).send({ error: 'invalid id' });
-      }
-      const sidecar = await sidecarRead(siteRoot, id);
-      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
-
-      const fmt = sidecar.metadata.format;
-      const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
-      if (!fmt || !ext) {
-        return reply.code(500).send({ error: 'sidecar has no recognized format' });
-      }
-
-      const filePath = originalPath(siteRoot, id, ext);
-      let stat: fs.Stats;
-      try {
-        stat = await fs.promises.stat(filePath);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-          return reply.code(404).send({ error: 'original missing' });
-        }
-        throw err;
-      }
-
-      // Originals are immutable (content-addressable by sha256). The 1y
-      // cache + immutable directive lets the browser keep the bytes
-      // across edits in the same session without revalidating.
-      reply
-        .header('Content-Type', formatContentType(fmt))
-        .header('Content-Length', String(stat.size))
-        .header('Cache-Control', 'private, max-age=31536000, immutable');
-      return reply.send(fs.createReadStream(filePath));
-    }
-  );
-
-  // Sidecar inspection: returns metadata + ops + redoStack so the
-  // editor can populate its undo/redo UI on each session-start. The
-  // redo stack is persisted on the sidecar (cheap JSON) so the
-  // user's undo history survives reload and cross-session.
-  fastify.get<{ Params: { id: string } }>(
-    '/admin/sidecar/:id/meta',
-    { ...guard },
-    async (req, reply) => {
-      const { id } = req.params;
-      if (!/^[0-9a-f]{64}$/.test(id)) {
-        return reply.code(400).send({ error: 'invalid id' });
-      }
-      const sidecar = await sidecarRead(siteRoot, id);
-      if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
-      return {
-        width: sidecar.metadata.width ?? null,
-        height: sidecar.metadata.height ?? null,
-        format: sidecar.metadata.format ?? null,
-        ops: sidecar.ops,
-        redoStack: sidecar.redoStack ?? []
-      };
-    }
-  );
+  const { invalidate: invalidateSidecarListCache } = registerImageLookupRoutes(fastify, {
+    siteRoot,
+    guard
+  });
 
   registerSidecarEditRoutes(fastify, { siteRoot, guard });
 
@@ -456,41 +324,6 @@ async function wipeRuntimeData(siteRoot: string): Promise<ResetCounts> {
 /** Cap slug length so a 50KB attacker slug can't be written to disk and
  * indexed. The kebab-case regex permits a-z/0-9/-; this just bounds it. */
 const MAX_SLUG_LENGTH = 100;
-
-/** Cache lifetime for the sidecar listing inside /admin/preview/:id.
- * Short enough that a freshly-uploaded image becomes findable by short
- * prefix within a few seconds; long enough that a post with many
- * images doesn't scan the directory once per request. */
-const SIDECAR_LIST_TTL_MS = 5_000;
-
-/** Map a Sharp/libvips format name to an HTTP Content-Type for serving
- * the original file. Limited to formats the ingest accepts. The rarely-
- * served formats (webp/avif/gif/tiff/heif/default) have trivial 1:1
- * mappings; coverage-marking them avoids dragging fixture images of
- * every format into the unit suite. */
-function formatContentType(fmt: string): string {
-  switch (fmt) {
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    /* c8 ignore start -- trivial 1:1 mapping; tested via integration
-       once a fixture exists for each format */
-    case 'webp':
-      return 'image/webp';
-    case 'avif':
-      return 'image/avif';
-    case 'gif':
-      return 'image/gif';
-    case 'tiff':
-      return 'image/tiff';
-    case 'heif':
-      return 'image/heif';
-    default:
-      return 'application/octet-stream';
-    /* c8 ignore stop */
-  }
-}
 
 /**
  * CSP for /admin/editor. TipTap is bundled by esbuild so the editor
