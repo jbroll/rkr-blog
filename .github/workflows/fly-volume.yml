@@ -1,0 +1,80 @@
+# One-shot administrative workflow: create the persistent Fly volume
+# `rkr_data` that fly.toml's [[mounts]] block needs at deploy time.
+#
+# Why this exists:
+#   - Fly's GitHub App handles deploys, but doesn't create volumes.
+#   - `[[mounts]] initial_size = "..."` only auto-creates on scale-out
+#     (a second machine getting a new volume), not on the first deploy.
+#   - Without terminal access we can't run `fly volumes create` locally.
+#
+# Setup once (in browser):
+#   1. Fly dashboard → Tokens → "Create deploy token"
+#      (deploy tokens have volume:write scope on the app they're issued for)
+#      Name it whatever, copy the token.
+#   2. GitHub repo → Settings → Secrets and variables → Actions →
+#      New repository secret. Name = FLY_API_TOKEN, value = paste.
+#   3. GitHub Actions tab → "Create Fly volume (one-shot)" → Run workflow.
+#
+# After the workflow exits successfully, the volume exists. Re-trigger
+# the Fly GitHub App deploy (push any commit, or "Redeploy" from the
+# dashboard) and it'll mount /site cleanly.
+#
+# Idempotent: re-running this workflow when the volume already exists
+# logs a message and exits 0. Safe to re-run.
+
+name: Create Fly volume (one-shot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      volume_name:
+        description: 'Volume name (must match fly.toml [[mounts]].source)'
+        required: true
+        default: 'rkr_data'
+      size_gb:
+        description: 'Volume size in GB'
+        required: true
+        default: '1'
+      region:
+        description: 'Fly region (must match primary_region in fly.toml)'
+        required: true
+        default: 'ord'
+
+jobs:
+  create-volume:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Create volume (idempotent)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          name='${{ inputs.volume_name }}'
+          size='${{ inputs.size_gb }}'
+          region='${{ inputs.region }}'
+          app=rkr-blog
+
+          # If a volume with this name already exists, exit 0 — re-running
+          # the workflow shouldn't double-allocate.
+          if flyctl volumes list --app "$app" --json \
+            | jq -e --arg n "$name" '.[] | select(.Name == $n)' >/dev/null; then
+            echo "Volume '$name' already exists on $app; nothing to do."
+            flyctl volumes list --app "$app"
+            exit 0
+          fi
+
+          echo "Creating volume '$name' ${size}GB in $region for $app..."
+          flyctl volumes create "$name" \
+            --app "$app" \
+            --size "$size" \
+            --region "$region" \
+            --yes
+
+          echo "Done. Current volumes:"
+          flyctl volumes list --app "$app"
