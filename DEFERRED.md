@@ -211,3 +211,139 @@ remarkDirective + renderer + editor refactor.
 
 **Trigger.** Authoring an alt that contains a comma, or wanting
 per-image captions inside a multi-image directive.
+
+## User-requested follow-ups (2026-05-08)
+
+### EXIF rotation not honored on import
+
+**Source.** User report, 2026-05-08.
+
+**What.** Photos with EXIF orientation tags (e.g. iPhone portraits
+saved as landscape with `Orientation=6`) come out sideways through
+the image pipeline. `sharp` has `.rotate()` which auto-applies the
+orientation tag, but it's only effective when called *before* any
+resize — and it must be called explicitly. Need to audit
+`src/widgets/figure.ts`, `src/lib/render.ts`, and the upload path
+in `src/routes/admin.ts` to confirm we invoke `.rotate()` first in
+every sharp pipeline, then strip orientation from the metadata so
+the rendered output is upright with no EXIF rotation re-applied
+client-side. Add a regression test using a fixture image with
+`Orientation=6`.
+
+**Why deferred.** Captured here so it isn't lost; the fix is a
+small audit + one-line change per pipeline + a test fixture, but
+it cuts across multiple files and benefits from being a focused
+commit rather than slipped into unrelated work.
+
+**Trigger.** Next image-pipeline change, or first time the author
+uploads a photo that comes out rotated.
+
+### Retry-with-backoff on image load failure
+
+**Source.** User request, 2026-05-08.
+
+**What.** When the browser's `<img>` element fires `error` (network
+hiccup, CDN miss, sidecar still rendering on the server), the
+image just stays broken. We should attach an `onerror` retry on
+the public site (lightbox, carousel, in-page figures) with
+exponential backoff — say 3 retries at 500ms / 2s / 8s with a
+small jitter, and a final visible "couldn't load" placeholder.
+Likely lives in `src/site/lightbox.ts` and `src/site/carousel.ts`,
+plus a small shared helper for in-page imgs.
+
+**Why deferred.** Not blocking — failure rate is low on a healthy
+deploy. But it'll matter the first time someone hits a render
+job that's still in flight.
+
+**Trigger.** First user-visible image-load failure report, or
+when adding any caching CDN that adds variability.
+
+### Refactor all source files to under 500 lines
+
+**Source.** User request, 2026-05-08; companion to the size-hook
+entries above.
+
+**What.** Eight files currently exceed the 500-line ceiling
+enforced by `.githooks/pre-commit`:
+
+| File | Lines | Suggested split |
+|---|---|---|
+| `src/admin/main.ts` | 1900 | see "src/admin/main.ts is too large" entry |
+| `test/routes/admin-editor.test.ts` | 1189 | by feature: editor save / image upload / autosave / role gate |
+| `src/routes/admin.ts` | 1026 | extract `admin/upload.ts`, `admin/posts.ts`, `admin/reset.ts` route modules |
+| `test/lib/prose-markdown.test.ts` | 661 | by direction: emit / parse / round-trip |
+| `src/lib/wp-import.ts` | 580 | extract `wp-import/parse.ts`, `wp-import/push.ts`, `wp-import/media.ts` |
+| `test/routes/integrations-gdrive.test.ts` | 548 | by phase: connect / callback / pick / import |
+| `test/routes/integrations-onedrive.test.ts` | 516 | mirror gdrive split |
+| `src/widgets/figure.ts` | 512 | extract `figure/layout.ts` (matrix/justified/masonry) |
+
+Each split should preserve test coverage and be its own commit so
+review is tractable.
+
+**Why deferred.** Mechanical but extensive; benefits from
+in-browser smoke testing for the editor pieces and from being
+sequenced (smaller files first, build confidence).
+
+**Trigger.** Tackle in a dedicated refactor sprint, or piecemeal
+whenever a feature touches one of these files.
+
+### Admin token login button (cookie session via shared secret)
+
+**Source.** User request, 2026-05-08.
+
+**What.** Today the admin token (`ADMIN_TOKEN` env, presented as
+`Authorization: Bearer …`) is usable only via headers — fine for
+CLI / curl but awkward in a browser. Add a small login form on
+the admin page (or `/admin/login`) with a "token" input that POSTs
+to a new `/admin/login-with-token` endpoint, which:
+
+1. Constant-time-compares the submitted token against
+   `ADMIN_TOKEN`.
+2. On match, mints a normal session cookie tied to the same
+   synthetic admin user (`id=0`) the bearer path uses.
+3. Redirects to the admin dashboard.
+
+Rate-limit aggressively (the existing `@fastify/rate-limit` covers
+this) and log every attempt.
+
+**Why deferred.** The bearer path exists and works for the
+current author flow (CLI + browser dev tools). Adding the UI
+requires a route, a template change, and a test — small but
+cleanest as its own commit. Also has security implications worth
+attention (lockout policy, log retention) that warrant a focused
+review.
+
+**Trigger.** When the author wants to log in from a phone or a
+machine where setting an Authorization header is awkward.
+
+### Playwright UI testing
+
+**Source.** User request, 2026-05-08.
+
+**What.** The editor's UI binding code in `src/admin/main.ts`
+(toolbar, attribute panel, cropper, integrations) has no
+automated test coverage today — it's verifiable only by hand.
+Add Playwright with a small headless suite covering the golden
+paths:
+
+- Open a post, type, save → reload → content matches
+- Insert each figure shape (image / gallery / carousel / diptych /
+  triptych), edit attributes, save → markdown matches expected
+  directive
+- Crop a single-image figure, save → sidecar ops persist
+- OAuth callback (Google) lands on admin dashboard
+- Login button (once the admin-token entry above ships)
+
+Wire it to run in CI behind `npm run test:e2e` so the unit suite
+stays fast (`npm test` ≈ a few seconds) and the e2e suite runs on
+push / PR.
+
+**Why deferred.** Real new infrastructure: Playwright dependency,
+test database / fixture setup, CI runner, headless browser
+install. Worth doing as a focused commit so the setup is readable
+later. Strongly complementary to the `main.ts` refactor — UI tests
+make the split safer.
+
+**Trigger.** Land before or alongside the `main.ts` split so the
+refactor has a regression net. Or first time a UI bug ships
+because there was no automated check.
