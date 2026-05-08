@@ -36,7 +36,7 @@
     "rules": {
       "recommended": true,
       "style": {
-        "useImportType": "off",
+        "useImportType": "error",
         "noParameterAssign": "off",
         "useTemplate": "warn",
         "noUselessElse": "warn",
@@ -45,7 +45,7 @@
       },
       "suspicious": {
         "noExplicitAny": "off",
-        "noConsole": "off"
+        "noConsole": "error"
       },
       "correctness": {
         "noUnusedVariables": "warn",
@@ -72,6 +72,25 @@
         "rules": {
           "style": {
             "noNonNullAssertion": "off"
+          },
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "bin/**",
+        "scripts/**/*.ts",
+        "src/cli/**/*.ts",
+        "src/lib/wp-push.ts",
+        "src/admin/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           }
         }
       }

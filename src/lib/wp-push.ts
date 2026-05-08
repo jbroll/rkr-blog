@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Readable } from 'node:stream';
+import type { Readable } from 'node:stream';
 
 import { FORMAT_TO_EXT, originalPath } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';

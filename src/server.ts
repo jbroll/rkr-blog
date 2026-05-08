@@ -224,6 +224,6 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
   const host = opts.host ?? cfg.host;
 
   await app.listen({ port, host });
-  console.log(`rkroll-cms listening on http://${host}:${port}`);
+  app.log.info({ host, port }, 'rkroll-cms listening');
   return app;
 }

@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { type AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
