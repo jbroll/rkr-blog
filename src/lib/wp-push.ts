@@ -175,18 +175,23 @@ interface SplitMarkdown {
  * full YAML parse isn't necessary. */
 function splitFrontmatter(raw: string): SplitMarkdown {
   const m = /^---\n([\s\S]*?)\n---\n+([\s\S]*)$/.exec(raw);
+  /* c8 ignore next -- importPost always emits frontmatter; defensive */
   if (!m) return { frontmatter: {}, body: raw };
   const fm: Record<string, string> = {};
+  /* c8 ignore next -- regex capture group always populated when m matches */
   const fmText = m[1] ?? '';
   for (const line of fmText.split('\n')) {
     const kv = /^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(line);
     if (!kv) continue;
+    /* c8 ignore next -- regex capture always populated when kv matches */
     let value = (kv[2] ?? '').trim();
     if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
       value = value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
     }
+    /* c8 ignore next -- kv[1] always populated when kv matches */
     if (kv[1]) fm[kv[1]] = value;
   }
+  /* c8 ignore next -- regex capture always populated when m matches */
   return { frontmatter: fm, body: m[2] ?? '' };
 }
 

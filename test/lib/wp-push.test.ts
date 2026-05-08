@@ -68,6 +68,15 @@ async function startWpFixture(
     // Real WP returns an array on /wp-json/wp/v2/posts?slug=foo; the
     // fixture matches that form (which is what wp-push.fetchWpPost uses
     // for non-numeric slugs).
+    if (url.pathname === `/wp-json/wp/v2/posts/${post.id}`) {
+      const rewritten = {
+        ...post,
+        content: { rendered: post.content.rendered.replaceAll('{{HOST}}', host) }
+      };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(rewritten));
+      return;
+    }
     if (url.pathname === '/wp-json/wp/v2/posts' && url.searchParams.get('slug') === post.slug) {
       const rewritten = {
         ...post,
@@ -273,4 +282,119 @@ test('pushPost: trailing slash on target URL is normalised', async (t) => {
     token: 'tok'
   });
   assert.equal(result.slug, 'slash-norm');
+});
+
+test('pushPost: numeric WP id resolves via /wp-json/wp/v2/posts/<id>', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const wpBaseUrl = await startWpFixture(
+    t,
+    {
+      ...TWO_UP,
+      id: 42,
+      slug: 'numeric-id',
+      content: { rendered: '<p>x</p>' }
+    },
+    new Map()
+  );
+  // Pass the numeric id; pushPost takes the /posts/<id> branch in
+  // fetchWpPost (slug-string branch is exercised by the other tests).
+  const result = await pushPost({
+    wpBaseUrl,
+    slug: 42,
+    toUrl: target.baseUrl,
+    token: 'tok'
+  });
+  assert.equal(result.slug, 'numeric-id');
+});
+
+test('pushPost: WP returns 500 for /posts/<id> → error includes URL', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const wpServer = http.createServer((_req, res) => {
+    res.writeHead(503, { 'content-type': 'text/plain' });
+    res.end('upstream down');
+  });
+  await new Promise<void>((r) => wpServer.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => wpServer.close(() => r())));
+  const wpUrl = `http://127.0.0.1:${(wpServer.address() as AddressInfo).port}`;
+
+  await assert.rejects(
+    () => pushPost({ wpBaseUrl: wpUrl, slug: 7, toUrl: target.baseUrl, token: 'tok' }),
+    /WP fetch: 503/
+  );
+});
+
+test('pushPost: WP returns 500 on /posts?slug=… → error includes URL', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const wpServer = http.createServer((_req, res) => {
+    res.writeHead(502, { 'content-type': 'text/plain' });
+    res.end('bad gateway');
+  });
+  await new Promise<void>((r) => wpServer.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => wpServer.close(() => r())));
+  const wpUrl = `http://127.0.0.1:${(wpServer.address() as AddressInfo).port}`;
+
+  await assert.rejects(
+    () => pushPost({ wpBaseUrl: wpUrl, slug: 'no-such', toUrl: target.baseUrl, token: 'tok' }),
+    /WP fetch: 502/
+  );
+});
+
+test('pushPost: WP returns empty array for slug → throws "no post"', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const wpServer = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('[]');
+  });
+  await new Promise<void>((r) => wpServer.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => wpServer.close(() => r())));
+  const wpUrl = `http://127.0.0.1:${(wpServer.address() as AddressInfo).port}`;
+
+  await assert.rejects(
+    () => pushPost({ wpBaseUrl: wpUrl, slug: 'missing', toUrl: target.baseUrl, token: 'tok' }),
+    /no post with slug "missing"/
+  );
+});
+
+test('pushPost: per-image upload failure increments imagesFailed and continues', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const wpBaseUrl = await startWpFixture(
+    t,
+    {
+      ...TWO_UP,
+      slug: 'partial-upload-fail',
+      content: { rendered: TWO_UP.content.rendered.replaceAll('{{HOST}}', '{{HOST}}') }
+    },
+    new Map([
+      ['/img1.jpg', await makeJpeg(11)],
+      ['/img2.jpg', await makeJpeg(12)]
+    ])
+  );
+
+  // Wrap fetch so the FIRST /admin/upload call returns 500, subsequent
+  // /admin/upload calls succeed, /admin/posts succeeds normally. Hits
+  // both the catch block (counted failure, warned to console) and the
+  // uploadOriginal !res.ok branch.
+  let uploadCalls = 0;
+  const flakyFetcher: typeof fetch = async (...args) => {
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] as URL).toString();
+    if (url.endsWith('/admin/upload')) {
+      uploadCalls++;
+      if (uploadCalls === 1) {
+        return new Response('upstream wedged', { status: 500 });
+      }
+    }
+    return fetch(args[0] as Parameters<typeof fetch>[0], args[1]);
+  };
+
+  const result = await pushPost({
+    wpBaseUrl,
+    slug: 'partial-upload-fail',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    fetcher: flakyFetcher,
+    fetchImage: plainFetchImage
+  });
+  assert.equal(result.imagesFailed, 1, 'one image upload was rejected');
+  assert.equal(result.imagesUploaded, 1, 'second image still landed');
+  assert.equal(result.slug, 'partial-upload-fail');
 });

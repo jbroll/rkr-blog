@@ -4,14 +4,15 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
-
 import { parsePost } from '../../src/lib/content.ts';
-import { importPost, type WpPost } from '../../src/lib/wp-import.ts';
+import { fetchPost, importPost, listPosts, type WpPost } from '../../src/lib/wp-import.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-wp-import-'));
@@ -231,6 +232,191 @@ test('importPost: image fetch failures are reported, post still imports', async 
   // Markdown still emitted; the failed figure becomes a placeholder
   // comment so the operator sees the gap.
   assert.match(result.markdown, /import: figure had no resolvable images/);
+});
+
+// ---- inline HTML rendering paths --------------------------------------
+
+test('importPost: renders <pre>, <div>, <section>, stray <figure>, unknown block', async (t) => {
+  const root = freshSiteRoot(t);
+  const html = `
+<pre><code>fenced code</code></pre>
+<div><p>div-wrapped paragraph</p></div>
+<section><p>section-wrapped paragraph</p></section>
+<figure class="text-only-figure">just a caption, no image</figure>
+<aside>aside text</aside>
+`;
+  const result = await importPost(makePost(html, 'block-html'), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  // Fenced code block.
+  assert.match(result.markdown, /```\nfenced code\n```/);
+  // Generic wrappers recurse so inner paragraphs survive.
+  assert.match(result.markdown, /div-wrapped paragraph/);
+  assert.match(result.markdown, /section-wrapped paragraph/);
+  // Stray figure (no wp-block-image class chain) → comment placeholder.
+  assert.match(result.markdown, /<!-- import: dropped non-WP figure -->/);
+  // Unknown block tag (<aside>) → falls through to inline rendering.
+  assert.match(result.markdown, /aside text/);
+});
+
+test('importPost: renders <ol>/<ul>, <code>, <br>, <span> in body markdown', async (t) => {
+  const root = freshSiteRoot(t);
+  const html = `
+<p>Para with <code>inline()</code> and a <br/>break and <span>span text</span> and <foo>unknown tag</foo>.</p>
+<ol><li>first</li><li>second</li></ol>
+<ul><li>alpha</li><li>bravo</li></ul>
+`;
+  const result = await importPost(makePost(html, 'inline-html'), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  // Backtick code, hard-break (two spaces + newline), span unwraps to text,
+  // unknown tag's text content survives.
+  assert.match(result.markdown, /`inline\(\)`/);
+  assert.match(result.markdown, / {2}\n/); // <br> emits trailing two-space + newline
+  assert.match(result.markdown, /span text/);
+  assert.match(result.markdown, /unknown tag/);
+  // Ordered list: numbered prefix; unordered list: dash prefix.
+  assert.match(result.markdown, /1\. first/);
+  assert.match(result.markdown, /2\. second/);
+  assert.match(result.markdown, /- alpha/);
+  assert.match(result.markdown, /- bravo/);
+});
+
+// ---- listPosts / fetchPost via injected fetcher -----------------------
+
+async function startWpListFixture(
+  t: TestContext,
+  posts: WpPost[]
+): Promise<{ baseUrl: string; calls: string[] }> {
+  const calls: string[] = [];
+  const server = http.createServer((req, res) => {
+    calls.push(req.url ?? '');
+    const url = new URL(req.url ?? '/', 'http://x');
+    if (url.pathname === '/wp-json/wp/v2/posts') {
+      const slug = url.searchParams.get('slug');
+      if (slug) {
+        const found = posts.filter((p) => p.slug === slug);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(found));
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'X-WP-Total': String(posts.length),
+        'X-WP-TotalPages': '1'
+      });
+      res.end(JSON.stringify(posts));
+      return;
+    }
+    const numMatch = /^\/wp-json\/wp\/v2\/posts\/(\d+)$/.exec(url.pathname);
+    if (numMatch) {
+      const id = Number(numMatch[1]);
+      const post = posts.find((p) => p.id === id);
+      if (!post) {
+        res.writeHead(404);
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(post));
+      return;
+    }
+    res.writeHead(404);
+    res.end('unknown');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  return { baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, calls };
+}
+
+test('listPosts: returns posts + reads X-WP-Total/X-WP-TotalPages headers', async (t) => {
+  const { baseUrl } = await startWpListFixture(t, [
+    makePost('<p>a</p>', 'a'),
+    makePost('<p>b</p>', 'b')
+  ]);
+  const result = await listPosts(baseUrl, { perPage: 50, page: 1 }, fetch);
+  assert.equal(result.posts.length, 2);
+  assert.equal(result.total, 2);
+  assert.equal(result.totalPages, 1);
+});
+
+test('listPosts: clamps perPage and uses defaults', async (t) => {
+  const { baseUrl, calls } = await startWpListFixture(t, []);
+  // perPage 9999 → capped at 100; page omitted → defaults to 1.
+  await listPosts(baseUrl, { perPage: 9999 }, fetch);
+  const reqUrl = calls[0] ?? '';
+  assert.match(reqUrl, /per_page=100/);
+  assert.match(reqUrl, /page=1/);
+  assert.match(reqUrl, /status=publish/);
+});
+
+test('listPosts: 5xx → throws with status + URL', async (t) => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(503);
+    res.end('upstream wedged');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  await assert.rejects(() => listPosts(baseUrl, {}, fetch), /WP listPosts: 503/);
+});
+
+test('fetchPost: numeric id resolves via /posts/<id>', async (t) => {
+  const post = makePost('<p>numeric</p>', 'numeric-post');
+  const { baseUrl } = await startWpListFixture(t, [post]);
+  const got = await fetchPost(baseUrl, post.id, fetch);
+  assert.equal(got.slug, 'numeric-post');
+});
+
+test('fetchPost: numeric-string id is treated as id (not slug)', async (t) => {
+  const post = makePost('<p>str-num</p>', 'str-numeric');
+  const { baseUrl, calls } = await startWpListFixture(t, [post]);
+  const got = await fetchPost(baseUrl, '1', fetch);
+  assert.equal(got.slug, 'str-numeric');
+  assert.match(calls[0] ?? '', /\/posts\/1$/);
+});
+
+test('fetchPost: slug path returns first match', async (t) => {
+  const post = makePost('<p>slug-x</p>', 'slug-x');
+  const { baseUrl } = await startWpListFixture(t, [post]);
+  const got = await fetchPost(baseUrl, 'slug-x', fetch);
+  assert.equal(got.id, post.id);
+});
+
+test('fetchPost: numeric id 5xx → throws', async (t) => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(503);
+    res.end('upstream');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  await assert.rejects(() => fetchPost(baseUrl, 99, fetch), /WP fetchPost: 503/);
+});
+
+test('fetchPost: slug 5xx → throws', async (t) => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(502);
+    res.end('upstream');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  await assert.rejects(() => fetchPost(baseUrl, 'no-such', fetch), /WP fetchPost: 502/);
+});
+
+test('fetchPost: slug returns empty array → throws "no post"', async (t) => {
+  const { baseUrl } = await startWpListFixture(t, []);
+  await assert.rejects(() => fetchPost(baseUrl, 'missing', fetch), /no post with slug "missing"/);
+});
+
+test('listPosts: trailing slash on base URL is normalised', async (t) => {
+  const { baseUrl, calls } = await startWpListFixture(t, []);
+  await listPosts(`${baseUrl}/`, {}, fetch);
+  // The server only sees the path; we verify by checking it didn't 404.
+  assert.match(calls[0] ?? '', /^\/wp-json\/wp\/v2\/posts\?/);
 });
 
 test('importPost: dedupes byte-identical images across figures', async (t) => {

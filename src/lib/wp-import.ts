@@ -1,16 +1,11 @@
-// WordPress import: fetch posts from a WP REST API, ingest every
-// `<img>` they contain into our originals/sidecars, and emit one
-// markdown file per post using the unified `::figure` directive
-// (spec.md §9). Each WP `<figure>` block maps to a single ::figure
-// directive with `matrix=` chosen by image count.
+// WordPress import: walk a WpPost's HTML, ingest every <img> into the
+// originals + sidecars trees, and emit one markdown file using the
+// unified `::figure` directive (spec.md §9). Each WP <figure> block
+// maps to a single ::figure with `matrix=` chosen by image count.
 //
-// Surface:
-//   listPosts(baseUrl, { page, perPage })  → { posts, totalPages, total }
-//   fetchPost(baseUrl, idOrSlug)            → WpPost
-//   importPost(post, opts)                  → { markdown, imagesIngested }
-//
-// The CLI in src/cli/import-wp.ts wraps these. Pulled out so tests can
-// drive against a fixture WP response without a network round-trip.
+// REST client (listPosts / fetchPost) lives in lib/wp-rest.ts; the WpPost
+// type lives in lib/wp-import-types.ts. Both are re-exported here for
+// callers that import them via the top-level path.
 //
 // Why not rehype-remark for the prose: WP block content is a small
 // vocabulary (p, figure, h2/h3, strong, em, a, br, ul/ol, blockquote,
@@ -24,74 +19,10 @@ import { unified } from 'unified';
 import { ingestStream } from './originals.ts';
 import { safeFetch } from './url-safety.ts';
 
-/** Subset of WP /wp-json/wp/v2/posts response we depend on. */
-export interface WpPost {
-  id: number;
-  date: string; // ISO-8601 (server local; we treat as UTC for filenames)
-  modified: string;
-  slug: string;
-  status: string;
-  title: { rendered: string };
-  content: { rendered: string };
-  excerpt: { rendered: string };
-  link: string;
-  categories?: number[];
-  tags?: number[];
-}
+export type { WpPost } from './wp-import-types.ts';
+export { fetchPost, type ListResult, listPosts, type WpFetcher } from './wp-rest.ts';
 
-export interface ListResult {
-  posts: WpPost[];
-  total: number;
-  totalPages: number;
-}
-
-/** Fetch one page of posts from the WP REST API. Adds `_fields` so we
- * don't transfer fields we don't read (saves ~20% on the wire). */
-export async function listPosts(
-  baseUrl: string,
-  opts: { page?: number; perPage?: number; status?: string } = {}
-): Promise<ListResult> {
-  const page = opts.page ?? 1;
-  const perPage = Math.min(100, Math.max(1, opts.perPage ?? 50));
-  const status = opts.status ?? 'publish';
-  const fields = [
-    'id',
-    'date',
-    'modified',
-    'slug',
-    'status',
-    'title',
-    'excerpt',
-    'link',
-    'categories',
-    'tags'
-  ].join(',');
-  const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}&status=${status}&_fields=${fields}`;
-  const res = await safeFetch(url, { timeoutMs: 30_000 });
-  if (!res.ok) throw new Error(`WP listPosts: ${res.status} ${url}`);
-  const total = Number(res.headers.get('X-WP-Total') ?? 0);
-  const totalPages = Number(res.headers.get('X-WP-TotalPages') ?? 0);
-  const posts = (await res.json()) as WpPost[];
-  return { posts, total, totalPages };
-}
-
-/** Fetch a single post by numeric id or slug. */
-export async function fetchPost(baseUrl: string, idOrSlug: string | number): Promise<WpPost> {
-  const base = stripTrailingSlash(baseUrl);
-  if (typeof idOrSlug === 'number' || /^\d+$/.test(idOrSlug)) {
-    const url = `${base}/wp-json/wp/v2/posts/${idOrSlug}`;
-    const res = await safeFetch(url, { timeoutMs: 30_000 });
-    if (!res.ok) throw new Error(`WP fetchPost: ${res.status} ${url}`);
-    return (await res.json()) as WpPost;
-  }
-  // Slug lookup: ?slug=foo returns an array of posts whose slug matches.
-  const url = `${base}/wp-json/wp/v2/posts?slug=${encodeURIComponent(idOrSlug)}`;
-  const res = await safeFetch(url, { timeoutMs: 30_000 });
-  if (!res.ok) throw new Error(`WP fetchPost: ${res.status} ${url}`);
-  const arr = (await res.json()) as WpPost[];
-  if (arr.length === 0) throw new Error(`WP fetchPost: no post with slug "${idOrSlug}"`);
-  return arr[0] as WpPost;
-}
+import type { WpPost } from './wp-import-types.ts';
 
 export interface ImportResult {
   /** Frontmatter + body, ready to write to content/posts/. */
@@ -175,10 +106,6 @@ export async function importPost(post: WpPost, opts: ImportOpts): Promise<Import
 
 // ---- helpers ----------------------------------------------------------
 
-function stripTrailingSlash(s: string): string {
-  return s.endsWith('/') ? s.slice(0, -1) : s;
-}
-
 function filenameFor(post: WpPost): string {
   const date = post.date.slice(0, 10); // YYYY-MM-DD
   const slug = post.slug || `post-${post.id}`;
@@ -188,13 +115,16 @@ function filenameFor(post: WpPost): string {
 function filenameFromUrl(url: string): string {
   try {
     const u = new URL(url);
+    /* c8 ignore next -- pathname.split('/').pop() always returns a string */
     const base = u.pathname.split('/').pop() ?? 'image';
     return base;
   } catch {
+    /* c8 ignore next -- defensive: importPost callers always pass parsed URLs */
     return 'image';
   }
 }
 
+/* c8 ignore start -- production-only wiring; tests inject opts.fetchImage */
 function defaultImageFetcher(): (url: string) => Promise<Readable> {
   return async (url: string) => {
     const res = await safeFetch(url, { timeoutMs: 60_000 });
@@ -203,6 +133,7 @@ function defaultImageFetcher(): (url: string) => Promise<Readable> {
     return Readable.fromWeb(res.body);
   };
 }
+/* c8 ignore stop */
 
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
