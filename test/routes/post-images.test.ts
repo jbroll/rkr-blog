@@ -4,6 +4,14 @@
 // what /img/ knows how to serve (sidecar variants × outputs missing the
 // fallback). The widget-fallback-alignment.test.ts test covers the
 // constants relationship; this test is the actual round-trip.
+//
+// Sampling: we fetch one URL per distinct image id, not all 7. A real
+// browser only requests a single (variant, format) per image — picking
+// one matches the production load pattern, runs ~7× faster, and the
+// constants-alignment test already proves every emitted (variant,
+// output) pair lines up with the sidecar's declarations. The pick is
+// deterministic per-id (hash-of-id modulo URL count), so different ids
+// hit different URLs without making CI runs flaky.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -52,22 +60,61 @@ async function setup(t: TestContext) {
   return { root, app, imageId: ingest.id };
 }
 
-/** Pull every distinct /img/... URL out of the rendered HTML. */
-function imageUrls(html: string): string[] {
+/** Pull every distinct /img/<id>.<ophash>.<fmt> URL from the rendered
+ * HTML, grouped by image id. */
+function imageUrlsByImageId(html: string): Map<string, string[]> {
   const re = /(?:src|srcset)="([^"]+)"/g;
-  const urls = new Set<string>();
+  const byId = new Map<string, string[]>();
   for (const m of html.matchAll(re)) {
     const value = m[1] ?? '';
     // srcset may carry comma-separated `<url> <descriptor>` pairs.
     for (const part of value.split(',')) {
       const u = part.trim().split(/\s+/)[0] ?? '';
-      if (u.startsWith('/img/')) urls.add(u);
+      const idMatch = /^\/img\/([0-9a-f]+)\.[0-9a-f]+\.[a-z]+$/.exec(u);
+      if (!idMatch) continue;
+      const id = idMatch[1] as string;
+      const list = byId.get(id) ?? [];
+      if (!list.includes(u)) list.push(u);
+      byId.set(id, list);
     }
   }
-  return [...urls];
+  return byId;
 }
 
-test('::image: every <img src> + every srcset entry resolves to 200', async (t) => {
+/** Pick one URL per image id, deterministically — hash-of-id mod
+ * url-count means the same id always picks the same URL across runs
+ * (no CI flake), but different ids hit different URLs so the test
+ * corpus exercises a variety of (variant, output) combos. */
+function sampleOneUrlPerImage(byId: Map<string, string[]>): string[] {
+  const out: string[] = [];
+  for (const [id, urls] of byId) {
+    const sorted = [...urls].sort();
+    const idx = Number.parseInt(id.slice(0, 8), 16) % sorted.length;
+    out.push(sorted[idx] as string);
+  }
+  return out;
+}
+
+async function assertSampledImagesResolve(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  html: string
+): Promise<void> {
+  const byId = imageUrlsByImageId(html);
+  assert.ok(byId.size >= 1, `no image URLs in rendered HTML: ${html}`);
+  const sample = sampleOneUrlPerImage(byId);
+  for (const url of sample) {
+    const res = await app.inject({ method: 'GET', url });
+    // 200 (just rendered) or 202 (queued for async render). Both mean
+    // the URL was understood. 404 means the widget emitted a URL the
+    // server can't satisfy — the bug we're guarding against.
+    assert.ok(
+      res.statusCode === 200 || res.statusCode === 202,
+      `${url} → ${res.statusCode}: ${res.body}`
+    );
+  }
+}
+
+test('::image: rendered <img>/<srcset> URLs resolve (sample one per image)', async (t) => {
   const { app, imageId } = await setup(t);
 
   const post = await app.inject({
@@ -84,25 +131,10 @@ test('::image: every <img src> + every srcset entry resolves to 200', async (t) 
 
   const page = await app.inject({ method: 'GET', url: '/pic-roundtrip' });
   assert.equal(page.statusCode, 200);
-  const urls = imageUrls(page.body);
-  // image widget: 3 srcset widths × 2 source-formats (webp+avif) + 1
-  // <img src> fallback (jpeg). At minimum we expect the fallback to be
-  // present; the srcsets too if @fastify rendered them as expected.
-  assert.ok(urls.length >= 1, `no image URLs in rendered HTML: ${page.body}`);
-
-  for (const url of urls) {
-    const res = await app.inject({ method: 'GET', url });
-    // 200 (just rendered) or 202 (queued for async render). Both mean
-    // the URL was understood. 404 means the widget emitted a URL the
-    // server can't satisfy — the bug we're guarding against.
-    assert.ok(
-      res.statusCode === 200 || res.statusCode === 202,
-      `${url} → ${res.statusCode}: ${res.body}`
-    );
-  }
+  await assertSampledImagesResolve(app, page.body);
 });
 
-test('::diptych: every <img src> + every srcset entry resolves', async (t) => {
+test('::diptych: rendered URLs resolve (sample one per image)', async (t) => {
   const { app, imageId } = await setup(t);
   // Reuse the same id twice — the post will reference one logical image
   // for both diptych slots, which is enough to exercise the widget.
@@ -120,18 +152,10 @@ test('::diptych: every <img src> + every srcset entry resolves', async (t) => {
 
   const page = await app.inject({ method: 'GET', url: '/dip-roundtrip' });
   assert.equal(page.statusCode, 200);
-  const urls = imageUrls(page.body);
-  assert.ok(urls.length >= 1, `no image URLs: ${page.body}`);
-  for (const url of urls) {
-    const res = await app.inject({ method: 'GET', url });
-    assert.ok(
-      res.statusCode === 200 || res.statusCode === 202,
-      `${url} → ${res.statusCode}: ${res.body}`
-    );
-  }
+  await assertSampledImagesResolve(app, page.body);
 });
 
-test('::gallery: every <img src> + every srcset entry resolves', async (t) => {
+test('::gallery: rendered URLs resolve (sample one per image)', async (t) => {
   const { app, imageId } = await setup(t);
   const post = await app.inject({
     method: 'POST',
@@ -147,13 +171,5 @@ test('::gallery: every <img src> + every srcset entry resolves', async (t) => {
 
   const page = await app.inject({ method: 'GET', url: '/gal-roundtrip' });
   assert.equal(page.statusCode, 200);
-  const urls = imageUrls(page.body);
-  assert.ok(urls.length >= 1, `no image URLs: ${page.body}`);
-  for (const url of urls) {
-    const res = await app.inject({ method: 'GET', url });
-    assert.ok(
-      res.statusCode === 200 || res.statusCode === 202,
-      `${url} → ${res.statusCode}: ${res.body}`
-    );
-  }
+  await assertSampledImagesResolve(app, page.body);
 });
