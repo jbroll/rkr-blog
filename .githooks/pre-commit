@@ -46,6 +46,12 @@ fi
 echo "==> knip:gate"
 npm run --silent knip:gate
 
+# dpdm: catch circular import chains. tsc and biome don't flag these;
+# circular imports cause subtle runtime issues (undefined imports, broken
+# initialization order) that compile fine.
+echo "==> circular-import check"
+npm run --silent circular
+
 # Per-file 500-line size limit.
 #
 # Policy:

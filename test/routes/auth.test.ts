@@ -5,10 +5,10 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { open } from '../../src/lib/db.ts';
-import type { IdTokenVerifier } from '../../src/lib/google-jwt.ts';
+import type { GoogleIdPayload, IdTokenVerifier } from '../../src/lib/google-jwt.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { findUserByEmail, inviteEmail } from '../../src/lib/users.ts';
-import type { GoogleIdPayload, TokenExchange } from '../../src/routes/auth.ts';
+import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
 
 interface ErrorBody {

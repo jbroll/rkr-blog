@@ -9,7 +9,11 @@ import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from '
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { Db } from '../lib/db.ts';
-import { type IdTokenVerifier, makeGoogleVerifier } from '../lib/google-jwt.ts';
+import {
+  type GoogleIdPayload,
+  type IdTokenVerifier,
+  makeGoogleVerifier
+} from '../lib/google-jwt.ts';
 import { createSession, deleteSession } from '../lib/sessions.ts';
 import {
   EmailLinkedError,
@@ -21,18 +25,6 @@ import {
 const SESSION_COOKIE = 'rkr_session';
 const OAUTH_STATE_COOKIE = 'rkr_oauth_state';
 const OAUTH_STATE_TTL_S = 600;
-
-// Decoded payload of a Google ID token. Fields per OpenID Connect spec.
-export interface GoogleIdPayload {
-  sub: string;
-  email: string;
-  email_verified?: boolean;
-  name?: string;
-  picture?: string;
-  aud?: string | string[];
-  iss?: string;
-  exp?: number;
-}
 
 /**
  * Pluggable token-exchange so tests don't need to hit Google's servers.

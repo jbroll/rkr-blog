@@ -8,7 +8,17 @@
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-import type { GoogleIdPayload } from '../routes/auth.ts';
+/** Decoded payload of a Google ID token. Fields per OpenID Connect spec. */
+export interface GoogleIdPayload {
+  sub: string;
+  email: string;
+  email_verified?: boolean;
+  name?: string;
+  picture?: string;
+  aud?: string | string[];
+  iss?: string;
+  exp?: number;
+}
 
 export interface IdTokenVerifier {
   /** Reject (throw) on signature, expiry, issuer, or audience mismatch. */
