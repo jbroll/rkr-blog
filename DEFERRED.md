@@ -35,20 +35,37 @@ a multi-image figure.
 
 ## src/admin/main.ts is too large
 
-**What.** The editor entry point is ~1900 lines and covers many
-concerns: ProseMirror node + toolbar + attribute panel + cropper +
-ops pipeline + Drive integration + OneDrive integration + save flow.
-A 500-line per-file commit hook (DEFERRED entry below) would block
-any commit that touches it. The right shape is to split into
-modules — e.g. `src/admin/figure-node.ts`, `src/admin/toolbar.ts`,
-`src/admin/attribute-panel.ts`, `src/admin/image-edit.ts`,
-`src/admin/integrations/{gdrive,onedrive}.ts`.
+**What.** The editor entry point is 1747 lines and covers many
+concerns: ProseMirror FigureNode + toolbar + unified attribute panel
++ cropper modal + perspective-rectify modal + image-edit pipeline
+(LocalEditState, undo/redo, ops persistence) + Drive integration +
+OneDrive integration + save flow + mount() orchestration. The right
+shape is to split into modules:
 
-**Why deferred.** The editor refactor is mechanical but extensive
-and benefits from in-browser smoke testing after each split.
+| Module | Approx lines | What |
+|---|---|---|
+| `src/admin/image-edit.ts` | ~200 | LocalEditState, ensureLocalState, ops mutators (mutate/undo/redo/deleteAt), postOpsToServer, saveImageEdits, dirtyImageStates, flushDirtyImageEdits, describeOp |
+| `src/admin/canvas-loaders.ts` | ~115 | lruGet/Set, getPipelineCache, loadImageElement, loadOriginal, hasWebglSupport, canvasToBlob, setEditorImageSrc, refreshImagePreview, uploadBake |
+| `src/admin/cropper-modal.ts` | ~110 | openCropper, closeCropper |
+| `src/admin/perspective-modal.ts` | ~225 | openPerspective, closePerspective, PerspSession |
+| `src/admin/integrations/gdrive.ts` | ~115 | gapi loader, gdriveStatus/Token/Config, importGdriveFile, pickFromDrive |
+| `src/admin/integrations/onedrive.ts` | ~75 | oneDriveStatus, importOneDriveFile, pickFromOneDrive, parseOneDriveId |
+| `src/admin/save.ts` | ~50 | savePost, handleSave |
 
-**Trigger.** Land alongside the toolbar UX refresh, or before
-tightening the size hook to fail-on-existing.
+After all extractions: main.ts becomes the FigureNode + mount()
+orchestrator at ~700-800 lines (still over 500; further work to
+slice mount() into smaller mounts per panel section).
+
+**Why deferred.** The extracted modules need DI for closure-scoped
+helpers (setStatus, $, editor instance). Each split is mechanical
+but the cumulative refactor needs an in-browser iteration loop to
+catch UI regressions — there's no Playwright coverage of editor
+flows yet (token-login is the only e2e). Doing the splits without
+that net is a real regression risk.
+
+**Trigger.** Land alongside the Playwright editor-flow tests
+(`DEFERRED.md` Playwright UI test coverage entry) so each split has
+a regression check, or alongside the toolbar UX refresh.
 
 ## Tighten the per-file size hook to fail-on-existing
 
@@ -56,15 +73,13 @@ tightening the size hook to fail-on-existing.
 ceiling for new files in production source (`src/`, `bin/`) and
 rejects any growth in already-oversized files (warn-on-existing).
 Tests are exempt from the size check — coverage growth is a feature.
-Once the existing production offenders are split (`src/admin/main.ts`,
-`src/routes/admin.ts`, `src/lib/wp-import.ts`, `src/widgets/figure.ts`),
-the hook should be tightened so the warn-on-existing branch becomes
-a FAIL. That removes the special case and keeps production code
-under the limit.
+After the recent splits, only `src/admin/main.ts` (1747) is still
+over the limit; once it lands under 500, the hook should be
+tightened so the warn-on-existing branch becomes a FAIL.
 
-**Why deferred.** Four production-source files are over 500 lines
-today. Failing on them all immediately would block every commit
-until they're refactored — a disruptive forced march.
+**Why deferred.** main.ts (1747) is the last warn-on-existing
+production file. Flipping the gate before main.ts is split would
+block every commit that touches main.ts.
 
 **Trigger.** When the last warn-on-existing production file drops
 below 500 lines (i.e., `wc -l` of every staged file under `src/`
@@ -210,105 +225,32 @@ per-image captions inside a multi-image directive.
 
 ## User-requested follow-ups (2026-05-08)
 
-### EXIF rotation not honored on import
-
-**Source.** User report, 2026-05-08.
-
-**What.** Photos with EXIF orientation tags (e.g. iPhone portraits
-saved as landscape with `Orientation=6`) come out sideways through
-the image pipeline. `sharp` has `.rotate()` which auto-applies the
-orientation tag, but it's only effective when called *before* any
-resize — and it must be called explicitly. Need to audit
-`src/widgets/figure.ts`, `src/lib/render.ts`, and the upload path
-in `src/routes/admin.ts` to confirm we invoke `.rotate()` first in
-every sharp pipeline, then strip orientation from the metadata so
-the rendered output is upright with no EXIF rotation re-applied
-client-side. Add a regression test using a fixture image with
-`Orientation=6`.
-
-**Why deferred.** Captured here so it isn't lost; the fix is a
-small audit + one-line change per pipeline + a test fixture, but
-it cuts across multiple files and benefits from being a focused
-commit rather than slipped into unrelated work.
-
-**Trigger.** Next image-pipeline change, or first time the author
-uploads a photo that comes out rotated.
-
-### Retry-with-backoff on image load failure
-
-**Source.** User request, 2026-05-08.
-
-**What.** When the browser's `<img>` element fires `error` (network
-hiccup, CDN miss, sidecar still rendering on the server), the
-image just stays broken. We should attach an `onerror` retry on
-the public site (lightbox, carousel, in-page figures) with
-exponential backoff — say 3 retries at 500ms / 2s / 8s with a
-small jitter, and a final visible "couldn't load" placeholder.
-Likely lives in `src/site/lightbox.ts` and `src/site/carousel.ts`,
-plus a small shared helper for in-page imgs.
-
-**Why deferred.** Not blocking — failure rate is low on a healthy
-deploy. But it'll matter the first time someone hits a render
-job that's still in flight.
-
-**Trigger.** First user-visible image-load failure report, or
-when adding any caching CDN that adds variability.
-
 ### Refactor production source files to under 500 lines
 
 **Source.** User request, 2026-05-08; companion to the size-hook
 entries above.
 
-**What.** Four production-source files currently exceed the
-500-line ceiling enforced by `.githooks/pre-commit` (tests are
-exempt from the size check):
+**Status (2026-05-09).** 3 of 4 originals refactored:
 
-| File | Lines | Suggested split |
-|---|---|---|
-| `src/admin/main.ts` | 1900 | see "src/admin/main.ts is too large" entry |
-| `src/routes/admin.ts` | 1026 | extract `admin/upload.ts`, `admin/posts.ts`, `admin/reset.ts` route modules |
-| `src/lib/wp-import.ts` | 580 | extract `wp-import/parse.ts`, `wp-import/push.ts`, `wp-import/media.ts` |
-| `src/widgets/figure.ts` | 512 | extract `figure/layout.ts` (matrix/justified/masonry) |
+| File | Was | Now | Notes |
+|---|---|---|---|
+| `src/admin/main.ts` | 1900 → 1747 | 1747 | still over; see "src/admin/main.ts is too large" |
+| `src/routes/admin.ts` | 1026 | 395 | split into 4 modules — see entry below |
+| `src/lib/wp-import.ts` | 580 → 511 | 349 | extracted wp-import-emit.ts |
+| `src/widgets/figure.ts` | 512 → 507 | 416 | extracted figure-attrs.ts |
 
-Each split should preserve test coverage and be its own commit so
-review is tractable.
+The admin.ts split landed across 4 commits:
+- `routes/admin-ops-validation.ts` (validateOps + constants/types)
+- `routes/admin-import-url.ts` (POST /admin/import/url)
+- `routes/admin-sidecar-edit.ts` (POST /admin/sidecar/:id/{ops,bake})
+- `routes/admin-image-lookup.ts` (GET /admin/preview/:id, /admin/original/:id, /admin/sidecar/:id/meta + cache)
 
-**Why deferred.** Mechanical but extensive; benefits from
+**Why deferred (main.ts only).** Mechanical but extensive; benefits from
 in-browser smoke testing for the editor pieces and from being
 sequenced (smaller files first, build confidence).
 
 **Trigger.** Tackle in a dedicated refactor sprint, or piecemeal
 whenever a feature touches one of these files.
-
-### Admin token login button (cookie session via shared secret)
-
-**Source.** User request, 2026-05-08.
-
-**What.** Today the admin token (`ADMIN_TOKEN` env, presented as
-`Authorization: Bearer …`) is usable only via headers — fine for
-CLI / curl but awkward in a browser. Add a small login form on
-the admin page (or `/admin/login`) with a "token" input that POSTs
-to a new `/admin/login-with-token` endpoint, which:
-
-1. Constant-time-compares the submitted token against
-   `ADMIN_TOKEN`.
-2. On match, mints a normal session cookie tied to the same
-   synthetic admin user (`id=0`) the bearer path uses.
-3. Redirects to the admin dashboard.
-
-Rate-limit aggressively (the existing `@fastify/rate-limit` covers
-this) and log every attempt.
-
-**Why deferred.** The bearer path exists and works for the
-current author flow (CLI + browser dev tools). Adding the UI
-requires a route, a template change, and a test — small but
-cleanest as its own commit. Also has security implications worth
-attention (lockout policy, log retention) that warrant a focused
-review.
-
-**Trigger.** When the author wants to log in from a phone or a
-machine where setting an Authorization header is awkward.
-
 
 ### Resolve the duplicate-type-check allowlist
 
@@ -358,9 +300,9 @@ attribute panel, cropper, integrations) is the still-uncovered
 surface. Outstanding cases:
 
 - Open a post, type, save → reload → content matches
-- Insert each figure shape (image / gallery / carousel / diptych /
-  triptych), edit attributes, save → markdown matches expected
-  directive
+- Insert image / gallery via toolbar, edit matrix attribute to
+  flip between 1x1/1x2/1x3/justified/masonry, save → markdown
+  contains the expected ::figure directive
 - Crop a single-image figure, save → sidecar ops persist
 - OAuth callback (Google) lands on admin dashboard (needs an inject
   hook to stub the exchange/verifier inside the long-running
