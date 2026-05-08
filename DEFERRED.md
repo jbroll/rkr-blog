@@ -10,6 +10,38 @@ When you fix one, delete the entry. When something gets worse than expected,
 promote it. Newly-discovered work goes here, not into commit messages, so
 the queue is searchable.
 
+## Image widget unification (`::figure` directive)
+
+**Source.** Spec discussion 2026-05-08 after image-render bug debugging
+exposed the cost of maintaining four separate widgets (`::image`,
+`::diptych`, `::triptych`, `::gallery`, `::carousel`) with
+non-overlapping `variants` × `fallback` declarations.
+
+**What.** Spec.md §9 now describes a single `::figure` directive whose
+`matrix=NxM` + `images=…` subsumes all five legacy widgets. Carousel
+mode emerges when `len(ids) > matrix.cells`. Layout via
+`justify`/`width`/`aspect`/`fit`. Implementation steps in §9
+"Migration plan":
+
+1. Implement `::figure` as a new widget alongside legacy ones.
+2. WP importer emits `::figure` going forward.
+3. Editor (TipTap) collapses 5 node types into one.
+4. One-shot `site-admin migrate-figures` rewrites posts on disk.
+5. Delete legacy widgets after one release cycle of read-only support.
+
+**Why deferred.** The current widgets work and the alignment bug is
+fixed. Unification is correctness/maintainability work, not a user-
+visible feature, and the constants-alignment test now guards the worst
+class of regression. Doing the refactor right (editor + migration +
+tests) is roughly two weekends of focused work; doing it badly would
+break the editor or scramble post markdown.
+
+**Trigger.** Before the next user-facing layout feature (e.g. masonry
+gallery variants, custom-aspect cells, or a 4th legacy variant) — at
+that point we should land `::figure` first rather than extend the
+zoo. Or when we add a second author / multi-tenant features and
+maintenance cost compounds.
+
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
 ### M3 — Sliding-session lookup timing

@@ -234,55 +234,133 @@ tools (e.g. the WordPress importer).
 
 ## 9. Image widgets
 
-### Single image (`::image`)
+The post body uses a single `::figure` directive for all image display.
+One directive collapses what used to be five (`::image`, `::diptych`,
+`::triptych`, `::gallery`, `::carousel`); layout is described by
+attributes rather than by directive name. See "Migration plan" below
+for the transition strategy from the legacy directives.
 
-| attribute | required | purpose |
-|---|---|---|
-| `id` (or `#<id>` shorthand) | yes | sha256 hex (or 6+ char prefix) |
-| `alt` | recommended | screen-reader description |
-| `caption` | optional | editorial copy in `<figcaption>` |
-| `position` | optional | `default \| full \| left \| right \| inline` |
+### Syntax
 
-`alt` and `caption` are different concerns. `alt` describes what's in
-the image for screen readers and image-loading failures; `caption` is
-editorial text shown alongside the image. The editor surfaces both
-fields separately.
+```
+::figure{ids="<id>[,<id>…]" [matrix=NxM] [justify=J] [width=…]
+         [aspect=W:H] [fit=cover|contain] [alts="…,…"]
+         [captions="…|…"] [caption="…"] [timer=N]}
+```
 
-Position values:
+`ids` is the only required attribute; all others have defaults.
+
+### Attributes
+
+| attribute | required | default | purpose |
+|---|---|---|---|
+| `ids` | **yes** | — | comma-separated sha256 hex (6+ char prefix or full 64) |
+| `matrix` | no | `1x1` | display grid as `rows`x`cols` (e.g. `2x3` = 2 rows, 3 cols) |
+| `justify` | no | `center` | block placement; see Justify table |
+| `width` | no | (justify default) | block width with explicit unit: `400px` or `60%` |
+| `aspect` | no | (image-derived) | per-cell display aspect ratio, e.g. `16:9` |
+| `fit` | no | `cover` | how the image fills its cell: `cover` (fill, crop edges) or `contain` (letterbox) |
+| `alts` | no | — | comma-separated alt text, parallel to `ids` |
+| `captions` | no | — | pipe-separated per-image captions (pipe avoids comma collisions in alts) |
+| `caption` | no | — | one caption for the whole `<figure>` |
+| `timer` | no | — | autoplay seconds when carousel mode kicks in (cap 60) |
+
+### Justify
 
 | value | layout |
 |---|---|
-| `default` | wide centered figure that breaks out of the prose column to the wider content width |
-| `full` | edge-to-edge of viewport |
-| `left` | float left, prose wraps right; ≤40% column width on desktop, full-width on mobile |
+| `center` | block centered in the prose column; `width` defaults to 100% of column |
+| `left` | float left; prose wraps right; `width` defaults to 40% on desktop, 100% on mobile |
 | `right` | mirror of `left` |
-| `inline` | inline with text, sized to ~1.5em; caption suppressed |
+| `full` | spans the wider content-column width (breaks out of prose column) |
+| `bleed` | spans the full viewport width (breaks out of content column too) |
 
-Renders as `<figure class="rkr-figure rkr-pos-{position}">` containing
-a `<picture>` with one `<source>` per output format and srcset entries
-for each declared variant width, plus a JPEG fallback. `<figcaption>`
-appends only when `caption` is set.
+`width` has effect only when `justify` is `left`, `right`, or `center`.
+On `full` / `bleed` the width is determined by the surrounding layout
+and any `width` value is silently ignored.
 
-### Multi-image directives
+### Sizing semantics
 
-| widget | layout(s) | notes |
-|---|---|---|
-| `gallery` | `justified` (Flickr-style rows), `masonry` (Pinterest columns), `matrix` (uniform square cells) | no JavaScript |
-| `carousel` | one image at a time, swipe/click, optional autoplay (≤60s, pauses on hover/focus/page-hidden, accessible play/pause when autoplay is set, reduced-motion-aware) | scroll-snap track + small JS for prev/next/dots/keyboard |
-| `diptych` / `triptych` | 2 or 3 equal-width side-by-side panels; stacks to one column on narrow screens | no JavaScript |
+The image's native aspect ratio is always preserved. `aspect` controls
+the *cell* aspect ratio: the renderer reserves a box at `aspect` per
+matrix cell and fits the image inside per `fit`.
 
-All multi-image widgets accept `ids="…,…,…"` (6-64 hex strings,
-exact-match preferred, otherwise unique-prefix) and an optional
-`caption`. Ambiguous or unmatched ids are skipped with an HTML
-comment. Per-item `alt` text is supplied via a parallel `alts="…"`
-attribute.
+- `fit=cover`: image fills the cell; if aspects differ, edges are
+  cropped (typical photo-blog behavior).
+- `fit=contain`: image fits inside the cell; if aspects differ, the
+  cell shows letterbox bars (technical / art images).
+
+When `aspect` is omitted, the cell aspect defaults to the median of
+the supplied images' native aspects (which collapses to "the image's
+own aspect" for a 1×1 figure with one image).
+
+The whole figure's display aspect is `aspect × matrix.cols : matrix.rows`
+(used to reserve layout space and avoid CLS as images load).
+
+### Carousel mode (overflow)
+
+If `len(ids) > matrix.rows * matrix.cols`, the figure becomes a
+carousel: the matrix is one slide; the remaining ids form additional
+slides displayed in source order. `timer=N` autoplays at N seconds
+per slide (cap 60). When omitted, the carousel is manual-advance only
+(prev/next, swipe, keyboard). Same accessibility constraints as
+today's `::carousel`: pauses on hover/focus/page-hidden,
+reduced-motion respected, accessible play/pause when `timer` is set.
+
+### Edge cases
+
+- `matrix` omitted with N images → equivalent to `matrix=1xN` for N≤3,
+  `matrix=ceil(sqrt(N))xceil(sqrt(N))` for larger; carousel kicks in
+  at N>9. (Smart default; author can always override.)
+- `matrix=2x3` with only 2 ids → matrix auto-shrinks to
+  `min(matrix, ceil(images / cols))` rows so we don't render empty
+  cells.
+- `matrix=1x1` with N>1 ids → carousel with one cell visible at a time.
+- `ids` empty or all unresolvable → the figure is replaced by an HTML
+  comment so authoring errors are visible without breaking the page.
+
+### Render output
+
+A single `<figure class="rkr-figure rkr-justify-{justify}
+rkr-fit-{fit}">` containing either:
+- a CSS-grid `<div>` (matrix mode, no JS), or
+- a CSS-grid scroll-snap track + small JS controller (carousel mode).
+
+Each cell wraps a `<picture>` with one `<source>` per format and
+srcset entries from the widget's declared variants, plus a JPEG
+fallback (kept aligned with `DEFAULT_VARIANTS × DEFAULT_OUTPUTS` at
+ingest — see test/lib/widget-fallback-alignment.test.ts).
+
+`<figcaption>` appears only when `caption` is set. Per-image
+`captions[i]` go inside that cell's `<picture>` wrapper.
 
 ### Lightbox
 
-Loaded automatically on every public post page. Clicking any
-non-inline figure overlays it fullscreen; ESC or click-outside
-dismisses. The figure's caption (if any) reuses as the lightbox
-caption.
+Unchanged: clicking any cell overlays it fullscreen; ESC or
+click-outside dismisses. The block `caption` (if any) — or the per-
+image `captions[i]` — appears as the lightbox caption.
+
+### Migration plan
+
+The legacy directives (`::image`, `::diptych`, `::triptych`,
+`::gallery`, `::carousel`) ship in posts on disk today. Transition:
+
+1. **Spec freeze** (this document) defines the target syntax.
+2. **Implement `::figure`** as a new widget alongside the legacy ones.
+3. **Migrate the WP importer** to emit `::figure` for all imported
+   posts. Existing imported posts on disk keep working via legacy
+   widgets.
+4. **Editor (TipTap) refactor**: the 5 node types collapse to one
+   `figure` node with attribute panel for matrix / justify / aspect.
+5. **One-shot migration tool** (`site-admin migrate-figures`) rewrites
+   legacy directives in `content/posts/*.md` to `::figure` form.
+   Tested round-trip: legacy → figure → identical render output.
+6. **Delete legacy widgets** once content is fully migrated. Their
+   parsers stay for one release cycle as read-only fallback in case
+   someone restores an old post from backup.
+
+The constants-alignment test (test/lib/widget-fallback-alignment.test.ts)
+shrinks to one widget × one fallback after step 6.
 
 ## 10. Remote image import
 
