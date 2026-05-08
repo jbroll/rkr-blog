@@ -71,6 +71,36 @@ test('runGc on an empty cache directory returns zero counts', async (t) => {
   assert.deepEqual(result, { deleted: 0, kept: 0 });
 });
 
+test('runGc sweeps originals/.tmp leftovers (crashed ingest)', async (t) => {
+  const root = freshSiteRoot(t);
+  const tmpDir = path.join(root, 'originals', '.tmp');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, 'ingest-deadbeef.bin'), Buffer.alloc(4));
+  fs.writeFileSync(path.join(tmpDir, 'ingest-feedface.bin'), Buffer.alloc(4));
+
+  const result = await runGc(root);
+  assert.equal(result.deleted, 2, 'both ingest leftovers removed');
+  assert.deepEqual(fs.readdirSync(tmpDir), [], 'tmp dir empty after sweep');
+});
+
+test('runGc sweeps *.tmp recursively under bakes/ and sidecars/', async (t) => {
+  const root = freshSiteRoot(t);
+  // bakes/ uses 2/2-prefix sharding: bakes/aa/bb/<id>.webp(.tmp).
+  const bakeDir = path.join(root, 'bakes', 'aa', 'bb');
+  fs.mkdirSync(bakeDir, { recursive: true });
+  fs.writeFileSync(path.join(bakeDir, 'abc123.webp'), Buffer.alloc(4)); // not .tmp; preserved
+  fs.writeFileSync(path.join(bakeDir, 'abc123.webp.crash.tmp'), Buffer.alloc(4));
+  // sidecars/ is flat.
+  const sidecarDir = path.join(root, 'sidecars');
+  fs.writeFileSync(path.join(sidecarDir, 'pending.json.tmp'), Buffer.alloc(4));
+
+  const result = await runGc(root);
+  assert.equal(result.deleted, 2, 'two .tmp files removed across bakes + sidecars');
+  assert.equal(fs.existsSync(path.join(bakeDir, 'abc123.webp')), true, '.webp preserved');
+  assert.equal(fs.existsSync(path.join(bakeDir, 'abc123.webp.crash.tmp')), false);
+  assert.equal(fs.existsSync(path.join(sidecarDir, 'pending.json.tmp')), false);
+});
+
 test('runGc preserves derivatives produced by render() (round-trip)', async (t) => {
   const root = freshSiteRoot(t);
 
