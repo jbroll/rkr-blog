@@ -19,8 +19,62 @@ import { isDirty, type LocalEditState } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal, uploadBake } from './canvas-loaders';
 import { getState } from './online-state.ts';
+import { readJson, writeJson } from './opfs.ts';
 import { append as outboxAppend } from './outbox.ts';
 import { tryDrain } from './sync.ts';
+
+const IMAGE_STATE_DIR = 'image-state';
+
+interface PersistedImageState {
+  schemaVersion: 1;
+  id: string;
+  ops: SidecarOp[];
+  redoStack: SidecarOp[];
+  baseline: { ops: SidecarOp[]; redoStack: SidecarOp[] };
+  sourceWidth: number | null;
+  sourceHeight: number | null;
+}
+
+/** Write the current local edit state to OPFS so a tab reload can
+ * restore unsaved edits (spec-offline §7 — phase 1i). Called from
+ * refreshAfterEdit on every mutation, and from saveImageEdits after
+ * baseline updates. Fire-and-forget: persistence failures are
+ * surfaced via console only — losing one persist is recoverable
+ * (the next mutation re-persists). The e2e ratchet covers the path
+ * via the existing rotate-and-save spec.
+ * @public */
+export function persistImageState(id: string, s: LocalEditState): void {
+  const snapshot: PersistedImageState = {
+    schemaVersion: 1,
+    id,
+    ops: [...s.ops],
+    redoStack: [...s.redoStack],
+    baseline: {
+      ops: [...s.baseline.ops],
+      redoStack: [...s.baseline.redoStack]
+    },
+    sourceWidth: s.sourceWidth,
+    sourceHeight: s.sourceHeight
+  };
+  void writeJson(`${IMAGE_STATE_DIR}/${id}.json`, snapshot).catch((err) => {
+    /* v8 ignore next 2 -- best-effort write; OPFS quota / IO errors
+       surfaced for debug only */
+    console.warn(`persistImageState ${id}:`, err);
+  });
+}
+
+async function loadImageState(id: string): Promise<LocalEditState | null> {
+  const raw = await readJson<PersistedImageState>(`${IMAGE_STATE_DIR}/${id}.json`);
+  /* v8 ignore next -- absent-file path is the common no-cache case */
+  if (!raw) return null;
+  return {
+    ops: raw.ops,
+    redoStack: raw.redoStack,
+    baseline: raw.baseline,
+    sourceWidth: raw.sourceWidth,
+    sourceHeight: raw.sourceHeight
+  };
+}
 
 interface SidecarMeta {
   width: number | null;
@@ -45,12 +99,18 @@ export function getLocalEditState(id: string): LocalEditState | undefined {
   return localEditState.get(id);
 }
 
-/** Lazy-load the local state for an id from the server. Subsequent
- * accesses reuse the cached state, preserving any in-progress edits
- * across selection changes. */
+/** Lazy-load the local state for an id. Order: (1) in-process Map
+ * (selection-change preserves edits), (2) OPFS image-state (a
+ * reload preserves unsaved edits — phase 1i), (3) server fetch.
+ * Subsequent accesses reuse the cached state. */
 export async function ensureLocalState(id: string): Promise<LocalEditState> {
   const cached = localEditState.get(id);
   if (cached) return cached;
+  const persisted = await loadImageState(id);
+  if (persisted) {
+    localEditState.set(id, persisted);
+    return persisted;
+  }
   const meta = await fetchSidecarMeta(id);
   const fresh: LocalEditState = {
     ops: [...meta.ops],
@@ -60,6 +120,7 @@ export async function ensureLocalState(id: string): Promise<LocalEditState> {
     sourceHeight: meta.height
   };
   localEditState.set(id, fresh);
+  persistImageState(id, fresh);
   return fresh;
 }
 
@@ -88,6 +149,7 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
     try {
       await commitOnline(id, s);
       s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+      persistImageState(id, s);
       return;
     } catch (err) {
       // Online attempt failed; before falling back to queue, try to
@@ -104,6 +166,7 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
 
   await commitOffline(id, s);
   s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+  persistImageState(id, s);
 }
 
 async function commitOnline(id: string, s: LocalEditState): Promise<void> {

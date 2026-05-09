@@ -26,6 +26,8 @@ const PNG_1X1_BLUE =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC';
 const PNG_1X1_GREEN =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNg+M8AAAICAQB7CYF4AAAAAElFTkSuQmCC';
+const PNG_1X1_YELLOW =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4/58BAAT/Af9dfQKHAAAAAElFTkSuQmCC';
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/admin/login');
@@ -528,4 +530,88 @@ test('editor: typed body persists across reload via OPFS draft', async ({ page }
   // The restored doc should contain the sentinel paragraph in the
   // ProseMirror DOM.
   await expect(page.locator('#rkroll-admin-article')).toContainText(sentinel, { timeout: 5_000 });
+});
+
+// Image-state persistence (phase 1i): unsaved per-image edits survive
+// a tab reload via opfs://image-state/<id>.json. Rotate, reload,
+// re-select the figure, confirm the rotate op is still queued (Save
+// button still enabled, edits list still shows it).
+test('editor: unsaved image edits survive reload via OPFS image-state', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // OPFS persists across e2e runs (it's tied to the origin, not the
+  // browser context). Clear image-state/ so a prior run's persisted
+  // ops for the same content-hashed id don't carry over.
+  await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    try {
+      await opfs.removeEntry('image-state', { recursive: true });
+    } catch {
+      /* directory absent on first run */
+    }
+  });
+
+  // PNG_1X1_YELLOW — unique to this test so the content-hashed id
+  // doesn't collide with PNG_1X1_GREEN (test 4 saves a rotate against
+  // that id; the server sidecar carries [rotate] permanently).
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'persist-edit.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_YELLOW, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded persist-edit\.png/, {
+    timeout: 10_000
+  });
+  const id = await page.locator('#rkr-figure-ids').inputValue();
+
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+
+  await page.locator('#rkr-image-rotate-r-btn').click();
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
+  await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
+  // Wait past the 500ms draft-persist debounce so the figure insert
+  // + the persistImageState write both land in OPFS before reload.
+  await page.waitForTimeout(900);
+
+  // ---- reload + re-select the figure ----------------------------
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Selecting the figure populates the image-edit panel; ensureLocalState
+  // reads the OPFS persist before falling through to the server.
+  await page.evaluate((targetId) => {
+    type EditorLike = {
+      state: {
+        doc: {
+          descendants: (
+            cb: (node: { type: { name: string }; attrs: { ids?: string[] } }, pos: number) => void
+          ) => void;
+        };
+      };
+      commands: { setNodeSelection: (pos: number) => boolean };
+    };
+    const ed = (window as unknown as { __rkrEditor: EditorLike }).__rkrEditor;
+    let figurePos = -1;
+    ed.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'figure' && node.attrs.ids?.includes(targetId)) {
+        figurePos = pos;
+      }
+    });
+    if (figurePos < 0) throw new Error('figure not found in restored doc');
+    ed.commands.setNodeSelection(figurePos);
+  }, id);
+
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  // Restored state has the rotate op still pending.
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1, { timeout: 5_000 });
+  await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
 });

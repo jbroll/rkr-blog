@@ -26,6 +26,7 @@ import {
   dirtyImageStates,
   ensureLocalState,
   getLocalEditState,
+  persistImageState,
   saveImageEdits
 } from './image-edit';
 import { openPerspective } from './perspective-modal';
@@ -347,9 +348,7 @@ function mount(): void {
       del.setAttribute('aria-label', `Delete step ${idx + 1}: ${describeOp(op)}`);
       del.addEventListener('click', () => {
         localDeleteAt(s, idx);
-        setStatus(`deleted step ${idx + 1}`);
-        renderEditsPanel(id, s);
-        void refreshImagePreview(editor, id, s.ops);
+        refreshAfterEdit(id, s, `deleted step ${idx + 1}`);
       });
       li.replaceChildren(span, del);
       return li;
@@ -357,12 +356,13 @@ function mount(): void {
     attrEditsList.replaceChildren(...items);
   }
 
-  /** Re-render the edits list + Save button state from local state, and
-   * repaint the editor's <img> via the canvas pipeline. No server I/O —
-   * the bake goes up only on Save (see attrSaveBtn handler). */
+  /** Re-render the edits list + Save button state, persist to OPFS
+   * (reload restores unsaved edits), and repaint the editor's <img>
+   * via the canvas pipeline. The bake goes up only on Save. */
   function refreshAfterEdit(id: string, s: LocalEditState, label: string): void {
     setStatus(`${label} ${id.slice(0, 8)}…`);
     renderEditsPanel(id, s);
+    persistImageState(id, s);
     void refreshImagePreview(editor, id, s.ops);
   }
 
