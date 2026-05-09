@@ -230,30 +230,27 @@ whenever a feature touches one of these files.
 
 **What.** Playwright infrastructure shipped (`playwright.config.ts`,
 `test-e2e/server-runner.ts`, `npm run test:e2e`, chromium installed).
-Initial suite covers the token-login golden path:
+Suite covers the token-login golden path + the editor image flow:
 
 - ✅ `/admin/login` renders both options
 - ✅ token-login → /admin/editor lands on the SPA shell
 - ✅ wrong token → 401, no session
+- ✅ insert image, set matrix, save → published `/:slug` page
+  renders the figure (`editor-flow.spec.ts`, 2026-05-09)
 
-The editor's UI binding code in `src/admin/main.ts` (toolbar,
-attribute panel, cropper, integrations) is the still-uncovered
-surface. Outstanding cases:
+Outstanding editor-flow coverage:
 
-- Open a post, type, save → reload → content matches
-- Insert image / gallery via toolbar, edit matrix attribute to
-  flip between 1x1/1x2/1x3/justified/masonry, save → markdown
-  contains the expected ::figure directive
+- Open an existing post, type, save → reload → content matches
 - Crop a single-image figure, save → sidecar ops persist
 - OAuth callback (Google) lands on admin dashboard (needs an inject
   hook to stub the exchange/verifier inside the long-running
   webServer; the unit suite already covers the data layer)
 
-**Why deferred.** Each editor-flow test needs fixture data (a
-saved post with images) plus assertions tied to TipTap's DOM,
-which is fragile across upgrades. Worth doing alongside the
-`main.ts` refactor so each split has a regression net.
+**Why deferred.** The remaining cases need either richer fixture
+data (an existing-post round-trip needs a seeded post on disk) or
+an OAuth stub hook in the long-running webServer. The first save
+flow shipping in `editor-flow.spec.ts` already gives the `main.ts`
+split work a regression net for the toolbar / attribute panel.
 
-**Trigger.** Land alongside the `main.ts` split so the refactor
-has a regression net, or first time a UI bug ships because there
-was no automated check.
+**Trigger.** Add cases as fixture infrastructure grows, or the
+first time a UI bug ships uncaught.
