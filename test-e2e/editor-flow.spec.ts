@@ -84,3 +84,96 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   expect(html).toContain('<title>e2e flow');
   expect(html).toMatch(/class="[^"]*rkr-figure/);
 });
+
+// Image-edit pipeline coverage: rotate (a runEdit path) writes through
+// the canvas pipeline + setStatus, then Save commits ops + bake to
+// /admin/sidecar/:id. Targets image-edit.ts (saveImageEdits) and the
+// runEdit/refreshAfterEdit glue in main.ts.
+test('editor: rotate single image then save edits', async ({ page }) => {
+  await login(page);
+
+  await page.locator('#rkr-title').fill('e2e rotate');
+  await page.locator('#rkr-slug').fill(`e2e-rotate-${Date.now()}`);
+
+  // Insert a single image so the image-edit section reveals (it only
+  // shows when the figure has exactly one id).
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'rotate.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BASE64, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded rotate\.png/, {
+    timeout: 10_000
+  });
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+
+  // Wait for ensureLocalState() to settle — the Save button starts
+  // disabled and the rotate handler reads getLocalEditState which
+  // returns null until the meta fetch resolves.
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+  await expect(page.locator('#rkr-image-edits')).toBeAttached();
+
+  await page.locator('#rkr-image-rotate-r-btn').click();
+  // setStatus(`${label} ${id.slice(0,8)}…`) from refreshAfterEdit.
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^rotate /, {
+    timeout: 5_000
+  });
+  // Op landed → Save button is now enabled (isDirty true).
+  await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
+  // Steps list shows one entry now.
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
+
+  await page.locator('#rkr-image-save-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, {
+    timeout: 10_000
+  });
+  // After save, baseline matches local → Save button disables again.
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+});
+
+// Cropper modal coverage: the crop button opens a <dialog> with
+// cropperjs mounted. We don't drive an actual crop — the test confirms
+// the modal opens (regression-guards the cropper-modal.ts extraction)
+// and that Cancel closes it without mutating the ops list.
+test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
+  await login(page);
+
+  await page.locator('#rkr-title').fill('e2e crop');
+  await page.locator('#rkr-slug').fill(`e2e-crop-${Date.now()}`);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'crop.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BASE64, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded crop\.png/, {
+    timeout: 10_000
+  });
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+
+  // Modal starts closed (no `open` attribute → not visible).
+  const dialog = page.locator('#rkr-crop-modal');
+  await expect(dialog).toBeHidden();
+
+  // Snapshot the pre-modal step count. Uploads are content-addressed,
+  // so a previous test that inserted the same PNG bytes (e.g. the
+  // rotate spec) has already attached ops to this id; we verify Cancel
+  // doesn't ADD an op rather than asserting an absolute count.
+  const stepsBefore = await page.locator('#rkr-image-edits li').count();
+
+  await page.locator('#rkr-image-crop-btn').click();
+  // openCropper is async (loads original, bakes a stage blob, mounts
+  // cropperjs); the dialog.showModal() call is the last step. Wait for
+  // it via the visibility check.
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  // The cropper's status text gets set to `${w}×${h} current` once
+  // mounted; wait for it as an extra signal that cropperjs initialised
+  // without throwing.
+  await expect(page.locator('#rkr-crop-status')).toContainText(/×/, { timeout: 5_000 });
+
+  await page.locator('#rkr-crop-cancel').click();
+  await expect(dialog).toBeHidden();
+
+  // Cancel must not have appended an op — count stays at the snapshot.
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(stepsBefore);
+});
