@@ -14,6 +14,7 @@ import path from 'node:path';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import sharp from 'sharp';
 
+import { canonicalJson } from '../lib/canonical-json.ts';
 import { SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
 import { bakePath } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
@@ -150,6 +151,30 @@ export function registerSidecarEditRoutes(
     }
     const sidecar = await sidecarRead(siteRoot, id);
     if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+    // Bake-ops-hash guard (spec.md §7). Two clients racing the same id
+    // (offline reconnect, two-tab session) can land a bake matching a
+    // stale opset; the public site would serve the wrong pixels until
+    // the next save. Rejecting the mismatch + asking the client to
+    // re-bake against current ops is the only safe answer.
+    const headerHash = req.headers['x-rkr-bake-ops-hash'];
+    if (typeof headerHash !== 'string' || headerHash.length === 0) {
+      return reply
+        .code(400)
+        .send({ error: 'X-Rkr-Bake-Ops-Hash header required (sha256 of canonical(ops))' });
+    }
+    const expectedHash = crypto
+      .createHash('sha256')
+      .update(canonicalJson(sidecar.ops as readonly SidecarOp[]), 'utf8')
+      .digest('hex');
+    if (headerHash !== expectedHash) {
+      req.log.warn({ id, headerHash, expectedHash }, 'bake ops-hash mismatch');
+      return reply.code(409).send({
+        error: 'bake-ops-mismatch',
+        expectedHash,
+        message: 'bake was computed against stale ops; re-bake against current ops + retry'
+      });
+    }
 
     const body = req.body;
     if (!Buffer.isBuffer(body) || body.length === 0) {

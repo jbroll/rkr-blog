@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,8 +7,18 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
+import { canonicalJson } from '../../src/lib/canonical-json.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
+import type { SidecarOp } from '../../src/lib/sidecar-types.ts';
 import { buildApp } from '../../src/server.ts';
+
+/** sha256 hex of canonicalJson(ops) — the value the server expects in
+ * X-Rkr-Bake-Ops-Hash. Mirrors what the client computes; if this
+ * function changes, src/admin/canvas-loaders.ts:uploadBake needs the
+ * same change. */
+function bakeOpsHash(ops: readonly SidecarOp[]): string {
+  return crypto.createHash('sha256').update(canonicalJson(ops), 'utf8').digest('hex');
+}
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-editor-'));
@@ -282,7 +293,7 @@ test('POST /admin/sidecar/:id/bake stores the WebP at bakes/<id>.webp', async (t
   const res = await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: webp
   });
   assert.equal(res.statusCode, 200);
@@ -316,7 +327,7 @@ test('POST /admin/sidecar/:id/bake rejects non-WebP content types and bad bodies
   const garbage = await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: Buffer.from('not a webp file at all just text bytes here')
   });
   assert.equal(garbage.statusCode, 400);
@@ -335,7 +346,7 @@ test('POST /admin/sidecar/:id/bake rejects non-WebP content types and bad bodies
   const spoofRes = await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: spoof
   });
   assert.equal(spoofRes.statusCode, 400);
@@ -350,7 +361,7 @@ test('POST /admin/sidecar/:id/bake 400s on malformed id and 404s on unknown', as
   const bad = await app.inject({
     method: 'POST',
     url: '/admin/sidecar/not-a-real-id/bake',
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: await makeWebp(10, 10)
   });
   assert.equal(bad.statusCode, 400);
@@ -358,7 +369,7 @@ test('POST /admin/sidecar/:id/bake 400s on malformed id and 404s on unknown', as
   const missing = await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${'a'.repeat(64)}/bake`,
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: await makeWebp(10, 10)
   });
   assert.equal(missing.statusCode, 404);
@@ -379,7 +390,7 @@ test('POST /admin/sidecar/:id/ops unlinks the bake (so render falls back to orig
   const planted = await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: webp
   });
   assert.equal(planted.statusCode, 200);
@@ -417,11 +428,84 @@ test('POST /admin/sidecar/:id/bake also drops stale derivatives so cached result
   await app.inject({
     method: 'POST',
     url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp' },
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
     payload: await makeWebp(800, 600)
   });
 
   assert.equal(fs.existsSync(stale), false);
+});
+
+test('POST /admin/sidecar/:id/bake 400s when X-Rkr-Bake-Ops-Hash header is missing', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(400, 300)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp' },
+    payload: await makeWebp(400, 300)
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /header required/);
+});
+
+test('POST /admin/sidecar/:id/bake 409s when X-Rkr-Bake-Ops-Hash does not match current ops', async (t) => {
+  // Two-tab race: tab A applies a rotate (sidecar.ops = [rotate]), then
+  // tab B — which still has stale local state — POSTs a bake whose
+  // ops-hash matches the empty pre-rotate ops. Server must reject; tab B
+  // can re-bake against current ops and retry.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(400, 300)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Tab A applies a rotate.
+  const opsRes = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [{ type: 'rotate', degrees: 90 }] }
+  });
+  assert.equal(opsRes.statusCode, 200);
+
+  // Tab B POSTs a bake with the empty-ops hash (its stale view).
+  const stale = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
+    payload: await makeWebp(400, 300)
+  });
+  assert.equal(stale.statusCode, 409);
+  const body = stale.json<{ error: string; expectedHash: string }>();
+  assert.equal(body.error, 'bake-ops-mismatch');
+  // Server returns the actual current-ops hash so the client knows what
+  // to re-bake against.
+  assert.equal(body.expectedHash, bakeOpsHash([{ type: 'rotate', degrees: 90 }]));
+
+  // The bake file was NOT written.
+  assert.equal(fs.existsSync(bakePath(root, ingest.id)), false);
+
+  // Re-POST with the correct hash succeeds.
+  const fresh = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: {
+      'content-type': 'image/webp',
+      'x-rkr-bake-ops-hash': bakeOpsHash([{ type: 'rotate', degrees: 90 }])
+    },
+    payload: await makeWebp(400, 300)
+  });
+  assert.equal(fresh.statusCode, 200);
+  assert.equal(fs.existsSync(bakePath(root, ingest.id)), true);
 });
 
 // ---- /admin/sidecar/:id/meta + /admin/sidecar/:id/ops -----------------
