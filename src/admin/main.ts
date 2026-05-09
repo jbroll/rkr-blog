@@ -246,11 +246,9 @@ function pickMany(): Promise<File[]> {
 }
 
 // ---- Cropper helpers --------------------------------------------------
-// The crop UI mounts Cropper.js on the existing /admin/preview/<id>
-// (the JPEG fallback, ~150KB) rather than the original — small payload,
-// fewer pixels to render. On save we scale display coords (Cropper
-// returns them in the IMG element's natural-pixel space) back to
-// original-pixel space using the sidecar's recorded width/height.
+// Cropper.js mounts on /admin/preview/<id> (JPEG fallback, ~150KB).
+// On save, display coords scale back to original-pixel space using
+// the sidecar's recorded width/height.
 
 interface SidecarMeta {
   width: number | null;
@@ -349,9 +347,7 @@ function localDeleteAt(s: LocalEditState, index: number): void {
   s.ops = [...s.ops.slice(0, index), ...s.ops.slice(index + 1)];
 }
 
-/** Server-side commit of one image's local edits. Used by the Save
- * button. Posts ops + redoStack first (so the server unlinks any prior
- * bake), then if there are still ops uploads the freshly baked WebP. */
+/** Server-side commit of one image's local edits (Save button). */
 async function postOpsToServer(
   id: string,
   ops: SidecarOp[],
@@ -365,11 +361,9 @@ async function postOpsToServer(
   if (!res.ok) throw new Error(`ops: ${res.status} ${await res.text()}`);
 }
 
-/** Commit one image's local edits to the server: POST ops + redoStack
- * (which unlinks any prior bake), then if there's still ops to bake,
- * apply them on the master and POST the WebP to /bake. Update baseline
- * only after both calls land — partial commits stay dirty so a retry
- * picks them up. */
+/** POST ops + redoStack (unlinks any prior bake), then if ops remain
+ * apply them on the master and POST the WebP to /bake. Baseline updates
+ * only after both land — partial commits stay dirty for retry. */
 async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
   // Snapshot the prior server-known state before mutating: if /ops
   // succeeds but /bake fails, we restore the snapshot so the public
@@ -891,8 +885,7 @@ async function openPerspective(id: string, s: LocalEditState, onSaved: () => voi
     svgEl.appendChild(poly);
   }
 
-  // Pointer drag handling. We use Pointer Events for unified mouse +
-  // touch + pen support.
+  // Pointer Events for unified mouse / touch / pen.
   function onPointerDown(ev: PointerEvent): void {
     const target = ev.currentTarget as HTMLDivElement;
     const idx = Number(target.dataset.idx);
@@ -1103,11 +1096,7 @@ async function pickFromDrive(editor: Editor): Promise<void> {
 
 // ---- end Drive helpers ------------------------------------------------
 
-// ---- OneDrive helpers --------------------------------------------------
-// MVP: connect flow + manual file-id prompt. Full Microsoft File Picker
-// SDK integration arrives once an MS Entra app is registered for this
-// deployment; the server side (src/routes/integrations-onedrive.ts +
-// src/lib/microsoft-graph.ts) is fully ready.
+// ---- OneDrive helpers (MVP: connect + manual id prompt; see DEFERRED.md)
 
 interface OneDriveStatus {
   connected: boolean;
@@ -1508,18 +1497,29 @@ function mount(): void {
         : ({ [name]: value } as Partial<FigureAttrs>);
     editor.chain().focus().updateAttributes('figure', patch).run();
   }
-  attrAlts.addEventListener('input', () =>
-    commitFigureAttr(
-      'alts',
-      attrAlts.value
-        .split('\n')
-        .map((s) => s.trim())
-        .join(',')
-    )
-  );
-  attrCaption.addEventListener('input', () => commitFigureAttr('caption', attrCaption.value));
+  attrAlts.addEventListener('input', () => {
+    const csv = attrAlts.value
+      .split('\n')
+      .map((s) => s.trim())
+      .join(',');
+    commitFigureAttr('alts', csv);
+  });
+  // justify=inline hides figcaption via site.css; warn so the author
+  // doesn't watch their caption silently disappear at render time.
+  const warnInlineCap = (): void => {
+    if (attrJustify.value === 'inline' && attrCaption.value.trim().length > 0) {
+      setStatus('warning: justify=inline hides the caption at render time');
+    }
+  };
+  attrCaption.addEventListener('input', () => {
+    commitFigureAttr('caption', attrCaption.value);
+    warnInlineCap();
+  });
   attrMatrix.addEventListener('input', () => commitFigureAttr('matrix', attrMatrix.value));
-  attrJustify.addEventListener('change', () => commitFigureAttr('justify', attrJustify.value));
+  attrJustify.addEventListener('change', () => {
+    commitFigureAttr('justify', attrJustify.value);
+    warnInlineCap();
+  });
   attrWidth.addEventListener('input', () => commitFigureAttr('width', attrWidth.value));
   attrAspect.addEventListener('input', () => commitFigureAttr('aspect', attrAspect.value));
   attrFit.addEventListener('change', () => commitFigureAttr('fit', attrFit.value));

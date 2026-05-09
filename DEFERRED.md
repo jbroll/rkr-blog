@@ -178,19 +178,6 @@ change.
 **Trigger.** First time an author wants the same source image cropped
 differently in two posts.
 
-### `position=inline` + `caption=` silently drops the caption
-**What.** Site.css sets `display: none` on figcaption inside
-.rkr-pos-inline (`static/site.css:287`). The image widget happily
-emits the figcaption HTML; CSS hides it. Author sees their caption
-disappear.
-
-**Why deferred.** Edge case — inline images are a small minority of
-authoring patterns. Real fix is editor-side: when position changes
-to inline and caption is non-empty, surface a warning OR auto-clear
-the caption.
-
-**Trigger.** First time an author hits this and is confused.
-
 ## Step 8 follow-up
 
 ### Container directive form for galleries (per-image alts with commas)
