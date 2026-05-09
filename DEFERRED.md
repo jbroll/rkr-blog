@@ -10,26 +10,6 @@ When you fix one, delete the entry. When something gets worse than expected,
 promote it. Newly-discovered work goes here, not into commit messages, so
 the queue is searchable.
 
-## REMOVE /_debug/admin-token before merging
-
-**Source.** 2026-05-09 — added to diagnose a token mismatch on the
-rkr-blog.fly.dev sandbox where the operator can't get console access
-to read `printenv ADMIN_TOKEN`.
-
-**What.** `src/server.ts` registers `GET /_debug/admin-token` which
-returns the live `process.env.ADMIN_TOKEN` value plus its length and
-sha256. The endpoint has no auth — anyone who knows the path can
-read the secret.
-
-**Why deferred.** Needed to unblock the Fly debug; tracked for
-removal rather than fixed in-line so the trigger condition is
-explicit.
-
-**Trigger.** As soon as the Fly debug session is over (the operator
-confirms the right ADMIN_TOKEN is loaded). Delete the route block
-and the unused `createHash` import. Do NOT merge this branch with
-the route still in place.
-
 ## ::figure editor: per-cell cropper for multi-image figures
 
 **Source.** Spec.md §9 unification follow-up. Most of the toolbar
