@@ -232,25 +232,6 @@ under Fly's edge timeout (~15s), or invert the policy (queue first,
 await briefly with a short timeout, return 202 quickly). Worth a
 focused look before the demo gets traffic.
 
-### `site-admin reset` leaves empty shard directories
-
-**Source.** Manual smoke test, 2026-05-09. After
-`site-admin reset --to <url> --force`, `originals/aa/bb/`
-sub-directories survive even though every blob inside has been
-removed.
-
-**What.** The reset endpoint unlinks files but doesn't `rmdir` the
-sharded parent directories. `site-admin gc` doesn't tidy them
-either. Cosmetic — the directory entries take ~4KB each and don't
-affect correctness.
-
-**Why deferred.** Cosmetic. A reset on a heavily-used site might
-leave hundreds of empty 2-char shard dirs, but they're inert.
-
-**Trigger.** If the empty-dir count ever becomes user-visible
-(e.g., `find originals -type d -empty | wc -l` showing thousands)
-or the operator wants a tidy snapshot for backup.
-
 ### Render 500 on pathological tiny PNG
 
 **Source.** Smoke testing 2026-05-09 — a hand-rolled 1×1 PNG

@@ -126,24 +126,18 @@ test('POST /admin/reset with bearer wipes posts/originals/sidecars/cache + DB ro
   assert.equal(body.cacheFiles, 4);
   assert.equal(body.postsTableRows, 1);
 
-  // FS state after wipe: directories exist (volume mount points stay
-  // intact); files are gone.
-  assert.equal(fs.existsSync(path.join(root, 'content', 'posts')), true);
-  // Walk recursively — every subdir should now be empty of regular files.
-  const stack = [
+  // FS state after wipe: top-level dirs survive (volume mount points
+  // stay intact); files AND inner shard subdirs are gone. The shard-
+  // dir cleanup (originals/aa/bb/ etc.) prevents leak across resets.
+  const tops = [
     path.join(root, 'content', 'posts'),
     path.join(root, 'originals'),
     path.join(root, 'sidecars'),
     path.join(root, 'cache', 'img')
   ];
-  while (stack.length) {
-    const dir = stack.pop() as string;
-    if (!fs.existsSync(dir)) continue;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else assert.fail(`unexpected leftover file: ${full}`);
-    }
+  for (const top of tops) {
+    assert.equal(fs.existsSync(top), true, `top-level dir missing: ${top}`);
+    assert.deepEqual(fs.readdirSync(top), [], `top-level dir not empty (leaked subdirs?): ${top}`);
   }
 
   // posts table is empty.

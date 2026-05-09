@@ -242,14 +242,24 @@ export default async function adminRoutes(
 }
 
 /**
- * Recursively walk a directory and unlink every regular file, leaving
- * the empty directory shell. Returns the count of files removed. We
- * remove files (not the directories themselves) so a fly volume mount
- * point — which can't be unlinked — stays in place.
+ * Recursively walk a directory: unlink every regular file, then rmdir
+ * every now-empty INNER subdirectory (leaves up to root). The top-level
+ * `dir` itself is preserved so a Fly volume mount point — which can't
+ * be unlinked — stays in place. Returns the count of files removed.
+ *
+ * Two passes by design:
+ *   1. forward (stack) walk to unlink files and enumerate subdirs
+ *   2. reverse walk to rmdir each inner subdir (leaves first), best-
+ *      effort — a non-empty dir or transient EBUSY is silently skipped
+ *
+ * Without the rmdir pass the originals/sidecars/cache trees accumulate
+ * empty shard subdirs (originals/aa/bb/) after every reset; cosmetic
+ * but they leak directory entries indefinitely on a long-lived demo.
  */
 async function wipeDirectoryContents(dir: string): Promise<number> {
   if (!fs.existsSync(dir)) return 0;
   let count = 0;
+  const visitedDirs: string[] = [];
   const stack: string[] = [dir];
   while (stack.length > 0) {
     const current = stack.pop() as string;
@@ -263,10 +273,7 @@ async function wipeDirectoryContents(dir: string): Promise<number> {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(full);
-        // Defer removal of inner directory shells; we only unlink files.
-        // Empty subdirs are harmless (rmdir would also be fine, but
-        // unlinking-only keeps the wipe idempotent against the volume
-        // root and any future bind-mount points).
+        visitedDirs.push(full);
       } else {
         try {
           await fs.promises.unlink(full);
@@ -275,6 +282,15 @@ async function wipeDirectoryContents(dir: string): Promise<number> {
           /* c8 ignore next -- best-effort: a transient EBUSY etc. shouldn't abort the wipe */
         }
       }
+    }
+  }
+  // Reverse-order rmdir so leaf subdirs go first; the top-level `dir`
+  // is excluded from visitedDirs so it's never touched.
+  for (const sub of visitedDirs.reverse()) {
+    try {
+      await fs.promises.rmdir(sub);
+    } catch {
+      /* c8 ignore next -- non-empty (concurrent write) or EBUSY: harmless to skip */
     }
   }
   return count;
