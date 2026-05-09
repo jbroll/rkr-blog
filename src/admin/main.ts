@@ -13,17 +13,13 @@ import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
 import { computeHomography, type Point, perspectiveOutputSize } from './canvas-math';
+import { $, setStatus } from './dom';
+import { pickFromOneDrive } from './integrations/onedrive';
+import { type UploadResponse, uploadImage } from './upload';
 
 interface SaveResponse {
   slug: string;
   inserted: boolean;
-}
-
-interface UploadResponse {
-  id: string;
-  bytes: number;
-  ext: string;
-  deduplicated: boolean;
 }
 
 interface GdriveStatus {
@@ -174,16 +170,6 @@ function singleId(ids: string | undefined): string {
   return (ids ?? '').split(',')[0]?.trim() ?? '';
 }
 
-function $<T extends HTMLElement = HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`#${id} not found`);
-  return el as T;
-}
-
-function setStatus(msg: string): void {
-  $('rkroll-admin-status').textContent = msg;
-}
-
 function makeButton(label: string, onClick: () => void, name?: string): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
@@ -191,14 +177,6 @@ function makeButton(label: string, onClick: () => void, name?: string): HTMLButt
   if (name) b.dataset.cmd = name;
   b.addEventListener('click', onClick);
   return b;
-}
-
-async function uploadImage(file: File): Promise<UploadResponse> {
-  const fd = new FormData();
-  fd.append('file', file);
-  const res = await fetch('/admin/upload', { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(`upload failed: ${res.status}`);
-  return (await res.json()) as UploadResponse;
 }
 
 // In series so a partial-batch failure doesn't dribble half the ids
@@ -1093,81 +1071,6 @@ async function pickFromDrive(editor: Editor): Promise<void> {
 }
 
 // ---- end Drive helpers ------------------------------------------------
-
-// ---- OneDrive helpers (MVP: connect + manual id prompt; see DEFERRED.md)
-
-interface OneDriveStatus {
-  connected: boolean;
-}
-
-async function oneDriveStatus(): Promise<OneDriveStatus> {
-  const res = await fetch('/admin/integrations/onedrive/status');
-  if (!res.ok) throw new Error(`status: ${res.status}`);
-  return (await res.json()) as OneDriveStatus;
-}
-
-async function importOneDriveFile(fileId: string): Promise<UploadResponse> {
-  const res = await fetch('/admin/import/onedrive', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fileId })
-  });
-  if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
-  return (await res.json()) as UploadResponse;
-}
-
-/**
- * MVP OneDrive insert: confirm connection, prompt for an item id (or
- * a OneDrive share link, from which we extract the id), import it,
- * insert as an image node. Replace with the Microsoft File Picker
- * SDK once the deployment has an MS Entra app registered — picker-
- * config endpoint is ready, only the JS SDK integration is missing.
- */
-async function pickFromOneDrive(editor: Editor): Promise<void> {
-  const status = await oneDriveStatus();
-  if (!status.connected) {
-    if (confirm('OneDrive is not connected for your account. Open the connect flow now?')) {
-      window.location.href = '/admin/integrations/onedrive/connect';
-    }
-    return;
-  }
-  const input = prompt('OneDrive item id (or share link):', '');
-  if (!input) return;
-  const fileId = parseOneDriveId(input);
-  if (!fileId) {
-    setStatus('OneDrive: could not extract an item id from input');
-    return;
-  }
-  setStatus(`importing ${fileId.slice(0, 12)}… from OneDrive`);
-  try {
-    const r = await importOneDriveFile(fileId);
-    editor
-      .chain()
-      .focus()
-      .insertContent({ type: 'figure', attrs: { ids: r.id } })
-      .run();
-    setStatus(`imported from OneDrive (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`);
-  } catch (err) {
-    setStatus(`OneDrive import error: ${(err as Error).message}`);
-  }
-}
-
-/** Extract a OneDrive item id from a raw id, a share link, or a Graph
- * URL. Falls back to the input verbatim if it already looks like an id
- * (alphanumeric + a few separators). Returns null on garbage. */
-function parseOneDriveId(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // /drive/items/<id> form (Graph URL or share link path).
-  const m = /\/items\/([A-Za-z0-9!_-]+)/.exec(trimmed);
-  if (m) return m[1] ?? null;
-  // Bare-ish id heuristic — OneDrive ids look like
-  // "01ABCDE234XYZ..." or use base64-ish chars; accept conservatively.
-  if (/^[A-Za-z0-9!_-]+$/.test(trimmed)) return trimmed;
-  return null;
-}
-
-// ---- end OneDrive helpers ---------------------------------------------
 
 async function savePost(payload: {
   slug: string;
