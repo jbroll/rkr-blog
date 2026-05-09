@@ -137,8 +137,12 @@ async function drainLoop(): Promise<void> {
       return;
     }
     try {
-      const blob =
-        head.op === 'upload' || head.op === 'bake' ? await readEntryBlobOrThrow(head.seq) : null;
+      // Bake entries carry their blob via outbox-blobs/<seq>.bin
+      // (image-edit.ts:commitOffline passes blob to outboxAppend).
+      // Upload entries store bytes in opfs://originals/<id>.<ext>
+      // for offline-preview reuse, so the upload drainer reads from
+      // there itself; sync passes null.
+      const blob = head.op === 'bake' ? await readEntryBlobOrThrow(head.seq) : null;
       await drainer(head, blob);
       await outboxRemove(head);
     } catch (err) {

@@ -17,7 +17,9 @@ export default async function globalTeardown(): Promise<void> {
     entryFilter: (entry: { url: string }) =>
       entry.url.includes('/static/admin/') || entry.url.includes('/static/site/'),
     sourceFilter: (sourcePath: string) =>
-      sourcePath.includes('src/admin/') || sourcePath.includes('src/site/')
+      sourcePath.includes('src/admin/') ||
+      sourcePath.includes('src/site/') ||
+      sourcePath.includes('src/lib/')
   });
   // mcr.generate() prints its own console-details report (see
   // reports: ['console-details'] in the fixture); we just need to

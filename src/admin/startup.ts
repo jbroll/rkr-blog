@@ -12,17 +12,27 @@
 // the offline-init order has one obvious home.
 
 import { setStatus } from './dom.ts';
-import { start as startOnline } from './online-state.ts';
+import { drainBake, drainSavePost, drainSetOps, drainUpload } from './drainers.ts';
+import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { pendingCount } from './outbox.ts';
-import { tryDrain } from './sync.ts';
+import { registerDrainer, tryDrain } from './sync.ts';
 
 export async function startOfflineInfrastructure(): Promise<void> {
   try {
     await ensureSchema();
+    registerDrainer('upload', drainUpload);
+    registerDrainer('setOps', drainSetOps);
+    registerDrainer('bake', drainBake);
+    registerDrainer('savePost', drainSavePost);
     const pending = await pendingCount();
     if (pending > 0) setStatus(`${pending} pending offline edit(s)`);
     startOnline();
+    // Drain on every offline → online transition. The unsubscribe is
+    // intentionally retained for the lifetime of the SPA.
+    onOnlineChange((state) => {
+      if (state === 'online') void tryDrain();
+    });
     await tryDrain();
   } catch (err) {
     setStatus(`offline cache init failed: ${(err as Error).message}`);

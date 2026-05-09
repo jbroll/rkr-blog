@@ -15,10 +15,12 @@ import { CoverageReport } from 'monocart-coverage-reports';
 // page.coverage calls means we keep accumulating across navigations
 // within one test (login → editor → save → /:slug all count).
 // Source filtering: keep only OUR code. Without this the report
-// includes node_modules (TipTap, ProseMirror, PhotoSwipe) plus a few
-// src/lib files imported into the bundle. entryFilter narrows the V8
-// entries (bundle URLs); sourceFilter narrows source paths after
-// sourcemap unpacking.
+// includes node_modules (TipTap, ProseMirror, PhotoSwipe).
+// entryFilter narrows the V8 entries (bundle URLs); sourceFilter
+// narrows source paths after sourcemap unpacking. src/lib/ files
+// imported into the admin/site bundle are tracked too — server-only
+// lib files (db.ts, migrate.ts, etc.) never reach the bundle so the
+// V8 data won't include them.
 const mcr = new CoverageReport({
   name: 'rkroll e2e (admin SPA + public site)',
   outputDir: './coverage/e2e',
@@ -26,7 +28,9 @@ const mcr = new CoverageReport({
   entryFilter: (entry: { url: string }) =>
     entry.url.includes('/static/admin/') || entry.url.includes('/static/site/'),
   sourceFilter: (sourcePath: string) =>
-    sourcePath.includes('src/admin/') || sourcePath.includes('src/site/'),
+    sourcePath.includes('src/admin/') ||
+    sourcePath.includes('src/site/') ||
+    sourcePath.includes('src/lib/'),
   // Defer cache cleanup to global-teardown so the cache persists
   // across spec files (Playwright runs each .spec.ts in a fresh test
   // process when configured to fork; we use workers:1 today, but

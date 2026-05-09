@@ -306,3 +306,132 @@ test('editor: per-cell selection drives the image-edit panel for multi-image fig
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(0);
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
+
+// Offline upload flow (phase 1f): with the browser context offline,
+// uploadImage's POST fails, queueUpload writes the original to OPFS
+// + appends an `upload` outbox entry, returning a synthetic
+// UploadResponse so the figure node is inserted immediately. Going
+// back online re-fires sync.tryDrain via the online-state change
+// subscription in startup.ts; the upload drainer POSTs the queued
+// blob and the entry is removed.
+test('editor: offline upload queues + drains on reconnect', async ({ page, context }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.locator('#rkr-title').fill('e2e offline');
+  await page.locator('#rkr-slug').fill(`e2e-offline-${Date.now()}`);
+
+  // ---- 1. go offline + upload --------------------------------------
+  await context.setOffline(true);
+
+  // PNG_1X1_PURPLE — unique to this test so the content-hashed id is
+  // fresh and prior-test sidecar state doesn't bleed.
+  const PNG_1X1_PURPLE =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYPj/HwACBwIAyTrtSAAAAABJRU5ErkJggg==';
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'offline-pixel.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_PURPLE, 'base64')
+  });
+
+  // uploadImage returns the same UploadResponse shape online or
+  // offline; the editor's status line still reports "uploaded …".
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded offline-pixel\.png/, {
+    timeout: 10_000
+  });
+
+  await expect(page.locator('#rkr-figure-attrs')).toBeVisible();
+  const id = await page.locator('#rkr-figure-ids').inputValue();
+  expect(id).toMatch(/^[0-9a-f]{64}$/);
+
+  // ---- 2. go back online + verify the queued upload drains --------
+  await context.setOffline(false);
+  // Playwright's setOffline(false) doesn't fire window.online by
+  // itself; dispatch the event so startup.ts's onOnlineChange
+  // subscription triggers tryDrain.
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('online'));
+  });
+
+  // The drainer POSTs to /admin/upload; on success the outbox entry
+  // is removed. /admin/preview returns 302 only when the server has
+  // a sidecar for the id — proves the bytes round-tripped.
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`/admin/preview/${id}`, { maxRedirects: 0 });
+        return res.status();
+      },
+      { timeout: 15_000 }
+    )
+    .toBe(302);
+});
+
+// Offline edit-and-save flow (phase 1f): upload while online so the
+// id is real on the server, then go offline and apply rotate + Save
+// edits. commitOffline appends setOps + bake outbox entries; drainers
+// post them on reconnect.
+test('editor: offline rotate+save queues setOps+bake, drains on reconnect', async ({
+  page,
+  context
+}) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.locator('#rkr-title').fill('e2e offline edit');
+  await page.locator('#rkr-slug').fill(`e2e-offlineedit-${Date.now()}`);
+
+  // Unique PNG to keep this test's sidecar state clean (cyan).
+  const PNG_1X1_CYAN =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYPj/HwAEAQH/MQyKoQAAAABJRU5ErkJggg==';
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'edit-pixel.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_CYAN, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded edit-pixel\.png/, {
+    timeout: 10_000
+  });
+  const id = await page.locator('#rkr-figure-ids').inputValue();
+  expect(id).toMatch(/^[0-9a-f]{64}$/);
+
+  // ---- 1. go offline + rotate + save -------------------------------
+  await context.setOffline(true);
+  // Tell the SPA we're offline so getState() flips before Save fires.
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  await page.locator('#rkr-image-rotate-r-btn').click();
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
+  await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
+
+  await page.locator('#rkr-image-save-btn').click();
+  // commitOffline updates s.baseline → Save disables again.
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled({ timeout: 10_000 });
+
+  // Confirm the server STILL doesn't see the rotate op yet.
+  const metaPre = await page.request.get(`/admin/sidecar/${id}/meta`);
+  expect(metaPre.status()).toBe(200);
+  const metaPreBody = await metaPre.json();
+  expect(metaPreBody.ops).toEqual([]);
+
+  // ---- 2. reconnect + drain ----------------------------------------
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+
+  // Once the drainers run (setOps then bake), the server's sidecar
+  // carries the rotate op.
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`/admin/sidecar/${id}/meta`);
+        if (!res.ok()) return null;
+        const body = (await res.json()) as { ops: { type: string; degrees?: number }[] };
+        return body.ops;
+      },
+      { timeout: 15_000 }
+    )
+    .toEqual([{ type: 'rotate', degrees: 90 }]);
+});

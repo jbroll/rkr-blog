@@ -25,10 +25,15 @@ const channel: BroadcastChannel | null =
 
 let current: OnlineState = 'verifying';
 let probeTimer: ReturnType<typeof setTimeout> | null = null;
+// BroadcastChannel doesn't deliver to its own posters, so in-process
+// subscribers are tracked separately and fanned out alongside the
+// cross-tab post.
+const localHandlers = new Set<(state: OnlineState) => void>();
 
 function publish(state: OnlineState): void {
   if (current === state) return;
   current = state;
+  for (const h of localHandlers) h(state);
   /* v8 ignore next 3 -- environments without BroadcastChannel skip */
   if (channel) {
     channel.postMessage({ type: 'state', state } satisfies OnlineEvent);
@@ -42,13 +47,18 @@ export function getState(): OnlineState {
 
 /** @public */
 export function onChange(handler: (state: OnlineState) => void): () => void {
-  /* v8 ignore next 3 -- BroadcastChannel-less envs return no-op unsub */
-  if (!channel) return () => {};
+  localHandlers.add(handler);
+  const cleanupLocal = () => localHandlers.delete(handler);
+  /* v8 ignore next 3 -- BroadcastChannel-less envs unsubscribe local-only */
+  if (!channel) return cleanupLocal;
   const listener = (ev: MessageEvent<OnlineEvent>): void => {
     if (ev.data?.type === 'state') handler(ev.data.state);
   };
   channel.addEventListener('message', listener);
-  return () => channel.removeEventListener('message', listener);
+  return () => {
+    cleanupLocal();
+    channel.removeEventListener('message', listener);
+  };
 }
 
 /** Single HEAD probe to /health. Returns true on 2xx, false on

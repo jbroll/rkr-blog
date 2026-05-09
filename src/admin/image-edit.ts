@@ -14,9 +14,13 @@
 // the server has so we can detect "dirty" (Save button enabled) and
 // undo unsaved local edits if needed.
 
+import { bakeOpsHash } from '../lib/bake-ops-hash.ts';
 import { isDirty, type LocalEditState } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal, uploadBake } from './canvas-loaders';
+import { getState } from './online-state.ts';
+import { append as outboxAppend } from './outbox.ts';
+import { tryDrain } from './sync.ts';
 
 interface SidecarMeta {
   width: number | null;
@@ -73,46 +77,74 @@ async function postOpsToServer(
   if (!res.ok) throw new Error(`ops: ${res.status} ${await res.text()}`);
 }
 
-/** POST ops + redoStack (unlinks any prior bake), then if ops remain
- * apply them on the master and POST the WebP to /bake. Baseline updates
- * only after both land — partial commits stay dirty for retry. */
+/** Commit the local ops + bake to either the server (online) or
+ * the outbox (offline / online attempt failed). Updates s.baseline
+ * either way — "saved" means "committed for sync," not "the server
+ * has it yet." Phase 1g savePost-conflict resolution will roll back
+ * s.baseline if the drain hits a 409 the user resolves by
+ * discarding. */
 export async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
-  // Snapshot the prior server-known state before mutating: if /ops
-  // succeeds but /bake fails, we restore the snapshot so the public
-  // site doesn't end up serving 500s for an `ops` chain whose bake
-  // never landed (notably, `perspective` is client-only — sharp can't
-  // apply a homography, so a missing bake means `unknown op type`
-  // until the next save).
-  const priorOps = [...s.baseline.ops];
-  const priorRedo = [...s.baseline.redoStack];
-
-  await postOpsToServer(id, s.ops, s.redoStack);
-  if (s.ops.length > 0) {
+  if (getState() !== 'offline') {
     try {
-      const original = await loadOriginal(id);
-      const canvas = getPipelineCache(id).apply(
-        {
-          drawable: original,
-          width: original.naturalWidth,
-          height: original.naturalHeight
-        },
-        s.ops
-      );
-      const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
-      await uploadBake(id, blob, s.ops);
+      await commitOnline(id, s);
+      s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+      return;
     } catch (err) {
-      // Roll back the server's view of ops to the prior baseline so
-      // the public site stays in a coherent state. Best-effort: if
-      // this also fails the user's session is offline — the local
-      // state stays dirty for retry, and beforeunload will warn
-      // before the user loses work to a reload.
-      await postOpsToServer(id, priorOps, priorRedo).catch(() => {
-        /* network gone; user retries */
+      // Online attempt failed; before falling back to queue, try to
+      // roll back the prior /ops POST if it landed but /bake failed
+      // — same reasoning as before, the public site mustn't serve
+      // 500s for an ops chain whose bake never landed.
+      await postOpsToServer(id, [...s.baseline.ops], [...s.baseline.redoStack]).catch(() => {
+        /* fall through */
       });
-      throw err;
+      // Surface why we fell back; the queue path will retry.
+      console.warn('saveImageEdits online failed, queueing offline:', err);
     }
   }
+
+  await commitOffline(id, s);
   s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+}
+
+async function commitOnline(id: string, s: LocalEditState): Promise<void> {
+  await postOpsToServer(id, s.ops, s.redoStack);
+  if (s.ops.length > 0) {
+    const blob = await renderBakeBlob(id, s.ops);
+    await uploadBake(id, blob, s.ops);
+  }
+}
+
+async function commitOffline(id: string, s: LocalEditState): Promise<void> {
+  // Append setOps first so the drain order matches the online flow
+  // (ops first, bake second — server unlinks bake on ops change).
+  await outboxAppend({
+    op: 'setOps',
+    payload: { id, ops: [...s.ops], redoStack: [...s.redoStack] }
+  });
+  if (s.ops.length > 0) {
+    const blob = await renderBakeBlob(id, s.ops);
+    await outboxAppend(
+      {
+        op: 'bake',
+        payload: { id, opsHash: await bakeOpsHash(s.ops) }
+      },
+      blob
+    );
+  }
+  void tryDrain();
+}
+
+async function renderBakeBlob(id: string, ops: readonly SidecarOp[]): Promise<Blob> {
+  const original = await loadOriginal(id);
+  const canvas = getPipelineCache(id).apply(
+    {
+      drawable: original,
+      width: original.naturalWidth,
+      height: original.naturalHeight
+    },
+    ops as SidecarOp[]
+  );
+  return canvasToBlob(canvas, 'image/webp', 0.95);
 }
 
 /** Snapshot the in-memory edit state for every image whose local ops

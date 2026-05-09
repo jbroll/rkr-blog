@@ -2,8 +2,8 @@
   "version": 1,
   "files": {
     "src/admin/canvas-loaders.ts": {
-      "linesFound": 53,
-      "linesHit": 48
+      "linesFound": 50,
+      "linesHit": 45
     },
     "src/admin/canvas.ts": {
       "linesFound": 126,
@@ -26,8 +26,8 @@
       "linesHit": 4
     },
     "src/admin/image-edit.ts": {
-      "linesFound": 35,
-      "linesHit": 27
+      "linesFound": 47,
+      "linesHit": 39
     },
     "src/admin/integrations/gdrive.ts": {
       "linesFound": 48,
@@ -58,32 +58,72 @@
       "linesHit": 10
     },
     "src/admin/upload.ts": {
-      "linesFound": 6,
-      "linesHit": 6
+      "linesFound": 16,
+      "linesHit": 16
     },
     "src/admin/opfs-schema.ts": {
       "linesFound": 18,
-      "linesHit": 14
+      "linesHit": 18
     },
     "src/admin/opfs.ts": {
       "linesFound": 52,
-      "linesHit": 32
+      "linesHit": 52
     },
     "src/admin/online-state.ts": {
-      "linesFound": 18,
-      "linesHit": 15
+      "linesFound": 28,
+      "linesHit": 26
     },
     "src/admin/outbox.ts": {
       "linesFound": 11,
-      "linesHit": 10
+      "linesHit": 11
     },
     "src/admin/sync.ts": {
-      "linesFound": 8,
-      "linesHit": 8
+      "linesFound": 10,
+      "linesHit": 10
     },
     "src/admin/startup.ts": {
-      "linesFound": 8,
+      "linesFound": 9,
+      "linesHit": 8
+    },
+    "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
+      "linesFound": 1,
+      "linesHit": 1
+    },
+    "src/admin/drainers.ts": {
+      "linesFound": 18,
+      "linesHit": 14
+    },
+    "src/lib/bake-ops-hash.ts": {
+      "linesFound": 3,
+      "linesHit": 3
+    },
+    "src/lib/canonical-json.ts": {
+      "linesFound": 25,
+      "linesHit": 22
+    },
+    "src/lib/canvas-math.ts": {
+      "linesFound": 66,
+      "linesHit": 12
+    },
+    "src/lib/content-id.ts": {
+      "linesFound": 6,
+      "linesHit": 6
+    },
+    "src/lib/image-edit-ops.ts": {
+      "linesFound": 24,
       "linesHit": 7
+    },
+    "src/lib/outbox-types.ts": {
+      "linesFound": 9,
+      "linesHit": 8
+    },
+    "src/lib/prose-markdown.ts": {
+      "linesFound": 62,
+      "linesHit": 31
+    },
+    "src/lib/safe-url.ts": {
+      "linesFound": 12,
+      "linesHit": 1
     }
   }
 }
