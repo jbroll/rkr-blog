@@ -25,6 +25,7 @@ export function renderPostPage(post: PostPageData): string {
 <link rel="stylesheet" href="/static/site/lightbox.css"/>
 <link rel="manifest" href="/static/manifest.webmanifest"/>
 <meta name="theme-color" content="#1a4f7f"/>
+<script type="module" src="/static/site/sw-register.js" defer></script>
 <script type="module" src="/static/site/img-retry.js" defer></script>
 <script type="module" src="/static/site/lightbox.js" defer></script>
 <script type="module" src="/static/site/carousel.js" defer></script>

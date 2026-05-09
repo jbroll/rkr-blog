@@ -69,7 +69,16 @@ export default async function adminRoutes(
     await fastify.register(fastifyStatic, {
       root: staticDir,
       prefix: '/static/',
-      decorateReply: false
+      decorateReply: false,
+      // Service-Worker-Allowed lets the SW at /static/site/sw.js claim
+      // scope `/` rather than only `/static/site/`. Without this the
+      // browser rejects the registration the public templates issue.
+      // No effect on any other static asset.
+      setHeaders: (res, filepath) => {
+        if (filepath.endsWith(`${path.sep}site${path.sep}sw.js`)) {
+          res.setHeader('Service-Worker-Allowed', '/');
+        }
+      }
     });
   }
 

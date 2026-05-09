@@ -43,6 +43,7 @@ export function renderIndexPage(data: IndexPageData): string {
 <link rel="stylesheet" href="/static/site.css"/>
 <link rel="manifest" href="/static/manifest.webmanifest"/>
 <meta name="theme-color" content="#1a4f7f"/>
+<script type="module" src="/static/site/sw-register.js" defer></script>
 </head>
 <body>
 ${siteHead(data.site)}
