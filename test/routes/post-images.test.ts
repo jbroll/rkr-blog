@@ -80,9 +80,12 @@ async function setup(t: TestContext) {
 }
 
 /** Pull every distinct /img/<id>.<ophash>.<fmt> URL from the rendered
- * HTML, grouped by image id. */
+ * HTML, grouped by image id. Covers src, srcset, and href — the latter
+ * is the PhotoSwipe lightbox anchor target (largest variant), which
+ * lives on a different cache line from the in-page derivatives, so
+ * checking it catches the case where lightbox URLs misalign. */
 function imageUrlsByImageId(html: string): Map<string, string[]> {
-  const re = /(?:src|srcset)="([^"]+)"/g;
+  const re = /(?:src|srcset|href)="([^"]+)"/g;
   const byId = new Map<string, string[]>();
   for (const m of html.matchAll(re)) {
     const value = m[1] ?? '';

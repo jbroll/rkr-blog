@@ -131,6 +131,12 @@ export interface PictureArgs {
   alt?: string;
   /** loading attribute; default 'lazy'. */
   loading?: 'lazy' | 'eager';
+  /** When true, wrap the <picture> in an <a href> pointing at the
+   * largest variant + dimensional data attributes that PhotoSwipe's
+   * Lightbox plugin reads (data-pswp-width, data-pswp-height). The
+   * anchor doubles as a no-JS fallback (target=_blank to the same
+   * derivative) so the image is still reachable when JS is off. */
+  lightbox?: boolean;
 }
 
 /**
@@ -140,7 +146,7 @@ export interface PictureArgs {
  * it in their own figure / slide / cell shell and indent as needed.
  */
 export function renderPicture(args: PictureArgs): string {
-  const { id, sidecar, variants, fallback, alt = '', loading = 'lazy' } = args;
+  const { id, sidecar, variants, fallback, alt = '', loading = 'lazy', lightbox = false } = args;
   const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
 
   const formats = unique(variants.flatMap((v) => v.formats));
@@ -168,11 +174,59 @@ export function renderPicture(args: PictureArgs): string {
   });
   const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
 
-  return [
+  const pictureBlock = [
     '<picture>',
     ...sources,
     `<img src="${fbUrl}" alt="${alt}" loading="${loading}"/>`,
     '</picture>'
+  ].join('\n');
+
+  if (!lightbox) return pictureBlock;
+  return wrapLightboxAnchor(pictureBlock, { id, sidecar, variants, alt, ops });
+}
+
+/** Wrap a `<picture>` block in the PhotoSwipe-compatible anchor. The
+ * href targets the largest configured variant in webp (PhotoSwipe will
+ * load this same URL into its slide); the data-pswp-* attributes carry
+ * the actual served pixel dimensions, capped by the variant width and
+ * the original's recorded width — sharp's "fit: inside" never enlarges,
+ * so a smaller original wins. */
+function wrapLightboxAnchor(
+  pictureBlock: string,
+  ctx: {
+    id: string;
+    sidecar: Sidecar;
+    variants: VariantSpec[];
+    alt: string;
+    ops: Parameters<typeof cacheKey>[0]['ops'];
+  }
+): string {
+  const { id, sidecar, variants, alt, ops } = ctx;
+  const widest = variants.reduce((acc, v) => (v.w > acc.w ? v : acc), variants[0] as VariantSpec);
+  // Prefer webp for the lightbox target — it's the format every modern
+  // browser supports and the smallest-bytes choice for photographic
+  // content (the typical lightbox payload).
+  const lbFormat: OutputFormat =
+    /* c8 ignore next -- 'webp' is in widest.formats for every figure-widget variant */
+    widest.formats.includes('webp') ? 'webp' : (widest.formats[0] as OutputFormat);
+  const lbHash = cacheKey({
+    originalId: id,
+    ops,
+    variant: { w: widest.w },
+    /* c8 ignore next -- ?? 85 unreachable: every format is in QUALITY_BY_FORMAT */
+    output: { format: lbFormat, quality: QUALITY_BY_FORMAT[lbFormat] ?? 85 }
+  });
+  const lbUrl = `/img/${id}.${lbHash}.${lbFormat}`;
+
+  const srcW = sidecar.metadata.width ?? widest.w;
+  const srcH = sidecar.metadata.height ?? Math.round(widest.w / 1.5);
+  const lbW = Math.min(widest.w, srcW);
+  const lbH = Math.max(1, Math.round(lbW * (srcH / srcW)));
+
+  return [
+    `<a href="${lbUrl}" data-pswp-width="${lbW}" data-pswp-height="${lbH}" target="_blank" rel="noopener" aria-label="Enlarge image${alt ? `: ${alt}` : ''}">`,
+    pictureBlock,
+    '</a>'
   ].join('\n');
 }
 

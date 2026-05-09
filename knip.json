@@ -11,6 +11,7 @@
     "src/cli/reset.ts",
     "src/site/carousel.ts",
     "src/site/img-retry.ts",
+    "src/site/lightbox.ts",
     "scripts/check-duplicate-types.ts",
     "scripts/check-no-reexports.ts",
     "test/**/*.test.ts",
@@ -18,7 +19,8 @@
     "test-e2e/**/*.spec.ts"
   ],
   "ignore": [
-    "src/admin/css.d.ts"
+    "src/admin/css.d.ts",
+    "src/site/css.d.ts"
   ],
   "ignoreDependencies": [
     "typescript-language-server"

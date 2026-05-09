@@ -1,200 +1,88 @@
-// rkroll lightbox: click any .rkr-figure image (other than inline) to
-// enlarge in a fullscreen overlay. ESC or click-outside dismisses.
-// Pure DOM, no framework, single self-executing module.
+// rkroll lightbox: PhotoSwipe v5, mounted on the public post pages.
 //
-// Loaded by post.ts and index.ts via <script type="module" defer>.
-// No-ops on pages with no figures, so it's safe to include globally.
+// The renderer (lib/widget-helpers.ts) wraps every figure-cell <picture>
+// in an `<a href data-pswp-width data-pswp-height>` already, so this
+// module is just the initialization shim — PhotoSwipe handles the click
+// hijack, focus trap, ESC + click-outside dismissal, swipe/pinch
+// gestures, keyboard nav, and aria-modal semantics natively.
 //
-// Accessibility (WCAG 2.1.2 / dialog pattern):
-//   - role=dialog + aria-modal=true announce the overlay to screen readers
-//   - the overlay is `tabindex=-1` and we focus it on open
-//   - we trap Tab inside the overlay so focus can't escape behind it
-//   - the previously-focused element is captured and restored on close
+// We group slides per `<figure>` so a multi-image gallery / carousel /
+// diptych / triptych shows arrows and "1 / N" counter; single-image
+// figures just open the one slide. Inline figures render as `<span>`
+// (not `<figure>`) so the `figure.rkr-figure` selector skips them
+// — preserves the prior "skip inline" behavior.
+//
+// Captions: when a cell carries authored caption text, we read it back
+// from the per-cell wrapper at slide-mount time and inject it into
+// PhotoSwipe's UI via the standard uiRegister API.
 
-import { instrument as instrumentImgRetry } from './img-retry.ts';
-
-const STYLE = `
-.rkr-lightbox-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.92);
-  display: none; align-items: center; justify-content: center;
-  z-index: 9999; cursor: zoom-out; padding: 2vh 2vw;
-  opacity: 0; transition: opacity 120ms ease-out;
-}
-.rkr-lightbox-overlay.is-open { display: flex; opacity: 1; }
-.rkr-lightbox-overlay figure {
-  position: relative; margin: 0; display: inline-block;
-}
-.rkr-lightbox-overlay img {
-  max-width: 96vw; max-height: 92vh;
-  box-shadow: 0 4px 30px rgba(0,0,0,0.6);
-  border-radius: 4px;
-  display: block;
-}
-.rkr-lightbox-overlay figcaption {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 0.75rem 1rem; background: rgba(0,0,0,0.55);
-  color: #fff; text-align: center; font-size: 0.9rem;
-  font-style: italic;
-}
-.rkr-figure:not(.rkr-pos-inline) img { cursor: zoom-in; }
-/* Lightbox trigger: an unstyled <button> wrapping each clickable img
-   so keyboard users can activate it. Inherits sizing from the figure
-   layout; the visible chrome is the img alone. */
-.rkr-lightbox-trigger {
-  display: contents;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: zoom-in;
-}
-.rkr-lightbox-trigger:focus-visible {
-  outline: 2px solid var(--rkr-link, #1a4f7f);
-  outline-offset: 2px;
-}
-`;
-
-interface OpenArgs {
-  src: string;
-  alt: string;
-  caption: string | null;
-}
-
-function attachStyles(): void {
-  if (document.getElementById('rkr-lightbox-style')) return;
-  const style = document.createElement('style');
-  style.id = 'rkr-lightbox-style';
-  style.textContent = STYLE;
-  document.head.appendChild(style);
-}
-
-function makeOverlay(): {
-  el: HTMLDivElement;
-  img: HTMLImageElement;
-  caption: HTMLElement;
-} {
-  const el = document.createElement('div');
-  el.className = 'rkr-lightbox-overlay';
-  el.setAttribute('role', 'dialog');
-  el.setAttribute('aria-modal', 'true');
-  el.setAttribute('aria-hidden', 'true');
-  el.tabIndex = -1; // focusable target for openOverlay()
-
-  // Wrap img + figcaption in a <figure> so the caption is structurally
-  // associated with the image; aria-describedby points the screen
-  // reader at the caption text after the alt is announced.
-  const figure = document.createElement('figure');
-  el.appendChild(figure);
-
-  const img = document.createElement('img');
-  img.alt = '';
-  // Same retry-with-backoff as in-page imgs. The overlay img.src is set
-  // when the user opens the lightbox, so we wire the listener once at
-  // creation; instrument() captures img.src at error time, not now.
-  instrumentImgRetry(img);
-  figure.appendChild(img);
-
-  const caption = document.createElement('figcaption');
-  caption.id = 'rkr-lightbox-caption';
-  caption.style.display = 'none';
-  figure.appendChild(caption);
-
-  document.body.appendChild(el);
-  return { el, img, caption };
-}
-
-let previousFocus: HTMLElement | null = null;
-
-function closeOverlay(el: HTMLElement): void {
-  el.classList.remove('is-open');
-  el.setAttribute('aria-hidden', 'true');
-  // Restore focus to the element that was focused before we opened.
-  if (previousFocus && document.contains(previousFocus)) {
-    previousFocus.focus({ preventScroll: true });
-  }
-  previousFocus = null;
-}
-
-function openOverlay(
-  el: HTMLDivElement,
-  img: HTMLImageElement,
-  caption: HTMLElement,
-  args: OpenArgs
-): void {
-  previousFocus = (document.activeElement as HTMLElement | null) ?? null;
-  img.src = args.src;
-  img.alt = args.alt;
-  if (args.caption) {
-    caption.textContent = args.caption;
-    caption.style.display = '';
-    img.setAttribute('aria-describedby', caption.id);
-  } else {
-    caption.textContent = '';
-    caption.style.display = 'none';
-    img.removeAttribute('aria-describedby');
-  }
-  el.classList.add('is-open');
-  el.setAttribute('aria-hidden', 'false');
-  // Move focus into the dialog so Tab cycles and screen readers announce.
-  el.focus({ preventScroll: true });
-}
-
-function captionFor(figure: HTMLElement): string | null {
-  const cap = figure.querySelector('figcaption');
-  return cap?.textContent?.trim() || null;
-}
+import 'photoswipe/style.css';
+import PhotoSwipeLightbox from 'photoswipe/lightbox';
 
 function init(): void {
-  // Pages with no figures (e.g. the index) don't need any of this.
-  const figures = document.querySelectorAll<HTMLElement>('.rkr-figure:not(.rkr-pos-inline)');
+  // Pages with no figures (the index, posts that are pure prose) skip
+  // PhotoSwipe entirely — saves ~20KB of script execution that would
+  // bind no listeners anyway.
+  const figures = document.querySelectorAll('figure.rkr-figure');
   if (figures.length === 0) return;
 
-  attachStyles();
-  const { el, img: overlayImg, caption: overlayCap } = makeOverlay();
-
-  el.addEventListener('click', () => closeOverlay(el));
-  document.addEventListener('keydown', (e) => {
-    if (!el.classList.contains('is-open')) return;
-    if (e.key === 'Escape') {
-      closeOverlay(el);
-    } else if (e.key === 'Tab') {
-      // Focus trap: only the overlay itself is focusable inside, so Tab
-      // and Shift+Tab both keep focus on it. Prevents focus from leaking
-      // back to the article behind.
-      e.preventDefault();
-      el.focus({ preventScroll: true });
-    }
+  // One Lightbox instance per page. The gallery selector groups by
+  // `<figure>` element; `children` selector picks every PhotoSwipe-
+  // ready anchor inside (renderPicture's lightbox=true wrapper). For
+  // a single-image figure this still works — PhotoSwipe just doesn't
+  // show the prev/next chrome when the slide list has one entry.
+  const lightbox = new PhotoSwipeLightbox({
+    gallery: 'figure.rkr-figure',
+    children: 'a[data-pswp-width]',
+    pswpModule: () => import('photoswipe')
   });
 
-  // Wrap each clickable image in a <button> so keyboard users can
-  // open the lightbox with Enter / Space. Bare <img> isn't focusable
-  // and has no role that announces "activatable" to screen readers
-  // (WCAG 2.1.1). The button is unstyled — just a transparent shell
-  // around the existing img — so visual layout doesn't change.
-  for (const figure of figures) {
-    const img = figure.querySelector('img');
-    if (!img) continue;
-    if (img.parentElement?.classList.contains('rkr-lightbox-trigger')) continue;
-    const trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'rkr-lightbox-trigger';
-    const caption = captionFor(figure);
-    const label = caption
-      ? `Enlarge image: ${caption}`
-      : img.alt
-        ? `Enlarge image: ${img.alt}`
-        : 'Enlarge image';
-    trigger.setAttribute('aria-label', label);
-    img.parentNode?.insertBefore(trigger, img);
-    trigger.appendChild(img);
-    trigger.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openOverlay(el, overlayImg, overlayCap, {
-        src: img.currentSrc || img.src,
-        alt: img.alt,
-        caption: captionFor(figure)
-      });
+  // Caption support: each anchor sits inside a `<div class="rkr-figure-cell">`
+  // followed by an authored caption text node (when set). On slide mount
+  // we look the caption up via the source anchor's parent and inject
+  // it as a <p> in PhotoSwipe's UI region.
+  lightbox.on('uiRegister', () => {
+    /* c8 ignore start -- runtime UI registration; verified via e2e */
+    lightbox.pswp?.ui?.registerElement({
+      name: 'caption',
+      order: 9,
+      isButton: false,
+      appendTo: 'root',
+      html: '',
+      onInit: (el) => {
+        el.classList.add('rkr-pswp-caption');
+        lightbox.pswp?.on('change', () => {
+          const slide = lightbox.pswp?.currSlide?.data.element as HTMLElement | undefined;
+          const cell = slide?.closest('.rkr-figure-cell');
+          // Caption text lives as a trailing text node inside the cell
+          // (renderCell appends `\n${escapeText(caption)}` after the
+          // <picture>); pick it up via textContent minus the picture's
+          // alt so we don't echo image text.
+          const text = readCaption(cell);
+          el.textContent = text;
+          el.style.display = text ? '' : 'none';
+        });
+      }
     });
+    /* c8 ignore stop */
+  });
+
+  lightbox.init();
+}
+
+function readCaption(cell: Element | null | undefined): string {
+  if (!cell) return '';
+  // The cell layout is `<a><picture/></a>` followed by an optional
+  // trailing text node. Pull child text nodes (skipping element
+  // children — the anchor's contents are the picture, not the
+  // caption) and concatenate.
+  let out = '';
+  for (const node of Array.from(cell.childNodes)) {
+    if (node.nodeType === 3 /* TEXT_NODE */) {
+      out += node.textContent ?? '';
+    }
   }
+  return out.trim();
 }
 
 if (document.readyState === 'loading') {

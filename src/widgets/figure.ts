@@ -131,7 +131,7 @@ async function renderCell(cell: CellInput, ctx: WidgetCtx): Promise<string> {
     return `<!-- figure: no sidecar for ${escapeAttr(cell.id)} -->`;
   }
   const alt = escapeAttr(cell.alt);
-  const picture = renderPicture({ id: cell.id, sidecar, variants, fallback, alt });
+  const picture = renderPicture({ id: cell.id, sidecar, variants, fallback, alt, lightbox: true });
   const cap = cell.caption ? `\n${escapeText(cell.caption)}` : '';
   // Each cell carries the image's native aspect as a CSS variable for
   // CLS-friendly layout reservation in flow modes; matrix mode uses
