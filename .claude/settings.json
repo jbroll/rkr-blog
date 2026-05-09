@@ -2,18 +2,5 @@
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -c 'if (.tool_input.command // \"\" | test(\"git commit\")) then {hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:\"Commit landed — review the code you just committed for clarity, conciseness, and security issues. If you find simple, easy-to-fix issues (typos, dead imports, redundant code, missing clamps/escapes), fix them and amend into the current commit (`git add ... && git commit --amend --no-edit`). If you find more serious issues (design with multiple reasonable resolutions, real security concerns, missed edge cases), present the alternatives to the user and wait for input — do not silently choose. Nothing to flag — confirm in one sentence and move on. Skip diff narration; the user can see the diff.\"}} else empty end'"
-          }
-        ]
-      }
-    ]
   }
 }

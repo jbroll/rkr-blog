@@ -8,9 +8,12 @@ User-visible text is a cost. Default to short.
 
 - **End-of-turn summary**: 1-2 sentences. What changed, what's next.
   Don't restate the diff or reproduce work the user can already see.
-- **Post-commit reviews** (triggered by the `git commit` PostToolUse
-  hook): review the code you just committed for **clarity,
-  conciseness, and security**.
+- **Post-commit reviews** — use judgment. Review before pushing
+  for **clarity, conciseness, and security** when the commit is
+  substantial: new behavior, auth/security/data-handling code,
+  refactors that move logic, anything you'd want a second pair of
+  eyes on. Skip review on trivial commits — doc edits, comment
+  polish, single-line fixes, mechanical renames.
   - Simple, easy-to-fix issues (typos, dead imports, redundant code,
     missing clamps/escapes) — fix and amend into the current commit
     (`git add … && git commit --amend --no-edit`). The amend is
@@ -19,7 +22,9 @@ User-visible text is a cost. Default to short.
   - Serious issues with more than one reasonable resolution (design
     choices, real security concerns, missed edge cases) — present the
     alternatives to the user and wait for input. Don't silently pick.
-  - Nothing material — confirm in one sentence and move on.
+  - For commits that warrant a fresh, independent read (auth touch,
+    image-pipeline change, security-sensitive refactor), run
+    `/review-step` rather than self-reviewing.
   - Skip diff narration; the user can see the diff.
 - **No session-summary recaps** unless the user asks. Pushed commits
   are the record; a wall of bullets repeating them is noise.
