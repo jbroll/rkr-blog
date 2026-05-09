@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -c 'if (.tool_input.command // \"\" | test(\"git commit\")) then {hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:\"Commit landed. Note in 1-2 sentences what you verified (gates passed, behavior unchanged, anything risky). If something material is worth flagging — a behavior change, a deferred follow-up, a coverage gap — name it. Otherwise just confirm and move on. Skip headers, sections, and adjacent-code recaps. Run /review-step explicitly only if the commit is unusually risky.\"}} else empty end'"
+            "command": "jq -c 'if (.tool_input.command // \"\" | test(\"git commit\")) then {hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:\"Commit landed — review the change. Look for real issues: regressions, missed edge cases, weak coverage, security/perf concerns, deferred work surfaced by this change. Small items (typos, dead imports, comment polish, obvious refactors) — fix on the spot in a follow-up commit, do not ask. Substantive issues with more than one reasonable resolution — name the issue, list the options with trade-offs, ask which to take. Nothing to flag — confirm in one sentence and move on. Skip multi-section recaps and diff narration; the user can already see the diff.\"}} else empty end'"
           }
         ]
       }
