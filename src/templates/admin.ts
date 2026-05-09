@@ -73,6 +73,27 @@ export function renderAdminPage(data: AdminPageData): string {
      and hide overflow; in the editor we let it stretch to the editable box. */
   #rkroll-admin-root article { max-width: none; margin: 0; }
   #rkroll-admin-status { margin-top: .5rem; color: var(--rkr-muted); font-size: .9rem; }
+  /* Sync status badge: bottom-right of the editor frame. Click opens
+     the storage panel (phase 3). Visual contract per spec-offline §8. */
+  #rkroll-admin-root { position: relative; }
+  #rkr-sync-badge {
+    position: absolute; right: .5rem; bottom: .5rem;
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .15rem .5rem;
+    font: inherit; font-size: .8rem;
+    background: var(--rkr-bg); color: var(--rkr-muted);
+    border: 1px solid var(--rkr-rule); border-radius: 999px;
+    cursor: pointer;
+  }
+  #rkr-sync-badge:hover { color: var(--rkr-fg); }
+  .rkr-sync-dot {
+    display: inline-block; width: .55rem; height: .55rem;
+    border-radius: 50%; background: var(--rkr-muted);
+  }
+  .rkr-sync-dot.is-online { background: #2ea44f; }
+  .rkr-sync-dot.is-offline { background: #cf222e; }
+  .rkr-sync-dot.is-verifying { background: #d4a72c; }
+  .rkr-sync-dot.is-conflict { background: #cf222e; box-shadow: 0 0 0 2px color-mix(in srgb, #cf222e 30%, transparent); }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
   /* Figure attribute panel: shown only when a figure node is selected.
@@ -346,6 +367,10 @@ export function renderAdminPage(data: AdminPageData): string {
 </dialog>
 <div id="rkroll-admin-root">
   <article id="rkroll-admin-article"></article>
+  <button type="button" id="rkr-sync-badge" aria-label="Sync status (click for storage panel)">
+    <span class="rkr-sync-dot" aria-hidden="true"></span>
+    <span class="rkr-sync-text">verifying</span>
+  </button>
 </div>
 <div id="rkroll-admin-status"></div>
 <input id="rkr-image-input" type="file" accept="image/*" hidden/>

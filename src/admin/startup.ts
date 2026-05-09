@@ -22,6 +22,7 @@ import { drainBake, drainSavePost, drainSetOps, drainUpload } from './drainers.t
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { pendingCount } from './outbox.ts';
+import { mountStatusBadge } from './status-badge.ts';
 import { registerDrainer, tryDrain } from './sync.ts';
 
 export async function startOfflineInfrastructure(editor: Editor): Promise<void> {
@@ -42,6 +43,7 @@ export async function startOfflineInfrastructure(editor: Editor): Promise<void> 
       editor.commands.setContent(restored, { emitUpdate: false });
     }
     startDraftPersistence(editor, draftId);
+    mountStatusBadge();
     const pending = await pendingCount();
     if (pending > 0) setStatus(`${pending} pending offline edit(s)`);
     startOnline();

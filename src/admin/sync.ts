@@ -69,9 +69,15 @@ const channel: BroadcastChannel | null =
   typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null;
 
 let currentStatus: DrainStatus = { kind: 'idle' };
+// BroadcastChannel doesn't deliver to its own posters, so in-process
+// subscribers (the status badge in the same tab) are tracked here
+// and fanned out alongside the cross-tab post. Mirrors the
+// online-state.ts pattern.
+const localStatusHandlers = new Set<(status: DrainStatus) => void>();
 
 function publish(status: DrainStatus): void {
   currentStatus = status;
+  for (const h of localStatusHandlers) h(status);
   /* v8 ignore next 3 -- environments without BroadcastChannel skip publish */
   if (channel) {
     channel.postMessage({ type: 'status', status } satisfies SyncEvent);
@@ -89,15 +95,22 @@ export function getStatus(): DrainStatus {
 /** Subscribe to status updates. Returns an unsubscribe function.
  * @public */
 export function onStatus(handler: (status: DrainStatus) => void): () => void {
-  /* v8 ignore next 3 -- BroadcastChannel-less envs return no-op unsub */
+  localStatusHandlers.add(handler);
+  const cleanupLocal = (): void => {
+    localStatusHandlers.delete(handler);
+  };
+  /* v8 ignore next 3 -- BroadcastChannel-less envs unsubscribe local-only */
   if (!channel) {
-    return () => {};
+    return cleanupLocal;
   }
   const listener = (ev: MessageEvent<SyncEvent>): void => {
     if (ev.data?.type === 'status') handler(ev.data.status);
   };
   channel.addEventListener('message', listener);
-  return () => channel.removeEventListener('message', listener);
+  return () => {
+    cleanupLocal();
+    channel.removeEventListener('message', listener);
+  };
 }
 
 /** Per-op drain handler. Phase 1f registers one of these for each

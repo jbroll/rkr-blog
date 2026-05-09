@@ -615,3 +615,35 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(1, { timeout: 5_000 });
   await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
 });
+
+// Status badge (phase 1j): bottom-right corner of #rkroll-admin-root
+// reflects connectivity + pending outbox depth + drain status. The
+// CSS class on .rkr-sync-dot encodes the state machine; the .rkr-sync-
+// text element shows the headline.
+test('editor: sync status badge reflects online/offline transitions', async ({ page, context }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  const badge = page.locator('#rkr-sync-badge');
+  await expect(badge).toBeVisible();
+  // Initial state after offlineReady resolves: online state machine
+  // has settled to 'online' via the /health probe.
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-online/, { timeout: 5_000 });
+  await expect(badge.locator('.rkr-sync-text')).toHaveText('online');
+
+  // Go offline → window event → online-state publishes 'offline' → badge.
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-offline/, { timeout: 3_000 });
+  await expect(badge.locator('.rkr-sync-text')).toHaveText('offline');
+
+  // Back online — recovery via the SPA's online-event handler. The
+  // probe re-runs, the badge flicks to 'online'.
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-online/, { timeout: 5_000 });
+});

@@ -78,12 +78,12 @@
       "linesHit": 11
     },
     "src/admin/sync.ts": {
-      "linesFound": 12,
-      "linesHit": 10
+      "linesFound": 23,
+      "linesHit": 18
     },
     "src/admin/startup.ts": {
-      "linesFound": 11,
-      "linesHit": 10
+      "linesFound": 10,
+      "linesHit": 9
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -128,6 +128,10 @@
     "src/admin/draft.ts": {
       "linesFound": 28,
       "linesHit": 27
+    },
+    "src/admin/status-badge.ts": {
+      "linesFound": 18,
+      "linesHit": 16
     }
   }
 }
