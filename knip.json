@@ -11,7 +11,6 @@
     "src/cli/reset.ts",
     "src/site/carousel.ts",
     "src/site/img-retry.ts",
-    "src/site/lightbox.ts",
     "scripts/check-duplicate-types.ts",
     "scripts/check-no-reexports.ts",
     "test/**/*.test.ts",
