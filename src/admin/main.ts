@@ -7,12 +7,13 @@ import StarterKit from '@tiptap/starter-kit';
 // CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
 
+import { idCount, singleId } from '../lib/figure-ids.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { hasWebglSupport, refreshImagePreview } from './canvas-loaders';
 import { openCropper } from './cropper-modal';
 import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
-import { type FigureAttrs, FigureNode, idCount, singleId } from './figure-node';
+import { type FigureAttrs, FigureNode } from './figure-node';
 import {
   describeOp,
   dirtyImageStates,

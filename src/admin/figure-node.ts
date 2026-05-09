@@ -84,16 +84,3 @@ export const FigureNode = Node.create({
     ];
   }
 });
-
-/** Count the comma-separated ids in a figure-attrs string. */
-export function idCount(ids: string | undefined): number {
-  return (ids ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean).length;
-}
-
-/** Extract the single id from a figure that has exactly one. */
-export function singleId(ids: string | undefined): string {
-  return (ids ?? '').split(',')[0]?.trim() ?? '';
-}
