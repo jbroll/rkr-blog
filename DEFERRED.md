@@ -33,39 +33,33 @@ specific id. The cell-selection UI is the missing piece.
 **Trigger.** First time an author wants to crop one image inside
 a multi-image figure.
 
-## src/admin/main.ts is too large
+## Slice main.ts mount() into per-panel mounts
 
-**What.** The editor entry point is 1747 lines and covers many
-concerns: ProseMirror FigureNode + toolbar + unified attribute panel
-+ cropper modal + perspective-rectify modal + image-edit pipeline
-(LocalEditState, undo/redo, ops persistence) + Drive integration +
-OneDrive integration + save flow + mount() orchestration. The right
-shape is to split into modules:
+**What.** The 7-module split tracked here previously landed in
+2026-05-09 (`dom.ts`, `upload.ts`, `canvas-loaders.ts`,
+`image-edit.ts`, `cropper-modal.ts`, `perspective-modal.ts`,
+`save.ts`, plus `integrations/{gdrive,onedrive}.ts`). main.ts is
+now 709 lines: FigureNode + a single `mount()` orchestrator that
+wires every panel section to the editor.
 
-| Module | Approx lines | What |
-|---|---|---|
-| `src/admin/image-edit.ts` | ~200 | LocalEditState, ensureLocalState, ops mutators (mutate/undo/redo/deleteAt), postOpsToServer, saveImageEdits, dirtyImageStates, flushDirtyImageEdits, describeOp |
-| `src/admin/canvas-loaders.ts` | ~115 | lruGet/Set, getPipelineCache, loadImageElement, loadOriginal, hasWebglSupport, canvasToBlob, setEditorImageSrc, refreshImagePreview, uploadBake |
-| `src/admin/cropper-modal.ts` | ~110 | openCropper, closeCropper |
-| `src/admin/perspective-modal.ts` | ~225 | openPerspective, closePerspective, PerspSession |
-| `src/admin/integrations/gdrive.ts` | ~115 | gapi loader, gdriveStatus/Token/Config, importGdriveFile, pickFromDrive |
-| `src/admin/integrations/onedrive.ts` | ~75 | oneDriveStatus, importOneDriveFile, pickFromOneDrive, parseOneDriveId |
-| `src/admin/save.ts` | ~50 | savePost, handleSave |
+The remaining oversize is structural — `mount()` constructs and
+binds the toolbar, the figure-attrs panel, the image-edit pipeline
+controls, the per-image dirty-state subscriptions, the file-input,
+and the integrations buttons in one closure. Slicing it requires
+either extracting closure-scoped helpers behind explicit return
+shapes (each panel owning its own `mountX(deps)` function) or
+threading the editor + setStatus + state stores through a
+parameter object.
 
-After all extractions: main.ts becomes the FigureNode + mount()
-orchestrator at ~700-800 lines (still over 500; further work to
-slice mount() into smaller mounts per panel section).
+**Why deferred.** The natural-cut extractions (those with cleanly
+exportable boundaries) are done. Further reduction means deciding
+on a DI contract for the closure-scoped helpers; that's a design
+choice better made when a real motivating change drives it (e.g.
+adding a new panel, or replacing TipTap), not as a size-hook tax.
 
-**Why deferred.** The extracted modules need DI for closure-scoped
-helpers (setStatus, $, editor instance). Each split is mechanical
-but the cumulative refactor needs an in-browser iteration loop to
-catch UI regressions — there's no Playwright coverage of editor
-flows yet (token-login is the only e2e). Doing the splits without
-that net is a real regression risk.
-
-**Trigger.** Land alongside the Playwright editor-flow tests
-(`DEFERRED.md` Playwright UI test coverage entry) so each split has
-a regression check, or alongside the toolbar UX refresh.
+**Trigger.** When a feature touching the editor wants per-panel
+isolation, OR when the size hook is tightened to fail-on-existing
+(the entry below).
 
 ## Tighten the per-file size hook to fail-on-existing
 
@@ -73,13 +67,13 @@ a regression check, or alongside the toolbar UX refresh.
 ceiling for new files in production source (`src/`, `bin/`) and
 rejects any growth in already-oversized files (warn-on-existing).
 Tests are exempt from the size check — coverage growth is a feature.
-After the recent splits, only `src/admin/main.ts` (1747) is still
-over the limit; once it lands under 500, the hook should be
-tightened so the warn-on-existing branch becomes a FAIL.
+After the 2026-05-09 main.ts split, only `src/admin/main.ts` (709)
+is still over the limit; once it lands under 500, the hook should
+be tightened so the warn-on-existing branch becomes a FAIL.
 
-**Why deferred.** main.ts (1747) is the last warn-on-existing
-production file. Flipping the gate before main.ts is split would
-block every commit that touches main.ts.
+**Why deferred.** main.ts (709) is the last warn-on-existing
+production file. Flipping the gate before main.ts is split below
+500 would block every commit that touches main.ts.
 
 **Trigger.** When the last warn-on-existing production file drops
 below 500 lines (i.e., `wc -l` of every staged file under `src/`
@@ -202,11 +196,11 @@ per-image captions inside a multi-image directive.
 **Source.** User request, 2026-05-08; companion to the size-hook
 entries above.
 
-**Status (2026-05-09).** 3 of 4 originals refactored:
+**Status (2026-05-09).** All 4 originals refactored to under 1k lines:
 
 | File | Was | Now | Notes |
 |---|---|---|---|
-| `src/admin/main.ts` | 1900 → 1747 | 1747 | still over; see "src/admin/main.ts is too large" |
+| `src/admin/main.ts` | 1900 → 1747 | 709 | 7 modules extracted; see "Slice main.ts mount() into per-panel mounts" |
 | `src/routes/admin.ts` | 1026 | 395 | split into 4 modules — see entry below |
 | `src/lib/wp-import.ts` | 580 → 511 | 349 | extracted wp-import-emit.ts |
 | `src/widgets/figure.ts` | 512 → 507 | 416 | extracted figure-attrs.ts |
