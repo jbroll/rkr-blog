@@ -12,7 +12,7 @@ import { canonicalJson } from '../lib/canonical-json.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
-import { computeHomography, perspectiveOutputSize } from './canvas-math';
+import { computeHomography, type Point, perspectiveOutputSize } from './canvas-math';
 
 interface SaveResponse {
   slug: string;
@@ -769,8 +769,6 @@ interface PerspSession {
   /** Cleanup hook; revokes the stage Blob URL and removes handles. */
   dispose: () => void;
 }
-
-type Point = [number, number];
 
 let activePersp: PerspSession | null = null;
 

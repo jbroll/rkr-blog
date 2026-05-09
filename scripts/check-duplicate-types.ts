@@ -23,7 +23,7 @@ const EXTS = ['.ts'];
 // renaming, sharing via a common module, or accepting and removing
 // from the list — whichever fits the case.
 //
-// Baseline as of 2026-05-08 (15 entries). Pattern matches the size
+// Baseline as of 2026-05-09 (12 entries). Pattern matches the size
 // hook: existing offenders allowed, new ones rejected.
 const ALLOWLIST: ReadonlySet<string> = new Set([
   // --- production code (resolve when touching the file) ---
@@ -32,13 +32,6 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   'CallbackQuery',
   // ImportBody: identical in gdrive and onedrive route modules. Same fix.
   'ImportBody',
-  // Op: canvas-math (browser, generic input type) vs render.ts (server,
-  // discriminated union of crop/resample/rotate/flip/perspective).
-  // Different concepts; canvas-math's should be renamed to OpInput.
-  'Op',
-  // Point: canvas-math (readonly tuple, exported) vs main.ts (mutable
-  // local). main.ts could import the canonical readonly version.
-  'Point',
   // DirectiveNode: content.ts and widgets.ts both define a node shape.
   // One should re-export from the other.
   'DirectiveNode',
@@ -46,9 +39,6 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // (server response shape, used in assertions). Test should import
   // a shared response type from the route module.
   'UploadResponse',
-  // Sub: import-wp.ts and user.ts CLI subcommand unions. Narrowly
-  // scoped per command; rename to ImportWpSub / UserSub.
-  'Sub',
   // --- test-only (lower risk; cleanup = extract shared helpers) ---
   // JobRow: prod jobs.ts vs jobs.test.ts redeclaration. Test should import.
   'JobRow',

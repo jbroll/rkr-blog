@@ -14,14 +14,14 @@ import {
 } from '../lib/users.ts';
 
 const SUBCOMMANDS = ['invite', 'list', 'remove'] as const;
-type Sub = (typeof SUBCOMMANDS)[number];
+type UserSub = (typeof SUBCOMMANDS)[number];
 
-function parseArgs(argv: string[]): { sub: Sub; rest: string[] } {
+function parseArgs(argv: string[]): { sub: UserSub; rest: string[] } {
   const sub = argv[0];
-  if (!sub || !SUBCOMMANDS.includes(sub as Sub)) {
+  if (!sub || !SUBCOMMANDS.includes(sub as UserSub)) {
     throw new Error(`usage: site-admin user <${SUBCOMMANDS.join('|')}> [args]`);
   }
-  return { sub: sub as Sub, rest: argv.slice(1) };
+  return { sub: sub as UserSub, rest: argv.slice(1) };
 }
 
 function parseRole(s: string | undefined): Role {

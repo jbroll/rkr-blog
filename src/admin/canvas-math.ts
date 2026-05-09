@@ -63,16 +63,16 @@ export function normalizeRotation(degrees: unknown): 0 | 90 | 180 | 270 | null {
 /** Loose op shape — same one canvas.ts uses. We re-declare here rather
  * than import from canvas.ts so the canvas-math module stays free of
  * DOM-typed siblings. */
-type Op = { type: string; [k: string]: unknown };
+type CanvasOp = { type: string; [k: string]: unknown };
 
 /** Stable equality for op records. Sort keys so {type, x, y} == {y, x, type}.
  * Used by the incremental pipeline cache to test "is the new ops list
  * the previous list with one new op appended?" */
-export function opsEqual(a: Op, b: Op): boolean {
+export function opsEqual(a: CanvasOp, b: CanvasOp): boolean {
   return canonicalOp(a) === canonicalOp(b);
 }
 
-function canonicalOp(op: Op): string {
+function canonicalOp(op: CanvasOp): string {
   const keys = Object.keys(op).sort();
   return JSON.stringify(keys.map((k) => [k, op[k]]));
 }
@@ -236,8 +236,8 @@ function solveLinearSystem(
  * Storage (sidecar.ops) stays untouched — the edits panel still
  * reflects the user's click history; only execution is simplified.
  * Crop and resample don't compose cleanly so they pass through. */
-export function simplifyOps(ops: readonly Op[]): Op[] {
-  const out: Op[] = [];
+export function simplifyOps(ops: readonly CanvasOp[]): CanvasOp[] {
+  const out: CanvasOp[] = [];
   for (const op of ops) {
     const last = out[out.length - 1];
     if (op.type === 'rotate' && last && last.type === 'rotate') {

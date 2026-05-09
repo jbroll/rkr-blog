@@ -11,7 +11,7 @@ import { pushPost } from '../lib/wp-push.ts';
 import { fetchPost, listPosts } from '../lib/wp-rest.ts';
 
 const SUBCOMMANDS = ['list', 'post', 'push'] as const;
-type Sub = (typeof SUBCOMMANDS)[number];
+type ImportWpSub = (typeof SUBCOMMANDS)[number];
 
 export default async function importWpCmd(argv: string[]): Promise<void> {
   const sub = argv[0];
@@ -23,8 +23,8 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
   site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]`
     );
   }
-  if ((sub as Sub) === 'list') return list(argv.slice(1));
-  if ((sub as Sub) === 'push') return push(argv.slice(1));
+  if ((sub as ImportWpSub) === 'list') return list(argv.slice(1));
+  if ((sub as ImportWpSub) === 'push') return push(argv.slice(1));
   return post(argv.slice(1));
 }
 
