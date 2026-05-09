@@ -163,6 +163,28 @@ export default async function adminRoutes(
     const filename = `${slug}.md`;
     const finalPath = path.join(postsDir, filename);
     const inserted = !fs.existsSync(finalPath);
+
+    // Optimistic-concurrency guard (spec-offline §6). When the
+    // client supplies X-Rkr-Last-Synced-At — the server's
+    // updated_at the client believed at the time the offline edits
+    // BEGAN — refuse the write if the server's actual updated_at
+    // has advanced since. The client surfaces this as a discard /
+    // force-overwrite choice; force-overwrite re-POSTs without the
+    // header. The header is optional: a fresh post that was never
+    // synced just omits it and we accept unconditionally.
+    const lastSyncedAt = request.headers['x-rkr-last-synced-at'];
+    if (typeof lastSyncedAt === 'string' && !inserted) {
+      const serverUpdatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
+      if (serverUpdatedAt > lastSyncedAt) {
+        return reply.code(409).send({
+          error: 'post-superseded',
+          slug,
+          serverUpdatedAt,
+          clientLastSyncedAt: lastSyncedAt
+        });
+      }
+    }
+
     await fs.promises.writeFile(finalPath, file, 'utf8');
 
     runReindex(siteRoot);

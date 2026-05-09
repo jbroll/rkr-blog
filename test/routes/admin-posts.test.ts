@@ -106,6 +106,109 @@ test('POST /admin/posts overwrites an existing post (inserted=false)', async (t)
   assert.equal(r2.json<{ inserted: boolean }>().inserted, false);
 });
 
+// Spec-offline §6: when the client's X-Rkr-Last-Synced-At is older
+// than the server's mtime for the post, the save is refused with
+// 409 post-superseded. The client surfaces discard / force-overwrite
+// (force re-POSTs without the header).
+test('POST /admin/posts: stale X-Rkr-Last-Synced-At returns 409 post-superseded', async (t) => {
+  const { root, app } = await setup(t);
+
+  const payload = {
+    slug: 'concurrent',
+    title: 'v1',
+    status: 'draft' as const,
+    markdown: 'first\n'
+  };
+  const first = await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  assert.equal(first.statusCode, 200);
+
+  // Pretend a competing device wrote a NEWER version: bump the file
+  // mtime forward by 5s. Now the original client's "lastSyncedAt =
+  // before-original-write" header is older than the server's mtime.
+  const filePath = path.join(root, 'content', 'posts', 'concurrent.md');
+  const future = new Date(Date.now() + 5_000);
+  fs.utimesSync(filePath, future, future);
+  const staleClientTs = new Date(Date.now() - 60_000).toISOString();
+
+  const conflict = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': staleClientTs },
+    payload: { ...payload, title: 'v2 stale' }
+  });
+  assert.equal(conflict.statusCode, 409);
+  const body = conflict.json<{
+    error: string;
+    slug: string;
+    serverUpdatedAt: string;
+    clientLastSyncedAt: string;
+  }>();
+  assert.equal(body.error, 'post-superseded');
+  assert.equal(body.slug, 'concurrent');
+  assert.equal(body.clientLastSyncedAt, staleClientTs);
+  assert.ok(body.serverUpdatedAt > staleClientTs);
+
+  // The .md file on disk wasn't overwritten — the conflict halted
+  // the write before it landed.
+  const onDisk = fs.readFileSync(filePath, 'utf8');
+  assert.match(onDisk, /title: v1/);
+});
+
+// Same shape as above but the header matches the server's mtime —
+// the save proceeds. This is the "no concurrent write happened"
+// happy path.
+test('POST /admin/posts: fresh X-Rkr-Last-Synced-At permits overwrite', async (t) => {
+  const { root, app } = await setup(t);
+
+  const payload = {
+    slug: 'fresh-sync',
+    title: 'v1',
+    status: 'draft' as const,
+    markdown: 'first\n'
+  };
+  await app.inject({ method: 'POST', url: '/admin/posts', payload });
+
+  const filePath = path.join(root, 'content', 'posts', 'fresh-sync.md');
+  const serverMtime = new Date(fs.statSync(filePath).mtimeMs).toISOString();
+
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': serverMtime },
+    payload: { ...payload, title: 'v2 in-sync' }
+  });
+  assert.equal(ok.statusCode, 200, ok.body);
+  const onDisk = fs.readFileSync(filePath, 'utf8');
+  assert.match(onDisk, /title: v2 in-sync/);
+});
+
+// Force-overwrite path (§6): when the client decides to clobber,
+// they re-POST without the X-Rkr-Last-Synced-At header. The server
+// accepts unconditionally — even though the file is newer.
+test('POST /admin/posts: force-overwrite (no header) bypasses the conflict guard', async (t) => {
+  const { root, app } = await setup(t);
+
+  const payload = {
+    slug: 'force-overwrite',
+    title: 'v1',
+    status: 'draft' as const,
+    markdown: 'first\n'
+  };
+  await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  const filePath = path.join(root, 'content', 'posts', 'force-overwrite.md');
+  const future = new Date(Date.now() + 5_000);
+  fs.utimesSync(filePath, future, future);
+
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { ...payload, title: 'v2 forced' }
+  });
+  assert.equal(ok.statusCode, 200, ok.body);
+  const onDisk = fs.readFileSync(filePath, 'utf8');
+  assert.match(onDisk, /title: v2 forced/);
+});
+
 test('POST /admin/posts rejects bad slug / missing title / missing markdown', async (t) => {
   const { app } = await setup(t);
 
