@@ -226,27 +226,6 @@ came from a synthetic test fixture, not a real upload path.
 encoded as 1×1 due to a corrupt EXIF orientation), or if we ever
 allow tiny icons / thumbnails as figure inputs.
 
-### Browser-side coverage measurement
-
-**Source.** Coverage audit 2026-05-09. After the
-canvas-math/figure-ids/image-edit-ops extractions, ~2,400 lines of
-admin/site code remain uncovered by c8 (it explicitly excludes
-`src/admin/**`, and `src/site/**` has no tests at all).
-
-**What.** Companion to the existing "Playwright UI test coverage
-(expand)" entry, but specifically about *measurement*: the e2e suite
-exercises the SPA but doesn't capture per-line coverage data, so
-there's no signal for which admin lines are exercised vs dead.
-
-**Why deferred.** Path is known (Playwright `page.coverage.startJSCoverage()`
-per spec → merge to lcov → layer onto c8's report) but it's a fixture
-+ tooling lift, not a code change. Maybe ~30 lines of fixture code +
-a merge step.
-
-**Trigger.** When the missing coverage signal causes a real ship
-miss (a regression that the e2e didn't catch but a measured spec
-would have).
-
 ### `src/admin/main.ts` is exactly at the 500-line size cap
 
 **Source.** Size audit 2026-05-09, refreshed after per-cell editing

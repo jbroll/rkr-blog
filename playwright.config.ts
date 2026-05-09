@@ -24,6 +24,11 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? 'github' : 'list',
   timeout: 30_000,
+  // V8 coverage capture lives in test-e2e/coverage-fixtures.ts (per-
+  // test) + test-e2e/global-teardown.ts (final report generation).
+  // mcr handles source-map resolution so reports show src/admin/main.ts
+  // line coverage rather than the bundled URL.
+  globalTeardown: './test-e2e/global-teardown.ts',
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',

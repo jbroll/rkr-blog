@@ -23,6 +23,7 @@
     "circular": "dpdm --circular --no-warning --no-tree --exit-code circular:1 'src/**/*.ts'",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
+    "test:coverage:full": "rm -rf coverage && npm run --silent test:coverage:report && npm run --silent build:admin && npm run --silent build:site && npm run --silent test:e2e",
     "format": "biome format --write",
     "check": "npm run typecheck && biome check && npm run test:coverage",
     "build:admin": "esbuild src/admin/main.ts --bundle --format=esm --target=es2022 --outfile=static/admin/main.js --minify --sourcemap",
@@ -66,6 +67,7 @@
     "dpdm": "^4.0.1",
     "esbuild": "^0.28.0",
     "knip": "^6.12.1",
+    "monocart-coverage-reports": "^2.12.11",
     "typescript": "^6.0.3",
     "typescript-language-server": "^4.4.1"
   }

@@ -17,6 +17,8 @@
     "scripts/check-no-reexports.ts",
     "test/**/*.test.ts",
     "test-e2e/server-runner.ts",
+    "test-e2e/global-teardown.ts",
+    "test-e2e/coverage-fixtures.ts",
     "test-e2e/**/*.spec.ts"
   ],
   "ignore": [

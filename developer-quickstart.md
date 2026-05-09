@@ -169,11 +169,22 @@ npm run test:coverage        # c8 with per-file thresholds
 npm run typecheck            # tsc --noEmit (server + browser)
 npm run check                # typecheck + lint + test:coverage
 npm run test:e2e             # Playwright (chromium, headless)
+                             # plus V8 coverage of the admin SPA bundle
+                             # via monocart-coverage-reports → coverage/e2e/
 npm run test:e2e:headed      # Playwright (chromium, visible)
+npm run test:coverage:full   # c8 (server) + e2e (browser) end-to-end;
+                             # writes lcov to coverage/ + coverage/e2e/
 ```
 
 `test:coverage` excludes `src/admin/**` (browser code, requires a DOM
-shim to test directly; the pure-math siblings are covered).
+shim to test directly; the pure-math siblings already moved to
+`src/lib/` are covered). `test:e2e` fills that gap by capturing V8
+coverage of the live admin bundle: every spec wraps `page.coverage.
+startJSCoverage()` via the fixture in `test-e2e/coverage-fixtures.ts`,
+the global teardown emits an HTML report at `coverage/e2e/index.html`
+and lcov at `coverage/e2e/lcov.info`. Source maps map the bundle URLs
+back to `src/admin/*.ts` and `src/site/*.ts` so the report is in
+source-file space.
 
 `test:e2e` boots the server via `test-e2e/server-runner.ts` against a
 freshly-mkdtemp'd SITE_ROOT, runs the spec files in `test-e2e/`, and

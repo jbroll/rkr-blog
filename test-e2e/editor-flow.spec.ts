@@ -7,7 +7,7 @@
 // browser glue (TipTap insertContent, panel re-population on selection,
 // JSON-to-markdown serialization on save) that only runs in a real DOM.
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './coverage-fixtures.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
