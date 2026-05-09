@@ -8,7 +8,6 @@ import Cropper from 'cropperjs';
 // CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
 
-import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import {
   canvasToBlob,
@@ -23,7 +22,6 @@ import {
   describeOp,
   dirtyImageStates,
   ensureLocalState,
-  flushDirtyImageEdits,
   getLocalEditState,
   isDirty,
   type LocalEditState,
@@ -35,12 +33,8 @@ import {
 } from './image-edit';
 import { pickFromDrive } from './integrations/gdrive';
 import { pickFromOneDrive } from './integrations/onedrive';
+import { handleSave } from './save';
 import { uploadImage } from './upload';
-
-interface SaveResponse {
-  slug: string;
-  inserted: boolean;
-}
 
 // Custom image node. Stores {id, alt, caption, position} in the document;
 // renders to an <img> pointing at /admin/preview/<id> (server redirects
@@ -516,21 +510,6 @@ function closePerspective(): void {
     activePersp = null;
   }
   if (dialog.open) dialog.close();
-}
-
-async function savePost(payload: {
-  slug: string;
-  title: string;
-  status: 'draft' | 'published';
-  markdown: string;
-}): Promise<SaveResponse> {
-  const res = await fetch('/admin/posts', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error(`save failed: ${res.status} ${await res.text()}`);
-  return (await res.json()) as SaveResponse;
 }
 
 function mount(): void {
@@ -1043,39 +1022,6 @@ function mount(): void {
       setStatus(`upload error: ${(err as Error).message}`);
     }
   });
-}
-
-async function handleSave(editor: Editor): Promise<void> {
-  const slug = $<HTMLInputElement>('rkr-slug').value.trim();
-  const title = $<HTMLInputElement>('rkr-title').value.trim();
-  const status = $<HTMLSelectElement>('rkr-status').value as 'draft' | 'published';
-  if (!slug || !title) {
-    setStatus('slug and title are required');
-    return;
-  }
-  // Flush any dirty image edits BEFORE writing the post. Without this,
-  // the saved markdown would reference image ids whose server-side ops
-  // are stale relative to what the user just edited — silent data loss.
-  // Uses the same code path the per-image Save button uses, so failures
-  // leave the image state dirty and the user can retry.
-  const dirtyCount = dirtyImageStates().length;
-  if (dirtyCount > 0) {
-    setStatus(`saving ${dirtyCount} image edit${dirtyCount === 1 ? '' : 's'}…`);
-    const { ok, failed } = await flushDirtyImageEdits();
-    if (failed > 0) {
-      setStatus(`save aborted: ${failed}/${ok + failed} image edits failed to upload`);
-      return;
-    }
-  }
-  setStatus('saving…');
-  try {
-    const json = editor.getJSON() as ProseDoc;
-    const markdown = proseToMarkdown(json);
-    const result = await savePost({ slug, title, status, markdown });
-    setStatus(`saved /${result.slug}`);
-  } catch (err) {
-    setStatus(`save error: ${(err as Error).message}`);
-  }
 }
 
 // Warn on reload / close while any image has unsaved local edits.
