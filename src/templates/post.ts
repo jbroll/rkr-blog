@@ -23,6 +23,8 @@ export function renderPostPage(post: PostPageData): string {
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
 <link rel="stylesheet" href="/static/site.css"/>
 <link rel="stylesheet" href="/static/site/lightbox.css"/>
+<link rel="manifest" href="/static/manifest.webmanifest"/>
+<meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="/static/site/img-retry.js" defer></script>
 <script type="module" src="/static/site/lightbox.js" defer></script>
 <script type="module" src="/static/site/carousel.js" defer></script>

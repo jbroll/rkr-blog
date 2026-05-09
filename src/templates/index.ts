@@ -41,6 +41,8 @@ export function renderIndexPage(data: IndexPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(data.site.title)}</title>
 <link rel="stylesheet" href="/static/site.css"/>
+<link rel="manifest" href="/static/manifest.webmanifest"/>
+<meta name="theme-color" content="#1a4f7f"/>
 </head>
 <body>
 ${siteHead(data.site)}
