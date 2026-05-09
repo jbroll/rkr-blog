@@ -6,10 +6,10 @@
 // applyPerspective then runs a WebGL homography to rectify.
 
 import { computeHomography, type Point, perspectiveOutputSize } from '../lib/canvas-math.ts';
+import { type LocalEditState, localMutate } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
 import { $, setStatus } from './dom';
-import { type LocalEditState, localMutate } from './image-edit';
 
 interface PerspSession {
   /** Canvas-pixel coords of the four handles, in tl/tr/br/bl order. */

@@ -5,11 +5,10 @@
 // rotates / flips / earlier crops.
 
 import Cropper from 'cropperjs';
-
+import { type LocalEditState, localMutate } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
 import { $, setStatus } from './dom';
-import { type LocalEditState, localMutate } from './image-edit';
 
 let activeCropper: Cropper | null = null;
 

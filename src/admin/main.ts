@@ -8,6 +8,15 @@ import StarterKit from '@tiptap/starter-kit';
 import 'cropperjs/dist/cropper.css';
 
 import { idCount, singleId } from '../lib/figure-ids.ts';
+import {
+  describeOp,
+  isDirty,
+  type LocalEditState,
+  localDeleteAt,
+  localMutate,
+  localRedo,
+  localUndo
+} from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { hasWebglSupport, refreshImagePreview } from './canvas-loaders';
 import { openCropper } from './cropper-modal';
@@ -15,16 +24,9 @@ import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
 import { type FigureAttrs, FigureNode } from './figure-node';
 import {
-  describeOp,
   dirtyImageStates,
   ensureLocalState,
   getLocalEditState,
-  isDirty,
-  type LocalEditState,
-  localDeleteAt,
-  localMutate,
-  localRedo,
-  localUndo,
   saveImageEdits
 } from './image-edit';
 import { pickFromDrive } from './integrations/gdrive';
