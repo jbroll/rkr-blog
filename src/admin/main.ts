@@ -11,6 +11,7 @@ import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { hasWebglSupport, refreshImagePreview } from './canvas-loaders';
 import { openCropper } from './cropper-modal';
 import { $, setStatus } from './dom';
+import { makeDropHandlers, wireDragOverlay } from './drag-drop';
 import { type FigureAttrs, FigureNode, idCount, singleId } from './figure-node';
 import {
   describeOp,
@@ -91,118 +92,10 @@ function mount(): void {
     extensions: [StarterKit, FigureNode],
     content: '<p></p>',
     autofocus: 'end',
-    editorProps: {
-      // Drag-and-drop: extract File[]s from the drop, upload them
-      // sequentially, insert image nodes at the drop position. Return
-      // true so ProseMirror skips its default drop handling (which
-      // would otherwise insert garbage HTML for the dropped files).
-      handleDrop: (view, ev, _slice, _moved): boolean => {
-        const dt = (ev as DragEvent).dataTransfer;
-        const files = dt ? imageFilesFrom(dt) : [];
-        if (files.length === 0) return false;
-        ev.preventDefault();
-        const e = ev as DragEvent;
-        const pos =
-          view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? view.state.selection.from;
-        void uploadAndInsertAt(editor, files, pos);
-        return true;
-      },
-      // Paste: same shape, files come from clipboardData. Insert at
-      // the current cursor — pastes don't have spatial coords.
-      handlePaste: (_view, ev, _slice): boolean => {
-        const cd = (ev as ClipboardEvent).clipboardData;
-        const files = cd ? imageFilesFrom(cd) : [];
-        if (files.length === 0) return false;
-        ev.preventDefault();
-        void uploadAndInsertAt(editor, files, null);
-        return true;
-      }
-    }
+    editorProps: makeDropHandlers(() => editor)
   });
 
-  /** Pull image File entries out of a DataTransfer / Clipboard event.
-   * Filters by type so a drop containing both an image and a text
-   * snippet doesn't double-handle. */
-  function imageFilesFrom(source: {
-    files?: FileList | null;
-    items?: DataTransferItemList;
-  }): File[] {
-    const out: File[] = [];
-    // .files works for drag-drop. clipboardData.files is empty in some
-    // browsers for image paste; .items is the fallback.
-    if (source.files) {
-      for (const f of Array.from(source.files)) {
-        if (f.type.startsWith('image/')) out.push(f);
-      }
-    }
-    if (out.length === 0 && source.items) {
-      for (const item of Array.from(source.items)) {
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-          const f = item.getAsFile();
-          if (f) out.push(f);
-        }
-      }
-    }
-    return out;
-  }
-
-  /** Upload + insert N image files. Sequential so a partial-batch
-   * failure doesn't dribble half the ids into the editor before
-   * throwing. `pos === null` means "at current cursor". */
-  async function uploadAndInsertAt(ed: Editor, files: File[], pos: number | null): Promise<void> {
-    let cursor = pos;
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i] as File;
-      setStatus(`uploading ${f.name || 'image'} (${i + 1}/${files.length})…`);
-      try {
-        const r = await uploadImage(f);
-        const attrs = { ids: r.id };
-        const chain = ed.chain().focus();
-        if (cursor !== null) {
-          chain.insertContentAt(cursor, { type: 'figure', attrs });
-          // Advance cursor for subsequent inserts so multiple images
-          // land in source order, not stacked at the same point.
-          cursor += 1;
-        } else {
-          chain.insertContent({ type: 'figure', attrs });
-        }
-        chain.run();
-        setStatus(
-          `inserted ${f.name || 'image'} (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`
-        );
-      } catch (err) {
-        setStatus(`upload error: ${(err as Error).message}`);
-        return;
-      }
-    }
-  }
-
-  // Drag-over visual cue. The browser fires dragenter / dragleave on
-  // every descendant traversal, so we count enter/leave to know when
-  // the user has actually left the drop zone vs just crossed an
-  // internal boundary.
-  const editorFrame = $('rkroll-admin-root');
-  let dragDepth = 0;
-  editorFrame.addEventListener('dragenter', (ev) => {
-    if (!ev.dataTransfer || !Array.from(ev.dataTransfer.types).includes('Files')) return;
-    dragDepth++;
-    editorFrame.classList.add('is-drag-over');
-  });
-  editorFrame.addEventListener('dragleave', () => {
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (dragDepth === 0) editorFrame.classList.remove('is-drag-over');
-  });
-  editorFrame.addEventListener('dragover', (ev) => {
-    // Required: without preventDefault the browser refuses the drop
-    // and falls back to navigating to the file (Chrome/Firefox both).
-    if (ev.dataTransfer && Array.from(ev.dataTransfer.types).includes('Files')) {
-      ev.preventDefault();
-    }
-  });
-  editorFrame.addEventListener('drop', () => {
-    dragDepth = 0;
-    editorFrame.classList.remove('is-drag-over');
-  });
+  wireDragOverlay($('rkroll-admin-root'));
 
   /** Multi-upload helper: pick N files, upload, insert one figure with
    * matrix=justified by default. Author edits matrix in the figure
