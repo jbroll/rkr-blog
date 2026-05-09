@@ -99,7 +99,7 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
         s.ops
       );
       const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
-      await uploadBake(id, blob);
+      await uploadBake(id, blob, s.ops);
     } catch (err) {
       // Roll back the server's view of ops to the prior baseline so
       // the public site stays in a coherent state. Best-effort: if

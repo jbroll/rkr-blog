@@ -5,6 +5,7 @@
 
 import type { Editor } from '@tiptap/core';
 
+import { canonicalJson } from '../lib/canonical-json.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
 
@@ -189,10 +190,24 @@ export async function refreshImagePreview(
   }
 }
 
-export async function uploadBake(id: string, blob: Blob): Promise<void> {
+/** sha256 hex of canonicalJson(ops) — the value the server expects in
+ * X-Rkr-Bake-Ops-Hash. Mirrors the server's own computation in
+ * src/routes/admin-sidecar-edit.ts; keep them in sync. */
+async function bakeOpsHash(ops: readonly SidecarOp[]): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalJson(ops));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export async function uploadBake(id: string, blob: Blob, ops: readonly SidecarOp[]): Promise<void> {
   const res = await fetch(`/admin/sidecar/${id}/bake`, {
     method: 'POST',
-    headers: { 'content-type': 'image/webp' },
+    headers: {
+      'content-type': 'image/webp',
+      'x-rkr-bake-ops-hash': await bakeOpsHash(ops)
+    },
     body: blob
   });
   if (!res.ok) throw new Error(`bake: ${res.status} ${await res.text()}`);
