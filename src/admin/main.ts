@@ -28,12 +28,18 @@ import {
   getLocalEditState,
   saveImageEdits
 } from './image-edit';
+import { ensureSchema } from './opfs-schema';
 import { openPerspective } from './perspective-modal';
 import { pickMany, uploadMany } from './pick';
 import { mountToolbar } from './toolbar';
 import { uploadImage } from './upload';
 
 function mount(): void {
+  // OPFS schema init (spec-offline.md §10); fire-and-forget.
+  void ensureSchema().catch((err: unknown) =>
+    setStatus(`offline cache init failed: ${(err as Error).message}`)
+  );
+
   // Mount inside the <article> child so site.css's prose typography
   // (max-width, headings, blockquote, hr, code) applies to the editable
   // region. The outer #rkroll-admin-root keeps the framed-box look.
@@ -62,10 +68,8 @@ function mount(): void {
   const attrFlipHBtn = $<HTMLButtonElement>('rkr-image-flip-h-btn');
   const attrFlipVBtn = $<HTMLButtonElement>('rkr-image-flip-v-btn');
   const attrPerspBtn = $<HTMLButtonElement>('rkr-image-perspective-btn');
-  // Perspective rectify needs WebGL (Canvas2D's setTransform is affine
-  // only, so a homography can't be applied without a fragment shader).
-  // Detect at mount time and disable the button up front rather than
-  // surprising the user with a silent no-op when they save the modal.
+  // Perspective requires WebGL (Canvas2D can't do homographies).
+  // Disable up front rather than letting clicks silently no-op.
   if (!hasWebglSupport()) {
     attrPerspBtn.disabled = true;
     attrPerspBtn.title = 'Perspective rectify requires WebGL; your browser does not support it.';
@@ -78,9 +82,8 @@ function mount(): void {
   const attrSaveBtn = $<HTMLButtonElement>('rkr-image-save-btn');
   const attrEditsList = $<HTMLOListElement>('rkr-image-edits');
 
-  // Annotate explicitly: makeDropHandlers takes a getter that closes over
-  // `editor`, which makes the variable self-referential to TS's inference.
-  // The annotation breaks the cycle without changing runtime behavior.
+  // `editor: Editor` annotation breaks the TS self-reference cycle
+  // through makeDropHandlers' `() => editor` closure.
   const editor: Editor = new Editor({
     element: root,
     extensions: [StarterKit, FigureNode],
@@ -91,10 +94,8 @@ function mount(): void {
 
   wireDragOverlay($('rkroll-admin-root'));
 
-  // E2E hook: when /admin/editor?e2e=1, expose the editor on window so
-  // Playwright can drive flows the picker UI doesn't reach (multi-image
-  // figure construction, programmatic selection moves). Gated on the
-  // query string so production loads never get the debug surface.
+  // E2E hook: ?e2e=1 exposes the editor for Playwright flows the
+  // picker UI doesn't reach (multi-image figure construction).
   if (new URLSearchParams(location.search).get('e2e') === '1') {
     (window as unknown as { __rkrEditor?: Editor }).__rkrEditor = editor;
   }
