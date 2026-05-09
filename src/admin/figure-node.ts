@@ -65,9 +65,20 @@ export const FigureNode = Node.create({
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    const thumbs: unknown[] = idList.map((id) => [
+    // Each thumb carries data-id + data-cell-index so main.ts's
+    // delegated click handler can identify which cell the user picked
+    // (per-cell editing for multi-image figures), and the rkr-image
+    // class lets canvas-loaders' setEditorImageSrc find this <img> when
+    // refreshing a per-cell preview after a local op.
+    const thumbs: unknown[] = idList.map((id, i) => [
       'img',
-      { src: `/admin/preview/${id}`, alt: '', class: 'rkr-multi-thumb' }
+      {
+        src: `/admin/preview/${id}`,
+        alt: '',
+        class: 'rkr-image rkr-multi-thumb',
+        'data-id': id,
+        'data-cell-index': String(i)
+      }
     ]);
     const matrixLabel = attrs.matrix ? attrs.matrix : `1x${idList.length || 1}`;
     return [

@@ -47,6 +47,10 @@ export interface AuthRoutesOpts {
   postLoginPath?: string;
   /** Use Secure cookie attribute (true in prod over TLS). Default true. */
   secureCookies?: boolean;
+  /** Override the per-IP rate cap on /admin/auth/token-login (5 per
+   * 5 minutes by default). The e2e runner raises this so a multi-spec
+   * run with one login per spec doesn't exhaust the cap. */
+  tokenLoginRateMax?: number;
 }
 
 export default async function authRoutes(
@@ -233,8 +237,10 @@ export default async function authRoutes(
     {
       // Aggressive rate limit — auth endpoint with brute-force exposure.
       // ADMIN_TOKEN is long-random so brute force is infeasible, but the
-      // limit keeps attempt logs sparse and observable.
-      config: { rateLimit: { max: 5, timeWindow: '5 minutes' } }
+      // limit keeps attempt logs sparse and observable. The e2e runner
+      // raises the cap (one IP makes many logins per spec run) without
+      // disabling the gate so the route still has SOME ceiling.
+      config: { rateLimit: { max: opts.tokenLoginRateMax ?? 5, timeWindow: '5 minutes' } }
     },
     async (req, reply) => {
       const provided = typeof req.body?.token === 'string' ? req.body.token : '';

@@ -115,6 +115,11 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-root .rkr-multi-thumbs { display: flex; flex-wrap: wrap; gap: .35rem; }
   #rkroll-admin-root .rkr-multi-thumb {
     width: 6rem; height: 4rem; object-fit: cover; border-radius: 2px;
+    cursor: pointer;
+  }
+  #rkroll-admin-root .rkr-multi-thumb.is-active-cell {
+    outline: 2px solid var(--rkr-link, #1a4f7f);
+    outline-offset: 2px;
   }
   #rkroll-admin-root .rkr-multi-caption {
     margin-top: .35rem; color: var(--rkr-muted); font-size: .85rem; font-style: italic;
@@ -289,8 +294,10 @@ export function renderAdminPage(data: AdminPageData): string {
   <label for="rkr-figure-timer">Autoplay (s)</label>
   <input id="rkr-figure-timer" type="number" min="0" max="60" step="1"/>
   <!-- Image-edit pipeline (crop / rotate / flip / perspective / resample
-       + ops list). Only meaningful for single-image figures; main.ts
-       reveals this section when the figure has exactly one id. -->
+       + ops list). For single-image figures, main.ts reveals this
+       section automatically (cell 0 is implicit). For multi-image
+       figures, the user clicks a thumb to pick a cell and the section
+       reveals scoped to that cell's id. -->
   <div id="rkr-image-edit" hidden>
     <span></span>
     <span class="rkr-image-actions">

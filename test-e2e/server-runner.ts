@@ -39,7 +39,11 @@ const app = await buildApp({
   siteRoot: root,
   db,
   startWorker: false,
-  auth: { secureCookies: false }
+  // Loosened token-login rate cap: the e2e suite logs in once per
+  // spec and currently runs 4+ specs per run, brushing the production
+  // 5-per-5-minutes cap. Bumping it here keeps the gate in place (so
+  // a test with bad logic can't spam infinitely) without flaking.
+  auth: { secureCookies: false, tokenLoginRateMax: 100 }
 });
 app.addHook('onClose', async () => {
   db.close();

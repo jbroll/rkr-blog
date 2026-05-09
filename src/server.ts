@@ -55,6 +55,9 @@ export interface BuildAppOpts {
      * PUBLIC_BASE_URL; tests pass ['http://localhost'] (or whatever they
      * use as a synthetic origin). When undefined, CSRF check is skipped. */
     allowedOrigins?: string[];
+    /** Override the per-IP rate cap on /admin/auth/token-login. Default
+     * is the route's own (5 per 5 minutes); the e2e runner raises it. */
+    tokenLoginRateMax?: number;
   };
   /**
    * When set (and auth is wired), Google Drive picker integration routes
@@ -130,6 +133,9 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       db: opts.db,
       ...(opts.auth.exchange ? { exchange: opts.auth.exchange } : {}),
       ...(opts.auth.verifier ? { verifier: opts.auth.verifier } : {}),
+      ...(opts.auth.tokenLoginRateMax !== undefined
+        ? { tokenLoginRateMax: opts.auth.tokenLoginRateMax }
+        : {}),
       secureCookies: opts.auth.secureCookies ?? true
     });
     // Picker integration routes (gated behind auth via requireUser).

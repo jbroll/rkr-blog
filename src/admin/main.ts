@@ -7,7 +7,6 @@ import StarterKit from '@tiptap/starter-kit';
 // CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
 
-import { idCount, singleId } from '../lib/figure-ids.ts';
 import {
   describeOp,
   isDirty,
@@ -29,21 +28,10 @@ import {
   getLocalEditState,
   saveImageEdits
 } from './image-edit';
-import { pickFromDrive } from './integrations/gdrive';
-import { pickFromOneDrive } from './integrations/onedrive';
 import { openPerspective } from './perspective-modal';
 import { pickMany, uploadMany } from './pick';
-import { handleSave } from './save';
+import { mountToolbar } from './toolbar';
 import { uploadImage } from './upload';
-
-function makeButton(label: string, onClick: () => void, name?: string): HTMLButtonElement {
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.textContent = label;
-  if (name) b.dataset.cmd = name;
-  b.addEventListener('click', onClick);
-  return b;
-}
 
 function mount(): void {
   // Mount inside the <article> child so site.css's prose typography
@@ -103,6 +91,14 @@ function mount(): void {
 
   wireDragOverlay($('rkroll-admin-root'));
 
+  // E2E hook: when /admin/editor?e2e=1, expose the editor on window so
+  // Playwright can drive flows the picker UI doesn't reach (multi-image
+  // figure construction, programmatic selection moves). Gated on the
+  // query string so production loads never get the debug surface.
+  if (new URLSearchParams(location.search).get('e2e') === '1') {
+    (window as unknown as { __rkrEditor?: Editor }).__rkrEditor = editor;
+  }
+
   /** Multi-upload helper: pick N files, upload, insert one figure with
    * matrix=justified by default. Author edits matrix in the figure
    * panel to convert to 1x1 (carousel), 1x2 (diptych), 1x3 (triptych),
@@ -126,65 +122,27 @@ function mount(): void {
     }
   }
 
-  toolbar.replaceChildren(
-    makeButton('B', () => editor.chain().focus().toggleBold().run(), 'bold'),
-    makeButton('I', () => editor.chain().focus().toggleItalic().run(), 'italic'),
-    makeButton('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'h2'),
-    makeButton('H3', () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'h3'),
-    makeButton(
-      'Link',
-      () => {
-        const url = prompt('URL?');
-        if (!url) return;
-        editor.chain().focus().setLink({ href: url }).run();
-      },
-      'link'
-    ),
-    makeButton('Image', () => fileInput.click(), 'image'),
-    makeButton('Gallery', () => void insertGallery(), 'gallery'),
-    makeButton(
-      'Drive',
-      () => {
-        void pickFromDrive(editor).catch((err: unknown) => {
-          setStatus(`Drive: ${(err as Error).message}`);
-        });
-      },
-      'gdrive'
-    ),
-    makeButton(
-      'OneDrive',
-      () => {
-        void pickFromOneDrive(editor).catch((err: unknown) => {
-          setStatus(`OneDrive: ${(err as Error).message}`);
-        });
-      },
-      'onedrive'
-    ),
-    makeButton('Save', () => void handleSave(editor), 'save')
-  );
+  const syncToolbarActiveStates = mountToolbar({ editor, toolbar, fileInput, insertGallery });
 
-  // Sync active states on selection change. Also reveals the figure
-  // attribute panel when a figure is selected, populates every editable
-  // field from the node's attrs, and reveals the image-edit pipeline
-  // section when the figure has exactly one image. Programmatic updates
-  // from panel inputs re-trigger this handler; we guard against
-  // feedback loops via `populating`.
+  // selectionUpdate fires on every panel-input commit too, so guard
+  // attribute writes against feedback loops via `populating`.
+  // activeCellIndex: which cell of a multi-image figure is selected
+  // (auto-0 for single-image; null until the user clicks a thumb in
+  // multi-image). lastFigurePos detects "different figure" to reset.
   let populating = false;
+  let activeCellIndex: number | null = null;
+  let lastFigurePos: number | null = null;
+
   editor.on('selectionUpdate', () => {
-    for (const b of toolbar.querySelectorAll<HTMLButtonElement>('button[data-cmd]')) {
-      const cmd = b.dataset.cmd;
-      let active = false;
-      if (cmd === 'bold') active = editor.isActive('bold');
-      else if (cmd === 'italic') active = editor.isActive('italic');
-      else if (cmd === 'h2') active = editor.isActive('heading', { level: 2 });
-      else if (cmd === 'h3') active = editor.isActive('heading', { level: 3 });
-      else if (cmd === 'link') active = editor.isActive('link');
-      b.classList.toggle('is-active', active);
-    }
+    syncToolbarActiveStates();
 
     const isFigure = editor.isActive('figure');
     if (!isFigure) {
       attrPanel.hidden = true;
+      imageEditSection.hidden = true;
+      activeCellIndex = null;
+      lastFigurePos = null;
+      clearActiveCellHighlight();
       return;
     }
     const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
@@ -210,35 +168,104 @@ function mount(): void {
     populating = false;
     attrPanel.hidden = false;
 
-    // Image-edit pipeline (crop/rotate/flip/perspective/resample) only
-    // applies to single-image figures — operations target one
-    // originals/<id>. Hide the section otherwise.
-    const isSingle = idList.length === 1;
-    imageEditSection.hidden = !isSingle;
+    // Reset cell selection when the active figure changes (different
+    // node position). Same-figure re-selects (e.g. attribute edits
+    // re-trigger selectionUpdate) preserve the user's cell pick.
+    const figurePos = editor.state.selection.from;
+    if (figurePos !== lastFigurePos) {
+      lastFigurePos = figurePos;
+      // Single-image: implicit cell 0. Multi: clear and wait for a click.
+      activeCellIndex = idList.length === 1 ? 0 : null;
+      clearActiveCellHighlight();
+    } else if (activeCellIndex !== null && activeCellIndex >= idList.length) {
+      // Author edited `ids` and the previously-active cell no longer
+      // exists. Drop selection rather than pointing at a stale id.
+      activeCellIndex = null;
+      clearActiveCellHighlight();
+    }
+
+    populateImageEditForActiveCell(idList);
+  });
+
+  /** Highlight the data-cell-index thumb that matches activeCellIndex,
+   * clearing any prior highlight. No-op when activeCellIndex is null. */
+  function applyActiveCellHighlight(): void {
+    clearActiveCellHighlight();
+    if (activeCellIndex === null) return;
+    for (const img of editor.view.dom.querySelectorAll<HTMLImageElement>(
+      `img[data-cell-index="${activeCellIndex}"]`
+    )) {
+      img.classList.add('is-active-cell');
+    }
+  }
+  function clearActiveCellHighlight(): void {
+    for (const img of editor.view.dom.querySelectorAll<HTMLImageElement>('.is-active-cell')) {
+      img.classList.remove('is-active-cell');
+    }
+  }
+
+  /** Reset the image-edit section to its empty state, then if a cell is
+   * active populate it with that cell's id state (lazy fetch via
+   * ensureLocalState). Multi-image figures with no active cell just
+   * leave the section hidden. */
+  function populateImageEditForActiveCell(idList: string[]): void {
     attrResetBtn.hidden = true;
     attrResampleInput.value = '';
     attrUndoBtn.disabled = true;
     attrRedoBtn.disabled = true;
     attrSaveBtn.disabled = true;
     attrEditsList.replaceChildren();
-    if (isSingle) {
-      const id = idList[0] as string;
-      void ensureLocalState(id).then(
-        (s) => {
-          const resample = s.ops.find((o) => o.type === 'resample');
-          if (resample && typeof resample.w === 'number') {
-            attrResampleInput.value = String(resample.w);
-          }
-          renderEditsPanel(id, s);
-          // Repaint preview from local ops — there might be unsaved
-          // edits from a prior selection of this image in this session.
-          void refreshImagePreview(editor, id, s.ops);
-        },
-        () => {
-          /* best-effort */
-        }
-      );
+    if (activeCellIndex === null || idList.length === 0) {
+      imageEditSection.hidden = true;
+      return;
     }
+    const id = idList[activeCellIndex];
+    if (!id) {
+      imageEditSection.hidden = true;
+      return;
+    }
+    imageEditSection.hidden = false;
+    applyActiveCellHighlight();
+    void ensureLocalState(id).then(
+      (s) => {
+        // Selection may have moved on while the meta fetch was in
+        // flight; only paint if we're still on the same cell.
+        if (idList[activeCellIndex ?? -1] !== id) return;
+        const resample = s.ops.find((o) => o.type === 'resample');
+        if (resample && typeof resample.w === 'number') {
+          attrResampleInput.value = String(resample.w);
+        }
+        renderEditsPanel(id, s);
+        // Repaint the cell preview from local ops — there might be
+        // unsaved edits from a prior selection of this image in this
+        // session.
+        void refreshImagePreview(editor, id, s.ops);
+      },
+      () => {
+        /* best-effort */
+      }
+    );
+  }
+
+  // Per-cell click delegation. Only fires for thumbs INSIDE the
+  // currently-selected figure node — clicks on other figures are
+  // handled by ProseMirror's normal click-to-select-node path, and the
+  // resulting selectionUpdate above will reset our cell state.
+  editor.view.dom.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target?.matches('img[data-cell-index]')) return;
+    if (!editor.isActive('figure')) return;
+    const idxRaw = target.dataset.cellIndex;
+    const idx = Number(idxRaw);
+    if (!Number.isInteger(idx) || idx < 0) return;
+    const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
+    const idList = (attrs.ids ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (idx >= idList.length) return;
+    activeCellIndex = idx;
+    populateImageEditForActiveCell(idList);
   });
 
   /** Patch a single figure attr. Field name maps directly to a
@@ -282,8 +309,18 @@ function mount(): void {
   function activeImageId(): string | null {
     if (!editor.isActive('figure')) return null;
     const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
-    if (idCount(attrs.ids) !== 1) return null;
-    return singleId(attrs.ids) || null;
+    const idList = (attrs.ids ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (idList.length === 0) return null;
+    // Single-image figures: cell 0 is implicit so callers don't need
+    // to track activeCellIndex. Multi-image figures: only return when
+    // a cell is explicitly active (clicked) — otherwise the edit
+    // buttons would no-op silently and confuse the author.
+    if (idList.length === 1) return idList[0] ?? null;
+    if (activeCellIndex === null || activeCellIndex >= idList.length) return null;
+    return idList[activeCellIndex] ?? null;
   }
 
   /** Render one row per op (in click order), plus per-row delete buttons,
@@ -339,15 +376,20 @@ function mount(): void {
     refreshAfterEdit(id, s, label);
   }
 
-  attrCropBtn.addEventListener('click', () => {
+  /** Run `fn(id, state)` only when the active cell has a resolved id
+   * AND its local state has been fetched. Collapses the id+state guard
+   * pattern shared across all 7 image-edit click handlers. */
+  function runWithState(fn: (id: string, s: LocalEditState) => void): void {
     const id = activeImageId();
     if (!id) return;
     const s = getLocalEditState(id);
     if (!s) return;
-    void openCropper(id, s, () => {
-      refreshAfterEdit(id, s, 'crop');
-    });
-  });
+    fn(id, s);
+  }
+
+  attrCropBtn.addEventListener('click', () =>
+    runWithState((id, s) => void openCropper(id, s, () => refreshAfterEdit(id, s, 'crop')))
+  );
   attrRotateLBtn.addEventListener('click', () =>
     runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: -90 }])
   );
@@ -360,31 +402,23 @@ function mount(): void {
   attrFlipVBtn.addEventListener('click', () =>
     runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'vertical' }])
   );
-  attrPerspBtn.addEventListener('click', () => {
-    const id = activeImageId();
-    if (!id) return;
-    const s = getLocalEditState(id);
-    if (!s) return;
-    void openPerspective(id, s, () => {
-      refreshAfterEdit(id, s, 'perspective');
-    });
-  });
-  attrUndoBtn.addEventListener('click', () => {
-    const id = activeImageId();
-    if (!id) return;
-    const s = getLocalEditState(id);
-    if (!s) return;
-    localUndo(s);
-    refreshAfterEdit(id, s, 'undo');
-  });
-  attrRedoBtn.addEventListener('click', () => {
-    const id = activeImageId();
-    if (!id) return;
-    const s = getLocalEditState(id);
-    if (!s) return;
-    localRedo(s);
-    refreshAfterEdit(id, s, 'redo');
-  });
+  attrPerspBtn.addEventListener('click', () =>
+    runWithState(
+      (id, s) => void openPerspective(id, s, () => refreshAfterEdit(id, s, 'perspective'))
+    )
+  );
+  attrUndoBtn.addEventListener('click', () =>
+    runWithState((id, s) => {
+      localUndo(s);
+      refreshAfterEdit(id, s, 'undo');
+    })
+  );
+  attrRedoBtn.addEventListener('click', () =>
+    runWithState((id, s) => {
+      localRedo(s);
+      refreshAfterEdit(id, s, 'redo');
+    })
+  );
   attrResampleBtn.addEventListener('click', () => {
     const w = Math.floor(Number(attrResampleInput.value) || 0);
     if (w <= 0) {
@@ -397,37 +431,34 @@ function mount(): void {
       { type: 'resample', w, fit: 'inside' }
     ]);
   });
-  attrResetBtn.addEventListener('click', () => {
-    const id = activeImageId();
-    if (!id) return;
-    const s = getLocalEditState(id);
-    if (!s) return;
-    localMutate(s, () => []);
-    attrResampleInput.value = '';
-    refreshAfterEdit(id, s, 'edits reset');
-  });
-  attrSaveBtn.addEventListener('click', () => {
-    const id = activeImageId();
-    if (!id) return;
-    const s = getLocalEditState(id);
-    if (!s || !isDirty(s)) return;
-    // Guard against double-clicks during the (potentially multi-MB)
-    // bake upload. Re-enabled by renderEditsPanel on success (where
-    // isDirty is now false → disabled stays true) or explicitly on
-    // failure so the user can retry.
-    attrSaveBtn.disabled = true;
-    setStatus(`saving edits ${id.slice(0, 8)}…`);
-    void saveImageEdits(id, s).then(
-      () => {
-        renderEditsPanel(id, s);
-        setStatus(`saved edits ${id.slice(0, 8)}…`);
-      },
-      (err: unknown) => {
-        attrSaveBtn.disabled = false;
-        setStatus(`save edits failed: ${(err as Error).message}`);
-      }
-    );
-  });
+  attrResetBtn.addEventListener('click', () =>
+    runWithState((id, s) => {
+      localMutate(s, () => []);
+      attrResampleInput.value = '';
+      refreshAfterEdit(id, s, 'edits reset');
+    })
+  );
+  attrSaveBtn.addEventListener('click', () =>
+    runWithState((id, s) => {
+      if (!isDirty(s)) return;
+      // Guard against double-clicks during the (potentially multi-MB)
+      // bake upload. Re-enabled by renderEditsPanel on success (where
+      // isDirty is now false → disabled stays true) or explicitly on
+      // failure so the user can retry.
+      attrSaveBtn.disabled = true;
+      setStatus(`saving edits ${id.slice(0, 8)}…`);
+      void saveImageEdits(id, s).then(
+        () => {
+          renderEditsPanel(id, s);
+          setStatus(`saved edits ${id.slice(0, 8)}…`);
+        },
+        (err: unknown) => {
+          attrSaveBtn.disabled = false;
+          setStatus(`save edits failed: ${(err as Error).message}`);
+        }
+      );
+    })
+  );
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];

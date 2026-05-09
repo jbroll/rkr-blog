@@ -10,29 +10,6 @@ When you fix one, delete the entry. When something gets worse than expected,
 promote it. Newly-discovered work goes here, not into commit messages, so
 the queue is searchable.
 
-## ::figure editor: per-cell cropper for multi-image figures
-
-**Source.** Spec.md §9 unification follow-up. Most of the toolbar
-UX refresh that lived here previously was implemented (adapter
-helpers deleted, toolbar collapsed to Image/Gallery, attribute
-panel unified to read/write figure attrs directly, image-edit
-pipeline shows when ids count is 1).
-
-**What.** What remains: when a figure has more than one image,
-there's no UI for cropping or applying ops to a *selected cell*.
-The image-edit section is hidden in multi mode; ops on a
-multi-image figure currently aren't expressible from the editor.
-
-**Why deferred.** Requires per-instance cell selection in the
-editor's figure preview (a real interaction surface) plus a
-data-model decision: do per-cell ops live on the sidecar (one
-ops list per id) or on the directive? Sidecar.ops is the existing
-shape, so per-cell ops would naturally update the sidecar of the
-specific id. The cell-selection UI is the missing piece.
-
-**Trigger.** First time an author wants to crop one image inside
-a multi-image figure.
-
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
 ### M3 — Sliding-session lookup timing
@@ -270,22 +247,51 @@ a merge step.
 miss (a regression that the e2e didn't catch but a measured spec
 would have).
 
-### `src/admin/main.ts` close to the 500-line size cap
+### `src/admin/main.ts` is exactly at the 500-line size cap
 
-**Source.** Size audit 2026-05-09. main.ts at 462 lines after the
-7-module split + 3 lib extractions. Headroom for new SPA features
-is ~38 lines before the size hook fails commits.
+**Source.** Size audit 2026-05-09, refreshed after per-cell editing
+landed. main.ts hit 560 during the per-cell work and was brought
+back to 500 by extracting the toolbar setup (admin/toolbar.ts) and
+trimming inline comments. Headroom for the next SPA feature is
+**zero lines** — anything new trips the gate.
 
-**What.** The next non-trivial feature touching the editor mount
-will trip the size gate. The natural-cut extractions are done;
-further reduction means a per-panel `mountX(deps)` shape change.
+**What.** The natural-cut extractions are done. Further reduction
+needs a structural change: extract a per-panel `mountX(deps)` shape
+(figure-attrs panel, image-edit panel, cell-selection state) so
+each panel becomes its own ~80-line module that mount() composes.
 
-**Why deferred.** No active feature is being blocked yet.
+**Why deferred.** No active feature is being blocked yet, but the
+next will need the structural extraction first.
 
-**Trigger.** First commit that actually trips the gate, or a feature
-that wants per-panel isolation. The "per-cell editing for
-multi-image figures" work (see the entry above) is a likely first
-trip — it'll add cell-selection state + handlers.
+**Trigger.** First commit that adds non-trivial editor behavior.
+
+### Per-cell editing UX polish
+
+**Source.** Per-cell editing landed 2026-05-09 (selection by thumb
+click, ops scoped to the active cell, e2e regression coverage).
+Follow-ups noted during implementation:
+
+**What.** Three open items on top of the working baseline:
+
+1. **Visual hint when no cell is selected.** A multi-image figure
+   shows the attribute panel but the image-edit section is hidden
+   until the author clicks a thumb. Currently no on-screen hint
+   tells them to click; first-time users may not discover the
+   interaction.
+2. **Active-cell persistence across re-selections.** Selecting a
+   different node and returning to the same multi-image figure
+   resets activeCellIndex to null. Could be preserved per-figure
+   (key by figure pos or by ids string) for ergonomics.
+3. **Live preview update.** Single-image rotate/flip/crop refreshes
+   the editor preview via setEditorImageSrc; multi-image now
+   matches (data-id is now on every thumb), but the bake-side
+   refresh after Save isn't yet wired to redraw the cell — author
+   has to re-select to see the post-bake derivative.
+
+**Why deferred.** Working baseline; cosmetic / discoverability
+polish.
+
+**Trigger.** First author feedback report on multi-image editing.
 
 ### Bundle-size monitoring
 

@@ -24,6 +24,8 @@ const PNG_1X1_RED =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 const PNG_1X1_BLUE =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC';
+const PNG_1X1_GREEN =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNg+M8AAAICAQB7CYF4AAAAAElFTkSuQmCC';
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/admin/login');
@@ -184,6 +186,123 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await expect(dialog).toBeHidden();
 
   // Cancel must not have appended an op — list stays empty.
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(0);
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+});
+
+// Per-cell editing in a multi-image figure: the image-edit panel should
+// hide on a fresh multi-image selection (no cell active), reveal when
+// the author clicks a thumb, and target that cell's id on subsequent
+// rotate / crop / save actions.
+//
+// Constructing a multi-image figure through the UI alone is awkward —
+// the Gallery button uses a transient <input> element Playwright can't
+// reach by selector. Instead we upload two distinct images via the
+// single-image path, then use the editor's e2e hook (window.__rkrEditor,
+// gated on ?e2e=1) to merge the two into one multi-image figure.
+test('editor: per-cell selection drives the image-edit panel for multi-image figures', async ({
+  page
+}) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.locator('#rkr-title').fill('e2e per-cell');
+  await page.locator('#rkr-slug').fill(`e2e-percell-${Date.now()}`);
+
+  // Upload two distinct PNGs. cellA uses BLUE (matches the cropper
+  // test which only opens-and-cancels — leaves no ops). cellB uses
+  // GREEN (a fresh id, not touched by any other test) so its sidecar
+  // baseline starts empty and the rotate-then-save assertions are
+  // deterministic.
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'cellA.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded cellA\.png/, {
+    timeout: 10_000
+  });
+  const idA = await page.locator('#rkr-figure-ids').inputValue();
+  expect(idA).toMatch(/^[0-9a-f]{8,}/);
+
+  // Move cursor past the first figure before inserting the second so
+  // they don't overwrite. ProseMirror's End key + Enter gives a fresh
+  // paragraph below the atom node.
+  await page.locator('#rkroll-admin-article').click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'cellB.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_GREEN, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded cellB\.png/, {
+    timeout: 10_000
+  });
+  const idB = await page.locator('#rkr-figure-ids').inputValue();
+  expect(idB).toMatch(/^[0-9a-f]{8,}/);
+  expect(idB).not.toBe(idA);
+
+  // Merge: delete the second figure, then update the first to carry
+  // both ids in 1×2 matrix mode. The hook exposes the editor instance
+  // when ?e2e=1.
+  await page.evaluate(
+    ({ a, b }: { a: string; b: string }) => {
+      const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+      if (!ed) throw new Error('window.__rkrEditor not exposed; ?e2e=1 missing');
+      // Walk the doc, find the two figure nodes, remember their positions.
+      const positions: number[] = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'figure') positions.push(pos);
+      });
+      if (positions.length !== 2) throw new Error(`expected 2 figures, found ${positions.length}`);
+      const [firstPos, secondPos] = positions as [number, number];
+      // Delete from highest pos down so the first pos stays valid.
+      ed.chain()
+        .focus()
+        .deleteRange({ from: secondPos, to: secondPos + 1 })
+        .setNodeSelection(firstPos)
+        .updateAttributes('figure', { ids: `${a},${b}`, matrix: '1x2' })
+        .run();
+    },
+    { a: idA, b: idB }
+  );
+
+  // The figure now has ids="A,B". The image-edit panel should be
+  // hidden because no cell is selected yet.
+  await expect(page.locator('#rkr-figure-attrs')).toBeVisible();
+  await expect(page.locator('#rkr-figure-ids')).toHaveValue(`${idA},${idB}`);
+  await expect(page.locator('#rkr-image-edit')).toBeHidden();
+
+  // Click the second thumb (data-cell-index="1"). Panel reveals
+  // scoped to that cell's id.
+  await page.locator('img[data-cell-index="1"]').click();
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  await expect(page.locator('img[data-cell-index="1"]')).toHaveClass(/is-active-cell/);
+
+  // Rotate the second cell. Status reports the cell's id prefix.
+  await page.locator('#rkr-image-rotate-r-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(
+    new RegExp(`^rotate ${idB.slice(0, 8)}`),
+    { timeout: 5_000 }
+  );
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
+  await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
+
+  // Save commits to the second cell's sidecar specifically.
+  await page.locator('#rkr-image-save-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(
+    new RegExp(`^saved edits ${idB.slice(0, 8)}`),
+    { timeout: 10_000 }
+  );
+
+  // Switch to the first cell. Its panel should show the empty state
+  // (no ops applied yet), distinct from the second cell.
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('img[data-cell-index="0"]')).toHaveClass(/is-active-cell/);
+  await expect(page.locator('img[data-cell-index="1"]')).not.toHaveClass(/is-active-cell/);
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(0);
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
