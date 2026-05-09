@@ -91,7 +91,21 @@ while IFS= read -r slug; do
       /*)                 url="$BASE$src" ;;
       *)                  url="$BASE/$src" ;;
     esac
-    img_http=$(curl -sS -L -o /dev/null -w '%{http_code}' -I "$url" || echo "000")
+
+    # The /img/:filename route rate-limits at 120 req/min/IP. A walk of
+    # an image-heavy post blows through that and would falsely flag
+    # every burnt request. On 429, sleep until the window resets
+    # (Fastify sets x-ratelimit-reset: <seconds>) and retry once.
+    headers="$tmp/img-$slug.hdr"
+    img_http=$(curl -sS -L -o /dev/null -D "$headers" -w '%{http_code}' -I "$url" || echo "000")
+    if [ "$img_http" = "429" ]; then
+      reset=$(awk 'tolower($1)=="x-ratelimit-reset:" { sub(/\r$/,"",$2); print $2; exit }' "$headers")
+      sleep_for="${reset:-2}"
+      [ "$sleep_for" -gt 0 ] 2>/dev/null || sleep_for=2
+      sleep "$sleep_for"
+      img_http=$(curl -sS -L -o /dev/null -w '%{http_code}' -I "$url" || echo "000")
+    fi
+
     case "$img_http" in
       2*) ;;
       *)  failed=$((failed + 1))

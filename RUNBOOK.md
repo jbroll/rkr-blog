@@ -124,13 +124,23 @@ slugs, so it covers every published post — useful well beyond the
 
 ### 4. End-to-end smoke (full cycle)
 
+For the canonical seed (`roll-along.rkroll.com` → target), the
+reset+copy step is bundled into one script:
+
 ```bash
 TARGET=https://rkr-blog.fly.dev   # or http://127.0.0.1:3000
-WP_BASE=https://example-wp.com    # your source
+ADMIN_TOKEN=...                   # bearer matching the target
 
+scripts/reseed-from-roll-along.sh "$TARGET" 3
+scripts/walk-site.sh "$TARGET"
+```
+
+The WP source is hardcoded in the reseed script — for a different WP
+source, fall back to the three-step form:
+
+```bash
 bin/site-admin reset --to "$TARGET" --token "$ADMIN_TOKEN" --force
 
-# Pick three from the WP list (operator chooses; latest 3 here):
 mapfile -t slugs < <(bin/site-admin import-wp list "$WP_BASE" --per-page 3 \
   | awk '/^[0-9]+ /{ print $2 }')
 
@@ -143,6 +153,12 @@ scripts/walk-site.sh "$TARGET"
 ```
 
 If walk-site exits 0, the reset + seed + render path is healthy.
+
+A walk over an image-heavy seed will trip the per-IP rate limit on
+`/img/:filename` (120 req/min). The walk script handles this
+transparently — on a 429 it sleeps until `x-ratelimit-reset` and
+retries once — but the wall-clock time scales with how often it has to
+back off. A 125-image seed lands in ~60s; budget accordingly.
 
 ## Troubleshooting
 
