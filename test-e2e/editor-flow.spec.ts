@@ -647,3 +647,71 @@ test('editor: sync status badge reflects online/offline transitions', async ({ p
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-online/, { timeout: 5_000 });
 });
+
+// savePost conflict + force-overwrite (phase 1l). Save v1 online so
+// the post mtime is fresh and the draft meta records lastSyncedAt.
+// Then bump the file mtime via the e2e-only test endpoint so the
+// next save's X-Rkr-Last-Synced-At looks stale → 409 → conflict
+// status. Force-overwrite clears the conflict and the v2 markdown
+// lands.
+test('editor: savePost conflict surfaces + force-overwrite resolves it', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  const slug = `e2e-conflict-${Date.now()}`;
+  await page.locator('#rkr-title').fill('e2e conflict v1');
+  await page.locator('#rkr-slug').fill(slug);
+  await page.locator('#rkr-status').selectOption('published');
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>v1 body</p>');
+  });
+
+  // ---- 1. save v1 online → meta.lastSyncedAt stamped --------------
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
+    timeout: 10_000
+  });
+
+  // ---- 2. competing-device write — bump mtime via the test-only
+  //         endpoint so the next save's lastSyncedAt header looks stale.
+  const bump = await page.request.post(`/admin/test/bump-mtime/${slug}`, {
+    data: { offsetMs: 5_000 }
+  });
+  expect(bump.status()).toBe(200);
+
+  // ---- 3. save v2 → 409 → conflict status -------------------------
+  await page.locator('#rkr-title').fill('e2e conflict v2');
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>v2 body</p>');
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  // The online attempt hits 409. handleSave's catch falls through to
+  // queueSavePost — entry queued for drain. tryDrain runs immediately,
+  // drainSavePost sees 409 again, throws SavePostConflictError, sync
+  // publishes 'conflict'. The badge reflects it.
+  const badge = page.locator('#rkr-sync-badge');
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-conflict/, { timeout: 10_000 });
+  await expect(badge.locator('.rkr-sync-text')).toHaveText(`conflict on /${slug}`);
+
+  // ---- 4. force-overwrite resolves it -----------------------------
+  await page.evaluate(async () =>
+    (window as unknown as { __rkrForceConflict: () => Promise<void> }).__rkrForceConflict()
+  );
+  // Force POSTs without the header → server accepts → drainer removes
+  // the entry → status returns to a non-conflict state.
+  await expect(badge.locator('.rkr-sync-dot')).not.toHaveClass(/is-conflict/, { timeout: 10_000 });
+
+  // The public site renders v2.
+  const html = await (await page.request.get(`/${slug}`)).text();
+  expect(html).toContain('v2 body');
+});

@@ -10,6 +10,7 @@ import type { Editor } from '@tiptap/core';
 import type { SavePostPayload } from '../lib/outbox-types.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { $, setStatus } from './dom';
+import { getOrCreateDraftId, readMeta, updateMeta } from './draft.ts';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
 import { getState } from './online-state.ts';
 import { append as outboxAppend } from './outbox.ts';
@@ -18,12 +19,11 @@ import { tryDrain } from './sync.ts';
 interface SaveResponse {
   slug: string;
   inserted: boolean;
+  updatedAt: string;
 }
 
 async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  /* v8 ignore next 3 -- lastSyncedAt populated once phase 1h persists
-     drafts; offline-only e2e exercises the no-header path */
   if (payload.lastSyncedAt) {
     headers['x-rkr-last-synced-at'] = payload.lastSyncedAt;
   }
@@ -61,11 +61,26 @@ export async function handleSave(editor: Editor): Promise<void> {
   }
   const json = editor.getJSON() as ProseDoc;
   const markdown = proseToMarkdown(json);
-  const payload: SavePostPayload = { slug, title, status, markdown };
+  // Pull lastSyncedAt from the draft meta so the server can detect a
+  // concurrent edit (spec-offline §6). When the meta has no
+  // lastSyncedAt yet (fresh post that's never been synced), the
+  // header is omitted and the server accepts unconditionally.
+  const draftId = await getOrCreateDraftId();
+  const meta = await readMeta(draftId);
+  const payload: SavePostPayload = {
+    slug,
+    title,
+    status,
+    markdown,
+    lastSyncedAt: meta?.lastSyncedAt
+  };
   setStatus('saving…');
   if (getState() !== 'offline') {
     try {
       const result = await postSavePost(payload);
+      // Stamp the new server-known updated_at into the draft meta so
+      // the next save sends an accurate header.
+      await updateMeta(draftId, { slug, lastSyncedAt: result.updatedAt });
       setStatus(`saved /${result.slug}`);
       return;
     } catch {

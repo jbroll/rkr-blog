@@ -50,8 +50,8 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 27,
-      "linesHit": 20
+      "linesFound": 28,
+      "linesHit": 21
     },
     "src/admin/toolbar.ts": {
       "linesFound": 17,
@@ -78,12 +78,12 @@
       "linesHit": 11
     },
     "src/admin/sync.ts": {
-      "linesFound": 23,
-      "linesHit": 18
+      "linesFound": 25,
+      "linesHit": 21
     },
     "src/admin/startup.ts": {
-      "linesFound": 10,
-      "linesHit": 9
+      "linesFound": 13,
+      "linesHit": 12
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -131,7 +131,7 @@
     },
     "src/admin/status-badge.ts": {
       "linesFound": 18,
-      "linesHit": 16
+      "linesHit": 18
     }
   }
 }

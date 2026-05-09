@@ -45,6 +45,24 @@ const app = await buildApp({
   // a test with bad logic can't spam infinitely) without flaking.
   auth: { secureCookies: false, tokenLoginRateMax: 100 }
 });
+// E2E-only test hook: bump a post's mtime forward by a given offset
+// to simulate a competing-device write. Drives the savePost-conflict
+// e2e (phase 1l). Token-only, like the rest of the admin surface.
+app.post<{ Params: { slug: string }; Body: { offsetMs?: number } }>(
+  '/admin/test/bump-mtime/:slug',
+  async (request, reply) => {
+    const slug = request.params.slug;
+    const offsetMs = typeof request.body?.offsetMs === 'number' ? request.body.offsetMs : 5_000;
+    const filePath = path.join(root, 'content', 'posts', `${slug}.md`);
+    if (!fs.existsSync(filePath)) {
+      return reply.code(404).send({ error: 'not found' });
+    }
+    const future = new Date(Date.now() + offsetMs);
+    fs.utimesSync(filePath, future, future);
+    return { mtime: future.toISOString() };
+  }
+);
+
 app.addHook('onClose', async () => {
   db.close();
 });

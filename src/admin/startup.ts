@@ -23,9 +23,26 @@ import { onChange as onOnlineChange, start as startOnline } from './online-state
 import { ensureSchema } from './opfs-schema.ts';
 import { pendingCount } from './outbox.ts';
 import { mountStatusBadge } from './status-badge.ts';
-import { registerDrainer, tryDrain } from './sync.ts';
+import { discardConflictedSave, forceConflictedSave, registerDrainer, tryDrain } from './sync.ts';
 
 export async function startOfflineInfrastructure(editor: Editor): Promise<void> {
+  const ready = runStart(editor);
+  // ?e2e=1 hooks: editor + offline-init promise + conflict APIs.
+  // Set synchronously so tests can await __rkrOfflineReady before
+  // any other interaction.
+  /* v8 ignore next 8 -- prod path skips e2e hook */
+  if (typeof location !== 'undefined' && location.search.includes('e2e=1')) {
+    Object.assign(window, {
+      __rkrEditor: editor,
+      __rkrOfflineReady: ready,
+      __rkrDiscardConflict: discardConflictedSave,
+      __rkrForceConflict: forceConflictedSave
+    });
+  }
+  await ready;
+}
+
+async function runStart(editor: Editor): Promise<void> {
   try {
     await ensureSchema();
     registerDrainer('upload', drainUpload);

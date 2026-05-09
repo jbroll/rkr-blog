@@ -189,7 +189,12 @@ export default async function adminRoutes(
 
     runReindex(siteRoot);
 
-    return { slug, inserted };
+    // Echo the server's updated_at (the file mtime) so the client
+    // can stamp meta.lastSyncedAt for the next save's conflict
+    // check (spec-offline §6 — clients must know what the server
+    // saw to detect concurrent writes).
+    const updatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
+    return { slug, inserted, updatedAt };
   });
 
   fastify.post('/admin/upload', { ...guard }, async (request, reply) => {

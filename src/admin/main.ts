@@ -88,18 +88,12 @@ function mount(): void {
     editorProps: makeDropHandlers(() => editor)
   });
 
-  // OPFS init + draft restore + outbox + online-state (spec-offline
-  // §5/§7/§8). Runs post-editor so draft restore can setContent.
-  const offlineReady = startOfflineInfrastructure(editor);
+  // OPFS init + draft restore + outbox + online-state. Runs after
+  // editor construction so draft restore can setContent. Handles
+  // ?e2e=1 hook exposure internally.
+  void startOfflineInfrastructure(editor);
 
   wireDragOverlay($('rkroll-admin-root'));
-
-  // E2E hooks under ?e2e=1: expose editor (multi-image figure flows
-  // the picker can't drive) + offline-init promise so tests can
-  // await draft-restore before typing.
-  if (new URLSearchParams(location.search).get('e2e') === '1') {
-    Object.assign(window, { __rkrEditor: editor, __rkrOfflineReady: offlineReady });
-  }
 
   /** Multi-upload helper: pick N files, upload, insert one figure with
    * matrix=justified by default. Author edits matrix in the figure

@@ -63,7 +63,10 @@ export async function loadDraft(draftId: string): Promise<unknown | null> {
   return readJson(`${DRAFT_DIR}/${draftId}.json`);
 }
 
-async function readMeta(draftId: string): Promise<DraftMeta | null> {
+/** Read the draft's metadata sidecar. save.ts uses this to populate
+ * the X-Rkr-Last-Synced-At header on outgoing savePost entries.
+ * @public */
+export async function readMeta(draftId: string): Promise<DraftMeta | null> {
   return readJson<DraftMeta>(`${META_DIR}/${draftId}.json`);
 }
 
