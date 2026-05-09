@@ -16,6 +16,14 @@ import { findOrCreateOAuthUser, inviteEmail } from '../../src/lib/users.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import type { OneDriveTokenExchange } from '../../src/routes/integrations-onedrive.ts';
 import { buildApp } from '../../src/server.ts';
+import {
+  type AccessBody,
+  type ErrorBody,
+  type ImportResponseBody,
+  type StatusBody,
+  type StubOpts,
+  stubOAuth2Tokens
+} from '../helpers/oauth-fixtures.ts';
 
 /** auth.exchange stub so authRoutes registers without needing
  * GOOGLE_CLIENT_ID env. None of these tests exercise login. */
@@ -26,23 +34,6 @@ const noopAuthExchange: TokenExchange = {
   }
 };
 
-interface ErrorBody {
-  error: string;
-}
-interface StatusBody {
-  connected: boolean;
-}
-interface AccessBody {
-  accessToken: string;
-  expiresAt: string;
-}
-interface ImportBody {
-  id: string;
-  bytes: number;
-  ext: string;
-  deduplicated: boolean;
-}
-
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-onedrive-'));
   for (const sub of ['sidecars', 'originals', 'cache/img', 'data', 'content/posts']) {
@@ -51,35 +42,6 @@ function freshSiteRoot(t: TestContext): string {
   ensureSecretKey(root);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
-}
-
-interface StubTokens {
-  accessToken: string;
-  refreshToken?: string;
-  expiresInSeconds?: number;
-  scopes?: string[];
-}
-
-function stubOAuth2Tokens(t: StubTokens) {
-  const expiresAt = new Date(Date.now() + (t.expiresInSeconds ?? 3600) * 1000);
-  return {
-    accessToken: () => t.accessToken,
-    accessTokenExpiresAt: () => expiresAt,
-    accessTokenExpiresInSeconds: () => t.expiresInSeconds ?? 3600,
-    hasRefreshToken: () => t.refreshToken !== undefined,
-    refreshToken: () => t.refreshToken ?? '',
-    hasScopes: () => (t.scopes?.length ?? 0) > 0,
-    scopes: () => t.scopes ?? [],
-    tokenType: () => 'Bearer',
-    idToken: () => '',
-    data: {}
-  };
-}
-
-interface StubOpts {
-  exchangeReturns?: StubTokens;
-  refreshReturns?: StubTokens;
-  exchangeThrows?: Error;
 }
 
 function stubExchange(opts: StubOpts = {}): OneDriveTokenExchange {
@@ -441,7 +403,7 @@ test('POST /admin/import/onedrive fetches via Graph and ingests', async (t) => {
     payload: { fileId: 'ms-id' }
   });
   assert.equal(res.statusCode, 200, res.body);
-  const body = res.json<ImportBody>();
+  const body = res.json<ImportResponseBody>();
   assert.equal(body.bytes, jpeg.length);
   assert.equal(body.ext, 'jpg');
 

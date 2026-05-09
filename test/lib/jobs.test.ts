@@ -14,7 +14,7 @@ import {
 } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 
-interface JobRow {
+interface JobsTableRow {
   id: number;
   kind: string;
   state: string;
@@ -38,7 +38,9 @@ test('enqueue inserts a queued row and returns its id', () => {
     assert.equal(r.duplicate, false);
     assert.ok(r.id > 0);
 
-    const row = db.prepare<JobRow>('SELECT kind, state, cache_key FROM jobs WHERE id=?').get(r.id);
+    const row = db
+      .prepare<JobsTableRow>('SELECT kind, state, cache_key FROM jobs WHERE id=?')
+      .get(r.id);
     assert.ok(row);
     assert.equal(row.kind, 'render');
     assert.equal(row.state, 'queued');
@@ -71,13 +73,18 @@ test('enqueue resets a done job back to queued (same row, not duplicate)', () =>
     const a = enqueue(db, { kind: 'render', payload: { v: 1 }, cacheKey: 'k1' });
     claim(db);
     complete(db, a.id);
-    assert.equal(db.prepare<JobRow>('SELECT state FROM jobs WHERE id=?').get(a.id)?.state, 'done');
+    assert.equal(
+      db.prepare<JobsTableRow>('SELECT state FROM jobs WHERE id=?').get(a.id)?.state,
+      'done'
+    );
 
     const b = enqueue(db, { kind: 'render', payload: { v: 2 }, cacheKey: 'k1' });
     assert.equal(b.duplicate, false, 're-enqueue after done is not a duplicate');
     assert.equal(b.id, a.id, 'cache_key UNIQUE → same row, reset to queued');
 
-    const row = db.prepare<JobRow>('SELECT state, payload, error FROM jobs WHERE id=?').get(a.id);
+    const row = db
+      .prepare<JobsTableRow>('SELECT state, payload, error FROM jobs WHERE id=?')
+      .get(a.id);
     assert.ok(row);
     assert.equal(row.state, 'queued');
     assert.equal((JSON.parse(row.payload) as { v: number }).v, 2, 'payload is updated');
@@ -144,12 +151,15 @@ test('complete marks done; complete with error marks failed and stores message',
     const ok = enqueue(db, { kind: 'render', payload: {} });
     claim(db);
     complete(db, ok.id);
-    assert.equal(db.prepare<JobRow>('SELECT state FROM jobs WHERE id=?').get(ok.id)?.state, 'done');
+    assert.equal(
+      db.prepare<JobsTableRow>('SELECT state FROM jobs WHERE id=?').get(ok.id)?.state,
+      'done'
+    );
 
     const bad = enqueue(db, { kind: 'render', payload: {} });
     claim(db);
     complete(db, bad.id, { error: 'kaboom' });
-    const row = db.prepare<JobRow>('SELECT state, error FROM jobs WHERE id=?').get(bad.id);
+    const row = db.prepare<JobsTableRow>('SELECT state, error FROM jobs WHERE id=?').get(bad.id);
     assert.ok(row);
     assert.equal(row.state, 'failed');
     assert.equal(row.error, 'kaboom');
@@ -198,7 +208,7 @@ test('workQueue: handler throw → state=failed with error message', async () =>
     const ctrl = workQueue({ db, ctx: noopCtx, handlers, drainAndExit: true });
     await ctrl.done;
 
-    const row = db.prepare<JobRow>('SELECT state, error FROM jobs WHERE id=?').get(j.id);
+    const row = db.prepare<JobsTableRow>('SELECT state, error FROM jobs WHERE id=?').get(j.id);
     assert.ok(row);
     assert.equal(row.state, 'failed');
     assert.match(row.error ?? '', /handler boom/);

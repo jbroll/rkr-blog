@@ -31,7 +31,7 @@ import remarkFrontmatter from 'remark-frontmatter';
 import { parse as yamlParse } from 'yaml';
 
 import { safeLinkUrl } from './safe-url.ts';
-import type { WidgetRegistry } from './widgets.ts';
+import type { DirectiveNode, WidgetRegistry } from './widgets.ts';
 
 export interface PostFrontmatter {
   title: string;
@@ -50,13 +50,6 @@ export interface ParsedPost {
 export interface RenderCtx {
   siteRoot: string;
   widgets: WidgetRegistry;
-}
-
-interface DirectiveNode extends Parent {
-  type: 'leafDirective' | 'textDirective' | 'containerDirective';
-  name: string;
-  attributes?: Record<string, string | null | undefined>;
-  children: PhrasingContent[];
 }
 
 const DIRECTIVE_TYPES: ReadonlySet<string> = new Set([

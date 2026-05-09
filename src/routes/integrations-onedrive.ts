@@ -35,6 +35,7 @@ import {
 } from '../lib/oauth-tokens.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { readSecretKey } from '../lib/secrets.ts';
+import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
 
 const PROVIDER = 'onedrive';
 // Files.Read is the narrowest scope that lets us fetch user-selected
@@ -61,16 +62,9 @@ export interface IntegrationsOnedriveOpts {
   secureCookies?: boolean;
 }
 
-interface ImportBody {
-  fileId?: unknown;
-  name?: unknown;
-  mimeType?: unknown;
-}
-
-interface CallbackQuery {
-  code?: string;
-  state?: string;
-  error?: string;
+/** OneDrive's OAuth callback adds an `error_description` field beyond
+ * the shared base. */
+interface OneDriveCallbackQuery extends ProviderCallbackQuery {
   error_description?: string;
 }
 
@@ -102,7 +96,7 @@ export default async function integrationsOnedriveRoutes(
     return reply.redirect(url.toString(), 302);
   });
 
-  fastify.get<{ Querystring: CallbackQuery }>(
+  fastify.get<{ Querystring: OneDriveCallbackQuery }>(
     '/admin/integrations/onedrive/callback',
     { ...guard },
     async (req, reply) => {
@@ -203,73 +197,77 @@ export default async function integrationsOnedriveRoutes(
     return reply.send({ removed });
   });
 
-  fastify.post<{ Body: ImportBody }>('/admin/import/onedrive', { ...guard }, async (req, reply) => {
-    const user = req.user;
-    /* c8 ignore next 2 -- requireUser preHandler */
-    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
-    const fileId = req.body?.fileId;
-    if (typeof fileId !== 'string' || !fileId.trim()) {
-      return reply.code(400).send({ error: 'fileId is required' });
-    }
-    const key = readSecretKey(siteRoot);
-    const fresh = await ensureFresh(db, key, user.id, exchange);
-    if (!fresh) return reply.code(412).send({ error: 'onedrive not connected' });
-
-    let drive: Awaited<ReturnType<typeof fetchOneDriveFile>>;
-    try {
-      drive = await fetchOneDriveFile(fresh.access_token, fileId, {
-        ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {})
-      });
-    } catch (err) {
-      req.log.warn({ err, fileId }, 'onedrive fetch failed');
-      return reply.code(400).send({ error: (err as Error).message });
-    }
-
-    if (!/^image\//i.test(drive.contentType)) {
-      return reply
-        .code(415)
-        .send({ error: `content-type must be image/*; got ${drive.contentType}` });
-    }
-
-    // Same 50 MiB streamed-bytes cap as /admin/import/url and
-    // /admin/import/gdrive — defends against a multi-GB OneDrive file
-    // being buffered to a tmp file before sharp's pixel-count guard
-    // would otherwise fire.
-    let bytes = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        bytes += chunk.length;
-        if (bytes > ONEDRIVE_MAX_BYTES) {
-          cb(new Error('streamed bytes exceeded limit'));
-          return;
-        }
-        cb(null, chunk);
+  fastify.post<{ Body: ProviderImportBody }>(
+    '/admin/import/onedrive',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const fileId = req.body?.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim()) {
+        return reply.code(400).send({ error: 'fileId is required' });
       }
-    });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(412).send({ error: 'onedrive not connected' });
 
-    try {
-      const result = await ingestStream({
-        stream: drive.body.pipe(limiter),
-        siteRoot,
-        source: {
-          kind: 'onedrive',
-          originalName: drive.file.name,
-          fileId: drive.file.id
+      let drive: Awaited<ReturnType<typeof fetchOneDriveFile>>;
+      try {
+        drive = await fetchOneDriveFile(fresh.access_token, fileId, {
+          ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, fileId }, 'onedrive fetch failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+
+      if (!/^image\//i.test(drive.contentType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be image/*; got ${drive.contentType}` });
+      }
+
+      // Same 50 MiB streamed-bytes cap as /admin/import/url and
+      // /admin/import/gdrive — defends against a multi-GB OneDrive file
+      // being buffered to a tmp file before sharp's pixel-count guard
+      // would otherwise fire.
+      let bytes = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          bytes += chunk.length;
+          if (bytes > ONEDRIVE_MAX_BYTES) {
+            cb(new Error('streamed bytes exceeded limit'));
+            return;
+          }
+          cb(null, chunk);
         }
       });
-      return {
-        id: result.id,
-        bytes: result.bytes,
-        deduplicated: result.deduplicated,
-        ext: result.ext
-      };
-    } catch (err) {
-      const msg = (err as Error).message;
-      const code = /exceeded limit/.test(msg) ? 413 : 400;
-      req.log.warn({ err, fileId }, 'onedrive ingest failed');
-      return reply.code(code).send({ error: msg });
+
+      try {
+        const result = await ingestStream({
+          stream: drive.body.pipe(limiter),
+          siteRoot,
+          source: {
+            kind: 'onedrive',
+            originalName: drive.file.name,
+            fileId: drive.file.id
+          }
+        });
+        return {
+          id: result.id,
+          bytes: result.bytes,
+          deduplicated: result.deduplicated,
+          ext: result.ext
+        };
+      } catch (err) {
+        const msg = (err as Error).message;
+        const code = /exceeded limit/.test(msg) ? 413 : 400;
+        req.log.warn({ err, fileId }, 'onedrive ingest failed');
+        return reply.code(code).send({ error: msg });
+      }
     }
-  });
+  );
 }
 
 /** Mirrors GDRIVE_MAX_BYTES + URL_FETCH_MAX_BYTES — keeps every

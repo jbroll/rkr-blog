@@ -23,35 +23,11 @@ const EXTS = ['.ts'];
 // renaming, sharing via a common module, or accepting and removing
 // from the list — whichever fits the case.
 //
-// Baseline as of 2026-05-09 (12 entries). Pattern matches the size
-// hook: existing offenders allowed, new ones rejected.
-const ALLOWLIST: ReadonlySet<string> = new Set([
-  // --- production code (resolve when touching the file) ---
-  // CallbackQuery: gdrive (private) vs onedrive (private + error_description).
-  // Share a base in src/routes/integrations-shared.ts when refactoring.
-  'CallbackQuery',
-  // ImportBody: identical in gdrive and onedrive route modules. Same fix.
-  'ImportBody',
-  // DirectiveNode: content.ts and widgets.ts both define a node shape.
-  // One should re-export from the other.
-  'DirectiveNode',
-  // UploadResponse: main.ts (browser request type) vs admin.test.ts
-  // (server response shape, used in assertions). Test should import
-  // a shared response type from the route module.
-  'UploadResponse',
-  // --- test-only (lower risk; cleanup = extract shared helpers) ---
-  // JobRow: prod jobs.ts vs jobs.test.ts redeclaration. Test should import.
-  'JobRow',
-  // AccessBody / StatusBody / ErrorBody / ErrorResponse / StubOpts /
-  // StubTokens: copy-paste between gdrive.test, onedrive.test, and
-  // adjacent route tests. Extract to test/helpers/oauth.ts.
-  'AccessBody',
-  'StatusBody',
-  'ErrorBody',
-  'ErrorResponse',
-  'StubOpts',
-  'StubTokens'
-]);
+// Drained to empty as of 2026-05-09. New offenders are rejected: rename
+// or share via a common module. Only re-add a name with a justification
+// comment when the duplication is structurally load-bearing (e.g. a
+// browser-only vs server-only declaration the bundler keeps separate).
+const ALLOWLIST: ReadonlySet<string> = new Set([]);
 
 interface Decl {
   file: string;

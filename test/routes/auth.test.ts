@@ -10,10 +10,7 @@ import { migrate } from '../../src/lib/migrate.ts';
 import { findUserByEmail, inviteEmail } from '../../src/lib/users.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
-
-interface ErrorBody {
-  error: string;
-}
+import type { ErrorBody } from '../helpers/oauth-fixtures.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-auth-'));

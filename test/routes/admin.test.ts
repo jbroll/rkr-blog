@@ -9,16 +9,13 @@ import sharp from 'sharp';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { buildApp } from '../../src/server.ts';
 import { buildMultipart } from '../helpers/multipart.ts';
+import type { ErrorBody } from '../helpers/oauth-fixtures.ts';
 
-interface UploadResponse {
+interface UploadResponseBody {
   id: string;
   bytes: number;
   deduplicated: boolean;
   ext: string;
-}
-
-interface ErrorResponse {
-  error: string;
 }
 
 function freshSiteRoot(t: TestContext): string {
@@ -59,7 +56,7 @@ test('POST /admin/upload writes original + sidecar', async (t) => {
   });
 
   assert.equal(res.statusCode, 200, res.body);
-  const body = res.json<UploadResponse>();
+  const body = res.json<UploadResponseBody>();
   assert.equal(body.id, expectedId);
   assert.equal(body.bytes, bytes.length);
   assert.equal(body.deduplicated, false);
@@ -99,7 +96,7 @@ test('POST /admin/upload dedupes a byte-identical re-upload', async (t) => {
     });
     const res = await app.inject({ method: 'POST', url: '/admin/upload', payload, headers });
     assert.equal(res.statusCode, 200, res.body);
-    const body = res.json<UploadResponse>();
+    const body = res.json<UploadResponseBody>();
     assert.equal(body.deduplicated, i === 1);
   }
 });
@@ -117,7 +114,7 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
 
   const res = await app.inject({ method: 'POST', url: '/admin/upload', payload, headers });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json<ErrorResponse>().error, /not a recognized image/);
+  assert.match(res.json<ErrorBody>().error, /not a recognized image/);
 });
 
 test('POST /admin/upload returns 400 when no file part is present', async (t) => {

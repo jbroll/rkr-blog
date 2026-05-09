@@ -27,6 +27,7 @@ import {
 } from '../lib/oauth-tokens.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { readSecretKey } from '../lib/secrets.ts';
+import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
 
 const PROVIDER = 'gdrive';
 const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
@@ -48,18 +49,6 @@ export interface IntegrationsGdriveOpts {
   /** Inject a stub fetcher for Drive API calls. */
   driveFetcher?: typeof fetch;
   secureCookies?: boolean;
-}
-
-interface ImportBody {
-  fileId?: unknown;
-  name?: unknown;
-  mimeType?: unknown;
-}
-
-interface CallbackQuery {
-  code?: string;
-  state?: string;
-  error?: string;
 }
 
 export default async function integrationsGdriveRoutes(
@@ -88,7 +77,7 @@ export default async function integrationsGdriveRoutes(
     return reply.redirect(url.toString(), 302);
   });
 
-  fastify.get<{ Querystring: CallbackQuery }>(
+  fastify.get<{ Querystring: ProviderCallbackQuery }>(
     '/admin/integrations/gdrive/callback',
     { ...guard },
     async (req, reply) => {
@@ -187,74 +176,78 @@ export default async function integrationsGdriveRoutes(
     return reply.send({ removed });
   });
 
-  fastify.post<{ Body: ImportBody }>('/admin/import/gdrive', { ...guard }, async (req, reply) => {
-    const user = req.user;
-    /* c8 ignore next 2 -- requireUser preHandler */
-    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
-    const fileId = req.body?.fileId;
-    if (typeof fileId !== 'string' || !fileId.trim()) {
-      return reply.code(400).send({ error: 'fileId is required' });
-    }
-    const key = readSecretKey(siteRoot);
-    const fresh = await ensureFresh(db, key, user.id, exchange);
-    if (!fresh) return reply.code(412).send({ error: 'gdrive not connected' });
-
-    let drive: Awaited<ReturnType<typeof fetchDriveFile>>;
-    try {
-      drive = await fetchDriveFile(fresh.access_token, fileId, {
-        ...(opts.driveFetcher ? { fetcher: opts.driveFetcher } : {})
-      });
-    } catch (err) {
-      req.log.warn({ err, fileId }, 'drive fetch failed');
-      return reply.code(400).send({ error: (err as Error).message });
-    }
-
-    if (!/^image\//i.test(drive.contentType)) {
-      return reply
-        .code(415)
-        .send({ error: `content-type must be image/*; got ${drive.contentType}` });
-    }
-
-    // Cap the streamed bytes the same way /admin/import/url does. Drive
-    // could legitimately stream a multi-GB file (or a compromised access
-    // token could redirect to one); without this, ingestStream would
-    // buffer the whole thing to a tmp file before sharp.metadata fails
-    // on the pixel-count guard. This trips first.
-    let bytes = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        bytes += chunk.length;
-        if (bytes > GDRIVE_MAX_BYTES) {
-          cb(new Error('streamed bytes exceeded limit'));
-          return;
-        }
-        cb(null, chunk);
+  fastify.post<{ Body: ProviderImportBody }>(
+    '/admin/import/gdrive',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const fileId = req.body?.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim()) {
+        return reply.code(400).send({ error: 'fileId is required' });
       }
-    });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(412).send({ error: 'gdrive not connected' });
 
-    try {
-      const result = await ingestStream({
-        stream: drive.body.pipe(limiter),
-        siteRoot,
-        source: {
-          kind: 'gdrive',
-          originalName: drive.file.name,
-          fileId: drive.file.id
+      let drive: Awaited<ReturnType<typeof fetchDriveFile>>;
+      try {
+        drive = await fetchDriveFile(fresh.access_token, fileId, {
+          ...(opts.driveFetcher ? { fetcher: opts.driveFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, fileId }, 'drive fetch failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+
+      if (!/^image\//i.test(drive.contentType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be image/*; got ${drive.contentType}` });
+      }
+
+      // Cap the streamed bytes the same way /admin/import/url does. Drive
+      // could legitimately stream a multi-GB file (or a compromised access
+      // token could redirect to one); without this, ingestStream would
+      // buffer the whole thing to a tmp file before sharp.metadata fails
+      // on the pixel-count guard. This trips first.
+      let bytes = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          bytes += chunk.length;
+          if (bytes > GDRIVE_MAX_BYTES) {
+            cb(new Error('streamed bytes exceeded limit'));
+            return;
+          }
+          cb(null, chunk);
         }
       });
-      return {
-        id: result.id,
-        bytes: result.bytes,
-        deduplicated: result.deduplicated,
-        ext: result.ext
-      };
-    } catch (err) {
-      const msg = (err as Error).message;
-      const code = /exceeded limit/.test(msg) ? 413 : 400;
-      req.log.warn({ err, fileId }, 'gdrive ingest failed');
-      return reply.code(code).send({ error: msg });
+
+      try {
+        const result = await ingestStream({
+          stream: drive.body.pipe(limiter),
+          siteRoot,
+          source: {
+            kind: 'gdrive',
+            originalName: drive.file.name,
+            fileId: drive.file.id
+          }
+        });
+        return {
+          id: result.id,
+          bytes: result.bytes,
+          deduplicated: result.deduplicated,
+          ext: result.ext
+        };
+      } catch (err) {
+        const msg = (err as Error).message;
+        const code = /exceeded limit/.test(msg) ? 413 : 400;
+        req.log.warn({ err, fileId }, 'gdrive ingest failed');
+        return reply.code(code).send({ error: msg });
+      }
     }
-  });
+  );
 }
 
 /** Mirrors URL_FETCH_MAX_BYTES in src/routes/admin.ts; keeps the two

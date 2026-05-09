@@ -19,10 +19,7 @@ import {
   type Variant
 } from '../../src/lib/render.ts';
 import { buildApp } from '../../src/server.ts';
-
-interface ErrorResponse {
-  error: string;
-}
+import type { ErrorBody } from '../helpers/oauth-fixtures.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-public-'));
@@ -130,7 +127,7 @@ test('GET /img/<filename> 404s on a malformed filename', async (t) => {
   const { app } = await setup(t);
   const res = await app.inject({ method: 'GET', url: '/img/not-a-derivative-name.png' });
   assert.equal(res.statusCode, 404);
-  assert.match(res.json<ErrorResponse>().error, /bad filename/);
+  assert.match(res.json<ErrorBody>().error, /bad filename/);
 });
 
 test('GET /img/<filename> 404s when no sidecar matches the originalId', async (t) => {
@@ -142,7 +139,7 @@ test('GET /img/<filename> 404s when no sidecar matches the originalId', async (t
     url: `/img/${fakeId}.${fakeOphash}.webp`
   });
   assert.equal(res.statusCode, 404);
-  assert.match(res.json<ErrorResponse>().error, /unknown original/);
+  assert.match(res.json<ErrorBody>().error, /unknown original/);
 });
 
 test('GET /img/<filename> 404s when the ophash does not match any variant×output', async (t) => {
@@ -153,7 +150,7 @@ test('GET /img/<filename> 404s when the ophash does not match any variant×outpu
     url: `/img/${sidecar.original}.${wrongOphash}.webp`
   });
   assert.equal(res.statusCode, 404);
-  assert.match(res.json<ErrorResponse>().error, /no matching variant/);
+  assert.match(res.json<ErrorBody>().error, /no matching variant/);
 });
 
 test('GET /img/<filename> on budget-exceeded enqueues + returns 202', async (t) => {

@@ -9,16 +9,13 @@ import sharp from 'sharp';
 
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { buildApp } from '../../src/server.ts';
+import type { ErrorBody } from '../helpers/oauth-fixtures.ts';
 
 interface ImportResponse {
   id: string;
   bytes: number;
   deduplicated: boolean;
   ext: string;
-}
-
-interface ErrorResponse {
-  error: string;
 }
 
 function freshSiteRoot(t: TestContext): string {
@@ -110,7 +107,7 @@ test('POST /admin/import/url 400s on a non-http URL', async (t) => {
     payload: { url: 'file:///etc/passwd' }
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json<ErrorResponse>().error, /http\(s\) URL/);
+  assert.match(res.json<ErrorBody>().error, /http\(s\) URL/);
 });
 
 test('POST /admin/import/url 400s on private/loopback URL via the default SSRF guard', async (t) => {
@@ -125,7 +122,7 @@ test('POST /admin/import/url 400s on private/loopback URL via the default SSRF g
     payload: { url: 'http://169.254.169.254/latest/meta-data/' }
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json<ErrorResponse>().error, /unsafe url/);
+  assert.match(res.json<ErrorBody>().error, /unsafe url/);
 });
 
 test('POST /admin/import/url 400s on missing url field', async (t) => {
@@ -146,7 +143,7 @@ test('POST /admin/import/url 400s on a non-2xx upstream response', async (t) => 
     payload: { url: `${base}/missing.jpg` }
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json<ErrorResponse>().error, /404/);
+  assert.match(res.json<ErrorBody>().error, /404/);
 });
 
 test('POST /admin/import/url 415s when content-type is not image/*', async (t) => {
@@ -161,7 +158,7 @@ test('POST /admin/import/url 415s when content-type is not image/*', async (t) =
     payload: { url: `${base}/x.txt` }
   });
   assert.equal(res.statusCode, 415);
-  assert.match(res.json<ErrorResponse>().error, /content-type/);
+  assert.match(res.json<ErrorBody>().error, /content-type/);
 });
 
 test('POST /admin/import/url 413s when content-length exceeds the cap', async (t) => {
@@ -181,7 +178,7 @@ test('POST /admin/import/url 413s when content-length exceeds the cap', async (t
     payload: { url: `${base}/huge.jpg` }
   });
   assert.equal(res.statusCode, 413);
-  assert.match(res.json<ErrorResponse>().error, /exceeds limit/);
+  assert.match(res.json<ErrorBody>().error, /exceeds limit/);
 });
 
 test('POST /admin/import/url 413s mid-stream when no content-length is sent', async (t) => {
@@ -200,7 +197,7 @@ test('POST /admin/import/url 413s mid-stream when no content-length is sent', as
     payload: { url: `${base}/big.jpg` }
   });
   assert.equal(res.statusCode, 413);
-  assert.match(res.json<ErrorResponse>().error, /exceeded limit/);
+  assert.match(res.json<ErrorBody>().error, /exceeded limit/);
 });
 
 test('POST /admin/import/url derives an originalName from the URL path', async (t) => {
