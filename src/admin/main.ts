@@ -2,7 +2,7 @@
 // /admin/posts (save). proseToMarkdown converts on save before POST;
 // the server's /admin/posts persists the markdown after validation.
 
-import { Editor, mergeAttributes, Node } from '@tiptap/core';
+import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 // CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
@@ -11,6 +11,7 @@ import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { hasWebglSupport, refreshImagePreview } from './canvas-loaders';
 import { openCropper } from './cropper-modal';
 import { $, setStatus } from './dom';
+import { type FigureAttrs, FigureNode, idCount, singleId } from './figure-node';
 import {
   describeOp,
   dirtyImageStates,
@@ -29,104 +30,6 @@ import { pickFromOneDrive } from './integrations/onedrive';
 import { openPerspective } from './perspective-modal';
 import { handleSave } from './save';
 import { uploadImage } from './upload';
-
-// Custom image node. Stores {id, alt, caption, position} in the document;
-// renders to an <img> pointing at /admin/preview/<id> (server redirects
-// to the actual cached derivative). Server sees this as
-// `::image{#id alt=… caption=… position=…}` after serialization.
-// Unified figure node — the only image-bearing node type in the editor.
-// Replaces the legacy ImageNode + GalleryNode/CarouselNode/DiptychNode/
-// TriptychNode that used to cover the same surface (spec.md §9).
-//
-// Attribute layout mirrors prose-markdown.ts emitFigure / parseFigure
-// so the wire format is single-source-of-truth. Toolbar / attribute
-// panel keeps a per-shape UX abstraction (image / gallery / carousel /
-// diptych / triptych = different defaults + different visible inputs)
-// but the on-disk node is always `figure`.
-interface FigureAttrs {
-  ids: string;
-  /** Comma-separated parallel array of alts. */
-  alts: string;
-  /** Pipe-separated parallel array of per-image captions. */
-  captions: string;
-  /** Block-level caption (single, applies to whole figure). */
-  caption: string;
-  /** Matrix spec — `NxM` grid, or `justified[:H]`, or `masonry[:N]`. */
-  matrix: string;
-  /** center | left | right | full | bleed | inline */
-  justify: string;
-  /** CSS-ready width; e.g. "60%" or "400px". Empty = use justify default. */
-  width: string;
-  /** "W:H" cell aspect; empty = derive from first image. */
-  aspect: string;
-  /** cover | contain. Default cover. */
-  fit: string;
-  /** Carousel autoplay seconds (0 = manual). */
-  timer: number;
-}
-const FIGURE_DEFAULTS: FigureAttrs = {
-  ids: '',
-  alts: '',
-  captions: '',
-  caption: '',
-  matrix: '',
-  justify: 'center',
-  width: '',
-  aspect: '',
-  fit: 'cover',
-  timer: 0
-};
-
-const FigureNode = Node.create({
-  name: 'figure',
-  group: 'block',
-  atom: true,
-  selectable: true,
-  draggable: true,
-  addAttributes() {
-    return Object.fromEntries(Object.entries(FIGURE_DEFAULTS).map(([k, v]) => [k, { default: v }]));
-  },
-  parseHTML() {
-    return [{ tag: 'div.rkr-figure-placeholder' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    const attrs = HTMLAttributes as Partial<FigureAttrs>;
-    const idList = (attrs.ids ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const thumbs: unknown[] = idList.map((id) => [
-      'img',
-      { src: `/admin/preview/${id}`, alt: '', class: 'rkr-multi-thumb' }
-    ]);
-    const matrixLabel = attrs.matrix ? attrs.matrix : `1x${idList.length || 1}`;
-    return [
-      'div',
-      mergeAttributes(HTMLAttributes, {
-        class: 'rkr-multi rkr-figure-placeholder',
-        'data-kind': 'figure',
-        'data-matrix': attrs.matrix ?? '',
-        'data-count': String(idList.length)
-      }),
-      ['div', { class: 'rkr-multi-label' }, `figure ${matrixLabel} (${idList.length})`],
-      ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
-      ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])
-    ];
-  }
-});
-
-/** Count the comma-separated ids in a figure-attrs string. */
-function idCount(ids: string | undefined): number {
-  return (ids ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean).length;
-}
-
-/** Extract the single id from a figure that has exactly one. */
-function singleId(ids: string | undefined): string {
-  return (ids ?? '').split(',')[0]?.trim() ?? '';
-}
 
 function makeButton(label: string, onClick: () => void, name?: string): HTMLButtonElement {
   const b = document.createElement('button');
