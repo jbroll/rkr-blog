@@ -192,6 +192,10 @@ tears down. The chromium binary it drives was installed by
 `npm run setup`; if `playwright install` was skipped (or the cache
 was cleared), re-run `npx playwright install chromium`.
 
+For writing new e2e specs (selector patterns, isolation rules, the
+`?e2e=1` debug hook, the per-test PNG-uniqueness gotcha, debugging,
+the pre-commit ratchet), see [`TESTING.md`](./TESTING.md).
+
 ### Other gates the pre-commit hook runs
 
 Beyond tests, biome, and tsc, the hook (`./.githooks/pre-commit`)
