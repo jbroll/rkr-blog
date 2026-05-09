@@ -25,9 +25,18 @@ fi
 
 # tsc step is wired in when the first .ts file lands; until then it errors
 # with TS18003 "No inputs were found". The migration commit re-enables it.
+#
+# Both tsconfigs run: server (tsconfig.json — covers src/{lib,routes,
+# templates,widgets,cli,site}, test/, scripts/) AND browser (tsconfig.
+# browser.json — covers src/admin/**). The browser config used to be
+# checked only by `npm run typecheck`; not having it in the hook let an
+# editor-only type bug slip through (commit d8a9d89). DEFERRED.md ⇒
+# "Pre-commit hook only runs server tsc" tracks the history.
 if compgen -G "src/**/*.ts" > /dev/null || compgen -G "test/**/*.ts" > /dev/null; then
-  echo "==> tsc --noEmit"
+  echo "==> tsc --noEmit (server)"
   npx --no-install tsc --noEmit
+  echo "==> tsc --noEmit (browser)"
+  npx --no-install tsc -p tsconfig.browser.json --noEmit
 fi
 
 # Cross-file duplicate type/interface/enum names. Biome and tsc don't catch

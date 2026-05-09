@@ -210,23 +210,6 @@ duplication is 2.55%, well below "act on it" thresholds.
 that point unifying the existing pair behind a Provider interface
 saves real work. Otherwise it's a pure code-tidiness exercise.
 
-### Pre-commit hook only runs server tsc, not browser tsc
-
-**Source.** Caught 2026-05-09 during the canvas-math relocation —
-`makeDropHandlers(() => editor)` had silently been failing the
-browser tsc since `d8a9d89`.
-
-**What.** `.githooks/pre-commit` runs `tsc --noEmit` (server config
-only). The browser tsconfig (`tsconfig.browser.json`) is checked by
-`npm run typecheck` but never by the hook. Editor-only type errors
-slip through and only surface on a manual typecheck or a build.
-
-**Why deferred.** Was assumed to run already; just a missed wiring.
-
-**Trigger.** Trivial fix — add `npx --no-install tsc -p
-tsconfig.browser.json --noEmit` to the hook alongside the existing
-server tsc invocation. Adds ~1-2s to commit time.
-
 ### Cold-cache `/img` 502s on Fly
 
 **Source.** Live walk against rkr-blog.fly.dev, 2026-05-09 — two
