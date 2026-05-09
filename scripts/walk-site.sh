@@ -92,19 +92,35 @@ while IFS= read -r slug; do
       *)                  url="$BASE/$src" ;;
     esac
 
-    # The /img/:filename route rate-limits at 120 req/min/IP. A walk of
-    # an image-heavy post blows through that and would falsely flag
-    # every burnt request. On 429, sleep until the window resets
-    # (Fastify sets x-ratelimit-reset: <seconds>) and retry once.
+    # Retry-with-backoff mirroring src/site/img-retry.ts: 3 attempts at
+    # 500/2000/8000 ms with ±20% jitter. The browser does the same on
+    # cold-cache 5xx and on edge timeouts (Fly returns 502 when sharp
+    # blows the 30s render budget on a fresh derivative). 429 is a
+    # separate branch that consults x-ratelimit-reset instead, since
+    # the rate-limiter tells us exactly when the next slot opens.
     headers="$tmp/img-$slug.hdr"
-    img_http=$(curl -sS -L -o /dev/null -D "$headers" -w '%{http_code}' -I "$url" || echo "000")
-    if [ "$img_http" = "429" ]; then
-      reset=$(awk 'tolower($1)=="x-ratelimit-reset:" { sub(/\r$/,"",$2); print $2; exit }' "$headers")
-      sleep_for="${reset:-2}"
-      [ "$sleep_for" -gt 0 ] 2>/dev/null || sleep_for=2
+    attempts_remaining=3
+    img_http="000"
+    while :; do
+      img_http=$(curl -sS -L -o /dev/null -D "$headers" -w '%{http_code}' -I "$url" || echo "000")
+      case "$img_http" in 2*) break ;; esac
+      [ "$attempts_remaining" -le 0 ] && break
+      attempts_remaining=$((attempts_remaining - 1))
+      attempt_idx=$((3 - attempts_remaining))    # 1 → 2 → 3
+      if [ "$img_http" = "429" ]; then
+        reset=$(awk 'tolower($1)=="x-ratelimit-reset:" { sub(/\r$/,"",$2); print $2; exit }' "$headers")
+        sleep_for="${reset:-2}"
+        [ "$sleep_for" -gt 0 ] 2>/dev/null || sleep_for=2
+      else
+        case "$attempt_idx" in
+          1) base_ms=500  ;;
+          2) base_ms=2000 ;;
+          *) base_ms=8000 ;;
+        esac
+        sleep_for=$(awk -v b="$base_ms" 'BEGIN { srand(); j = (rand()*0.4 - 0.2); printf "%.3f", (b * (1+j)) / 1000 }')
+      fi
       sleep "$sleep_for"
-      img_http=$(curl -sS -L -o /dev/null -w '%{http_code}' -I "$url" || echo "000")
-    fi
+    done
 
     case "$img_http" in
       2*) ;;
