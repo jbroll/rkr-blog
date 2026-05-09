@@ -1,12 +1,10 @@
-// Pure-math helpers for the client canvas pipeline. Lives in its own
-// module so the server-side test runner can import it without dragging
-// in DOM types (canvas.ts itself touches HTMLCanvasElement and friends,
-// which only exist under the browser tsconfig's lib).
-
-// canonicalJson lives in ../lib/canonical-json.ts; callers import from
-// there directly. canvas-math is dual-tsconfig (included by both
-// tsconfig.browser.json and visited transitively by tsconfig.json via
-// test/admin/canvas.test.ts), so the .ts extension form is required.
+// Pure-math helpers for the client canvas pipeline. Lives in src/lib
+// (rather than src/admin) so c8 can measure it under the standard
+// coverage gate; admin/canvas.ts itself touches HTMLCanvasElement and
+// stays admin-side. The math is a regression magnet — a rounding bug
+// or off-by-one in resample geometry makes preview drift from the
+// published render — so the unit tests in test/lib/canvas-math.test.ts
+// guard the contract.
 
 /** Compute the post-resample canvas size given the bounds and fit mode.
  * Mirrors sharp's behavior closely enough for live-preview parity:

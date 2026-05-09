@@ -5,9 +5,9 @@
 // current-canvas (post-prior-ops) space. The canvas pipeline's
 // applyPerspective then runs a WebGL homography to rectify.
 
+import { computeHomography, type Point, perspectiveOutputSize } from '../lib/canvas-math.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
-import { computeHomography, type Point, perspectiveOutputSize } from './canvas-math';
 import { $, setStatus } from './dom';
 import { type LocalEditState, localMutate } from './image-edit';
 

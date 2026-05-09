@@ -87,7 +87,10 @@ function mount(): void {
   const attrSaveBtn = $<HTMLButtonElement>('rkr-image-save-btn');
   const attrEditsList = $<HTMLOListElement>('rkr-image-edits');
 
-  const editor = new Editor({
+  // Annotate explicitly: makeDropHandlers takes a getter that closes over
+  // `editor`, which makes the variable self-referential to TS's inference.
+  // The annotation breaks the cycle without changing runtime behavior.
+  const editor: Editor = new Editor({
     element: root,
     extensions: [StarterKit, FigureNode],
     content: '<p></p>',

@@ -1,5 +1,5 @@
-// Unit coverage for the pure-math helpers in src/admin/canvas-math.ts.
-// canvas.ts itself touches the DOM (createElement, getContext,
+// Unit coverage for the pure-math helpers in src/lib/canvas-math.ts.
+// admin/canvas.ts itself touches the DOM (createElement, getContext,
 // drawImage) and is exercised manually via the editor — Node has no
 // canvas context. The geometry math here is a regression-magnet: a
 // rounding bug or off-by-one in resample geometry makes preview drift
@@ -18,7 +18,7 @@ import {
   type Point,
   perspectiveOutputSize,
   simplifyOps
-} from '../../src/admin/canvas-math.ts';
+} from '../../src/lib/canvas-math.ts';
 
 test('computeResampleSize: w only (downscale, preserves aspect)', () => {
   // 800×600 bounded by w=400 → scale 0.5; h follows.

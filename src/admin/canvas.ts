@@ -15,7 +15,6 @@
 // SidecarOp lives in lib/sidecar-types.ts (a pure type module — no
 // node:fs / node:crypto, safe for the browser bundle). Callers import
 // from there directly; canvas.ts uses it internally.
-import type { SidecarOp } from '../lib/sidecar-types.ts';
 import {
   clampInt,
   computeHomography,
@@ -26,7 +25,8 @@ import {
   type Point,
   perspectiveOutputSize,
   simplifyOps
-} from './canvas-math';
+} from '../lib/canvas-math.ts';
+import type { SidecarOp } from '../lib/sidecar-types.ts';
 
 export interface CanvasSource {
   /** The decoded source pixels — anything `drawImage` accepts. */
