@@ -196,6 +196,13 @@ the cached result. The exact default is set by the implementation
 - A render request landing between "bake unlinked" and "new bake
   uploaded" falls through to the master + apply-ops path. One slower
   request at most; correct content.
+- Bake uploads carry an ops-hash header (`X-Rkr-Bake-Ops-Hash:
+  <sha256-of-canonical-json-of-current-ops>`); the server compares
+  against the live sidecar and rejects the upload with 409 if they
+  don't match. Without this guard, two clients racing the same id
+  (offline reconnect, two-tab session) can land a bake that no
+  longer corresponds to current ops; the public site would serve
+  the wrong pixels until the next save.
 
 ## 8. Content model
 

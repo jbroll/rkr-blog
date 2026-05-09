@@ -10,6 +10,31 @@ When you fix one, delete the entry. When something gets worse than expected,
 promote it. Newly-discovered work goes here, not into commit messages, so
 the queue is searchable.
 
+## Implement spec.md §7 bake-ops-hash guard
+
+**Source.** Surfaced during the spec-offline.md design review,
+2026-05-09. Promoted to a v1 correctness fix and folded into spec.md
+§7 "Bake invalidation" because it isn't offline-conditional — two
+online tabs racing the same image's ops trigger the same drift.
+
+**What.** `POST /admin/sidecar/:id/bake` should require
+`X-Rkr-Bake-Ops-Hash: <sha256-hex of canonicalJson(current ops)>`
+and reject with 409 if the hash doesn't match the live sidecar's
+ops. Today the route accepts any bake under the id; concurrent
+drains can land a bake matching a stale opset, and the public site
+serves the wrong pixels until the next save.
+
+**Why deferred.** Routine v1 correctness work; spec landed today,
+implementation hasn't. Not blocking offline phases (which can ship
+on top of either the guarded or unguarded route — the guard
+strictly improves correctness either way).
+
+**Trigger.** Pair with phase 1 of the offline plan or land sooner
+as a v1.x bugfix. Estimated ~30 server lines plus a unit test
+(submit two concurrent /bake POSTs, second one with a stale hash,
+assert 409). Client side: admin/canvas-loaders.ts's `uploadBake`
+needs to compute and send the header — also small.
+
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
 ### M3 — Sliding-session lookup timing
