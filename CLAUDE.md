@@ -9,16 +9,18 @@ User-visible text is a cost. Default to short.
 - **End-of-turn summary**: 1-2 sentences. What changed, what's next.
   Don't restate the diff or reproduce work the user can already see.
 - **Post-commit reviews** (triggered by the `git commit` PostToolUse
-  hook): actually review the change. Look for regressions, missed
-  edge cases, weak coverage, security/perf issues, deferred work
-  surfaced by the diff.
-  - Small items (typos, dead imports, comment polish, obvious
-    refactors) — fix on the spot in a follow-up commit. Don't ask.
-  - Substantive issues with more than one reasonable resolution —
-    name the issue, list options with trade-offs, ask which to take.
+  hook): review the code you just committed for **clarity,
+  conciseness, and security**.
+  - Simple, easy-to-fix issues (typos, dead imports, redundant code,
+    missing clamps/escapes) — fix and amend into the current commit
+    (`git add … && git commit --amend --no-edit`). The amend is
+    explicitly authorised for this case; everywhere else, follow the
+    default "create new commits" rule.
+  - Serious issues with more than one reasonable resolution (design
+    choices, real security concerns, missed edge cases) — present the
+    alternatives to the user and wait for input. Don't silently pick.
   - Nothing material — confirm in one sentence and move on.
-  - Skip multi-section recaps and diff narration; the user can see
-    the diff.
+  - Skip diff narration; the user can see the diff.
 - **No session-summary recaps** unless the user asks. Pushed commits
   are the record; a wall of bullets repeating them is noise.
 - **Status lines while working**: one short sentence per real moment
