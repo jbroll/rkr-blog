@@ -35,12 +35,9 @@ import { mountToolbar } from './toolbar';
 import { uploadImage } from './upload';
 
 function mount(): void {
-  // OPFS init + outbox surfacing + online-state (spec-offline §5+§8).
-  void startOfflineInfrastructure();
-
   // Mount inside the <article> child so site.css's prose typography
-  // (max-width, headings, blockquote, hr, code) applies to the editable
-  // region. The outer #rkroll-admin-root keeps the framed-box look.
+  // applies to the editable region; outer #rkroll-admin-root keeps
+  // the framed-box look.
   const root = $('rkroll-admin-article');
   const toolbar = $('rkroll-admin-toolbar');
   const fileInput = $<HTMLInputElement>('rkr-image-input');
@@ -90,12 +87,17 @@ function mount(): void {
     editorProps: makeDropHandlers(() => editor)
   });
 
+  // OPFS init + draft restore + outbox + online-state (spec-offline
+  // §5/§7/§8). Runs post-editor so draft restore can setContent.
+  const offlineReady = startOfflineInfrastructure(editor);
+
   wireDragOverlay($('rkroll-admin-root'));
 
-  // E2E hook: ?e2e=1 exposes the editor for Playwright flows the
-  // picker UI doesn't reach (multi-image figure construction).
+  // E2E hooks under ?e2e=1: expose editor (multi-image figure flows
+  // the picker can't drive) + offline-init promise so tests can
+  // await draft-restore before typing.
   if (new URLSearchParams(location.search).get('e2e') === '1') {
-    (window as unknown as { __rkrEditor?: Editor }).__rkrEditor = editor;
+    Object.assign(window, { __rkrEditor: editor, __rkrOfflineReady: offlineReady });
   }
 
   /** Multi-upload helper: pick N files, upload, insert one figure with

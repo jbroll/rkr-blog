@@ -488,3 +488,44 @@ test('editor: offline savePost queues + drains on reconnect to publish /:slug', 
   const html = await (await page.request.get(`/${slug}`)).text();
   expect(html).toContain('offline save body');
 });
+
+// Draft persistence (phase 1h): editor JSON is debounce-persisted to
+// opfs://drafts/<id>.json so a tab close + reopen restores exactly
+// what the author saw. Type, wait past the 500ms debounce, reload,
+// confirm the text comes back.
+test('editor: typed body persists across reload via OPFS draft', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  // Wait for draft restore to finish before our setContent — without
+  // this, a race lets startOfflineInfrastructure clobber the test's
+  // typed sentinel with whatever a prior test left in OPFS.
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  const sentinel = `draft persisted ${Date.now()}`;
+  await page.evaluate((text) => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent(`<p>${text}</p>`);
+  }, sentinel);
+
+  // Wait past the 500ms debounce + a small safety margin so the OPFS
+  // write completes before reload.
+  await page.waitForTimeout(900);
+
+  // Reload re-mounts the SPA; startOfflineInfrastructure restores the
+  // persisted draft into the editor before user interaction.
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // The restored doc should contain the sentinel paragraph in the
+  // ProseMirror DOM.
+  await expect(page.locator('#rkroll-admin-article')).toContainText(sentinel, { timeout: 5_000 });
+});

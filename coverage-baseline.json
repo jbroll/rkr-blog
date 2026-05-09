@@ -38,8 +38,8 @@
       "linesHit": 0
     },
     "src/admin/main.ts": {
-      "linesFound": 110,
-      "linesHit": 84
+      "linesFound": 109,
+      "linesHit": 83
     },
     "src/admin/perspective-modal.ts": {
       "linesFound": 73,
@@ -82,16 +82,16 @@
       "linesHit": 10
     },
     "src/admin/startup.ts": {
-      "linesFound": 9,
-      "linesHit": 8
+      "linesFound": 11,
+      "linesHit": 10
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
       "linesHit": 1
     },
     "src/admin/drainers.ts": {
-      "linesFound": 20,
-      "linesHit": 17
+      "linesFound": 21,
+      "linesHit": 18
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -124,6 +124,10 @@
     "src/lib/safe-url.ts": {
       "linesFound": 12,
       "linesHit": 1
+    },
+    "src/admin/draft.ts": {
+      "linesFound": 28,
+      "linesHit": 27
     }
   }
 }

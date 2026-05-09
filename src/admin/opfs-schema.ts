@@ -42,6 +42,12 @@ export interface OpfsRoot {
    * older OpfsRoot lands without the field (e.g. a partial migration
    * crash that leaves _root.json missing it). */
   nextSeq?: number;
+  /** Active draft id for the SPA's single-draft session model
+   * (phase 1h). draft.ts persists the editor's TipTap JSON to
+   * `drafts/<currentDraftId>.json` between mounts; meta lives in
+   * `meta/<currentDraftId>.json`. Phase 2 extends to a list-of-drafts
+   * model when pinning lands; that bump goes through MIGRATIONS. */
+  currentDraftId?: string;
 }
 
 export type SchemaStatus =
