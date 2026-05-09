@@ -1,7 +1,18 @@
 // Shared site chrome: header + footer used by both /:slug and / templates.
 // Driven by SITE_TITLE / SITE_TAGLINE env vars (lib/config.ts).
 
+import { resolveGitHash } from '../lib/build-info.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
+
+/** ?v=<short-hash> suffix appended to public-side bundle / stylesheet
+ * URLs so the service worker (src/site/sw.ts) treats each deploy as a
+ * distinct cache key. When the git hash can't be resolved, the
+ * fallback suffix is `?v=unknown` — consistent per-process, so the SW
+ * still caches deterministically (the deploy can re-warm by setting
+ * GIT_HASH env). */
+export function bundleVersion(): string {
+  return `?v=${resolveGitHash().slice(0, 12)}`;
+}
 
 export interface SiteChrome {
   /** Resolved site config — owner-side branding only; never per-request. */

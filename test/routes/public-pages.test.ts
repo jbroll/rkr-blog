@@ -86,8 +86,17 @@ test('GET /:slug includes the lightbox script tag', async (t) => {
   runReindex(root);
   const res = await app.inject({ method: 'GET', url: '/lb' });
   assert.equal(res.statusCode, 200);
-  assert.match(res.body, /<script type="module" src="\/static\/site\/lightbox\.js" defer>/);
-  assert.match(res.body, /<script type="module" src="\/static\/site\/img-retry\.js" defer>/);
+  // Versioned URL: bundleVersion() suffixes ?v=<gitHash> per-deploy
+  // for SW cache invalidation (templates/layout.ts). Unversioned in
+  // dev only when no git hash resolves; both shapes accepted.
+  assert.match(
+    res.body,
+    /<script type="module" src="\/static\/site\/lightbox\.js(\?v=[0-9a-f]+)?" defer>/
+  );
+  assert.match(
+    res.body,
+    /<script type="module" src="\/static\/site\/img-retry\.js(\?v=[0-9a-f]+)?" defer>/
+  );
 });
 
 test('GET / does NOT include the lightbox script (no figures on index)', async (t) => {

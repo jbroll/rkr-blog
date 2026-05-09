@@ -31,8 +31,11 @@ const ALL_CACHES = [SHELL, PAGES, IMAGES];
 const PAGES_CAP = 50;
 const IMAGES_CAP = 200;
 
+// site.css and the JS bundles are referenced as `path?v=<gitHash>` from
+// the templates (so each deploy is a distinct cache key); the precache
+// can't know the hash, so we let SWR populate them on first navigation.
+// The icons + manifest stay un-versioned, so they're safe to precache.
 const SHELL_PRECACHE: readonly string[] = [
-  '/static/site.css',
   '/static/manifest.webmanifest',
   '/static/icon-192.png',
   '/static/icon-512.png'
