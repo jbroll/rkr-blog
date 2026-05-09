@@ -28,17 +28,15 @@ import {
   getLocalEditState,
   saveImageEdits
 } from './image-edit';
-import { ensureSchema } from './opfs-schema';
 import { openPerspective } from './perspective-modal';
 import { pickMany, uploadMany } from './pick';
+import { startOfflineInfrastructure } from './startup';
 import { mountToolbar } from './toolbar';
 import { uploadImage } from './upload';
 
 function mount(): void {
-  // OPFS schema init (spec-offline.md §10); fire-and-forget.
-  void ensureSchema().catch((err: unknown) =>
-    setStatus(`offline cache init failed: ${(err as Error).message}`)
-  );
+  // OPFS init + outbox surfacing + online-state (spec-offline §5+§8).
+  void startOfflineInfrastructure();
 
   // Mount inside the <article> child so site.css's prose typography
   // (max-width, headings, blockquote, hr, code) applies to the editable

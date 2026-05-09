@@ -1,0 +1,107 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { coalescePending, type OutboxEntry } from '../../src/lib/outbox-types.ts';
+
+function entry(seq: number, op: OutboxEntry['op'], extra: Record<string, unknown>): OutboxEntry {
+  // Cast through unknown — the discriminated union doesn't accept a
+  // generic object literal; tests build minimal valid entries per op.
+  return {
+    seq,
+    op,
+    createdAt: '2026-05-09T00:00:00.000Z',
+    deviceId: 'test-device',
+    ...extra
+  } as unknown as OutboxEntry;
+}
+
+test('coalescePending: empty array → empty', () => {
+  assert.deepEqual(coalescePending([]), []);
+});
+
+test('coalescePending: single entry preserved', () => {
+  const e = entry(1, 'upload', {
+    payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
+  });
+  assert.deepEqual(coalescePending([e]), [e]);
+});
+
+test('coalescePending: two savePost entries for same slug → keep latest', () => {
+  const earlier = entry(3, 'savePost', {
+    payload: { slug: 'my-post', title: 'A', status: 'draft', markdown: 'v1' }
+  });
+  const later = entry(7, 'savePost', {
+    payload: { slug: 'my-post', title: 'B', status: 'published', markdown: 'v2' }
+  });
+  const result = coalescePending([earlier, later]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.seq, 7);
+});
+
+test('coalescePending: savePost entries for different slugs both kept', () => {
+  const a = entry(3, 'savePost', {
+    payload: { slug: 'post-a', title: 'A', status: 'draft', markdown: '' }
+  });
+  const b = entry(5, 'savePost', {
+    payload: { slug: 'post-b', title: 'B', status: 'draft', markdown: '' }
+  });
+  assert.deepEqual(
+    coalescePending([a, b]).map((e) => e.seq),
+    [3, 5]
+  );
+});
+
+test('coalescePending: setOps coalesces by id, latest seq wins', () => {
+  const earlier = entry(2, 'setOps', { payload: { id: 'abc', ops: [], redoStack: [] } });
+  const later = entry(8, 'setOps', {
+    payload: { id: 'abc', ops: [{ type: 'rotate', degrees: 90 }], redoStack: [] }
+  });
+  const other = entry(5, 'setOps', { payload: { id: 'def', ops: [], redoStack: [] } });
+  const result = coalescePending([earlier, later, other]);
+  // Both ids represented, but only the latest setOps for `abc`.
+  assert.equal(result.length, 2);
+  assert.deepEqual(
+    result.map((e) => e.seq).sort((a, b) => a - b),
+    [5, 8]
+  );
+});
+
+test('coalescePending: upload entries are NEVER coalesced (content-addressed)', () => {
+  // Two uploads with identical payload → both kept. Server dedups
+  // server-side so the second drain is a no-op anyway.
+  const a = entry(1, 'upload', {
+    payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
+  });
+  const b = entry(2, 'upload', {
+    payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
+  });
+  assert.equal(coalescePending([a, b]).length, 2);
+});
+
+test('coalescePending: bake entries are NEVER coalesced', () => {
+  // Two bakes for same id but DIFFERENT opsHash → both must drain
+  // (the second's ops-hash must match server's current ops; server
+  // 409s the wrong one).
+  const a = entry(1, 'bake', { payload: { id: 'abc', opsHash: 'aaaa' } });
+  const b = entry(2, 'bake', { payload: { id: 'abc', opsHash: 'bbbb' } });
+  assert.equal(coalescePending([a, b]).length, 2);
+});
+
+test('coalescePending: mixed ops preserve causal order across kept entries', () => {
+  // upload → savePost(draft) → savePost(final). Coalescing drops the
+  // earlier savePost; upload stays first.
+  const upload = entry(1, 'upload', {
+    payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
+  });
+  const draft = entry(2, 'savePost', {
+    payload: { slug: 's', title: 'd', status: 'draft', markdown: '' }
+  });
+  const final = entry(3, 'savePost', {
+    payload: { slug: 's', title: 'f', status: 'published', markdown: '' }
+  });
+  const result = coalescePending([upload, draft, final]);
+  assert.deepEqual(
+    result.map((e) => e.seq),
+    [1, 3]
+  );
+});

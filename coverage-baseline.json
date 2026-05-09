@@ -62,12 +62,28 @@
       "linesHit": 6
     },
     "src/admin/opfs-schema.ts": {
-      "linesFound": 12,
-      "linesHit": 12
+      "linesFound": 18,
+      "linesHit": 14
     },
     "src/admin/opfs.ts": {
-      "linesFound": 25,
-      "linesHit": 25
+      "linesFound": 52,
+      "linesHit": 32
+    },
+    "src/admin/online-state.ts": {
+      "linesFound": 18,
+      "linesHit": 15
+    },
+    "src/admin/outbox.ts": {
+      "linesFound": 11,
+      "linesHit": 10
+    },
+    "src/admin/sync.ts": {
+      "linesFound": 8,
+      "linesHit": 8
+    },
+    "src/admin/startup.ts": {
+      "linesFound": 8,
+      "linesHit": 7
     }
   }
 }

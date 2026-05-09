@@ -29,12 +29,19 @@ const OPFS_SCHEMA_CURRENT = 1 as const;
 
 const ROOT_PATH = 'meta/_root.json';
 
-interface OpfsRoot {
+/** @public */
+export interface OpfsRoot {
   schemaVersion: number;
   /** Stable per-device id, generated on first OPFS write. Useful
    * for multi-device debug ("which device drained this outbox
    * entry?") — sent in outbox JSON's `deviceId` field. */
   deviceId: string;
+  /** Monotonic counter for outbox entry sequence numbers. Reads /
+   * writes happen via reserveSeq() in src/admin/outbox.ts so the
+   * file is the single source of truth. Defaulted to 0 when an
+   * older OpfsRoot lands without the field (e.g. a partial migration
+   * crash that leaves _root.json missing it). */
+  nextSeq?: number;
 }
 
 export type SchemaStatus =
@@ -55,8 +62,23 @@ const MIGRATIONS: Map<string, Migration> = new Map();
 function makeRoot(): OpfsRoot {
   return {
     schemaVersion: OPFS_SCHEMA_CURRENT,
-    deviceId: makeDeviceId()
+    deviceId: makeDeviceId(),
+    nextSeq: 0
   };
+}
+
+/** Read _root.json. Returns null when absent (caller decides
+ * whether to initialize). Used by outbox.ts to read deviceId +
+ * advance nextSeq. */
+export async function readRoot(): Promise<OpfsRoot | null> {
+  return readJson<OpfsRoot>(ROOT_PATH);
+}
+
+/** Write _root.json. Used by outbox.ts to persist nextSeq after
+ * each append. Atomic-rename semantics aren't needed here because
+ * a torn write of a counter is corrected on next append. */
+export async function writeRoot(root: OpfsRoot): Promise<void> {
+  await writeJson(ROOT_PATH, root);
 }
 
 function makeDeviceId(): string {

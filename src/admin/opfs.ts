@@ -2,11 +2,11 @@
 // offline cache. Browser-private filesystem at navigator.storage
 // .getDirectory(); see spec-offline.md §4 for the on-disk layout.
 //
-// Phase 1 foundation: just the JSON read/write surface that the
-// schema versioning module (opfs-schema.ts) needs. readBlob /
-// writeBlob / listDir / removeFile / removeDir land in phase 1c+
-// when their consumers (outbox, eviction) arrive — held back today
-// per the no-speculative-API rule.
+// Phase 1 foundation: JSON + blob read/write, directory listing,
+// file/directory removal. Each call collapses the verbose native
+// API (getDirectoryHandle → getFileHandle → createWritable → write
+// → close) to one function and auto-creates intermediate
+// directories on writes.
 
 /** True iff the running browser exposes OPFS. Cached because the
  * answer is process-stable. Older browsers + some private-browsing
@@ -97,4 +97,81 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
   const writable = await handle.createWritable();
   await writable.write(`${JSON.stringify(value, null, 2)}\n`);
   await writable.close();
+}
+
+/** Read a binary file as a Blob. Returns null when not present. */
+export async function readBlob(path: string): Promise<Blob | null> {
+  if (!isSupported()) return null;
+  let parent: FileSystemDirectoryHandle;
+  let leafName: string;
+  try {
+    ({ parent, leafName } = await walk(path, false));
+    /* v8 ignore next 3 -- not-found path; only fires when the dir
+       walk succeeds but the leaf is gone (rare race) */
+  } catch {
+    return null;
+  }
+  try {
+    const handle = await parent.getFileHandle(leafName, { create: false });
+    return await handle.getFile();
+    /* v8 ignore next 3 -- not-found path; same shape as readJson's */
+  } catch {
+    return null;
+  }
+}
+
+/** Write a binary blob, creating intermediate directories as needed. */
+export async function writeBlob(path: string, blob: Blob): Promise<void> {
+  /* v8 ignore next 3 -- defensive guard; isSupported() gates upstream */
+  if (!isSupported()) {
+    throw new Error('writeBlob called on unsupported browser');
+  }
+  const { parent, leafName } = await walk(path, true);
+  const handle = await parent.getFileHandle(leafName, { create: true });
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
+/** List the names in a directory. Returns [] when the directory
+ * doesn't exist (vs. throwing — callers iterating a possibly-empty
+ * area shouldn't have to wrap in try/catch). */
+export async function listDir(path: string): Promise<string[]> {
+  if (!isSupported()) return [];
+  const parts = path.split('/').filter((p) => p.length > 0);
+  let dir = await getRoot();
+  try {
+    for (const segment of parts) {
+      dir = await dir.getDirectoryHandle(segment, { create: false });
+    }
+    /* v8 ignore next 3 -- empty-dir / not-found path; covered indirectly */
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for await (const name of dir.keys()) {
+    out.push(name);
+  }
+  return out;
+}
+
+/** Remove a single file. Silent on "doesn't exist" — callers
+ * dropping a possibly-already-drained outbox entry shouldn't have
+ * to differentiate. */
+export async function removeFile(path: string): Promise<void> {
+  if (!isSupported()) return;
+  let parent: FileSystemDirectoryHandle;
+  let leafName: string;
+  try {
+    ({ parent, leafName } = await walk(path, false));
+    /* v8 ignore next */
+  } catch {
+    return;
+  }
+  try {
+    await parent.removeEntry(leafName);
+    /* v8 ignore next 3 -- already-gone path; harmless, fires on retried drains */
+  } catch {
+    /* already gone or nonexistent — fine */
+  }
 }
