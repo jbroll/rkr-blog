@@ -29,6 +29,7 @@
     "build:site": "esbuild src/site/lightbox.ts src/site/carousel.ts src/site/img-retry.ts --format=esm --target=es2022 --outdir=static/site --sourcemap",
     "build": "npm run build:admin && npm run build:site",
     "clean:admin": "rm -rf static/admin",
+    "setup": "bash scripts/setup.sh",
     "hooks:install": "git config core.hooksPath .githooks",
     "migrate": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/site-admin migrate",
     "render": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/site-admin render",

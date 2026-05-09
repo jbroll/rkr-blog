@@ -20,34 +20,43 @@ For how the codebase delivers it, see [implementation.md](./implementation.md).
 
 ## 2. Initial setup
 
-### Debian / Ubuntu / macOS
-
 ```bash
 git clone <repo> ~/src/rkroll-cms
 cd ~/src/rkroll-cms
-npm ci
+npm run setup                # node_modules + chromium + git hooks
 SITE_ROOT=$HOME/site bin/site-admin init
 ```
 
-### Void Linux
+`npm run setup` runs three idempotent steps via `scripts/setup.sh`:
+
+1. **`npm install`** — pulls every Node dep, including the binary
+   ones: `sharp` (libvips bindings; ships prebuilds for
+   Debian / Ubuntu / macOS / glibc + ARM), `argon2` (no longer used —
+   if you see it in node_modules it's stale), and the dev tooling
+   (biome, knip, dpdm, c8, esbuild, tiptap, cropperjs, @playwright/test).
+2. **`npx playwright install chromium`** — downloads Chrome Headless
+   Shell (~110 MB) into the Playwright cache. Required for
+   `npm run test:e2e`. Skipped on second run.
+3. **`npm run hooks:install`** — sets `git config core.hooksPath` to
+   `.githooks/` so `pre-commit` runs the full gate (biome / tsc /
+   duplicate-type / no-reexports / knip / circular-import / size /
+   c8 coverage thresholds / npm test).
+
+### Distro-specific Sharp notes
+
+`sharp` ships prebuilds for the common targets, but a few cases need
+the OS to provide libvips before `npm install` succeeds:
 
 ```bash
-xbps-install -S nodejs
-git clone <repo> ~/src/rkroll-cms
-cd ~/src/rkroll-cms
-npm ci   # if Sharp prebuild fails: xbps-install vips vips-devel && npm install --build-from-source sharp
-SITE_ROOT=$HOME/site bin/site-admin init
+# Void Linux (and any musl distro / non-standard ARM)
+xbps-install -S nodejs vips vips-devel
+# Then either: re-run npm run setup, or force a source build:
+npm install --build-from-source sharp
 ```
 
-### Hooks
-
-```bash
-npm run hooks:install        # one-time: enables .githooks/
-```
-
-The pre-commit hook runs `biome check --staged`, `tsc --noEmit`, then
-the full test suite. Bypass with `git commit --no-verify` only when
-you're sure.
+If `npm install` fails inside `npm run setup`, drop to `npm install`
+manually so the build error is visible, fix the libvips path, then
+re-run `npm run setup` to pick up at the playwright + hooks steps.
 
 ## 3. Running locally
 
@@ -155,19 +164,44 @@ The pre-commit hook runs `biome check --staged`.
 
 ```bash
 npm test                     # node --test
-npm run test:coverage        # c8 coverage with thresholds
+npm run test:coverage        # c8 with per-file thresholds
+                             # (lines=90 / branches=75 / fns=90)
 npm run typecheck            # tsc --noEmit (server + browser)
 npm run check                # typecheck + lint + test:coverage
+npm run test:e2e             # Playwright (chromium, headless)
+npm run test:e2e:headed      # Playwright (chromium, visible)
 ```
 
 `test:coverage` excludes `src/admin/**` (browser code, requires a DOM
 shim to test directly; the pure-math siblings are covered).
 
+`test:e2e` boots the server via `test-e2e/server-runner.ts` against a
+freshly-mkdtemp'd SITE_ROOT, runs the spec files in `test-e2e/`, and
+tears down. The chromium binary it drives was installed by
+`npm run setup`; if `playwright install` was skipped (or the cache
+was cleared), re-run `npx playwright install chromium`.
+
+### Other gates the pre-commit hook runs
+
+Beyond tests, biome, and tsc, the hook (`./.githooks/pre-commit`)
+also runs:
+
+```bash
+node scripts/check-duplicate-types.ts   # cross-file dupe interfaces / types
+node scripts/check-no-reexports.ts      # `export { … } from …` patterns
+npm run knip:gate                       # full knip report (dead code)
+npm run circular                        # dpdm circular-import survey
+```
+
+Each is invokable on demand if you want to debug a specific failure.
+The size hook (per-file 500-line ceiling for `src/`/`bin/`; tests
+exempt) is inline in the hook itself.
+
 ## 7. Building the admin bundle
 
 ```bash
 npm run build:admin          # esbuild → static/admin/main.js
-npm run build:site           # esbuild → static/site/{lightbox,carousel}.js
+npm run build:site           # esbuild → static/site/{lightbox,carousel,img-retry}.js
 npm run build                # both
 ```
 
@@ -177,12 +211,21 @@ the bundle. Production builds happen at deploy time.
 ## 8. Command cheatsheet
 
 ```bash
-# tests + lint
-npm test                                  # node --test
+# one-shot environment setup (idempotent)
+npm run setup                             # npm install + playwright install + hooks
+
+# tests + lint + gates
+npm test                                  # node --test (unit)
+npm run test:coverage                     # c8 with per-file thresholds
+npm run test:e2e                          # Playwright (chromium, headless)
+npm run test:e2e:headed                   # Playwright (visible)
 npm run lint                              # biome check
 npm run lint:fix                          # biome check --write
-npm run typecheck                         # tsc --noEmit
-npm run check                             # typecheck + lint + tests + coverage
+npm run typecheck                         # tsc --noEmit (server + browser)
+npm run knip                              # full dead-code report
+npm run knip:gate                         # gate subset (pre-commit step)
+npm run circular                          # dpdm circular-import check
+npm run check                             # typecheck + lint + test:coverage
 npm run hooks:install                     # one-time: enable .githooks/
 
 # server
@@ -202,7 +245,9 @@ SITE_ROOT=$HOME/site bin/site-admin reindex
 SITE_ROOT=$HOME/site bin/site-admin render
 SITE_ROOT=$HOME/site bin/site-admin gc
 SITE_ROOT=$HOME/site bin/site-admin verify
+SITE_ROOT=$HOME/site bin/site-admin reset --to <url> --token <ADMIN_TOKEN> --force
 SITE_ROOT=$HOME/site bin/site-admin user invite <email> [--role owner|editor]
+SITE_ROOT=$HOME/site bin/site-admin import-wp push <wp-base> <slug> --to <fly-url>
 ```
 
 ## 9. Troubleshooting
@@ -221,3 +266,7 @@ SITE_ROOT=$HOME/site bin/site-admin user invite <email> [--role owner|editor]
 - **Editor "perspective" button is greyed out.** Browser doesn't
   support WebGL (or has it disabled). The button's tooltip explains
   why; other ops still work.
+- **`npm run test:e2e` errors with `Executable doesn't exist at
+  …/chrome-linux/headless_shell`.** The chromium binary isn't in the
+  Playwright cache. Re-run `npx playwright install chromium`
+  (or `npm run setup` to redo the whole bootstrap).
