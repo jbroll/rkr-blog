@@ -33,53 +33,6 @@ specific id. The cell-selection UI is the missing piece.
 **Trigger.** First time an author wants to crop one image inside
 a multi-image figure.
 
-## Slice main.ts mount() into per-panel mounts
-
-**What.** The 7-module split tracked here previously landed in
-2026-05-09 (`dom.ts`, `upload.ts`, `canvas-loaders.ts`,
-`image-edit.ts`, `cropper-modal.ts`, `perspective-modal.ts`,
-`save.ts`, plus `integrations/{gdrive,onedrive}.ts`). main.ts is
-now 709 lines: FigureNode + a single `mount()` orchestrator that
-wires every panel section to the editor.
-
-The remaining oversize is structural — `mount()` constructs and
-binds the toolbar, the figure-attrs panel, the image-edit pipeline
-controls, the per-image dirty-state subscriptions, the file-input,
-and the integrations buttons in one closure. Slicing it requires
-either extracting closure-scoped helpers behind explicit return
-shapes (each panel owning its own `mountX(deps)` function) or
-threading the editor + setStatus + state stores through a
-parameter object.
-
-**Why deferred.** The natural-cut extractions (those with cleanly
-exportable boundaries) are done. Further reduction means deciding
-on a DI contract for the closure-scoped helpers; that's a design
-choice better made when a real motivating change drives it (e.g.
-adding a new panel, or replacing TipTap), not as a size-hook tax.
-
-**Trigger.** When a feature touching the editor wants per-panel
-isolation, OR when the size hook is tightened to fail-on-existing
-(the entry below).
-
-## Tighten the per-file size hook to fail-on-existing
-
-**What.** `.githooks/pre-commit` already enforces the 500-line
-ceiling for new files in production source (`src/`, `bin/`) and
-rejects any growth in already-oversized files (warn-on-existing).
-Tests are exempt from the size check — coverage growth is a feature.
-After the 2026-05-09 main.ts split, only `src/admin/main.ts` (709)
-is still over the limit; once it lands under 500, the hook should
-be tightened so the warn-on-existing branch becomes a FAIL.
-
-**Why deferred.** main.ts (709) is the last warn-on-existing
-production file. Flipping the gate before main.ts is split below
-500 would block every commit that touches main.ts.
-
-**Trigger.** When the last warn-on-existing production file drops
-below 500 lines (i.e., `wc -l` of every staged file under `src/`
-or `bin/` returns ≤ 500). At that point flip the warn branch in
-`.githooks/pre-commit` to `exit 1`.
-
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
 ### M3 — Sliding-session lookup timing
@@ -191,33 +144,6 @@ per-image captions inside a multi-image directive.
 
 ## User-requested follow-ups (2026-05-08)
 
-### Refactor production source files to under 500 lines
-
-**Source.** User request, 2026-05-08; companion to the size-hook
-entries above.
-
-**Status (2026-05-09).** All 4 originals refactored to under 1k lines:
-
-| File | Was | Now | Notes |
-|---|---|---|---|
-| `src/admin/main.ts` | 1900 → 1747 | 709 | 7 modules extracted; see "Slice main.ts mount() into per-panel mounts" |
-| `src/routes/admin.ts` | 1026 | 395 | split into 4 modules — see entry below |
-| `src/lib/wp-import.ts` | 580 → 511 | 349 | extracted wp-import-emit.ts |
-| `src/widgets/figure.ts` | 512 → 507 | 416 | extracted figure-attrs.ts |
-
-The admin.ts split landed across 4 commits:
-- `routes/admin-ops-validation.ts` (validateOps + constants/types)
-- `routes/admin-import-url.ts` (POST /admin/import/url)
-- `routes/admin-sidecar-edit.ts` (POST /admin/sidecar/:id/{ops,bake})
-- `routes/admin-image-lookup.ts` (GET /admin/preview/:id, /admin/original/:id, /admin/sidecar/:id/meta + cache)
-
-**Why deferred (main.ts only).** Mechanical but extensive; benefits from
-in-browser smoke testing for the editor pieces and from being
-sequenced (smaller files first, build confidence).
-
-**Trigger.** Tackle in a dedicated refactor sprint, or piecemeal
-whenever a feature touches one of these files.
-
 ### Playwright UI test coverage (expand)
 
 **Source.** User request, 2026-05-08.
@@ -231,20 +157,28 @@ Suite covers the token-login golden path + the editor image flow:
 - ✅ wrong token → 401, no session
 - ✅ insert image, set matrix, save → published `/:slug` page
   renders the figure (`editor-flow.spec.ts`, 2026-05-09)
+- ✅ rotate single image → save edits → ops persist on the sidecar
+  (`editor-flow.spec.ts`, 2026-05-09)
+- ✅ cropper modal opens + cancels cleanly without mutating ops
+  (`editor-flow.spec.ts`, 2026-05-09; covers the cropper-modal.ts
+  extraction)
 
 Outstanding editor-flow coverage:
 
 - Open an existing post, type, save → reload → content matches
-- Crop a single-image figure, save → sidecar ops persist
+- Drag-drop an image onto the editor (the new drag-drop.ts factory
+  closure pattern only has the static-import smoke from the rotate
+  spec; the actual drag-drop path is unexercised)
+- Perspective rectify (gated on WebGL; chromium-headless support
+  varies, so this needs a feature-detect-and-skip)
 - OAuth callback (Google) lands on admin dashboard (needs an inject
   hook to stub the exchange/verifier inside the long-running
   webServer; the unit suite already covers the data layer)
 
 **Why deferred.** The remaining cases need either richer fixture
-data (an existing-post round-trip needs a seeded post on disk) or
-an OAuth stub hook in the long-running webServer. The first save
-flow shipping in `editor-flow.spec.ts` already gives the `main.ts`
-split work a regression net for the toolbar / attribute panel.
+data (an existing-post round-trip needs a seeded post on disk),
+synthetic DataTransfer dispatch (drag-drop), or an OAuth stub hook
+in the long-running webServer.
 
 **Trigger.** Add cases as fixture infrastructure grows, or the
 first time a UI bug ships uncaught.

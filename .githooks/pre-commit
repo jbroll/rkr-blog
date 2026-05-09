@@ -63,18 +63,16 @@ npm run --silent circular
 # Per-file 500-line size limit.
 #
 # Policy:
-#   * NEW source file > 500 lines: FAIL.
-#   * EXISTING file that was <= 500 in HEAD and is > 500 staged: FAIL
-#     (don't let a file cross the threshold).
-#   * EXISTING file that was already > 500 in HEAD and grew further: FAIL
-#     (don't make a known offender worse).
-#   * EXISTING file that was already > 500 in HEAD and didn't grow: WARN
-#     (work continues; refactor is tracked in DEFERRED.md).
+#   * ANY production source file > 500 lines: FAIL.
 #
 # Applies to production source only (src/, bin/). Tests (test/) are exempt:
 # test files legitimately grow with feature coverage, and forcing splits
 # for size reasons fragments the failure-pinpoint experience without
 # improving production code health.
+#
+# Pre-2026-05-09 the gate ran in warn-on-existing mode while main.ts was
+# above the cap; once the admin-SPA splits brought every staged source
+# file under 500, the warn branch was promoted to FAIL.
 echo "==> 500-line size check"
 size_limit=500
 size_failures=0
@@ -86,23 +84,8 @@ for f in $staged_src; do
   if [ "$staged_lines" -le "$size_limit" ]; then
     continue
   fi
-  if git cat-file -e "HEAD:$f" 2>/dev/null; then
-    head_lines=$(git show "HEAD:$f" | wc -l | tr -d ' ')
-  else
-    head_lines=0
-  fi
-  if [ "$head_lines" -eq 0 ]; then
-    echo "  FAIL  $f: $staged_lines lines (new file, limit $size_limit)"
-    size_failures=$((size_failures + 1))
-  elif [ "$head_lines" -le "$size_limit" ]; then
-    echo "  FAIL  $f: $staged_lines lines (was $head_lines, crossed $size_limit)"
-    size_failures=$((size_failures + 1))
-  elif [ "$staged_lines" -gt "$head_lines" ]; then
-    echo "  FAIL  $f: $staged_lines lines (was $head_lines, already over $size_limit and grew)"
-    size_failures=$((size_failures + 1))
-  else
-    echo "  warn  $f: $staged_lines lines (over $size_limit, not growing — see DEFERRED.md)"
-  fi
+  echo "  FAIL  $f: $staged_lines lines (limit $size_limit)"
+  size_failures=$((size_failures + 1))
 done
 
 if [ "$size_failures" -gt 0 ]; then
