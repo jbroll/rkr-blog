@@ -182,3 +182,183 @@ in the long-running webServer.
 
 **Trigger.** Add cases as fixture infrastructure grows, or the
 first time a UI bug ships uncaught.
+
+## 2026-05-09 audit follow-ups
+
+These were observed during the architecture / coverage / lightbox
+sweep on 2026-05-09; promoting them to deferred entries so the queue
+stays current.
+
+### gdrive ↔ onedrive structural duplication
+
+**Source.** `npx jscpd src/` audit, 2026-05-09. ~150 of the 233
+duplicated lines (77% of all clones in the codebase) sit on the
+gdrive ↔ onedrive axis across server routes, server libs, and the
+client-side admin integration shims.
+
+**What.** Both providers implement the same shape: OAuth code
+exchange, encrypted token storage, picker config endpoint, file
+fetch + ingestion. Two parallel modules instead of one provider
+interface with two adapters.
+
+**Why deferred.** The duplication is honest (each provider has its
+own SDK shape and quirks) and the surface area is small enough that
+the refactor isn't blocking anything. Whole-codebase token
+duplication is 2.55%, well below "act on it" thresholds.
+
+**Trigger.** When a third integration lands (Dropbox, iCloud) — at
+that point unifying the existing pair behind a Provider interface
+saves real work. Otherwise it's a pure code-tidiness exercise.
+
+### Pre-commit hook only runs server tsc, not browser tsc
+
+**Source.** Caught 2026-05-09 during the canvas-math relocation —
+`makeDropHandlers(() => editor)` had silently been failing the
+browser tsc since `d8a9d89`.
+
+**What.** `.githooks/pre-commit` runs `tsc --noEmit` (server config
+only). The browser tsconfig (`tsconfig.browser.json`) is checked by
+`npm run typecheck` but never by the hook. Editor-only type errors
+slip through and only surface on a manual typecheck or a build.
+
+**Why deferred.** Was assumed to run already; just a missed wiring.
+
+**Trigger.** Trivial fix — add `npx --no-install tsc -p
+tsconfig.browser.json --noEmit` to the hook alongside the existing
+server tsc invocation. Adds ~1-2s to commit time.
+
+### Cold-cache `/img` 502s on Fly
+
+**Source.** Live walk against rkr-blog.fly.dev, 2026-05-09 — two
+out of 125 images returned 502 on first hit; both succeeded on
+retry. The walk script now retries with backoff so it's no longer
+a smoke-test failure, but the underlying cause is real.
+
+**What.** Cold-cache renders of larger derivatives (sharp pipeline
+on a fresh `/img/<id>.<oph>.<fmt>` URL) sometimes blow Fly's edge
+timeout (~20s) before the route's 30s render budget triggers the
+202 "rendering" handoff to the queue. The user sees a 502 instead
+of a queued-render placeholder.
+
+**Why deferred.** Self-healing on retry; impacts only the first
+cold visitor of a fresh derivative, and the on-disk cache means
+subsequent visits are instant.
+
+**Trigger.** Either tune the route's render budget down to land
+under Fly's edge timeout (~15s), or invert the policy (queue first,
+await briefly with a short timeout, return 202 quickly). Worth a
+focused look before the demo gets traffic.
+
+### `site-admin reset` leaves empty shard directories
+
+**Source.** Manual smoke test, 2026-05-09. After
+`site-admin reset --to <url> --force`, `originals/aa/bb/`
+sub-directories survive even though every blob inside has been
+removed.
+
+**What.** The reset endpoint unlinks files but doesn't `rmdir` the
+sharded parent directories. `site-admin gc` doesn't tidy them
+either. Cosmetic — the directory entries take ~4KB each and don't
+affect correctness.
+
+**Why deferred.** Cosmetic. A reset on a heavily-used site might
+leave hundreds of empty 2-char shard dirs, but they're inert.
+
+**Trigger.** If the empty-dir count ever becomes user-visible
+(e.g., `find originals -type d -empty | wc -l` showing thousands)
+or the operator wants a tidy snapshot for backup.
+
+### Render 500 on pathological tiny PNG
+
+**Source.** Smoke testing 2026-05-09 — a hand-rolled 1×1 PNG
+(67 bytes) triggered `"render failed"` 500 from `GET /img/...`.
+
+**What.** Sharp throws on the derivative pipeline for inputs at the
+extreme small end. The route catches the throw and returns 500;
+there's no "input is too small to derive a variant from" guard
+upstream.
+
+**Why deferred.** Every realistic source image works. The 1×1 PNG
+came from a synthetic test fixture, not a real upload path.
+
+**Trigger.** If a real upload triggers it (e.g., an image that
+encoded as 1×1 due to a corrupt EXIF orientation), or if we ever
+allow tiny icons / thumbnails as figure inputs.
+
+### Browser-side coverage measurement
+
+**Source.** Coverage audit 2026-05-09. After the
+canvas-math/figure-ids/image-edit-ops extractions, ~2,400 lines of
+admin/site code remain uncovered by c8 (it explicitly excludes
+`src/admin/**`, and `src/site/**` has no tests at all).
+
+**What.** Companion to the existing "Playwright UI test coverage
+(expand)" entry, but specifically about *measurement*: the e2e suite
+exercises the SPA but doesn't capture per-line coverage data, so
+there's no signal for which admin lines are exercised vs dead.
+
+**Why deferred.** Path is known (Playwright `page.coverage.startJSCoverage()`
+per spec → merge to lcov → layer onto c8's report) but it's a fixture
++ tooling lift, not a code change. Maybe ~30 lines of fixture code +
+a merge step.
+
+**Trigger.** When the missing coverage signal causes a real ship
+miss (a regression that the e2e didn't catch but a measured spec
+would have).
+
+### Cropper-modal e2e race
+
+**Source.** Observed flake 2026-05-09 (cropper test failed once on
+3 runs).
+
+**What.** The cropper test snapshots `#rkr-image-edits li` count
+*before* opening the modal as a "stepsBefore" baseline, then asserts
+the count is unchanged after Cancel. The race: if `ensureLocalState`
+hasn't resolved yet at snapshot time, stepsBefore is 0; by
+assertion time the panel has populated to 1, false-failing.
+
+**Why deferred.** Self-healing on retry; pre-existing (not a
+regression from the recent extractions).
+
+**Trigger.** Flake rate becomes annoying. Fix is one of: (a) use
+distinct PNG bytes per test so dedup doesn't carry prior ops; (b)
+add an explicit `waitForFunction` for the panel to settle before
+snapshotting; (c) replace the pre/post snapshot with a stronger
+assertion (e.g. check the figure node's serialized attrs).
+
+### `src/admin/main.ts` close to the 500-line size cap
+
+**Source.** Size audit 2026-05-09. main.ts at 462 lines after the
+7-module split + 3 lib extractions. Headroom for new SPA features
+is ~38 lines before the size hook fails commits.
+
+**What.** The next non-trivial feature touching the editor mount
+will trip the size gate. The natural-cut extractions are done;
+further reduction means a per-panel `mountX(deps)` shape change.
+
+**Why deferred.** No active feature is being blocked yet.
+
+**Trigger.** First commit that actually trips the gate, or a feature
+that wants per-panel isolation. The "per-cell editing for
+multi-image figures" work (see the entry above) is a likely first
+trip — it'll add cell-selection state + handlers.
+
+### Bundle-size monitoring
+
+**Source.** PhotoSwipe replacement 2026-05-09. Adding PhotoSwipe
+grew the public-page footprint by ~64KB (lightbox.js 15kb +
+lightbox.css 4.6kb + a 59kb dynamically-imported chunk). No alert,
+no budget — the change shipped silently.
+
+**What.** Neither admin nor site bundles have a recorded size
+baseline or a CI threshold. Bloat creeps in invisibly.
+
+**Why deferred.** Current bundles are reasonable; no immediate
+problem to solve.
+
+**Trigger.** A bundle change that materially affects time-to-
+interactive (e.g., a heavy editor library landing in admin/main.js).
+Cheap remedy: add a `du -b static/admin static/site` line to the
+gauntlet that snapshots sizes and warns on >10% growth from the
+last commit.
+
