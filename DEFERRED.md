@@ -178,21 +178,6 @@ change.
 **Trigger.** First time an author wants the same source image cropped
 differently in two posts.
 
-## UI review (post-Step-9 audit, 2026-05-07)
-
-### Lightbox figcaption not associated with displayed image
-**What.** The overlay's `<figcaption>` element is positioned over the
-image but isn't connected via `aria-describedby`. Screen readers
-treating the dialog as an island won't read the caption alongside the
-img.
-
-**Why deferred.** Improvement, not violation — the dialog still
-announces correctly via aria-modal + the img's alt + the figcaption
-being inside the same dialog tree. Real fix is one-line + a tested
-behavior change to the overlay structure (single `<figure>`).
-
-**Trigger.** First screen-reader user reports unclear caption.
-
 ### `position=inline` + `caption=` silently drops the caption
 **What.** Site.css sets `display: none` on figcaption inside
 .rkr-pos-inline (`static/site.css:287`). The image widget happily

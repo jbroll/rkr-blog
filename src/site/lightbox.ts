@@ -21,10 +21,14 @@ const STYLE = `
   opacity: 0; transition: opacity 120ms ease-out;
 }
 .rkr-lightbox-overlay.is-open { display: flex; opacity: 1; }
+.rkr-lightbox-overlay figure {
+  position: relative; margin: 0; display: inline-block;
+}
 .rkr-lightbox-overlay img {
   max-width: 96vw; max-height: 92vh;
   box-shadow: 0 4px 30px rgba(0,0,0,0.6);
   border-radius: 4px;
+  display: block;
 }
 .rkr-lightbox-overlay figcaption {
   position: absolute; bottom: 0; left: 0; right: 0;
@@ -75,17 +79,24 @@ function makeOverlay(): {
   el.setAttribute('aria-hidden', 'true');
   el.tabIndex = -1; // focusable target for openOverlay()
 
+  // Wrap img + figcaption in a <figure> so the caption is structurally
+  // associated with the image; aria-describedby points the screen
+  // reader at the caption text after the alt is announced.
+  const figure = document.createElement('figure');
+  el.appendChild(figure);
+
   const img = document.createElement('img');
   img.alt = '';
   // Same retry-with-backoff as in-page imgs. The overlay img.src is set
   // when the user opens the lightbox, so we wire the listener once at
   // creation; instrument() captures img.src at error time, not now.
   instrumentImgRetry(img);
-  el.appendChild(img);
+  figure.appendChild(img);
 
   const caption = document.createElement('figcaption');
+  caption.id = 'rkr-lightbox-caption';
   caption.style.display = 'none';
-  el.appendChild(caption);
+  figure.appendChild(caption);
 
   document.body.appendChild(el);
   return { el, img, caption };
@@ -115,9 +126,11 @@ function openOverlay(
   if (args.caption) {
     caption.textContent = args.caption;
     caption.style.display = '';
+    img.setAttribute('aria-describedby', caption.id);
   } else {
     caption.textContent = '';
     caption.style.display = 'none';
+    img.removeAttribute('aria-describedby');
   }
   el.classList.add('is-open');
   el.setAttribute('aria-hidden', 'false');
