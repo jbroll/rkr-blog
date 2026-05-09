@@ -250,6 +250,9 @@ SITE_ROOT=$HOME/site bin/site-admin user invite <email> [--role owner|editor]
 SITE_ROOT=$HOME/site bin/site-admin import-wp push <wp-base> <slug> --to <fly-url>
 ```
 
+For the operator-facing reset → seed → walk procedure (against the Fly
+demo or a local dev server), see [`RUNBOOK.md`](RUNBOOK.md).
+
 ## 9. Troubleshooting
 
 - **Sharp prebuild fails on Void.** Install libvips and rebuild:
