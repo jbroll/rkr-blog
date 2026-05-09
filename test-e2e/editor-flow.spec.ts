@@ -11,10 +11,19 @@ import { expect, test } from '@playwright/test';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
-// 1×1 PNG, 67 bytes. Inlined as base64 so the spec doesn't need a fixture
-// file and the bytes can survive page.setInputFiles unchanged.
-const PNG_1X1_BASE64 =
+// 1×1 PNGs, inlined as base64 so the spec doesn't need fixture files
+// and the bytes survive page.setInputFiles unchanged.
+//
+// Three distinct colors (black / red / blue) so each test that uploads
+// gets a content-hashed id unique to that test. Otherwise the rotate
+// test's saved ops carry over to the crop test (same bytes → same id
+// → shared sidecar) and race with ensureLocalState resolution.
+const PNG_1X1_BLACK =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const PNG_1X1_RED =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+const PNG_1X1_BLUE =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC';
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/admin/login');
@@ -41,7 +50,7 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   await page.locator('#rkr-image-input').setInputFiles({
     name: 'pixel.png',
     mimeType: 'image/png',
-    buffer: Buffer.from(PNG_1X1_BASE64, 'base64')
+    buffer: Buffer.from(PNG_1X1_BLACK, 'base64')
   });
 
   // The toolbar's setStatus() trace becomes the visible status line and
@@ -100,7 +109,7 @@ test('editor: rotate single image then save edits', async ({ page }) => {
   await page.locator('#rkr-image-input').setInputFiles({
     name: 'rotate.png',
     mimeType: 'image/png',
-    buffer: Buffer.from(PNG_1X1_BASE64, 'base64')
+    buffer: Buffer.from(PNG_1X1_RED, 'base64')
   });
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded rotate\.png/, {
     timeout: 10_000
@@ -144,7 +153,7 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await page.locator('#rkr-image-input').setInputFiles({
     name: 'crop.png',
     mimeType: 'image/png',
-    buffer: Buffer.from(PNG_1X1_BASE64, 'base64')
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
   });
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded crop\.png/, {
     timeout: 10_000
@@ -155,11 +164,11 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   const dialog = page.locator('#rkr-crop-modal');
   await expect(dialog).toBeHidden();
 
-  // Snapshot the pre-modal step count. Uploads are content-addressed,
-  // so a previous test that inserted the same PNG bytes (e.g. the
-  // rotate spec) has already attached ops to this id; we verify Cancel
-  // doesn't ADD an op rather than asserting an absolute count.
-  const stepsBefore = await page.locator('#rkr-image-edits li').count();
+  // PNG_1X1_BLUE is unique to this test → fresh content-hashed id →
+  // sidecar has no prior ops. The edits list is reliably empty here,
+  // not racy with ensureLocalState's resolution like it was when all
+  // tests shared one PNG.
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(0);
 
   await page.locator('#rkr-image-crop-btn').click();
   // openCropper is async (loads original, bakes a stage blob, mounts
@@ -174,6 +183,7 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await page.locator('#rkr-crop-cancel').click();
   await expect(dialog).toBeHidden();
 
-  // Cancel must not have appended an op — count stays at the snapshot.
-  await expect(page.locator('#rkr-image-edits li')).toHaveCount(stepsBefore);
+  // Cancel must not have appended an op — list stays empty.
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(0);
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });

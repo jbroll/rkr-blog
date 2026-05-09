@@ -270,26 +270,6 @@ a merge step.
 miss (a regression that the e2e didn't catch but a measured spec
 would have).
 
-### Cropper-modal e2e race
-
-**Source.** Observed flake 2026-05-09 (cropper test failed once on
-3 runs).
-
-**What.** The cropper test snapshots `#rkr-image-edits li` count
-*before* opening the modal as a "stepsBefore" baseline, then asserts
-the count is unchanged after Cancel. The race: if `ensureLocalState`
-hasn't resolved yet at snapshot time, stepsBefore is 0; by
-assertion time the panel has populated to 1, false-failing.
-
-**Why deferred.** Self-healing on retry; pre-existing (not a
-regression from the recent extractions).
-
-**Trigger.** Flake rate becomes annoying. Fix is one of: (a) use
-distinct PNG bytes per test so dedup doesn't carry prior ops; (b)
-add an explicit `waitForFunction` for the panel to settle before
-snapshotting; (c) replace the pre/post snapshot with a stronger
-assertion (e.g. check the figure node's serialized attrs).
-
 ### `src/admin/main.ts` close to the 500-line size cap
 
 **Source.** Size audit 2026-05-09. main.ts at 462 lines after the
