@@ -435,3 +435,56 @@ test('editor: offline rotate+save queues setOps+bake, drains on reconnect', asyn
     )
     .toEqual([{ type: 'rotate', degrees: 90 }]);
 });
+
+// Offline post-save flow (phase 1g): compose a fresh post while
+// offline, click Save → handleSave queues a `savePost` outbox entry
+// rather than POSTing. On reconnect, drainSavePost posts /admin/posts
+// and /:slug then renders the post.
+test('editor: offline savePost queues + drains on reconnect to publish /:slug', async ({
+  page,
+  context
+}) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const slug = `e2e-offline-save-${Date.now()}`;
+  await page.locator('#rkr-title').fill('e2e offline save');
+  await page.locator('#rkr-slug').fill(slug);
+  await page.locator('#rkr-status').selectOption('published');
+
+  // Type a one-line body so the post has visible content on /:slug.
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>offline save body</p>');
+  });
+
+  // ---- 1. go offline + Save ---------------------------------------
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`queued /${slug} for sync`, {
+    timeout: 10_000
+  });
+
+  // Confirm the server has NOT received the post yet.
+  const preStatus = (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status();
+  expect(preStatus).toBe(404);
+
+  // ---- 2. reconnect + drain ---------------------------------------
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+
+  // Once drainSavePost succeeds, /:slug returns the rendered post.
+  await expect
+    .poll(async () => (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
+      timeout: 15_000
+    })
+    .toBe(200);
+
+  const html = await (await page.request.get(`/${slug}`)).text();
+  expect(html).toContain('offline save body');
+});

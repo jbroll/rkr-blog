@@ -26,11 +26,39 @@ import { listSuperseded, list as outboxList, remove as outboxRemove } from './ou
 const LOCK_NAME = 'rkr-sync-leader';
 const CHANNEL_NAME = 'rkr-sync';
 
+/** Thrown by drainSavePost when /admin/posts returns 409
+ * post-superseded. drainLoop catches it via instanceof and publishes
+ * a `conflict` DrainStatus carrying { slug, seq, serverUpdatedAt,
+ * clientLastSyncedAt }. Lives here (not in drainers.ts) so drainers
+ * can import this value without a circular module graph — sync.ts
+ * already owns the public DrainStatus type that the error feeds.
+ * @public */
+export class SavePostConflictError extends Error {
+  constructor(
+    public readonly info: {
+      slug: string;
+      seq: number;
+      serverUpdatedAt: string;
+      clientLastSyncedAt: string;
+    }
+  ) {
+    super(`savePost conflict on /${info.slug}: server updated ${info.serverUpdatedAt}`);
+    this.name = 'SavePostConflictError';
+  }
+}
+
 /** @public */
 export type DrainStatus =
   | { kind: 'idle' }
   | { kind: 'draining'; remaining: number }
-  | { kind: 'halted'; reason: string; lastSeq?: number };
+  | { kind: 'halted'; reason: string; lastSeq?: number }
+  | {
+      kind: 'conflict';
+      slug: string;
+      seq: number;
+      serverUpdatedAt: string;
+      clientLastSyncedAt: string;
+    };
 
 interface SyncEvent {
   type: 'status';
@@ -90,6 +118,55 @@ export function registerDrainer(op: string, drainer: Drainer): void {
   drainers.set(op, drainer);
 }
 
+/** Resolve a `conflict` status by discarding the local edit. Drops
+ * the queued savePost outbox entry and re-runs the drain so any
+ * downstream entries for OTHER posts can advance. Surfaces a fresh
+ * `idle` / `draining` status. Spec-offline §6 — discard option.
+ * @public */
+export async function discardConflictedSave(): Promise<void> {
+  /* v8 ignore next 4 -- conflict path lands fully in phase 1k+1l */
+  if (currentStatus.kind !== 'conflict') return;
+  await outboxRemove({ seq: currentStatus.seq, op: 'savePost' });
+  publish({ kind: 'idle' });
+  await tryDrain();
+}
+
+/** Resolve a `conflict` status by force-overwriting the server. Re-
+ * POSTs /admin/posts WITHOUT X-Rkr-Last-Synced-At so the server
+ * accepts unconditionally (spec-offline §6 — force option). Removes
+ * the entry on 2xx, keeps it on failure (the user can retry).
+ * @public */
+export async function forceConflictedSave(): Promise<void> {
+  /* v8 ignore start -- conflict path lands fully in phase 1k+1l */
+  if (currentStatus.kind !== 'conflict') return;
+  const seq = currentStatus.seq;
+  const entries = await outboxList();
+  const entry = entries.find((e) => e.seq === seq);
+  if (!entry || entry.op !== 'savePost') {
+    await outboxRemove({ seq, op: 'savePost' });
+    publish({ kind: 'idle' });
+    await tryDrain();
+    return;
+  }
+  const res = await fetch('/admin/posts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-rkr-outbox-seq': String(seq) },
+    body: JSON.stringify(entry.payload)
+  });
+  if (!res.ok) {
+    publish({
+      kind: 'halted',
+      reason: `force overwrite failed: ${res.status}`,
+      lastSeq: seq
+    });
+    return;
+  }
+  await outboxRemove({ seq, op: 'savePost' });
+  publish({ kind: 'idle' });
+  await tryDrain();
+  /* v8 ignore stop */
+}
+
 /** Try to acquire the leader lock and run the drain loop. If the
  * lock is held by another tab, returns immediately — that tab is
  * the leader. The leader's drain loop runs until the outbox is
@@ -146,6 +223,10 @@ async function drainLoop(): Promise<void> {
       await drainer(head, blob);
       await outboxRemove(head);
     } catch (err) {
+      if (err instanceof SavePostConflictError) {
+        publish({ kind: 'conflict', ...err.info });
+        return;
+      }
       publish({ kind: 'halted', reason: (err as Error).message, lastSeq: head.seq });
       return;
     }

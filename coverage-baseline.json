@@ -50,8 +50,8 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 21,
-      "linesHit": 13
+      "linesFound": 27,
+      "linesHit": 20
     },
     "src/admin/toolbar.ts": {
       "linesFound": 17,
@@ -78,7 +78,7 @@
       "linesHit": 11
     },
     "src/admin/sync.ts": {
-      "linesFound": 10,
+      "linesFound": 12,
       "linesHit": 10
     },
     "src/admin/startup.ts": {
@@ -90,8 +90,8 @@
       "linesHit": 1
     },
     "src/admin/drainers.ts": {
-      "linesFound": 18,
-      "linesHit": 14
+      "linesFound": 20,
+      "linesHit": 17
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -115,11 +115,11 @@
     },
     "src/lib/outbox-types.ts": {
       "linesFound": 9,
-      "linesHit": 8
+      "linesHit": 9
     },
     "src/lib/prose-markdown.ts": {
       "linesFound": 62,
-      "linesHit": 31
+      "linesHit": 38
     },
     "src/lib/safe-url.ts": {
       "linesFound": 12,

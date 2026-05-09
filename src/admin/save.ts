@@ -1,28 +1,35 @@
 // Save flow: serialize the editor JSON to markdown, flush any dirty
-// per-image edits, then POST /admin/posts. The toolbar's Save button
-// is the only entry point; e2e/editor-flow.spec.ts asserts on the
-// status text it produces.
+// per-image edits, then POST /admin/posts. Online-first: try the
+// network; on offline / network failure, queue a `savePost` outbox
+// entry and let sync.ts drain it on reconnect (spec-offline §5).
+//
+// The toolbar's Save button is the only entry point; e2e/editor-flow.
+// spec.ts asserts on the status text it produces.
 
 import type { Editor } from '@tiptap/core';
-
+import type { SavePostPayload } from '../lib/outbox-types.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { $, setStatus } from './dom';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
+import { getState } from './online-state.ts';
+import { append as outboxAppend } from './outbox.ts';
+import { tryDrain } from './sync.ts';
 
 interface SaveResponse {
   slug: string;
   inserted: boolean;
 }
 
-async function savePost(payload: {
-  slug: string;
-  title: string;
-  status: 'draft' | 'published';
-  markdown: string;
-}): Promise<SaveResponse> {
+async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  /* v8 ignore next 3 -- lastSyncedAt populated once phase 1h persists
+     drafts; offline-only e2e exercises the no-header path */
+  if (payload.lastSyncedAt) {
+    headers['x-rkr-last-synced-at'] = payload.lastSyncedAt;
+  }
   const res = await fetch('/admin/posts', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error(`save failed: ${res.status} ${await res.text()}`);
@@ -40,8 +47,9 @@ export async function handleSave(editor: Editor): Promise<void> {
   // Flush any dirty image edits BEFORE writing the post. Without this,
   // the saved markdown would reference image ids whose server-side ops
   // are stale relative to what the user just edited — silent data loss.
-  // Uses the same code path the per-image Save button uses, so failures
-  // leave the image state dirty and the user can retry.
+  // Uses the same code path the per-image Save button uses, so when
+  // saveImageEdits queues offline-mode setOps/bake the seq order
+  // guarantees those drain before the savePost.
   const dirtyCount = dirtyImageStates().length;
   if (dirtyCount > 0) {
     setStatus(`saving ${dirtyCount} image edit${dirtyCount === 1 ? '' : 's'}…`);
@@ -51,13 +59,24 @@ export async function handleSave(editor: Editor): Promise<void> {
       return;
     }
   }
+  const json = editor.getJSON() as ProseDoc;
+  const markdown = proseToMarkdown(json);
+  const payload: SavePostPayload = { slug, title, status, markdown };
   setStatus('saving…');
-  try {
-    const json = editor.getJSON() as ProseDoc;
-    const markdown = proseToMarkdown(json);
-    const result = await savePost({ slug, title, status, markdown });
-    setStatus(`saved /${result.slug}`);
-  } catch (err) {
-    setStatus(`save error: ${(err as Error).message}`);
+  if (getState() !== 'offline') {
+    try {
+      const result = await postSavePost(payload);
+      setStatus(`saved /${result.slug}`);
+      return;
+    } catch {
+      /* fall through to outbox queue on network failure */
+    }
   }
+  await queueSavePost(payload);
+}
+
+async function queueSavePost(payload: SavePostPayload): Promise<void> {
+  await outboxAppend({ op: 'savePost', payload });
+  setStatus(`queued /${payload.slug} for sync`);
+  void tryDrain();
 }

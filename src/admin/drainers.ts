@@ -17,7 +17,7 @@
 import { extForMime } from '../lib/content-id.ts';
 import type { OutboxEntry } from '../lib/outbox-types.ts';
 import { readBlob } from './opfs.ts';
-import type { Drainer } from './sync.ts';
+import { type Drainer, SavePostConflictError } from './sync.ts';
 
 export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   if (entry.op !== 'upload') return;
@@ -84,7 +84,45 @@ export const drainBake: Drainer = async (entry, blob) => {
   /* v8 ignore stop */
 };
 
-/** Phase 1g savePost drainer — landing in the next commit. */
-export const drainSavePost: Drainer = async (_entry: OutboxEntry) => {
-  throw new Error('savePost drain not yet implemented (phase 1g)');
+/** savePost drainer — POST /admin/posts with X-Rkr-Last-Synced-At
+ * for the optimistic-concurrency check (spec-offline §6). On 409 the
+ * server returns { error: 'post-superseded', slug, serverUpdatedAt,
+ * clientLastSyncedAt }; we throw a structured error so sync.ts can
+ * publish a `conflict` status that the storage panel surfaces with
+ * discard / force options. */
+export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
+  if (entry.op !== 'savePost') return;
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-rkr-outbox-seq': String(entry.seq)
+  };
+  /* v8 ignore next 3 -- lastSyncedAt populated once phase 1h persists
+     drafts; phase 1g e2e exercises the no-header path */
+  if (entry.payload.lastSyncedAt) {
+    headers['x-rkr-last-synced-at'] = entry.payload.lastSyncedAt;
+  }
+  const res = await fetch('/admin/posts', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(entry.payload)
+  });
+  /* v8 ignore start -- 409 conflict + non-409 4xx paths exercised
+     once phase 1k wires server-side last-synced-at handling */
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as {
+      slug?: string;
+      serverUpdatedAt?: string;
+      clientLastSyncedAt?: string;
+    };
+    throw new SavePostConflictError({
+      slug: body.slug ?? entry.payload.slug,
+      seq: entry.seq,
+      serverUpdatedAt: body.serverUpdatedAt ?? '',
+      clientLastSyncedAt: body.clientLastSyncedAt ?? entry.payload.lastSyncedAt ?? ''
+    });
+  }
+  if (!res.ok) {
+    throw new Error(`savePost drain ${entry.seq}: ${res.status}`);
+  }
+  /* v8 ignore stop */
 };
