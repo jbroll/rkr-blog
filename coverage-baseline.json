@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "files": {
+    "src/admin/canvas-loaders.ts": {
+      "linesFound": 53,
+      "linesHit": 48
+    },
+    "src/admin/canvas.ts": {
+      "linesFound": 126,
+      "linesHit": 29
+    },
+    "src/admin/cropper-modal.ts": {
+      "linesFound": 31,
+      "linesHit": 22
+    },
+    "src/admin/dom.ts": {
+      "linesFound": 6,
+      "linesHit": 6
+    },
+    "src/admin/drag-drop.ts": {
+      "linesFound": 37,
+      "linesHit": 5
+    },
+    "src/admin/figure-node.ts": {
+      "linesFound": 4,
+      "linesHit": 4
+    },
+    "src/admin/image-edit.ts": {
+      "linesFound": 35,
+      "linesHit": 27
+    },
+    "src/admin/integrations/gdrive.ts": {
+      "linesFound": 48,
+      "linesHit": 1
+    },
+    "src/admin/integrations/onedrive.ts": {
+      "linesFound": 28,
+      "linesHit": 0
+    },
+    "src/admin/main.ts": {
+      "linesFound": 109,
+      "linesHit": 83
+    },
+    "src/admin/perspective-modal.ts": {
+      "linesFound": 73,
+      "linesHit": 1
+    },
+    "src/admin/pick.ts": {
+      "linesFound": 14,
+      "linesHit": 0
+    },
+    "src/admin/save.ts": {
+      "linesFound": 21,
+      "linesHit": 13
+    },
+    "src/admin/toolbar.ts": {
+      "linesFound": 17,
+      "linesHit": 10
+    },
+    "src/admin/upload.ts": {
+      "linesFound": 6,
+      "linesHit": 6
+    }
+  }
+}

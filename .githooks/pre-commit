@@ -109,4 +109,24 @@ fi
 echo "==> npm test:coverage"
 npm run --silent test:coverage > /dev/null
 
+# E2E coverage ratchet — only fires when src/admin/** or src/site/** is
+# staged (admin + public-side browser code; covered by Playwright +
+# monocart V8 coverage rather than c8). Floor 75% lines for new files,
+# don't-decrease ratchet for existing files. Build + e2e adds ~25s,
+# which is why the gate is conditional rather than always-on.
+admin_site_staged=$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '^src/(admin|site)/.*\.ts$' || true)
+if [ -n "$admin_site_staged" ]; then
+  echo "==> build admin+site bundles for e2e"
+  npm run --silent build:admin > /dev/null
+  npm run --silent build:site > /dev/null
+  echo "==> e2e + V8 coverage"
+  npm run --silent test:e2e -- --reporter=line > /dev/null
+  echo "==> e2e coverage ratchet"
+  # check-e2e-coverage.ts re-stages coverage-baseline.json on pass so
+  # the ratchet's new floor travels with this commit.
+  node --no-warnings=ExperimentalWarning --experimental-strip-types \
+    scripts/check-e2e-coverage.ts $admin_site_staged
+fi
+
 echo "==> precommit OK"

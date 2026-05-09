@@ -15,9 +15,9 @@
     "src/site/sw-register.ts",
     "scripts/check-duplicate-types.ts",
     "scripts/check-no-reexports.ts",
+    "scripts/check-e2e-coverage.ts",
     "test/**/*.test.ts",
     "test-e2e/server-runner.ts",
-    "test-e2e/global-teardown.ts",
     "test-e2e/coverage-fixtures.ts",
     "test-e2e/**/*.spec.ts"
   ],
