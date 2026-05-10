@@ -22,6 +22,7 @@ import { drainBake, drainSavePost, drainSetOps, drainUpload } from './drainers.t
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { pendingCount } from './outbox.ts';
+import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
 import { discardConflictedSave, forceConflictedSave, registerDrainer, tryDrain } from './sync.ts';
 
@@ -36,7 +37,8 @@ export async function startOfflineInfrastructure(editor: Editor): Promise<void> 
       __rkrEditor: editor,
       __rkrOfflineReady: ready,
       __rkrDiscardConflict: discardConflictedSave,
-      __rkrForceConflict: forceConflictedSave
+      __rkrForceConflict: forceConflictedSave,
+      __rkrPin: pinPost
     });
   }
   await ready;

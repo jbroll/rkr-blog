@@ -54,8 +54,8 @@
       "linesHit": 21
     },
     "src/admin/toolbar.ts": {
-      "linesFound": 17,
-      "linesHit": 10
+      "linesFound": 18,
+      "linesHit": 11
     },
     "src/admin/upload.ts": {
       "linesFound": 16,
@@ -82,8 +82,8 @@
       "linesHit": 21
     },
     "src/admin/startup.ts": {
-      "linesFound": 13,
-      "linesHit": 12
+      "linesFound": 14,
+      "linesHit": 13
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -118,8 +118,8 @@
       "linesHit": 9
     },
     "src/lib/prose-markdown.ts": {
-      "linesFound": 62,
-      "linesHit": 38
+      "linesFound": 102,
+      "linesHit": 60
     },
     "src/lib/safe-url.ts": {
       "linesFound": 12,
@@ -132,6 +132,10 @@
     "src/admin/status-badge.ts": {
       "linesFound": 18,
       "linesHit": 18
+    },
+    "src/admin/pin.ts": {
+      "linesFound": 21,
+      "linesHit": 19
     }
   }
 }

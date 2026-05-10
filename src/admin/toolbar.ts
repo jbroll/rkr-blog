@@ -10,6 +10,7 @@ import type { Editor } from '@tiptap/core';
 import { setStatus } from './dom';
 import { pickFromDrive } from './integrations/gdrive';
 import { pickFromOneDrive } from './integrations/onedrive';
+import { pinPost } from './pin';
 import { handleSave } from './save';
 
 function makeButton(label: string, onClick: () => void, name?: string): HTMLButtonElement {
@@ -70,8 +71,35 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       },
       'onedrive'
     ),
-    makeButton('Save', () => void handleSave(editor), 'save')
+    makeButton('Save', () => void handleSave(editor), 'save'),
+    /* v8 ignore next -- prompt-driven UI; e2e drives __rkrPin directly */
+    makeButton('Pin', () => void runPin(), 'pin')
   );
+
+  /* v8 ignore start -- prompt-driven UI; e2e drives pinPost via
+     window.__rkrPin instead of clicking through prompt() */
+  /** Pin flow: prompt for the slug, fetch the bundle, reload so the
+   * editor mounts against the freshly-installed draft. Phase 3
+   * replaces the prompt with the storage panel's pinned-list. */
+  async function runPin(): Promise<void> {
+    const slug = prompt('Pin which slug?');
+    if (!slug) return;
+    setStatus(`pinning /${slug}…`);
+    try {
+      const result = await pinPost(slug, (p) => {
+        setStatus(`pinning /${slug}: ${p.fetched + p.skipped}/${p.total} originals`);
+      });
+      const note =
+        result.progress.failed > 0
+          ? `pinned /${slug} (${result.progress.failed} originals failed)`
+          : `pinned /${slug}`;
+      setStatus(note);
+      location.reload();
+    } catch (err) {
+      setStatus(`pin failed: ${(err as Error).message}`);
+    }
+  }
+  /* v8 ignore stop */
 
   return function syncActiveStates(): void {
     for (const b of toolbar.querySelectorAll<HTMLButtonElement>('button[data-cmd]')) {

@@ -715,3 +715,111 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   const html = await (await page.request.get(`/${slug}`)).text();
   expect(html).toContain('v2 body');
 });
+
+// Pin existing post for offline edit (phase 2). Seed v1 via the API,
+// clear OPFS so the pin pulls fresh, then __rkrPin(slug) pulls the
+// bundle, reload to mount the pinned draft, go offline + edit + Save
+// (queues), reconnect → drain → /:slug renders v2.
+test('editor: pin existing post → offline edit → reconnect drains', async ({ page, context }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Seed an existing post v1 via the API, with an image reference
+  // so the pin bundle exercises the originals-fetch path. Upload
+  // the image first so the server has the original + sidecar.
+  const PNG_1X1_PIN =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNg+M8AAAICAQDvf9QQAAAAAElFTkSuQmCC';
+  const upload = await page.request.post('/admin/upload', {
+    multipart: {
+      file: {
+        name: 'pin-img.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(PNG_1X1_PIN, 'base64')
+      }
+    }
+  });
+  expect(upload.status()).toBe(200);
+  const uploadBody = (await upload.json()) as { id: string };
+  const slug = `e2e-pin-${Date.now()}`;
+  const seed = await page.request.post('/admin/posts', {
+    data: {
+      slug,
+      title: 'e2e pin v1',
+      status: 'published',
+      markdown: `pinned source body\n\n::image{#${uploadBody.id.slice(0, 8)} alt="x"}\n`
+    }
+  });
+  expect(seed.status()).toBe(200);
+
+  // Clear the SPA's currentDraftId + drafts/ + meta/ so __rkrPin
+  // installs the post into a fresh OPFS slot. Without this, prior
+  // tests' state collides.
+  await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    for (const dir of ['drafts', 'meta']) {
+      try {
+        await opfs.removeEntry(dir, { recursive: true });
+      } catch {
+        /* absent */
+      }
+    }
+  });
+  await page.goto('/admin/editor?e2e=1');
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // pinPost writes sidecars + originals + a fresh drafts/<id>.json
+  // pointing at the parsed markdown, and bumps currentDraftId.
+  const pinResult = await page.evaluate(async (s) => {
+    const fn = (
+      window as unknown as { __rkrPin: (s: string) => Promise<{ progress: { total: number } }> }
+    ).__rkrPin;
+    return fn(s);
+  }, slug);
+  expect(pinResult.progress.total).toBe(1); // the seeded image
+  expect(pinResult.progress.fetched + pinResult.progress.skipped).toBe(1);
+
+  // Reload mounts against the new draftId; startup restores the
+  // pinned post body into the editor.
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+  await expect(page.locator('#rkroll-admin-article')).toContainText('pinned source body');
+
+  // Offline edit + queue savePost.
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await page.locator('#rkr-title').fill('e2e pin v2');
+  await page.locator('#rkr-slug').fill(slug);
+  await page.locator('#rkr-status').selectOption('published');
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>pinned + edited offline</p>');
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`queued /${slug} for sync`, {
+    timeout: 10_000
+  });
+
+  // Reconnect → drain → /:slug renders v2.
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect
+    .poll(
+      async () => {
+        const r = await page.request.get(`/${slug}`);
+        return r.ok() && (await r.text()).includes('pinned + edited offline');
+      },
+      { timeout: 15_000 }
+    )
+    .toBe(true);
+});
