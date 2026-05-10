@@ -47,11 +47,17 @@ const app = await buildApp({
 });
 // E2E-only test hook: bump a post's mtime forward by a given offset
 // to simulate a competing-device write. Drives the savePost-conflict
-// e2e (phase 1l). Token-only, like the rest of the admin surface.
+// e2e (phase 1l). Lives in server-runner.ts so it never reaches
+// production buildApp; defense in depth — slug regex matches the
+// /admin/posts handler so the param can't escape the posts dir.
+const E2E_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
 app.post<{ Params: { slug: string }; Body: { offsetMs?: number } }>(
   '/admin/test/bump-mtime/:slug',
   async (request, reply) => {
     const slug = request.params.slug;
+    if (!E2E_SLUG_RE.test(slug) || slug.length > 100) {
+      return reply.code(400).send({ error: 'invalid slug' });
+    }
     const offsetMs = typeof request.body?.offsetMs === 'number' ? request.body.offsetMs : 5_000;
     const filePath = path.join(root, 'content', 'posts', `${slug}.md`);
     if (!fs.existsSync(filePath)) {

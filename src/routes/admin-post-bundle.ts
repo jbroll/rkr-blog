@@ -79,6 +79,10 @@ export function registerPostBundleRoutes(
         const sc = await sidecarRead(siteRoot, id);
         if (!sc) continue;
         sidecars.push({ id, json: sc });
+        // Path-traversal safety: id is 64-hex (validated in
+        // scanPostForImageIds) and ext is restricted to FORMAT_TO_EXT
+        // values. A malformed sidecar with format='../whatever' falls
+        // through here because the lookup returns undefined.
         const fmt = sc.metadata.format;
         const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
         if (!fmt || !ext) continue;

@@ -170,19 +170,39 @@ export default async function adminRoutes(
     // client supplies X-Rkr-Last-Synced-At — the server's
     // updated_at the client believed at the time the offline edits
     // BEGAN — refuse the write if the server's actual updated_at
-    // has advanced since. The client surfaces this as a discard /
-    // force-overwrite choice; force-overwrite re-POSTs without the
-    // header. The header is optional: a fresh post that was never
-    // synced just omits it and we accept unconditionally.
-    const lastSyncedAt = request.headers['x-rkr-last-synced-at'];
-    if (typeof lastSyncedAt === 'string' && !inserted) {
-      const serverUpdatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
-      if (serverUpdatedAt > lastSyncedAt) {
+    // has advanced since. The header is optional: a fresh post that
+    // was never synced just omits it and we accept unconditionally.
+    //
+    // Compare numerically (Date.parse → ms-since-epoch) so the
+    // string-vs-string lex compare doesn't wave through:
+    //   • a malformed header like "banana" (NaN > number is false →
+    //     would silently accept), or
+    //   • a future-dated header like "9999-12-31T..." (lexicographic
+    //     compare would defeat the guard outright).
+    // Clamp the client's claim to "now" — clock skew or a
+    // malicious client can't bypass the check by claiming the
+    // future.
+    const lastSyncedAtRaw = request.headers['x-rkr-last-synced-at'];
+    if (typeof lastSyncedAtRaw === 'string' && !inserted) {
+      const lastSyncedMs = Date.parse(lastSyncedAtRaw);
+      if (Number.isNaN(lastSyncedMs)) {
+        return reply
+          .code(400)
+          .send({ error: 'X-Rkr-Last-Synced-At must be an ISO-8601 timestamp' });
+      }
+      const clampedLastSyncedMs = Math.min(lastSyncedMs, Date.now());
+      // fs.statSync().mtimeMs is a float with sub-millisecond
+      // precision on some filesystems; the header's ISO timestamp
+      // round-trips through ms. Compare at ms granularity so a file
+      // whose mtime matches the header (modulo nanosecond noise)
+      // doesn't 409 against itself.
+      const serverMtimeMs = Math.floor(fs.statSync(finalPath).mtimeMs);
+      if (serverMtimeMs > clampedLastSyncedMs) {
         return reply.code(409).send({
           error: 'post-superseded',
           slug,
-          serverUpdatedAt,
-          clientLastSyncedAt: lastSyncedAt
+          serverUpdatedAt: new Date(serverMtimeMs).toISOString(),
+          clientLastSyncedAt: lastSyncedAtRaw
         });
       }
     }

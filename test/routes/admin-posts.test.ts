@@ -185,6 +185,59 @@ test('POST /admin/posts: fresh X-Rkr-Last-Synced-At permits overwrite', async (t
 // Force-overwrite path (§6): when the client decides to clobber,
 // they re-POST without the X-Rkr-Last-Synced-At header. The server
 // accepts unconditionally — even though the file is newer.
+// Regression: the original `serverUpdatedAt > lastSyncedAt` byte-
+// string compare let a future-dated header bypass the guard
+// (lexicographic compare puts any real ISO timestamp behind
+// "9999-..."). The fix parses + clamps the client's claim to now.
+test('POST /admin/posts: future-dated X-Rkr-Last-Synced-At still 409s (clamped)', async (t) => {
+  const { root, app } = await setup(t);
+
+  const payload = {
+    slug: 'future-dated',
+    title: 'v1',
+    status: 'draft' as const,
+    markdown: 'first\n'
+  };
+  await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  // Bump the file forward so the server's mtime is a few ms past
+  // "now" — without the clamp, a 9999-... header would compare
+  // greater than ANY real mtime and the guard would no-op.
+  const filePath = path.join(root, 'content', 'posts', 'future-dated.md');
+  const future = new Date(Date.now() + 5_000);
+  fs.utimesSync(filePath, future, future);
+
+  const conflict = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': '9999-12-31T23:59:59.999Z' },
+    payload: { ...payload, title: 'v2 future-claimed' }
+  });
+  assert.equal(conflict.statusCode, 409, conflict.body);
+  assert.equal(conflict.json<{ error: string }>().error, 'post-superseded');
+});
+
+// Regression: a non-ISO string slipped through `typeof === 'string'`
+// and lex compared as smaller than the server's ISO timestamp,
+// silently accepting the write. The fix rejects with 400.
+test('POST /admin/posts: malformed X-Rkr-Last-Synced-At returns 400', async (t) => {
+  const { app } = await setup(t);
+  const payload = {
+    slug: 'malformed',
+    title: 'v1',
+    status: 'draft' as const,
+    markdown: 'first\n'
+  };
+  await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  const bad = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': 'banana' },
+    payload: { ...payload, title: 'v2' }
+  });
+  assert.equal(bad.statusCode, 400);
+  assert.match(bad.json<{ error: string }>().error, /ISO-8601/);
+});
+
 test('POST /admin/posts: force-overwrite (no header) bypasses the conflict guard', async (t) => {
   const { root, app } = await setup(t);
 
