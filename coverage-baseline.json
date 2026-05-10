@@ -78,8 +78,8 @@
       "linesHit": 11
     },
     "src/admin/sync.ts": {
-      "linesFound": 25,
-      "linesHit": 21
+      "linesFound": 28,
+      "linesHit": 24
     },
     "src/admin/startup.ts": {
       "linesFound": 14,
@@ -126,8 +126,8 @@
       "linesHit": 1
     },
     "src/admin/draft.ts": {
-      "linesFound": 28,
-      "linesHit": 27
+      "linesFound": 40,
+      "linesHit": 39
     },
     "src/admin/status-badge.ts": {
       "linesFound": 18,
@@ -136,6 +136,14 @@
     "src/admin/pin.ts": {
       "linesFound": 21,
       "linesHit": 19
+    },
+    "src/admin/eviction.ts": {
+      "linesFound": 32,
+      "linesHit": 31
+    },
+    "src/lib/eviction-pure.ts": {
+      "linesFound": 10,
+      "linesHit": 10
     }
   }
 }

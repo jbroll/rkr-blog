@@ -38,6 +38,15 @@ interface DraftMeta {
   lastSyncedAt?: string;
   /** Most recent local edit time. Drives 7-day cached eviction. */
   lastAccessedAt: string;
+  /** "pinned" survives eviction; "cached" is reclaim-eligible after
+   * 7 days idle (spec-offline §7). Defaults to "cached" — phase 2's
+   * pin flow flips it to "pinned". */
+  mode?: 'cached' | 'pinned';
+  /** Image ids the post body references. Used by the eviction
+   * policy to determine which originals/sidecars are still needed
+   * across the surviving meta set. Pin populates this from the
+   * bundle manifest; fresh drafts populate as figures are inserted. */
+  refIds?: string[];
 }
 
 /** Get the active draft id, creating one if absent. Stored in
@@ -106,7 +115,15 @@ export function startDraftPersistence(editor: Editor, draftId: string): () => vo
     const json = editor.getJSON();
     lastJson = json;
     await writeJson(`${DRAFT_DIR}/${draftId}.json`, json);
-    await updateMeta(draftId, { lastAccessedAt: new Date().toISOString() });
+    // Scan for figure-node ids so eviction (phase 3) knows which
+    // originals/sidecars/image-state files this draft pins. Without
+    // refIds the eviction planner can't tell orphaned files from
+    // ones the draft still needs, so it defaults to keeping
+    // everything.
+    await updateMeta(draftId, {
+      lastAccessedAt: new Date().toISOString(),
+      refIds: refIdsFromDoc(json)
+    });
   };
 
   const onUpdate = (): void => {
@@ -139,6 +156,35 @@ export function startDraftPersistence(editor: Editor, draftId: string): () => vo
     void lastJson;
     /* v8 ignore stop */
   };
+}
+
+interface RefIdScanNode {
+  type?: string;
+  attrs?: { ids?: string };
+  content?: RefIdScanNode[];
+}
+
+/** Walk a TipTap JSON doc, collecting the comma-separated ids on
+ * each figure node. Pure: tested via the eviction-pure unit suite
+ * indirectly (a draft persisted with images then reloaded must
+ * survive eviction). */
+function refIdsFromDoc(doc: unknown): string[] {
+  const ids = new Set<string>();
+  const stack: RefIdScanNode[] = [doc as RefIdScanNode];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (node.type === 'figure' && typeof node.attrs?.ids === 'string') {
+      for (const id of node.attrs.ids.split(',')) {
+        const trimmed = id.trim();
+        if (trimmed) ids.add(trimmed);
+      }
+    }
+    if (Array.isArray(node.content)) {
+      for (const c of node.content) stack.push(c);
+    }
+  }
+  return [...ids];
 }
 
 /** Drop a draft from OPFS. Used when the author starts a new post

@@ -248,6 +248,17 @@ async function drainLoop(): Promise<void> {
   }
 
   publish({ kind: 'idle' });
+  // After-drain-empty hook (spec-offline §7): run the eviction
+  // policy so a successful drain that empties the queue
+  // opportunistically reclaims OPFS space. Failures don't bubble —
+  // the next mount runs eviction again.
+  for (const fn of afterEmptyHandlers) {
+    try {
+      await fn();
+    } catch {
+      /* swallow */
+    }
+  }
 }
 
 async function readEntryBlobOrThrow(seq: number): Promise<Blob> {
@@ -257,3 +268,15 @@ async function readEntryBlobOrThrow(seq: number): Promise<Blob> {
   return blob;
 }
 /* v8 ignore stop */
+
+const afterEmptyHandlers = new Set<() => Promise<void> | void>();
+
+/** Register a callback that fires after the drain loop empties the
+ * queue and publishes idle. startup.ts uses this to invoke the
+ * eviction policy without importing eviction.ts in sync.ts'
+ * critical path.
+ * @public */
+export function onAfterDrainEmpty(handler: () => Promise<void> | void): () => void {
+  afterEmptyHandlers.add(handler);
+  return () => afterEmptyHandlers.delete(handler);
+}

@@ -111,7 +111,9 @@ export async function pinPost(
   await writeJson(`drafts/${draftId}.json`, doc);
   await updateMeta(draftId, {
     slug: manifest.slug,
-    lastSyncedAt: manifest.lastModified
+    lastSyncedAt: manifest.lastModified,
+    mode: 'pinned',
+    refIds: manifest.sidecars.map((s) => s.id)
   });
 
   return { draftId, manifest, progress };

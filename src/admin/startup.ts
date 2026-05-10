@@ -19,12 +19,19 @@ import type { Editor, JSONContent } from '@tiptap/core';
 import { setStatus } from './dom.ts';
 import { getOrCreateDraftId, loadDraft, startDraftPersistence } from './draft.ts';
 import { drainBake, drainSavePost, drainSetOps, drainUpload } from './drainers.ts';
+import { runEviction } from './eviction.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { pendingCount } from './outbox.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
-import { discardConflictedSave, forceConflictedSave, registerDrainer, tryDrain } from './sync.ts';
+import {
+  discardConflictedSave,
+  forceConflictedSave,
+  onAfterDrainEmpty,
+  registerDrainer,
+  tryDrain
+} from './sync.ts';
 
 export async function startOfflineInfrastructure(editor: Editor): Promise<void> {
   const ready = runStart(editor);
@@ -63,6 +70,11 @@ async function runStart(editor: Editor): Promise<void> {
     }
     startDraftPersistence(editor, draftId);
     mountStatusBadge();
+    // Eviction runs on every editor mount AND after each successful
+    // drain that empties the queue (spec-offline §7). Both are
+    // best-effort — failures don't block startup.
+    onAfterDrainEmpty(() => runEviction().then(() => undefined));
+    void runEviction();
     const pending = await pendingCount();
     if (pending > 0) setStatus(`${pending} pending offline edit(s)`);
     startOnline();
