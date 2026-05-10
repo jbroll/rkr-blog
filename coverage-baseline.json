@@ -58,8 +58,8 @@
       "linesHit": 11
     },
     "src/admin/upload.ts": {
-      "linesFound": 16,
-      "linesHit": 16
+      "linesFound": 15,
+      "linesHit": 15
     },
     "src/admin/opfs-schema.ts": {
       "linesFound": 18,
@@ -90,8 +90,8 @@
       "linesHit": 1
     },
     "src/admin/drainers.ts": {
-      "linesFound": 21,
-      "linesHit": 18
+      "linesFound": 27,
+      "linesHit": 21
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,

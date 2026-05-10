@@ -1,19 +1,4 @@
-// Storage panel (spec-offline §8). Opens from the status badge,
-// renders the offline cache's state, exposes manual controls. Six
-// sections per spec:
-//
-//   1. Total usage + persistence state
-//   2. Pinned posts (per-post bytes, unpin)
-//   3. Cached posts (per-post lastAccessed, evict)
-//   4. Pending sync queue (per-item discard / details)
-//   5. Sync now + Evict all cached actions
-//   6. Schema version (for support tickets)
-//
-// The panel is rendered into a <dialog> appended to body on first
-// open, kept around between opens. All state is read fresh on open
-// — there's no live-update subscription. Phase 3 happy path: user
-// clicks the badge, sees state, takes action, dialog closes, badge
-// reflects the result via its existing onStatus / onChange streams.
+// Storage panel (spec-offline §8). Opened by the status badge.
 
 import { setStatus } from './dom.ts';
 import { runEviction } from './eviction.ts';
@@ -32,10 +17,7 @@ interface StoragePanelMeta {
 
 let dialog: HTMLDialogElement | null = null;
 
-/** Open the storage panel. Idempotent — repeated calls re-render
- * against fresh OPFS state. The status-badge click handler is the
- * only caller in production; e2e drives it via window.__rkrPanel.
- * @public */
+/** @public */
 export async function openStoragePanel(): Promise<void> {
   if (!dialog) {
     dialog = document.createElement('dialog');
@@ -43,9 +25,7 @@ export async function openStoragePanel(): Promise<void> {
     document.body.appendChild(dialog);
   }
   await renderPanel(dialog);
-  /* v8 ignore next 3 -- dialog.show fallback for browsers that
-     fail showModal (e.g. inside an iframe without focus); modern
-     Chromium always succeeds */
+  /* v8 ignore next -- showModal fallback for non-Chromium envs */
   if (!dialog.open) dialog.showModal();
 }
 
@@ -113,8 +93,7 @@ function sectionList(
       )
     )
   );
-  /* v8 ignore next 3 -- empty-list rendering uses the same path as
-     the populated case via the items array length */
+  /* v8 ignore next 3 -- empty-list rendering */
   if (items.length === 0) {
     items.push(h('li', { class: 'rkr-storage-empty' }, '— none —'));
   }
@@ -131,7 +110,7 @@ function pendingSection(entries: import('../lib/outbox-types.ts').OutboxEntry[])
       h('button', { type: 'button', 'data-discard': String(e.seq) }, 'Discard')
     )
   );
-  /* v8 ignore next -- empty-list path; populated case is exercised */
+  /* v8 ignore next -- empty-list rendering */
   if (items.length === 0) items.push(h('li', { class: 'rkr-storage-empty' }, '— none —'));
   return h(
     'section',
@@ -151,9 +130,7 @@ function actionRow(): HTMLElement {
 }
 
 async function onSyncNow(d: HTMLDialogElement): Promise<void> {
-  /* v8 ignore start -- click-handler bodies covered via the e2e in
-     phase 3c; placing the v8-ignore inside the body so the handler
-     wiring still counts */
+  /* v8 ignore start -- exercised by phase 3c e2e */
   setStatus('sync now…');
   await tryDrain();
   await renderPanel(d);
@@ -162,22 +139,15 @@ async function onSyncNow(d: HTMLDialogElement): Promise<void> {
 
 async function onEvictCached(d: HTMLDialogElement): Promise<void> {
   /* v8 ignore start -- exercised by phase 3c e2e */
-  // Force every cached draft past the TTL, then run eviction. Skip
-  // drafts whose lock heartbeat is fresh (< 60s old): they're
-  // actively edited in another tab and runEviction would spare them
-  // anyway — but stamping their lastAccessedAt into 1970 would
-  // booby-trap the next mount when the lock has lapsed (TTL would
-  // immediately fire). Leave their lastAccessedAt alone; they're
-  // already not evict-eligible right now.
+  // Skip fresh-locked drafts: stamping their lastAccessedAt into
+  // 1970 would booby-trap the next mount once the lock lapses.
   const past = new Date(0).toISOString();
-  const lockGraceMs = 60_000;
-  const cutoff = Date.now() - lockGraceMs;
+  const cutoff = Date.now() - 60_000;
   for (const m of await collectMetas()) {
     if ((m.mode ?? 'cached') !== 'cached') continue;
     const lock = await readJson<{ ts: number }>(`drafts/${m.draftId}.lock`);
     if (lock && lock.ts > cutoff) continue;
-    const file = `meta/${m.draftId}.json`;
-    await writeJson(file, { ...m, lastAccessedAt: past });
+    await writeJson(`meta/${m.draftId}.json`, { ...m, lastAccessedAt: past });
   }
   await runEviction();
   await renderPanel(d);
@@ -212,15 +182,14 @@ async function collectMetas(): Promise<StoragePanelMeta[]> {
   for (const fname of await listDir('meta')) {
     if (!fname.endsWith('.json') || fname === '_root.json') continue;
     const m = await readJson<StoragePanelMeta>(`meta/${fname}`);
-    /* v8 ignore next -- malformed file on disk; readJson returns null */
+    /* v8 ignore next -- malformed-on-disk path */
     if (m) out.push(m);
   }
   return out;
 }
 
 async function getUsage(): Promise<{ usage: number; quota: number; percent: number } | null> {
-  /* v8 ignore start -- chromium 80+ supports estimate; defensive
-     for embeddings without it */
+  /* v8 ignore start -- defensive for browsers without estimate() */
   if (typeof navigator?.storage?.estimate !== 'function') return null;
   const est = await navigator.storage.estimate();
   const usage = est.usage ?? 0;
@@ -231,8 +200,7 @@ async function getUsage(): Promise<{ usage: number; quota: number; percent: numb
 }
 
 function formatBytes(n: number): string {
-  /* v8 ignore start -- pretty-printer; sample paths exercised via
-     the e2e but the full unit range is visual */
+  /* v8 ignore start -- pretty-printer */
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;

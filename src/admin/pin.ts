@@ -1,18 +1,4 @@
-// Pin an existing post to OPFS so the author can edit it offline
-// (spec-offline §6 + §7). Two-step flow:
-//
-//   1. GET /admin/post-bundle/:slug?manifest=1 → small JSON listing
-//      sidecars + originals + post body.
-//   2. For each sidecar: write opfs://sidecars/<id>.json.
-//      For each original: skip-if-already-cached, else fetch
-//      GET /admin/original/:id → opfs://originals/<id>.<ext>.
-//
-// The draft is materialised as a fresh draftId pointing at the
-// markdown body. handleSave's existing path (phase 1g) then does
-// the right thing online or offline; the X-Rkr-Last-Synced-At
-// header carries the manifest's lastModified so the server's
-// optimistic-concurrency guard (phase 1k) protects against another
-// device editing in the meantime.
+// Pin an existing post into OPFS for offline editing (spec-offline §6).
 
 import { markdownToProse } from '../lib/prose-markdown.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
@@ -40,23 +26,14 @@ export interface PinProgress {
   failed: number;
 }
 
-/** Result of a successful pin: the new draftId now points at the
- * post and is the SPA's currentDraftId. The caller (toolbar) loads
- * the editor with the parsed TipTap doc — handleSave's existing
- * path drains it normally on edit.
- * @public */
+/** @public */
 export interface PinResult {
   draftId: string;
   manifest: PinManifest;
   progress: PinProgress;
 }
 
-/** Pull a post bundle into OPFS. Marks it `mode: pinned` in meta so
- * eviction (phase 3) leaves it alone. Existing originals are
- * skipped (idempotent re-pin). Failed originals don't abort the
- * pin — the per-image-retry status is reported via onProgress so
- * the UI can surface partials.
- * @public */
+/** @public */
 export async function pinPost(
   slug: string,
   onProgress?: (p: PinProgress) => void
@@ -79,7 +56,7 @@ export async function pinPost(
     } else {
       try {
         const r = await fetch(`/admin/original/${orig.id}`);
-        /* v8 ignore next 3 -- server-error path; happy path is 200 */
+        /* v8 ignore next 3 -- server-error path */
         if (!r.ok) throw new Error(`original ${orig.id.slice(0, 8)}: ${r.status}`);
         await writeBlob(path, await r.blob());
         progress.fetched++;
@@ -90,28 +67,19 @@ export async function pinPost(
     onProgress?.({ ...progress });
   }
 
-  // Parse the markdown FIRST, before any OPFS writes that bump
-  // `currentDraftId`. markdownToProse can throw on a malformed body;
-  // doing the write side-effects after the parse means a parse
-  // failure leaves the SPA's `currentDraftId` intact (it still
-  // points at whatever draft was active before pinPost was called).
-  // Otherwise a partial pin would orphan currentDraftId at a draft
-  // whose drafts/<id>.json was never written, and the next mount
-  // would silently restore the empty placeholder.
+  // Parse before any side effects. A throw here must not leave
+  // currentDraftId pointing at a half-written draft.
   const doc = markdownToProse(manifest.markdown);
 
   const draftId = crypto.randomUUID();
   const root = await readRoot();
-  /* v8 ignore next 3 -- ensureSchema runs at startup; missing root
-     would mean a corrupted OPFS, not a normal flow */
+  /* v8 ignore next 3 -- ensureSchema runs at startup */
   if (!root) {
     throw new Error('pin: _root.json missing — ensureSchema not called?');
   }
-  // Order: write the draft body + meta first, then flip
-  // currentDraftId. A crash between writeJson + updateMeta + writeRoot
-  // leaves either nothing pointing at the new draft (no harm) or a
-  // complete draft + meta with currentDraftId still on the prior
-  // draft (orphan we'll clean up via eviction).
+  // Body + meta first, currentDraftId flip last: a crash between
+  // them orphans the new draft (eviction reclaims) rather than
+  // leaving _root pointing at a missing file.
   await writeJson(`drafts/${draftId}.json`, doc);
   await updateMeta(draftId, {
     slug: manifest.slug,

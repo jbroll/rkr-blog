@@ -1,18 +1,4 @@
-// Per-op drainers: turn an outbox entry back into the HTTP call it
-// queued. Registered once per op type at startup; sync.ts dispatches
-// to them when it runs the drain loop.
-//
-// Each drainer either:
-//   • returns void on 2xx → sync.ts removes the entry
-//   • throws → sync.ts halts; the user sees a "halted: <reason>"
-//     status and decides whether to retry or discard
-//
-// 409 handling is op-specific (per spec-offline §11):
-//   - upload    impossible (content-addressed; deduped server-side)
-//   - setOps    LWW; server overwrites — no 409 expected
-//   - bake      stale ops-hash; client re-bakes against current ops
-//                and retries (handled inline)
-//   - savePost  superseded; conflict surfaced to author (phase 1g)
+// Per-op drainers: outbox entry → HTTP call. Registered by startup.ts.
 
 import { extForMime } from '../lib/content-id.ts';
 import type { OutboxEntry } from '../lib/outbox-types.ts';
@@ -21,14 +7,12 @@ import { type Drainer, SavePostConflictError } from './sync.ts';
 
 export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   if (entry.op !== 'upload') return;
-  // Read from opfs://originals/<id>.<ext> rather than the outbox-
-  // blob copy: queueUpload writes the bytes to originals/ as the
-  // canonical local copy (offline-preview use), so we don't write
-  // a redundant outbox-blob. sync.ts's per-entry blob-read isn't
-  // used for upload entries.
+  // queueUpload writes the canonical local copy to originals/ for
+  // offline preview; reading from there avoids a redundant
+  // outbox-blob.
   const ext = extForMime(entry.payload.mimeType);
   const blob = await readBlob(`originals/${entry.payload.id}.${ext}`);
-  /* v8 ignore next 3 -- writeBlob in queueUpload ran before append */
+  /* v8 ignore next 3 -- queueUpload's writeBlob ran before append */
   if (!blob) {
     throw new Error(
       `upload drain ${entry.seq}: blob missing at originals/${entry.payload.id}.${ext}`
@@ -74,30 +58,19 @@ export const drainBake: Drainer = async (entry, blob) => {
     },
     body: blob
   });
-  /* v8 ignore start -- 409 + 5xx paths are surfaced to the user; they
-     fire on real conflicts in production but the offline-then-drain
-     happy path doesn't trip them. Phase 1g extends this with the
-     re-bake-against-current-ops auto-retry. */
+  /* v8 ignore start -- 409 / 5xx paths exercised in prod, not e2e */
   if (!res.ok) {
     throw new Error(`bake drain ${entry.seq}: ${res.status}`);
   }
   /* v8 ignore stop */
 };
 
-/** savePost drainer — POST /admin/posts with X-Rkr-Last-Synced-At
- * for the optimistic-concurrency check (spec-offline §6). On 409 the
- * server returns { error: 'post-superseded', slug, serverUpdatedAt,
- * clientLastSyncedAt }; we throw a structured error so sync.ts can
- * publish a `conflict` status that the storage panel surfaces with
- * discard / force options. */
 export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
   if (entry.op !== 'savePost') return;
   const headers: Record<string, string> = {
     'content-type': 'application/json',
     'x-rkr-outbox-seq': String(entry.seq)
   };
-  /* v8 ignore next 3 -- lastSyncedAt populated once phase 1h persists
-     drafts; phase 1g e2e exercises the no-header path */
   if (entry.payload.lastSyncedAt) {
     headers['x-rkr-last-synced-at'] = entry.payload.lastSyncedAt;
   }
@@ -106,8 +79,6 @@ export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
     headers,
     body: JSON.stringify(entry.payload)
   });
-  /* v8 ignore start -- 409 conflict + non-409 4xx paths exercised
-     once phase 1k wires server-side last-synced-at handling */
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as {
       slug?: string;
@@ -124,5 +95,4 @@ export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
   if (!res.ok) {
     throw new Error(`savePost drain ${entry.seq}: ${res.status}`);
   }
-  /* v8 ignore stop */
 };

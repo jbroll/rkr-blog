@@ -1,11 +1,4 @@
-// OPFS-side wiring for the eviction policy. Pure planner lives in
-// src/lib/eviction-pure.ts; this module collects the snapshot from
-// disk, hands it to the planner, and applies the resulting deletes.
-//
-// Spec-offline §7: eviction runs on every editor mount AND after a
-// drain that returns the queue to empty. Both call sites just
-// invoke runEviction() — no external coordination needed since OPFS
-// is per-origin and a single tab is the leader (phase 1d).
+// OPFS-side eviction. Pure planner: src/lib/eviction-pure.ts.
 
 import { type EvictionPlan, type MetaSnapshot, planEviction } from '../lib/eviction-pure.ts';
 import { listDir, readJson, removeFile } from './opfs.ts';
@@ -26,10 +19,7 @@ interface PersistedMeta {
   refIds?: string[];
 }
 
-/** Run one eviction pass. Returns counts so callers (status panel,
- * tests) can surface what happened. Failures inside the OPFS
- * deletes are swallowed — the next pass picks them up.
- * @public */
+/** @public */
 export async function runEviction(now: number = Date.now()): Promise<EvictionPlan> {
   const metas = await collectMetas();
   const originalsIds = await collectOriginals();
@@ -43,9 +33,7 @@ export async function runEviction(now: number = Date.now()): Promise<EvictionPla
     await removeFile(`${META_DIR}/${draftId}.json`).catch(() => {});
   }
   for (const id of plan.evictOriginals) {
-    // The on-disk filename includes the extension; we don't have it
-    // in the plan (which is just ids). Walk the originals/ dir for
-    // matching prefix.
+    // Plan carries ids; originals/<id>.<ext> needs prefix-walking.
     for (const fname of await listDir(ORIGINALS_DIR)) {
       if (fname.startsWith(`${id}.`)) {
         await removeFile(`${ORIGINALS_DIR}/${fname}`).catch(() => {});
@@ -66,7 +54,7 @@ async function collectMetas(): Promise<MetaSnapshot[]> {
     // _root.json lives in meta/ too; it's not a draft meta.
     if (!fname.endsWith('.json') || fname === '_root.json') continue;
     const m = await readJson<PersistedMeta>(`${META_DIR}/${fname}`);
-    /* v8 ignore next -- malformed file on disk; the read returns null */
+    /* v8 ignore next -- malformed-on-disk path */
     if (!m) continue;
     const lock = await readJson<{ ts: number }>(`${DRAFTS_DIR}/${m.draftId}.lock`);
     out.push({
@@ -83,9 +71,8 @@ async function collectMetas(): Promise<MetaSnapshot[]> {
 async function collectOriginals(): Promise<string[]> {
   const ids: string[] = [];
   for (const fname of await listDir(ORIGINALS_DIR)) {
-    // Filenames are <id>.<ext>; strip the ext.
     const dot = fname.lastIndexOf('.');
-    /* v8 ignore next -- ext-less files shouldn't appear; defensive */
+    /* v8 ignore next -- ext-less files shouldn't appear */
     if (dot <= 0) continue;
     ids.push(fname.slice(0, dot));
   }

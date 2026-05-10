@@ -1,10 +1,5 @@
-// Save flow: serialize the editor JSON to markdown, flush any dirty
-// per-image edits, then POST /admin/posts. Online-first: try the
-// network; on offline / network failure, queue a `savePost` outbox
-// entry and let sync.ts drain it on reconnect (spec-offline §5).
-//
-// The toolbar's Save button is the only entry point; e2e/editor-flow.
-// spec.ts asserts on the status text it produces.
+// Save flow: editor JSON → markdown → POST /admin/posts (online) or
+// queue a `savePost` outbox entry (offline / network error).
 
 import type { Editor } from '@tiptap/core';
 import type { SavePostPayload } from '../lib/outbox-types.ts';
@@ -44,12 +39,9 @@ export async function handleSave(editor: Editor): Promise<void> {
     setStatus('slug and title are required');
     return;
   }
-  // Flush any dirty image edits BEFORE writing the post. Without this,
-  // the saved markdown would reference image ids whose server-side ops
-  // are stale relative to what the user just edited — silent data loss.
-  // Uses the same code path the per-image Save button uses, so when
-  // saveImageEdits queues offline-mode setOps/bake the seq order
-  // guarantees those drain before the savePost.
+  // Flush dirty image edits first: the saved markdown references
+  // image ids whose ops must reach the server before the post does,
+  // or the public site renders with stale ops.
   const dirtyCount = dirtyImageStates().length;
   if (dirtyCount > 0) {
     setStatus(`saving ${dirtyCount} image edit${dirtyCount === 1 ? '' : 's'}…`);
@@ -61,10 +53,6 @@ export async function handleSave(editor: Editor): Promise<void> {
   }
   const json = editor.getJSON() as ProseDoc;
   const markdown = proseToMarkdown(json);
-  // Pull lastSyncedAt from the draft meta so the server can detect a
-  // concurrent edit (spec-offline §6). When the meta has no
-  // lastSyncedAt yet (fresh post that's never been synced), the
-  // header is omitted and the server accepts unconditionally.
   const draftId = await getOrCreateDraftId();
   const meta = await readMeta(draftId);
   const payload: SavePostPayload = {
@@ -78,13 +66,11 @@ export async function handleSave(editor: Editor): Promise<void> {
   if (getState() !== 'offline') {
     try {
       const result = await postSavePost(payload);
-      // Stamp the new server-known updated_at into the draft meta so
-      // the next save sends an accurate header.
       await updateMeta(draftId, { slug, lastSyncedAt: result.updatedAt });
       setStatus(`saved /${result.slug}`);
       return;
     } catch {
-      /* fall through to outbox queue on network failure */
+      /* fall through to outbox queue */
     }
   }
   await queueSavePost(payload);

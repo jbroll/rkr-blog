@@ -1,42 +1,16 @@
-// Outbox drain loop + multi-tab leader election.
+// Outbox drain loop + multi-tab leader election (spec-offline §5).
 //
-// Module graph note: drainers.ts imports `Drainer` (type) and
-// `SavePostConflictError` (value) from this file; this file does
-// NOT import from drainers.ts. The arrow is one-way — no cycle. The
-// circular-import gauntlet check enforces this.
-//
-// Multi-tab coordination (spec-offline.md §5.1): exactly one tab is
-// the "leader" at a time, elected via the Web Locks API. The leader
-// holds the rkr-sync-leader lock and runs the drain loop. Non-
-// leader tabs subscribe to the BroadcastChannel('rkr-sync') so
-// their UIs stay in sync without each tab making its own HTTP
-// requests.
-//
-// Drain failure handling (spec-offline.md §5.2):
-//   2xx          delete the entry, advance
-//   409          halt; surface conflict to the user
-//   4xx (other)  halt; surface "rejected: <message>"
-//   5xx / netw   retry with backoff (0.5s/2s/8s ±20% jitter)
-//                — same schedule as src/site/img-retry.ts
-//   401          halt; surface "log in to sync"; outbox preserved
-//
-// What's NOT here (phases 1f / 1j):
-//   • The HTTP-shape per op type (multipart vs JSON, headers).
-//     Phase 1f: each op-flow registers its drainer.
-//   • Status badge UI. Phase 1j: subscribes to the BroadcastChannel
-//     and renders pending/conflict/online state.
+// Module graph: drainers.ts imports `Drainer` (type) and
+// `SavePostConflictError` (value) from here. One-way arrow — no
+// cycle. Enforced by the circular-import gauntlet check.
 
 import { listSuperseded, list as outboxList, remove as outboxRemove } from './outbox.ts';
 
 const LOCK_NAME = 'rkr-sync-leader';
 const CHANNEL_NAME = 'rkr-sync';
 
-/** Thrown by drainSavePost when /admin/posts returns 409
- * post-superseded. drainLoop catches it via instanceof and publishes
- * a `conflict` DrainStatus carrying { slug, seq, serverUpdatedAt,
- * clientLastSyncedAt }. Lives here (not in drainers.ts) so drainers
- * can import this value without a circular module graph — sync.ts
- * already owns the public DrainStatus type that the error feeds.
+/** Owned here (not in drainers.ts) so drainers can throw it without
+ * a circular import — sync.ts already owns DrainStatus.
  * @public */
 export class SavePostConflictError extends Error {
   constructor(
@@ -74,37 +48,31 @@ const channel: BroadcastChannel | null =
   typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null;
 
 let currentStatus: DrainStatus = { kind: 'idle' };
-// BroadcastChannel doesn't deliver to its own posters, so in-process
-// subscribers (the status badge in the same tab) are tracked here
-// and fanned out alongside the cross-tab post. Mirrors the
-// online-state.ts pattern.
+// BroadcastChannel doesn't deliver to its own posters; same-tab
+// subscribers (the badge) need a separate fan-out.
 const localStatusHandlers = new Set<(status: DrainStatus) => void>();
 
 function publish(status: DrainStatus): void {
   currentStatus = status;
   for (const h of localStatusHandlers) h(status);
-  /* v8 ignore next 3 -- environments without BroadcastChannel skip publish */
+  /* v8 ignore next 3 -- BroadcastChannel-less env */
   if (channel) {
     channel.postMessage({ type: 'status', status } satisfies SyncEvent);
   }
 }
 
-/** Get the current status (last broadcast). UI subscribers can
- * call this on mount to render initial state without waiting for
- * the next event.
- * @public */
+/** @public */
 export function getStatus(): DrainStatus {
   return currentStatus;
 }
 
-/** Subscribe to status updates. Returns an unsubscribe function.
- * @public */
+/** @public */
 export function onStatus(handler: (status: DrainStatus) => void): () => void {
   localStatusHandlers.add(handler);
   const cleanupLocal = (): void => {
     localStatusHandlers.delete(handler);
   };
-  /* v8 ignore next 3 -- BroadcastChannel-less envs unsubscribe local-only */
+  /* v8 ignore next 3 -- BroadcastChannel-less env */
   if (!channel) {
     return cleanupLocal;
   }
@@ -118,10 +86,7 @@ export function onStatus(handler: (status: DrainStatus) => void): () => void {
   };
 }
 
-/** Per-op drain handler. Phase 1f registers one of these for each
- * op type (upload, setOps, bake, savePost). Returns void on success
- * (the entry is removed); throws on failure (signals halt).
- * @public */
+/** @public */
 export type Drainer = (
   entry: import('../lib/outbox-types.ts').OutboxEntry,
   blob: Blob | null
@@ -129,33 +94,25 @@ export type Drainer = (
 
 const drainers = new Map<string, Drainer>();
 
-/** Wire up the drain handler for a given op. Phase 1f calls this
- * once per op type at mount.
- * @public */
+/** @public */
 export function registerDrainer(op: string, drainer: Drainer): void {
   drainers.set(op, drainer);
 }
 
-/** Resolve a `conflict` status by discarding the local edit. Drops
- * the queued savePost outbox entry and re-runs the drain so any
- * downstream entries for OTHER posts can advance. Surfaces a fresh
- * `idle` / `draining` status. Spec-offline §6 — discard option.
- * @public */
+/** @public */
 export async function discardConflictedSave(): Promise<void> {
-  /* v8 ignore next 4 -- conflict path lands fully in phase 1k+1l */
+  /* v8 ignore next 4 -- conflict-resolution UI lives in storage panel */
   if (currentStatus.kind !== 'conflict') return;
   await outboxRemove({ seq: currentStatus.seq, op: 'savePost' });
   publish({ kind: 'idle' });
   await tryDrain();
 }
 
-/** Resolve a `conflict` status by force-overwriting the server. Re-
- * POSTs /admin/posts WITHOUT X-Rkr-Last-Synced-At so the server
- * accepts unconditionally (spec-offline §6 — force option). Removes
- * the entry on 2xx, keeps it on failure (the user can retry).
+/** Re-POST without X-Rkr-Last-Synced-At so the server accepts the
+ * conflicted save unconditionally (spec-offline §6).
  * @public */
 export async function forceConflictedSave(): Promise<void> {
-  /* v8 ignore start -- conflict path lands fully in phase 1k+1l */
+  /* v8 ignore start -- conflict-resolution UI lives in storage panel */
   if (currentStatus.kind !== 'conflict') return;
   const seq = currentStatus.seq;
   const entries = await outboxList();
@@ -185,39 +142,26 @@ export async function forceConflictedSave(): Promise<void> {
   /* v8 ignore stop */
 }
 
-/** Try to acquire the leader lock and run the drain loop. If the
- * lock is held by another tab, returns immediately — that tab is
- * the leader. The leader's drain loop runs until the outbox is
- * empty, halts on first failure, or the lock is released (tab
- * close). Safe to call repeatedly: re-acquiring while you ARE the
- * leader is a no-op via the Web Locks API.
- *
- * Phase 1f calls this on every `online` event AND on every
- * outbox.append() so a fresh edit drains as soon as possible. */
+/** Acquire the leader lock and run the drain. No-op when another
+ * tab holds the lock — that tab is the leader. */
 export function tryDrain(): Promise<void> {
-  /* v8 ignore next 3 -- Web Locks is universal in OPFS-supporting browsers */
+  /* v8 ignore next 3 -- Web Locks is universal where OPFS is */
   if (typeof navigator === 'undefined' || !navigator.locks) {
     return Promise.resolve();
   }
   return navigator.locks
     .request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
-      // ifAvailable returns null when the lock is busy — another
-      // tab is the leader. We're done; no drain.
       if (!lock) return;
       await drainLoop();
     })
     .then(() => {});
 }
 
-/* v8 ignore start -- the body fires only when phase 1f starts
-   appending entries; until then the loop runs once over empty
-   outbox state and exits via the early return below */
+/* v8 ignore start -- requires queued entries; covered by the
+   offline-flow e2e specs */
 async function drainLoop(): Promise<void> {
-  // Drop superseded entries first so the kept set is the real
-  // queue and the count we publish is accurate. coalescePending
-  // partitions entries by seq into kept-or-dropped (never both), so
-  // these removes never touch a seq the drain still needs. Removes
-  // run in parallel — they're independent OPFS operations.
+  // coalescePending partitions seqs into kept/dropped (never both),
+  // so the dropped set is safe to remove in parallel.
   const superseded = await listSuperseded();
   await Promise.all(superseded.map((stale) => outboxRemove(stale)));
 
@@ -234,11 +178,8 @@ async function drainLoop(): Promise<void> {
       return;
     }
     try {
-      // Bake entries carry their blob via outbox-blobs/<seq>.bin
-      // (image-edit.ts:commitOffline passes blob to outboxAppend).
-      // Upload entries store bytes in opfs://originals/<id>.<ext>
-      // for offline-preview reuse, so the upload drainer reads from
-      // there itself; sync passes null.
+      // bake entries carry the blob via outbox-blobs/<seq>.bin;
+      // upload entries read from originals/ in their drainer.
       const blob = head.op === 'bake' ? await readEntryBlobOrThrow(head.seq) : null;
       await drainer(head, blob);
       await outboxRemove(head);
@@ -255,10 +196,7 @@ async function drainLoop(): Promise<void> {
   }
 
   publish({ kind: 'idle' });
-  // After-drain-empty hook (spec-offline §7): run the eviction
-  // policy so a successful drain that empties the queue
-  // opportunistically reclaims OPFS space. Failures don't bubble —
-  // the next mount runs eviction again.
+  // After-drain-empty hook (spec-offline §7): eviction subscribes.
   for (const fn of afterEmptyHandlers) {
     try {
       await fn();
@@ -278,11 +216,7 @@ async function readEntryBlobOrThrow(seq: number): Promise<Blob> {
 
 const afterEmptyHandlers = new Set<() => Promise<void> | void>();
 
-/** Register a callback that fires after the drain loop empties the
- * queue and publishes idle. startup.ts uses this to invoke the
- * eviction policy without importing eviction.ts in sync.ts'
- * critical path.
- * @public */
+/** @public */
 export function onAfterDrainEmpty(handler: () => Promise<void> | void): () => void {
   afterEmptyHandlers.add(handler);
   return () => afterEmptyHandlers.delete(handler);

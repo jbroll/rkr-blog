@@ -1,30 +1,10 @@
-// OPFS schema versioning + migration framework. Reads / initializes
-// opfs://meta/_root.json, refuses downgrades, runs forward migrations
-// when the on-disk schema is older than OPFS_SCHEMA_CURRENT.
-//
-// Per spec-offline.md §10:
-//   • _root.json#schemaVersion is the layout version.
-//   • Forward migrations are atomic: write results into
-//     opfs://_migration-<from>-<to>/, then atomically rename
-//     _root.json.tmp → _root.json. The version bump is the commit
-//     point. A crash before it leaves the old layout intact + a
-//     leftover migration tree the next run cleans up.
-//   • Downgrades (newer browser cache, older deployed code) refuse
-//     to load OPFS rather than corrupt; the SPA surfaces a "browser
-//     cache is from a newer version" error and offers reset.
-//
-// Phase 1 (this commit): the framework is in place but the
-// MIGRATIONS table is empty — v1 is the initial schema, nothing to
-// migrate FROM. The first real migration (v1 → v2) would add an
-// entry here when a future phase changes a JSON shape or a
-// directory layout.
+// OPFS schema versioning + migration framework (spec-offline §10).
 
 import { isSupported, readJson, writeJson } from './opfs.ts';
 
-/** Bump alongside any schema-affecting change to the OPFS layout
- * (a meta/*.json shape change, a new directory eviction must know
- * about, etc.). Pure additions of optional fields don't need a
- * bump. See spec-offline.md §10 for the migration playbook. */
+/** Bump alongside any schema-affecting change. Pure additions of
+ * optional fields don't need a bump — see spec-offline §10 for the
+ * migration playbook. */
 const OPFS_SCHEMA_CURRENT = 1 as const;
 
 const ROOT_PATH = 'meta/_root.json';
@@ -32,37 +12,24 @@ const ROOT_PATH = 'meta/_root.json';
 /** @public */
 export interface OpfsRoot {
   schemaVersion: number;
-  /** Stable per-device id, generated on first OPFS write. Useful
-   * for multi-device debug ("which device drained this outbox
-   * entry?") — sent in outbox JSON's `deviceId` field. */
   deviceId: string;
-  /** Monotonic counter for outbox entry sequence numbers. Reads /
-   * writes happen via reserveSeq() in src/admin/outbox.ts so the
-   * file is the single source of truth. Defaulted to 0 when an
-   * older OpfsRoot lands without the field (e.g. a partial migration
-   * crash that leaves _root.json missing it). */
+  /** Monotonic outbox-seq counter. Defaults to 0 when missing. */
   nextSeq?: number;
-  /** Active draft id for the SPA's single-draft session model
-   * (phase 1h). draft.ts persists the editor's TipTap JSON to
-   * `drafts/<currentDraftId>.json` between mounts; meta lives in
-   * `meta/<currentDraftId>.json`. Phase 2 extends to a list-of-drafts
-   * model when pinning lands; that bump goes through MIGRATIONS. */
+  /** Active draft id (single-draft session model). */
   currentDraftId?: string;
 }
 
 export type SchemaStatus =
-  | { status: 'unsupported' } /* Browser lacks OPFS; offline mode disabled. */
-  | { status: 'fresh' } /* OPFS was empty; we initialized at CURRENT. */
-  | { status: 'current' } /* On-disk version === CURRENT. No-op. */
+  | { status: 'unsupported' }
+  | { status: 'fresh' }
+  | { status: 'current' }
   | { status: 'migrated'; from: number; to: number }
   | { status: 'downgrade'; onDisk: number; current: number };
 
 type Migration = (root: OpfsRoot) => Promise<OpfsRoot>;
 
-/** Ordered list of forward migrations. Each key is "from→to". When
- * adding a new schema version, append the entry here AND bump
- * OPFS_SCHEMA_CURRENT in the same commit so the runner picks it
- * up. */
+/** Forward migrations keyed "from->to". Bump OPFS_SCHEMA_CURRENT in
+ * the same commit that adds an entry. */
 const MIGRATIONS: Map<string, Migration> = new Map();
 
 function makeRoot(): OpfsRoot {
@@ -73,32 +40,20 @@ function makeRoot(): OpfsRoot {
   };
 }
 
-/** Read _root.json. Returns null when absent (caller decides
- * whether to initialize). Used by outbox.ts to read deviceId +
- * advance nextSeq. */
 export async function readRoot(): Promise<OpfsRoot | null> {
   return readJson<OpfsRoot>(ROOT_PATH);
 }
 
-/** Write _root.json. Used by outbox.ts to persist nextSeq after
- * each append. Atomic-rename semantics aren't needed here because
- * a torn write of a counter is corrected on next append. */
 export async function writeRoot(root: OpfsRoot): Promise<void> {
   await writeJson(ROOT_PATH, root);
 }
 
 function makeDeviceId(): string {
-  // Crypto.randomUUID is universal in OPFS-supporting browsers (it
-  // shipped before OPFS).
   return crypto.randomUUID();
 }
 
-/** Read on-disk schema state, run any pending forward migrations,
- * write the new _root.json. Always called once at admin SPA mount,
- * before any other OPFS code runs. Returns a status the caller
- * uses to decide what to surface in the UI. */
 export async function ensureSchema(): Promise<SchemaStatus> {
-  /* v8 ignore next 3 -- offline-mode-disabled path on pre-OPFS browsers */
+  /* v8 ignore next 3 -- pre-OPFS browser */
   if (!isSupported()) {
     return { status: 'unsupported' };
   }
@@ -112,9 +67,7 @@ export async function ensureSchema(): Promise<SchemaStatus> {
   if (fromVersion === OPFS_SCHEMA_CURRENT) {
     return { status: 'current' };
   }
-  /* v8 ignore start -- v1-unreachable: no v2 schema exists yet, so
-     the downgrade + migration paths are scaffolding that activates
-     when a future schema bump lands. Markers come off then. */
+  /* v8 ignore start -- v1-unreachable: no v2 schema yet */
   if (fromVersion > OPFS_SCHEMA_CURRENT) {
     return { status: 'downgrade', onDisk: fromVersion, current: OPFS_SCHEMA_CURRENT };
   }

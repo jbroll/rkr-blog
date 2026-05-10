@@ -1,16 +1,7 @@
-// GET /admin/post-bundle/:slug?manifest=1 — manifest the offline-pin
-// flow uses to populate OPFS for an existing post (spec-offline §6).
-//
-// Returns:
-//   { slug, title, status, date, lastModified, markdown,
-//     originals: [{ id, ext, bytes }],
-//     sidecars: [{ id, json }] }
-//
-// The manifest is small (KB) — originals are fetched separately via
-// the existing GET /admin/original/:id so the client can parallelise
-// + resume + skip-if-already-cached. The all-in-one bundle was
-// rejected for v2 because a 500 MB multipart over flaky 4G yields
-// nothing usable on a mid-stream drop.
+// GET /admin/post-bundle/:slug?manifest=1 (spec-offline §6) —
+// manifest the offline-pin flow uses to populate OPFS. Originals
+// fetch separately via /admin/original/:id so a flaky connection
+// can resume one image at a time.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,10 +35,8 @@ export function registerPostBundleRoutes(
       if (!SLUG_RE.test(slug) || slug.length > MAX_SLUG_LENGTH) {
         return reply.code(400).send({ error: 'invalid slug' });
       }
-      // Phase 2a: only the manifest shape exists. Future phases may
-      // add ?bytes=1 etc. — until then, anything other than
-      // ?manifest=1 is rejected so a typo doesn't silently return
-      // partial data.
+      // Reject anything other than ?manifest=1 so a typo doesn't
+      // silently return partial data.
       if (request.query.manifest !== '1') {
         return reply.code(400).send({ error: 'only ?manifest=1 is supported' });
       }
@@ -59,15 +48,12 @@ export function registerPostBundleRoutes(
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
           return reply.code(404).send({ error: 'post not found' });
         }
-        /* v8 ignore next 2 -- non-ENOENT stat failure (EACCES etc.) */
+        /* v8 ignore next 2 -- non-ENOENT stat failure */
         throw err;
       }
       const raw = await fs.promises.readFile(filePath, 'utf8');
       const parsed = parsePost(raw);
       const fm = parsed.frontmatter;
-      // The `body` returned via lightweight scanning is the markdown
-      // minus frontmatter (matches what /admin/posts wrote). Pull it
-      // from the raw read so we send the canonical bytes.
       const markdown = stripFrontmatter(raw);
 
       const knownIds = new Set(listSidecarIds(siteRoot));
@@ -79,10 +65,9 @@ export function registerPostBundleRoutes(
         const sc = await sidecarRead(siteRoot, id);
         if (!sc) continue;
         sidecars.push({ id, json: sc });
-        // Path-traversal safety: id is 64-hex (validated in
-        // scanPostForImageIds) and ext is restricted to FORMAT_TO_EXT
-        // values. A malformed sidecar with format='../whatever' falls
-        // through here because the lookup returns undefined.
+        // Path-traversal safety hinges on the FORMAT_TO_EXT
+        // allowlist: a malformed format falls through to undefined
+        // and we skip the original.
         const fmt = sc.metadata.format;
         const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
         if (!fmt || !ext) continue;
@@ -90,8 +75,7 @@ export function registerPostBundleRoutes(
           const ostat = await fs.promises.stat(originalPath(siteRoot, id, ext));
           originals.push({ id, ext, bytes: ostat.size });
         } catch {
-          /* original missing on disk (sidecar-only); skip — client
-             will re-upload if it wants to keep editing */
+          /* sidecar without original; client treats as ops-only */
         }
       }
 
