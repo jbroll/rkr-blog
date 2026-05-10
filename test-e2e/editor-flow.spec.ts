@@ -39,6 +39,47 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 }
 
+// Poll OPFS until any file under `dir` contains `needle`. Replaces
+// `waitForTimeout(<debounce + margin>)` for draft / image-state
+// persistence: a timeout-based wait is brittle on a loaded CI
+// runner; this polls for the actual state we care about.
+async function waitForOpfsContains(
+  page: import('@playwright/test').Page,
+  dir: string,
+  needle: string,
+  timeout = 5_000
+): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          async ({ d, n }: { d: string; n: string }) => {
+            try {
+              const root = await navigator.storage.getDirectory();
+              const handle = await root.getDirectoryHandle(d);
+              const iter = (
+                handle as FileSystemDirectoryHandle & {
+                  entries: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+                }
+              ).entries();
+              for await (const [name, h] of iter) {
+                if (!name.endsWith('.json') || h.kind !== 'file') continue;
+                const file = await (h as FileSystemFileHandle).getFile();
+                const text = await file.text();
+                if (text.includes(n)) return true;
+              }
+              return false;
+            } catch {
+              return false;
+            }
+          },
+          { d: dir, n: needle }
+        ),
+      { timeout }
+    )
+    .toBe(true);
+}
+
 test('editor: insert image, set matrix, save publishes to /:slug', async ({ page }) => {
   await login(page);
 
@@ -515,9 +556,10 @@ test('editor: typed body persists across reload via OPFS draft', async ({ page }
     ed.commands.setContent(`<p>${text}</p>`);
   }, sentinel);
 
-  // Wait past the 500ms debounce + a small safety margin so the OPFS
-  // write completes before reload.
-  await page.waitForTimeout(900);
+  // Poll OPFS until the debounced flush has written the sentinel into
+  // drafts/<id>.json. Replaces waitForTimeout(900) which flakes on
+  // loaded CI runners.
+  await waitForOpfsContains(page, 'drafts', sentinel);
 
   // Reload re-mounts the SPA; startOfflineInfrastructure restores the
   // persisted draft into the editor before user interaction.
@@ -575,9 +617,13 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
   await page.locator('#rkr-image-rotate-r-btn').click();
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
   await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
-  // Wait past the 500ms draft-persist debounce so the figure insert
-  // + the persistImageState write both land in OPFS before reload.
-  await page.waitForTimeout(900);
+  // Poll until the draft persist (figure-insert update event flushed
+  // through the debounce) has the figure id in drafts/<id>.json AND
+  // the rotate op landed in image-state/<id>.json. The OPFS writer
+  // pretty-prints (`JSON.stringify(_, null, 2)`), so the needle has
+  // a space after the colon. Replaces a brittle waitForTimeout(900).
+  await waitForOpfsContains(page, 'drafts', id);
+  await waitForOpfsContains(page, 'image-state', '"type": "rotate"');
 
   // ---- reload + re-select the figure ----------------------------
   await page.goto('/admin/editor?e2e=1');

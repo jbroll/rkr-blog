@@ -162,11 +162,20 @@ async function onSyncNow(d: HTMLDialogElement): Promise<void> {
 
 async function onEvictCached(d: HTMLDialogElement): Promise<void> {
   /* v8 ignore start -- exercised by phase 3c e2e */
-  // Force every cached draft past the TTL by stamping lastAccessedAt
-  // into the distant past, then run eviction.
+  // Force every cached draft past the TTL, then run eviction. Skip
+  // drafts whose lock heartbeat is fresh (< 60s old): they're
+  // actively edited in another tab and runEviction would spare them
+  // anyway — but stamping their lastAccessedAt into 1970 would
+  // booby-trap the next mount when the lock has lapsed (TTL would
+  // immediately fire). Leave their lastAccessedAt alone; they're
+  // already not evict-eligible right now.
   const past = new Date(0).toISOString();
+  const lockGraceMs = 60_000;
+  const cutoff = Date.now() - lockGraceMs;
   for (const m of await collectMetas()) {
     if ((m.mode ?? 'cached') !== 'cached') continue;
+    const lock = await readJson<{ ts: number }>(`drafts/${m.draftId}.lock`);
+    if (lock && lock.ts > cutoff) continue;
     const file = `meta/${m.draftId}.json`;
     await writeJson(file, { ...m, lastAccessedAt: past });
   }

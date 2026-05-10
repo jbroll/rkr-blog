@@ -62,6 +62,9 @@ export function planEviction(input: EvictionInput): EvictionPlan {
   for (const m of input.metas) {
     const mode = m.mode ?? 'cached';
     const isLocked = m.lockTs !== null && m.lockTs > input.now - lockGraceMs;
+    // TTL boundary: lastAccessedAt strictly older than `cutoff` is
+    // stale. Equality (lastAccessedAt === cutoff) is NOT stale —
+    // grace-of-one-tick to favour the user.
     const isStale = Date.parse(m.lastAccessedAt) < cutoff;
     if (mode === 'cached' && isStale && !isLocked) {
       evictDrafts.push(m.draftId);
@@ -76,13 +79,22 @@ export function planEviction(input: EvictionInput): EvictionPlan {
     for (const id of m.refIds ?? []) referenced.add(id);
   }
 
-  const evictOriginals = input.originalsIds.filter((id) => !referenced.has(id));
-
-  // Image-state cleanup. An image-state file is evictable when no
-  // surviving draft references it (it's orphaned by a cached
-  // eviction, or it predates any draft). Keeping it would be a slow
-  // leak; the next ensureLocalState fetch from the server is cheap.
-  const evictImageStates = input.imageStateIds.filter((id) => !referenced.has(id));
+  // Bootstrap-safety: when there are NO surviving metas (fresh
+  // install, every cached draft just expired, or pre-pin first
+  // mount with stale leftovers from another session), `referenced`
+  // is empty and every original / image-state would otherwise look
+  // orphaned. Skip the orphan sweep in that case — the user might
+  // be about to pin a post, and yanking originals before they get
+  // a chance to mount the draft would force a re-fetch from the
+  // server. Originals only get reclaimed when at least one draft
+  // survives to vouch for the reference set.
+  const haveReferenceSet = surviving.length > 0;
+  const evictOriginals = haveReferenceSet
+    ? input.originalsIds.filter((id) => !referenced.has(id))
+    : [];
+  const evictImageStates = haveReferenceSet
+    ? input.imageStateIds.filter((id) => !referenced.has(id))
+    : [];
 
   return { evictDrafts, evictOriginals, evictImageStates };
 }

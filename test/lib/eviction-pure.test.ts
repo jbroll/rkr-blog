@@ -128,7 +128,12 @@ test('planEviction: shared originals across pinned + cached survive when both re
   assert.deepEqual(plan.evictOriginals, []);
 });
 
-test('planEviction: cached eviction releases its refIds (orphans bubble up to originals)', () => {
+test('planEviction: cached eviction with a surviving meta drops orphaned originals', () => {
+  // The previous "cached cascade" case is now split: orphan-cleanup
+  // requires at least one surviving meta to vouch for the reference
+  // set, so this test keeps a pinned draft alongside the evicted
+  // cached one. Without the pinned meta the bootstrap-safety branch
+  // (covered by the next test) keeps everything.
   const plan = planEviction({
     metas: [
       {
@@ -137,17 +142,38 @@ test('planEviction: cached eviction releases its refIds (orphans bubble up to or
         lastAccessedAt: new Date(NOW - 30 * DAY_MS).toISOString(),
         refIds: ['only-in-evicted'],
         lockTs: null
+      },
+      {
+        draftId: 'pinned',
+        mode: 'pinned',
+        lastAccessedAt: new Date(NOW).toISOString(),
+        refIds: ['kept-by-pinned'],
+        lockTs: null
       }
     ],
-    originalsIds: ['only-in-evicted'],
-    imageStateIds: ['only-in-evicted'],
+    originalsIds: ['only-in-evicted', 'kept-by-pinned'],
+    imageStateIds: ['only-in-evicted', 'kept-by-pinned'],
     now: NOW
   });
   assert.deepEqual(plan.evictDrafts, ['evicted']);
-  // Once the draft is gone, no surviving meta references the id, so
-  // the original drops from disk too.
   assert.deepEqual(plan.evictOriginals, ['only-in-evicted']);
   assert.deepEqual(plan.evictImageStates, ['only-in-evicted']);
+});
+
+test('planEviction: empty surviving metas → bootstrap-safety, originals untouched', () => {
+  // No drafts on disk yet (or every cached draft just expired, no
+  // pinned drafts). Without this guard the planner would treat ALL
+  // originals as orphans on first mount. The user might be about
+  // to pin — keep originals until at least one meta survives.
+  const plan = planEviction({
+    metas: [],
+    originalsIds: ['from-prior-session'],
+    imageStateIds: ['from-prior-session'],
+    now: NOW
+  });
+  assert.deepEqual(plan.evictDrafts, []);
+  assert.deepEqual(plan.evictOriginals, []);
+  assert.deepEqual(plan.evictImageStates, []);
 });
 
 test('planEviction: image-state cleanup scoped to surviving refs', () => {

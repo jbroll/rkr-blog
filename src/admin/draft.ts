@@ -108,12 +108,10 @@ export async function updateMeta(
  * @public */
 export function startDraftPersistence(editor: Editor, draftId: string): () => void {
   let pending: ReturnType<typeof setTimeout> | null = null;
-  let lastJson: unknown = null;
 
   const flush = async (): Promise<void> => {
     pending = null;
     const json = editor.getJSON();
-    lastJson = json;
     await writeJson(`${DRAFT_DIR}/${draftId}.json`, json);
     // Scan for figure-node ids so eviction (phase 3) knows which
     // originals/sidecars/image-state files this draft pins. Without
@@ -135,9 +133,17 @@ export function startDraftPersistence(editor: Editor, draftId: string): () => vo
   };
   editor.on('update', onUpdate);
 
-  // Heartbeat: rewrite the lock file every 30s. Eviction (phase 3)
-  // treats lock-file mtime > now-60s as "stale → reclaim-eligible".
-  const beat = (): Promise<void> => writeJson(`${DRAFT_DIR}/${draftId}.lock`, { ts: Date.now() });
+  // Heartbeat: rewrite the lock file every 30s + bump
+  // lastAccessedAt. Eviction (phase 3) treats lock ts < now-60s as
+  // stale; updating lastAccessedAt too means a torn lock-file read
+  // (OPFS readJson returns null for both ENOENT and parse errors)
+  // is shadowed by the freshness check on lastAccessedAt — a
+  // currently-edited draft survives even if its lock file is
+  // momentarily unreadable.
+  const beat = async (): Promise<void> => {
+    await writeJson(`${DRAFT_DIR}/${draftId}.lock`, { ts: Date.now() });
+    await updateMeta(draftId, { lastAccessedAt: new Date().toISOString() });
+  };
   void beat();
   const heartbeat = setInterval(() => {
     void beat();
@@ -153,7 +159,6 @@ export function startDraftPersistence(editor: Editor, draftId: string): () => vo
       void flush().catch(() => {});
     }
     editor.off('update', onUpdate);
-    void lastJson;
     /* v8 ignore stop */
   };
 }

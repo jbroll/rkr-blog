@@ -1,5 +1,10 @@
 // Outbox drain loop + multi-tab leader election.
 //
+// Module graph note: drainers.ts imports `Drainer` (type) and
+// `SavePostConflictError` (value) from this file; this file does
+// NOT import from drainers.ts. The arrow is one-way — no cycle. The
+// circular-import gauntlet check enforces this.
+//
 // Multi-tab coordination (spec-offline.md §5.1): exactly one tab is
 // the "leader" at a time, elected via the Web Locks API. The leader
 // holds the rkr-sync-leader lock and runs the drain loop. Non-
@@ -209,10 +214,12 @@ export function tryDrain(): Promise<void> {
    outbox state and exits via the early return below */
 async function drainLoop(): Promise<void> {
   // Drop superseded entries first so the kept set is the real
-  // queue and the count we publish is accurate.
-  for (const stale of await listSuperseded()) {
-    await outboxRemove(stale);
-  }
+  // queue and the count we publish is accurate. coalescePending
+  // partitions entries by seq into kept-or-dropped (never both), so
+  // these removes never touch a seq the drain still needs. Removes
+  // run in parallel — they're independent OPFS operations.
+  const superseded = await listSuperseded();
+  await Promise.all(superseded.map((stale) => outboxRemove(stale)));
 
   let remaining = (await outboxList()).length;
   publish({ kind: 'draining', remaining });

@@ -90,10 +90,16 @@ export async function pinPost(
     onProgress?.({ ...progress });
   }
 
-  // Create a fresh draftId for this pin. Bumping currentDraftId
-  // means the next mount restores THIS post. Keeps the single-
-  // draft-session model from phase 1h intact; phase 3 storage panel
-  // adds the multi-draft list.
+  // Parse the markdown FIRST, before any OPFS writes that bump
+  // `currentDraftId`. markdownToProse can throw on a malformed body;
+  // doing the write side-effects after the parse means a parse
+  // failure leaves the SPA's `currentDraftId` intact (it still
+  // points at whatever draft was active before pinPost was called).
+  // Otherwise a partial pin would orphan currentDraftId at a draft
+  // whose drafts/<id>.json was never written, and the next mount
+  // would silently restore the empty placeholder.
+  const doc = markdownToProse(manifest.markdown);
+
   const draftId = crypto.randomUUID();
   const root = await readRoot();
   /* v8 ignore next 3 -- ensureSchema runs at startup; missing root
@@ -101,13 +107,11 @@ export async function pinPost(
   if (!root) {
     throw new Error('pin: _root.json missing — ensureSchema not called?');
   }
-  await writeRoot({ ...root, currentDraftId: draftId });
-
-  // Serialize the parsed prose doc as drafts/<id>.json so the next
-  // mount restores the post body. updateMeta stamps slug +
-  // lastSyncedAt so handleSave's optimistic-concurrency header is
-  // accurate from the first edit.
-  const doc = markdownToProse(manifest.markdown);
+  // Order: write the draft body + meta first, then flip
+  // currentDraftId. A crash between writeJson + updateMeta + writeRoot
+  // leaves either nothing pointing at the new draft (no harm) or a
+  // complete draft + meta with currentDraftId still on the prior
+  // draft (orphan we'll clean up via eviction).
   await writeJson(`drafts/${draftId}.json`, doc);
   await updateMeta(draftId, {
     slug: manifest.slug,
@@ -115,6 +119,7 @@ export async function pinPost(
     mode: 'pinned',
     refIds: manifest.sidecars.map((s) => s.id)
   });
+  await writeRoot({ ...root, currentDraftId: draftId });
 
   return { draftId, manifest, progress };
 }

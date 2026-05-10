@@ -126,8 +126,8 @@
       "linesHit": 1
     },
     "src/admin/draft.ts": {
-      "linesFound": 40,
-      "linesHit": 39
+      "linesFound": 41,
+      "linesHit": 40
     },
     "src/admin/status-badge.ts": {
       "linesFound": 19,
@@ -135,7 +135,7 @@
     },
     "src/admin/pin.ts": {
       "linesFound": 21,
-      "linesHit": 19
+      "linesHit": 18
     },
     "src/admin/eviction.ts": {
       "linesFound": 32,
@@ -147,7 +147,7 @@
     },
     "src/admin/storage-panel.ts": {
       "linesFound": 41,
-      "linesHit": 36
+      "linesHit": 38
     }
   }
 }
