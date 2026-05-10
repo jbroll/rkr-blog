@@ -31,11 +31,15 @@ export interface EvictionInput {
 }
 
 const DEFAULT_TTL_DAYS = 7;
-const DEFAULT_LOCK_GRACE_MS = 60_000;
+/** Heartbeat freshness window. A lock newer than now-LOCK_GRACE_MS
+ * blocks eviction. Must stay >= 2 × draft.ts:HEARTBEAT_MS so a
+ * single missed beat doesn't booby-trap a live draft.
+ * @public */
+export const LOCK_GRACE_MS = 60_000;
 
 export function planEviction(input: EvictionInput): EvictionPlan {
   const ttlDays = input.ttlDays ?? DEFAULT_TTL_DAYS;
-  const lockGraceMs = input.lockGraceMs ?? DEFAULT_LOCK_GRACE_MS;
+  const lockGraceMs = input.lockGraceMs ?? LOCK_GRACE_MS;
   const cutoff = input.now - ttlDays * 24 * 60 * 60 * 1000;
 
   const evictDrafts: string[] = [];
@@ -57,14 +61,14 @@ export function planEviction(input: EvictionInput): EvictionPlan {
     for (const id of m.refIds ?? []) referenced.add(id);
   }
 
-  // Bootstrap-safety: with no surviving metas, every original looks
-  // orphaned. The user might be about to pin — keep originals until
-  // at least one meta vouches for the reference set.
-  const haveReferenceSet = surviving.length > 0;
-  const evictOriginals = haveReferenceSet
-    ? input.originalsIds.filter((id) => !referenced.has(id))
-    : [];
-  const evictImageStates = haveReferenceSet
+  // Bootstrap-safety: with NO metas at all (fresh install, never
+  // pinned), every original looks orphaned. Keep them until at
+  // least one meta exists. When metas exist but all happened to
+  // expire this round, orphan-cleanup IS desired — the user's
+  // drafts are gone, the originals they referenced should follow.
+  const haveAnyMetas = input.metas.length > 0;
+  const evictOriginals = haveAnyMetas ? input.originalsIds.filter((id) => !referenced.has(id)) : [];
+  const evictImageStates = haveAnyMetas
     ? input.imageStateIds.filter((id) => !referenced.has(id))
     : [];
 

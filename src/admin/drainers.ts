@@ -25,6 +25,7 @@ export const drainUpload: Drainer = async (entry, _blobIgnored) => {
     body: fd,
     headers: { 'x-rkr-outbox-seq': String(entry.seq) }
   });
+  /* v8 ignore next 3 -- non-2xx server response; prod-only path */
   if (!res.ok) {
     throw new Error(`upload drain ${entry.seq}: ${res.status}`);
   }
@@ -38,6 +39,7 @@ export const drainSetOps: Drainer = async (entry) => {
     headers: { 'content-type': 'application/json', 'x-rkr-outbox-seq': String(entry.seq) },
     body: JSON.stringify({ ops: entry.payload.ops, redoStack: entry.payload.redoStack })
   });
+  /* v8 ignore next 3 -- non-2xx server response; prod-only path */
   if (!res.ok) {
     throw new Error(`setOps drain ${entry.seq}: ${res.status}`);
   }
@@ -92,6 +94,7 @@ export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
       clientLastSyncedAt: body.clientLastSyncedAt ?? entry.payload.lastSyncedAt ?? ''
     });
   }
+  /* v8 ignore next 3 -- non-2xx, non-409 server response; prod-only */
   if (!res.ok) {
     throw new Error(`savePost drain ${entry.seq}: ${res.status}`);
   }

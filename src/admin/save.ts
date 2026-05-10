@@ -70,7 +70,9 @@ export async function handleSave(editor: Editor): Promise<void> {
       setStatus(`saved /${result.slug}`);
       return;
     } catch {
-      /* fall through to outbox queue */
+      // Fall through to the outbox queue. A 409 conflict on the
+      // online attempt also lands here; drainSavePost will hit the
+      // same 409 on drain and surface it via DrainStatus 'conflict'.
     }
   }
   await queueSavePost(payload);

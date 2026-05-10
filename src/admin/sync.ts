@@ -143,7 +143,11 @@ export async function forceConflictedSave(): Promise<void> {
 }
 
 /** Acquire the leader lock and run the drain. No-op when another
- * tab holds the lock — that tab is the leader. */
+ * tab holds the lock — that tab is the leader. Caveat: a tab
+ * frozen mid-drainLoop releases the Web Lock at the OS level even
+ * though its JS may still be running; another tab can pick up the
+ * drain in parallel for a few seconds. Safe — outboxRemove is
+ * idempotent and the drainers themselves are safe to repeat. */
 export function tryDrain(): Promise<void> {
   /* v8 ignore next 3 -- Web Locks is universal where OPFS is */
   if (typeof navigator === 'undefined' || !navigator.locks) {

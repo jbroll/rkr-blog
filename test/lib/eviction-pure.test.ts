@@ -160,11 +160,39 @@ test('planEviction: cached eviction with a surviving meta drops orphaned origina
   assert.deepEqual(plan.evictImageStates, ['only-in-evicted']);
 });
 
-test('planEviction: empty surviving metas → bootstrap-safety, originals untouched', () => {
-  // No drafts on disk yet (or every cached draft just expired, no
-  // pinned drafts). Without this guard the planner would treat ALL
-  // originals as orphans on first mount. The user might be about
-  // to pin — keep originals until at least one meta survives.
+test('planEviction: cascade — every meta cached + stale → drafts evicted AND their orphaned originals reclaimed', () => {
+  // Earlier gate was `surviving.length > 0`, which over-protected
+  // this case (drafts gone, originals leaked forever). Now the gate
+  // is `metas.length > 0` so the orphan sweep still runs.
+  const plan = planEviction({
+    metas: [
+      {
+        draftId: 'a',
+        mode: 'cached',
+        lastAccessedAt: new Date(NOW - 30 * DAY_MS).toISOString(),
+        refIds: ['only-in-a'],
+        lockTs: null
+      },
+      {
+        draftId: 'b',
+        mode: 'cached',
+        lastAccessedAt: new Date(NOW - 30 * DAY_MS).toISOString(),
+        refIds: ['only-in-b'],
+        lockTs: null
+      }
+    ],
+    originalsIds: ['only-in-a', 'only-in-b'],
+    imageStateIds: ['only-in-a', 'only-in-b'],
+    now: NOW
+  });
+  assert.deepEqual(plan.evictDrafts.sort(), ['a', 'b']);
+  assert.deepEqual(plan.evictOriginals.sort(), ['only-in-a', 'only-in-b']);
+  assert.deepEqual(plan.evictImageStates.sort(), ['only-in-a', 'only-in-b']);
+});
+
+test('planEviction: empty metas → true bootstrap, originals untouched', () => {
+  // First mount with no drafts at all: the user might be about to
+  // pin. Keep originals until at least one meta exists.
   const plan = planEviction({
     metas: [],
     originalsIds: ['from-prior-session'],

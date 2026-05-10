@@ -82,16 +82,16 @@
       "linesHit": 24
     },
     "src/admin/startup.ts": {
-      "linesFound": 14,
-      "linesHit": 13
+      "linesFound": 17,
+      "linesHit": 14
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
       "linesHit": 1
     },
     "src/admin/drainers.ts": {
-      "linesFound": 27,
-      "linesHit": 21
+      "linesFound": 20,
+      "linesHit": 19
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -126,8 +126,8 @@
       "linesHit": 1
     },
     "src/admin/draft.ts": {
-      "linesFound": 41,
-      "linesHit": 40
+      "linesFound": 44,
+      "linesHit": 42
     },
     "src/admin/status-badge.ts": {
       "linesFound": 19,
@@ -138,8 +138,8 @@
       "linesHit": 18
     },
     "src/admin/eviction.ts": {
-      "linesFound": 32,
-      "linesHit": 31
+      "linesFound": 31,
+      "linesHit": 30
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,

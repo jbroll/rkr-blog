@@ -1,5 +1,6 @@
 // Storage panel (spec-offline §8). Opened by the status badge.
 
+import { LOCK_GRACE_MS } from '../lib/eviction-pure.ts';
 import { setStatus } from './dom.ts';
 import { runEviction } from './eviction.ts';
 import { listDir, readJson, writeJson } from './opfs.ts';
@@ -142,7 +143,7 @@ async function onEvictCached(d: HTMLDialogElement): Promise<void> {
   // Skip fresh-locked drafts: stamping their lastAccessedAt into
   // 1970 would booby-trap the next mount once the lock lapses.
   const past = new Date(0).toISOString();
-  const cutoff = Date.now() - 60_000;
+  const cutoff = Date.now() - LOCK_GRACE_MS;
   for (const m of await collectMetas()) {
     if ((m.mode ?? 'cached') !== 'cached') continue;
     const lock = await readJson<{ ts: number }>(`drafts/${m.draftId}.lock`);

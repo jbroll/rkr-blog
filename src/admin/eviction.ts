@@ -53,10 +53,17 @@ async function collectMetas(): Promise<MetaSnapshot[]> {
   for (const fname of await listDir(META_DIR)) {
     // _root.json lives in meta/ too; it's not a draft meta.
     if (!fname.endsWith('.json') || fname === '_root.json') continue;
+    // Read lock BEFORE meta. The eviction planner survives a draft
+    // when EITHER signal is fresh; reading the lock first means a
+    // concurrent heartbeat (lock then meta) gives us at-worst a
+    // pre-heartbeat lock paired with a post-heartbeat meta — both
+    // freshness signals, neither ever older than the other read's
+    // timestamp.
+    const draftId = fname.slice(0, -'.json'.length);
+    const lock = await readJson<{ ts: number }>(`${DRAFTS_DIR}/${draftId}.lock`);
     const m = await readJson<PersistedMeta>(`${META_DIR}/${fname}`);
     /* v8 ignore next -- malformed-on-disk path */
     if (!m) continue;
-    const lock = await readJson<{ ts: number }>(`${DRAFTS_DIR}/${m.draftId}.lock`);
     out.push({
       draftId: m.draftId,
       mode: m.mode,

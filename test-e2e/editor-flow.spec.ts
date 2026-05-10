@@ -619,11 +619,13 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
   await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
   // Poll until the draft persist (figure-insert update event flushed
   // through the debounce) has the figure id in drafts/<id>.json AND
-  // the rotate op landed in image-state/<id>.json. The OPFS writer
-  // pretty-prints (`JSON.stringify(_, null, 2)`), so the needle has
-  // a space after the colon. Replaces a brittle waitForTimeout(900).
+  // the rotate op landed in image-state/<id>.json. The bare op-name
+  // substring is shape-agnostic (matches both `"type":"rotate"` and
+  // `"type": "rotate"` regardless of how opfs writeJson formats),
+  // and image-state's initial persist after upload has empty ops, so
+  // matching `rotate` proves the post-click persist completed.
   await waitForOpfsContains(page, 'drafts', id);
-  await waitForOpfsContains(page, 'image-state', '"type": "rotate"');
+  await waitForOpfsContains(page, 'image-state', 'rotate');
 
   // ---- reload + re-select the figure ----------------------------
   await page.goto('/admin/editor?e2e=1');
@@ -801,9 +803,10 @@ test('editor: pin existing post → offline edit → reconnect drains', async ({
   });
   expect(seed.status()).toBe(200);
 
-  // Clear the SPA's currentDraftId + drafts/ + meta/ so __rkrPin
-  // installs the post into a fresh OPFS slot. Without this, prior
-  // tests' state collides.
+  // Clear drafts/ + meta/ so __rkrPin installs into a fresh OPFS
+  // slot. removeEntry recursive:true takes meta/_root.json with it;
+  // the page.goto below re-runs ensureSchema, which re-creates a
+  // fresh _root.json (status: 'fresh') with no currentDraftId.
   await page.evaluate(async () => {
     const opfs = await navigator.storage.getDirectory();
     for (const dir of ['drafts', 'meta']) {
@@ -931,4 +934,54 @@ test('editor: storage panel shows usage + sync-now + evict-all', async ({ page, 
   // but the click path exercises onEvictCached + the re-render.
   await page.locator('#rkr-storage-evict-cached').click();
   await expect(panel).toBeVisible();
+});
+
+// outbox.append is read-modify-write on _root.json#nextSeq. Without
+// the rkr-outbox-append Web Lock, parallel callers can collide on
+// the same seq. This spec fires N appends via Promise.all and
+// asserts the resulting entries have N distinct seqs.
+test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Clear the outbox so prior tests' entries don't pollute the count.
+  await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    for (const dir of ['outbox', 'outbox-blobs']) {
+      try {
+        await opfs.removeEntry(dir, { recursive: true });
+      } catch {
+        /* absent */
+      }
+    }
+  });
+
+  const n = 8;
+  const seqs = await page.evaluate(async (count) => {
+    type AppendFn = (entry: {
+      op: 'savePost';
+      payload: { slug: string; title: string; status: 'draft'; markdown: string };
+    }) => Promise<number>;
+    const append = (window as unknown as { __rkrOutboxAppend: AppendFn }).__rkrOutboxAppend;
+    return Promise.all(
+      Array.from({ length: count }, (_, i) =>
+        append({
+          op: 'savePost',
+          payload: {
+            slug: `e2e-race-${i}`,
+            title: `race ${i}`,
+            status: 'draft',
+            markdown: `body ${i}\n`
+          }
+        })
+      )
+    );
+  }, n);
+
+  expect(seqs).toHaveLength(n);
+  expect(new Set(seqs).size).toBe(n);
 });

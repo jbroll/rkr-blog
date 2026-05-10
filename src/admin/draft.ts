@@ -4,12 +4,18 @@
 
 import type { Editor } from '@tiptap/core';
 
+import { LOCK_GRACE_MS } from '../lib/eviction-pure.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
 import { readRoot, writeRoot } from './opfs-schema.ts';
 
 const DRAFT_DIR = 'drafts';
 const META_DIR = 'meta';
+// Eviction's lock-grace must accommodate at least one missed beat
+// or a live draft with a stale lock would be reclaimed.
 const HEARTBEAT_MS = 30_000;
+if (HEARTBEAT_MS * 2 > LOCK_GRACE_MS) {
+  throw new Error(`draft: HEARTBEAT_MS (${HEARTBEAT_MS}) * 2 > LOCK_GRACE_MS (${LOCK_GRACE_MS})`);
+}
 const DEBOUNCE_MS = 500;
 
 interface DraftMeta {
@@ -94,13 +100,16 @@ export function startDraftPersistence(editor: Editor, draftId: string): () => vo
   // Heartbeat bumps lastAccessedAt as well as the lock file: OPFS
   // readJson can't distinguish ENOENT from parse error, so a torn
   // lock read could otherwise treat a live draft as unlocked.
+  // Errors are swallowed with .catch — a transient OPFS error (quota,
+  // I/O glitch) should not surface as an unhandled-rejection from
+  // the interval timer.
   const beat = async (): Promise<void> => {
     await writeJson(`${DRAFT_DIR}/${draftId}.lock`, { ts: Date.now() });
     await updateMeta(draftId, { lastAccessedAt: new Date().toISOString() });
   };
-  void beat();
+  void beat().catch(() => {});
   const heartbeat = setInterval(() => {
-    void beat();
+    void beat().catch(() => {});
   }, HEARTBEAT_MS);
 
   return () => {
