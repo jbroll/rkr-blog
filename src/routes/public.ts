@@ -41,11 +41,12 @@ import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { enqueue } from '../lib/jobs.ts';
+import { enqueue, noteLiveRender } from '../lib/jobs.ts';
 import {
   type DerivativeArgs,
   type Op,
   type OutputFormat,
+  type RenderResult,
   renderDerivative
 } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
@@ -80,6 +81,13 @@ export default async function publicRoutes(
 ): Promise<void> {
   const { siteRoot, db, renderBudgetMs = 30_000 } = opts;
   const site = opts.site ?? siteConfig();
+
+  // Render dedup: concurrent /img requests for the same filename
+  // share one renderDerivative promise instead of starting parallel
+  // sharp pipelines. Halves CPU on bursts where a browser kicks off
+  // many parallel image fetches for the same variant URL (or two
+  // browsers hit the same article at the same time).
+  const inflightRenders = new Map<string, Promise<RenderResult>>();
 
   const widgets = new WidgetRegistry();
   // ::figure is the only image widget (spec.md §9 unification).
@@ -150,11 +158,14 @@ export default async function publicRoutes(
   fastify.get<{ Params: { filename: string } }>(
     '/img/:filename',
     {
-      // Anti-DoS: cap derivative renders per IP. Apache serves cache hits
-      // directly (implementation.md §7), so this only bites on cache-miss requests
-      // hitting Fastify — exactly the expensive path. 120 req/min/IP is
-      // very generous for normal browsing; abusive bursts get 429.
-      config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+      // Anti-DoS: cap derivative renders per IP. Apache serves cache
+      // hits directly (implementation.md §7), so this only bites on
+      // cache-miss requests hitting Fastify. A long article can have
+      // 30+ images and the client now retries indefinitely with up
+      // to 10s spacing, so a single user can sustain ~30 + ~6/min/img
+      // requests easily. 600/min/IP keeps abuse-bursts at 429 while
+      // accommodating a real reader on a slow render queue.
+      config: { rateLimit: { max: 600, timeWindow: '1 minute' } }
     },
     async (req, reply) => {
       const { filename } = req.params;
@@ -181,7 +192,22 @@ export default async function publicRoutes(
         siteRoot
       };
 
-      const renderPromise = renderDerivative(args);
+      // Dedup: if a render for this filename is already in flight,
+      // await the same promise. The map entry is cleared on settle
+      // so the next cache-miss request re-enters renderDerivative
+      // (which itself short-circuits on cache hit). The live-render
+      // gauge is bumped only by the originating request — duplicate
+      // awaiters share the same pause without double-counting.
+      let renderPromise = inflightRenders.get(filename);
+      if (!renderPromise) {
+        noteLiveRender(1);
+        renderPromise = renderDerivative(args).finally(() => {
+          inflightRenders.delete(filename);
+          noteLiveRender(-1);
+        });
+        inflightRenders.set(filename, renderPromise);
+      }
+
       let timer: NodeJS.Timeout | undefined;
       const timeoutPromise = new Promise<'timeout'>((resolve) => {
         timer = setTimeout(() => resolve('timeout'), renderBudgetMs);
@@ -198,10 +224,11 @@ export default async function publicRoutes(
       if (timer) clearTimeout(timer);
 
       if (result === 'timeout') {
+        // The in-flight renderPromise stays alive in inflightRenders;
+        // the next requester will await the same promise and serve
+        // from the cache once it lands. Enqueue too so a background
+        // worker can finish if every requester gives up first.
         enqueue(db, { kind: 'render', payload: args, cacheKey: ophash });
-        renderPromise.catch((err: unknown) => {
-          req.log.warn({ err, filename }, 'background render error');
-        });
         return reply.code(202).send({ status: 'rendering' });
       }
 

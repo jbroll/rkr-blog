@@ -8,6 +8,7 @@
 //   site-admin gc
 //   site-admin verify
 //   site-admin server [--port 3000]
+//   site-admin jobs failed
 //
 // Future subcommands (see spec.md §12 operator commands): reindex, import, password.
 
@@ -21,6 +22,7 @@ const COMMANDS = {
   reset:             () => import('../src/cli/reset.ts'),
   user:              () => import('../src/cli/user.ts'),
   server:            () => import('../src/cli/server.ts'),
+  jobs:              () => import('../src/cli/jobs.ts'),
   'import-wp':       () => import('../src/cli/import-wp.ts')
 };
 

@@ -177,7 +177,7 @@ export function renderPicture(args: PictureArgs): string {
   const pictureBlock = [
     '<picture>',
     ...sources,
-    `<img src="${fbUrl}" alt="${alt}" loading="${loading}"/>`,
+    `<img src="${fbUrl}" alt="${alt}" loading="${loading}" decoding="async"/>`,
     '</picture>'
   ].join('\n');
 

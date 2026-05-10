@@ -19,12 +19,14 @@ import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
+import type { Db } from '../lib/db.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
+import { prewarmVariants } from './admin-prewarm.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +50,10 @@ export interface AdminRoutesOpts {
   requireAuth?: boolean;
   /** Override the URL-import fetcher (default: SSRF-safe via lib/url-safety). */
   urlFetcher?: UrlFetcher;
+  /** Jobs DB. When provided, /admin/posts pre-warms variant renders
+   * by enqueueing render jobs for every image referenced by the new
+   * post — first public reader gets cache hits. */
+  db?: Db;
 }
 
 export default async function adminRoutes(
@@ -210,6 +216,17 @@ export default async function adminRoutes(
     await fs.promises.writeFile(finalPath, file, 'utf8');
 
     runReindex(siteRoot);
+
+    // Pre-warm: enqueue render jobs for every (variant × output)
+    // combo each image in the post body declares. The job-queue
+    // dedups by cache_key so re-saves don't pile up. With worker
+    // concurrency = 1 the renders trickle through in the
+    // background without saturating CPU.
+    if (opts.db) {
+      void prewarmVariants(opts.db, siteRoot, markdown).catch((err: unknown) => {
+        request.log.warn({ err, slug }, 'pre-warm enqueue failed');
+      });
+    }
 
     // Echo the server's updated_at (the file mtime) so the client
     // can stamp meta.lastSyncedAt for the next save's conflict

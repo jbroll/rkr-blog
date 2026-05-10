@@ -22,6 +22,26 @@ export const events = new EventEmitter();
 
 const POLL_INTERVAL_MS = 250;
 
+// Live-render gauge. Live /img requests render inline in the
+// request handler; while any are in flight, the worker pauses
+// pre-warm jobs so the two don't contend for libvips threads.
+// Pre-warm is opportunistic — it only runs when the box is idle.
+let liveInflight = 0;
+
+/** Increment / decrement the live-render gauge. publicRoutes wraps
+ * its inline renderDerivative calls; the worker checks this before
+ * claiming a job.
+ * @public */
+export function noteLiveRender(delta: 1 | -1): void {
+  liveInflight = Math.max(0, liveInflight + delta);
+  if (liveInflight === 0) events.emit('enqueued', { id: -1, kind: 'render' });
+}
+
+/** @public */
+export function liveRendersInFlight(): boolean {
+  return liveInflight > 0;
+}
+
 type JobKind = 'render';
 
 export interface RenderPayload extends DerivativeArgs {}
@@ -213,8 +233,10 @@ export function workQueue({
 
   async function loop(): Promise<void> {
     while (!stopped) {
-      // Fill up to concurrency.
-      while (!stopped && inflight < concurrency) {
+      // Pause pre-warm while live requests are rendering — they
+      // share libvips threads. The wake() emitted by noteLiveRender
+      // when the gauge hits 0 unblocks us promptly.
+      while (!stopped && inflight < concurrency && !liveRendersInFlight()) {
         const job = claim(db);
         if (!job) break;
         // Fire-and-forget; tracked by inflight.

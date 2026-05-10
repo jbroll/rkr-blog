@@ -148,6 +148,22 @@
     "src/admin/storage-panel.ts": {
       "linesFound": 41,
       "linesHit": 38
+    },
+    "src/site/carousel.ts": {
+      "linesFound": 43,
+      "linesHit": 4
+    },
+    "src/site/img-retry.ts": {
+      "linesFound": 33,
+      "linesHit": 9
+    },
+    "src/site/lightbox.ts": {
+      "linesFound": 11,
+      "linesHit": 5
+    },
+    "src/site/sw-register.ts": {
+      "linesFound": 2,
+      "linesHit": 2
     }
   }
 }

@@ -5,6 +5,13 @@ import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import Fastify from 'fastify';
+import sharp from 'sharp';
+
+// Cap libvips threads per render: a single sharp call can otherwise
+// peg every core. Combined with worker concurrency=1 below, this
+// caps total render CPU at ~1 core, leaving room for live serving.
+sharp.concurrency(1);
+
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
 import { paths, serverConfig } from './lib/config.ts';
@@ -181,6 +188,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     siteRoot,
     ...(opts.adminBundleDir !== undefined ? { adminBundleDir: opts.adminBundleDir } : {}),
     ...(opts.urlFetcher ? { urlFetcher: opts.urlFetcher } : {}),
+    ...(opts.db ? { db: opts.db } : {}),
     requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
   });
 
@@ -192,9 +200,15 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     });
 
     if (opts.startWorker !== false) {
+      // Concurrency = 1: one render at a time leaves CPU headroom
+      // for live request handlers + Fastify itself. Pre-warm
+      // (enqueued by /admin/posts on save) trickles through the
+      // queue at a single image per slot rather than swamping the
+      // single-machine deployment.
       const ctrl = workQueue({
         db: opts.db,
-        ctx: { siteRoot }
+        ctx: { siteRoot },
+        concurrency: 1
       });
       app.addHook('onClose', async () => {
         await ctrl.stop();
