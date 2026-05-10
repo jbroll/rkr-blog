@@ -823,3 +823,66 @@ test('editor: pin existing post → offline edit → reconnect drains', async ({
     )
     .toBe(true);
 });
+
+// Storage panel + eviction (phase 3). Open the panel, verify it
+// reflects the current OPFS state (pinned post from a prior pin,
+// pending queue, schema version), then exercise the "Sync now" and
+// "Evict all cached" buttons.
+test('editor: storage panel shows usage + sync-now + evict-all', async ({ page, context }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Seed an offline savePost so the pending list is non-empty when
+  // the panel opens. Stays queued until "Sync now" drains it.
+  const slug = `e2e-panel-${Date.now()}`;
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await page.locator('#rkr-title').fill('e2e panel');
+  await page.locator('#rkr-slug').fill(slug);
+  await page.locator('#rkr-status').selectOption('published');
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>panel body</p>');
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`queued /${slug} for sync`, {
+    timeout: 10_000
+  });
+
+  // Open the panel via the e2e hook (the badge click fires the same
+  // openStoragePanel; the hook lets us drive it without focusing).
+  await page.evaluate(async () =>
+    (window as unknown as { __rkrPanel: () => Promise<void> }).__rkrPanel()
+  );
+  const panel = page.locator('#rkr-storage-panel');
+  await expect(panel).toBeVisible();
+  // Schema version is rendered.
+  await expect(panel.locator('#rkr-storage-schema')).toContainText(/^schema v\d+$/);
+  // Pending queue has at least our queued savePost.
+  await expect(panel.locator('#rkr-storage-pending li')).not.toHaveCount(0);
+
+  // "Sync now" drains: go online first, then click. Drainer posts
+  // /admin/posts; pending list re-renders empty.
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.locator('#rkr-storage-sync-now').click();
+  await expect
+    .poll(
+      async () =>
+        Number(await panel.locator('#rkr-storage-pending .rkr-storage-empty').count()) === 1,
+      { timeout: 10_000 }
+    )
+    .toBe(true);
+
+  // "Evict all cached" stamps every cached meta into the past and
+  // runs eviction. With everything pinned this is mostly a no-op,
+  // but the click path exercises onEvictCached + the re-render.
+  await page.locator('#rkr-storage-evict-cached').click();
+  await expect(panel).toBeVisible();
+});

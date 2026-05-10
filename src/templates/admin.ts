@@ -94,6 +94,20 @@ export function renderAdminPage(data: AdminPageData): string {
   .rkr-sync-dot.is-offline { background: #cf222e; }
   .rkr-sync-dot.is-verifying { background: #d4a72c; }
   .rkr-sync-dot.is-conflict { background: #cf222e; box-shadow: 0 0 0 2px color-mix(in srgb, #cf222e 30%, transparent); }
+  /* Storage panel dialog (spec-offline §8). Opens from the badge
+     click; renders pinned/cached/pending lists + sync-now + evict-
+     all. */
+  #rkr-storage-panel { padding: 1rem; min-width: 24rem; max-width: 32rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
+  #rkr-storage-panel h2 { margin: 0 0 .5rem 0; }
+  #rkr-storage-panel h3 { margin: .75rem 0 .25rem 0; font-size: 1rem; }
+  #rkr-storage-panel ul { list-style: none; padding: 0; margin: 0; }
+  #rkr-storage-panel li { display: flex; gap: .5rem; align-items: center; padding: .15rem 0; }
+  #rkr-storage-panel .rkr-storage-slug { flex: 1; font-family: monospace; }
+  #rkr-storage-panel .rkr-storage-when { color: var(--rkr-muted); font-size: .85rem; }
+  #rkr-storage-panel .rkr-storage-empty { color: var(--rkr-muted); font-style: italic; }
+  #rkr-storage-panel .rkr-storage-actions { margin-top: 1rem; display: flex; gap: .5rem; }
+  #rkr-storage-close { float: right; background: none; border: none; font-size: 1.5rem; cursor: pointer; }
+  #rkr-storage-schema { color: var(--rkr-muted); font-size: .8rem; margin-top: 1rem; text-align: right; }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
   /* Figure attribute panel: shown only when a figure node is selected.

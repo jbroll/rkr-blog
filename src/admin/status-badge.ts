@@ -10,9 +10,10 @@
 // phase 3 wires the real panel (pinned/cached lists, sync-now,
 // evict-all per spec-offline §8 storage panel contract).
 
-import { $, setStatus } from './dom.ts';
+import { $ } from './dom.ts';
 import type { OnlineState } from './online-state.ts';
 import { getState as getOnlineState, onChange as onOnlineChange } from './online-state.ts';
+import { openStoragePanel } from './storage-panel.ts';
 import type { DrainStatus } from './sync.ts';
 import { getStatus as getDrainStatus, onStatus as onDrainStatus } from './sync.ts';
 
@@ -42,7 +43,7 @@ export function mountStatusBadge(): void {
     render();
   });
 
-  badge.addEventListener('click', openStoragePanel);
+  badge.addEventListener('click', () => void openStoragePanel());
 }
 
 function render(): void {
@@ -73,15 +74,3 @@ function render(): void {
   dot.className = `rkr-sync-dot is-${onlineState}`;
   text.textContent = onlineState;
 }
-
-/** Placeholder click handler. Phase 3 replaces this with the real
- * storage panel (pinned/cached lists + sync-now + evict-all). For
- * phase 1j we surface a status-line breadcrumb so the click is at
- * least observable in e2e — the user-facing message is intentionally
- * minimal. */
-/* v8 ignore start -- placeholder UI; the click handler is exercised
-   only when phase 3 lands the real panel */
-function openStoragePanel(): void {
-  setStatus('storage panel coming in phase 3');
-}
-/* v8 ignore stop */

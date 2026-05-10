@@ -130,7 +130,7 @@
       "linesHit": 39
     },
     "src/admin/status-badge.ts": {
-      "linesFound": 18,
+      "linesFound": 19,
       "linesHit": 18
     },
     "src/admin/pin.ts": {
@@ -144,6 +144,10 @@
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
       "linesHit": 10
+    },
+    "src/admin/storage-panel.ts": {
+      "linesFound": 41,
+      "linesHit": 36
     }
   }
 }

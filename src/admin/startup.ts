@@ -25,6 +25,7 @@ import { ensureSchema } from './opfs-schema.ts';
 import { pendingCount } from './outbox.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
+import { openStoragePanel } from './storage-panel.ts';
 import {
   discardConflictedSave,
   forceConflictedSave,
@@ -45,7 +46,8 @@ export async function startOfflineInfrastructure(editor: Editor): Promise<void> 
       __rkrOfflineReady: ready,
       __rkrDiscardConflict: discardConflictedSave,
       __rkrForceConflict: forceConflictedSave,
-      __rkrPin: pinPost
+      __rkrPin: pinPost,
+      __rkrPanel: openStoragePanel
     });
   }
   await ready;
