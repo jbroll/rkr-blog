@@ -24,6 +24,7 @@ import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
+import { registerPostBundleRoutes } from './admin-post-bundle.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -97,6 +98,7 @@ export default async function adminRoutes(
   });
 
   registerSidecarEditRoutes(fastify, { siteRoot, guard });
+  registerPostBundleRoutes(fastify, { siteRoot, guard });
 
   fastify.post<{
     Body: {
