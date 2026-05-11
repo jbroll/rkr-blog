@@ -157,8 +157,10 @@ test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', as
   assert.match(list.body, /WIP/);
   assert.match(list.body, /is-draft/);
   assert.match(list.body, /is-published/);
-  // edit links + delete forms are rendered for each row
-  assert.match(list.body, /\/admin\/editor\?slug=hello/);
+  // Title links to the public post view (the admin strip's
+  // "Edit this post" is the editor entry point); delete is a form
+  // POST so the CSRF / Origin guard fires.
+  assert.match(list.body, /<a href="\/hello">Hello<\/a>/);
   assert.match(list.body, /action="\/admin\/posts\/wip\/delete"/);
 
   // Delete one post → 303 back to the listing, file gone.

@@ -24,10 +24,11 @@ test('renderAdminPostsPage: rows show title, status select, pin + delete', () =>
   // Pin button is rendered disabled; the posts-list bundle enables
   // it after reading OPFS pin state.
   assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled>pin<\/button>/);
-  // Title is the "open in editor" affordance — no separate edit
-  // button. Click-through routes into the editor with the slug
-  // pre-populated.
-  assert.match(html, /<a href="\/admin\/editor\?slug=hello">Hello<\/a>/);
+  // Title routes to the public post view. The admin strip on that
+  // page carries the "Edit this post" link — the natural "read,
+  // then edit" workflow — so a posts-list click doesn't bypass the
+  // view step.
+  assert.match(html, /<a href="\/hello">Hello<\/a>/);
   // Delete is a form POST so the CSRF / Origin guard catches it.
   assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
   assert.match(html, /method="post"/);

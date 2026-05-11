@@ -62,13 +62,14 @@ function renderRow(p: AdminPostRow): string {
   // for a smoother flow.
   const date = p.updatedAt.slice(0, 10);
   const slugUri = encodeURIComponent(p.slug);
-  // The title link IS the "open in editor" gesture — no separate edit
-  // button. Public preview is one click via the save flow's `view →`
-  // permalink, so the posts list stays focused on management. Each
-  // action gets its own column so the status / pin / delete controls
-  // align vertically across rows like a real table.
+  // The title link routes to the public post view, not the editor.
+  // From a viewing post the authed user has a one-click "Edit this
+  // post" in the admin strip's header — that's the editor entry
+  // point, and it preserves the natural "read first, then edit"
+  // workflow. Each action gets its own column so the status / pin /
+  // delete controls align vertically across rows like a real table.
   return `  <tr data-slug="${escapeAttr(p.slug)}">
-    <td><a href="/admin/editor?slug=${slugUri}">${escapeText(p.title)}</a></td>
+    <td><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></td>
     <td><time datetime="${escapeAttr(p.updatedAt)}">${escapeText(date)}</time></td>
     <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
