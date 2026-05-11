@@ -9,6 +9,8 @@ import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from '
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { adminTokenMatchesEnv } from '../lib/admin-token.ts';
+import { siteConfig } from '../lib/config.ts';
+import { escapeText } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import {
   type GoogleIdPayload,
@@ -23,6 +25,7 @@ import {
   NotInvitedError,
   type User
 } from '../lib/users.ts';
+import { bundleVersion, siteFoot, siteHead } from '../templates/layout.ts';
 
 const SESSION_COOKIE = 'rkr_session';
 const OAUTH_STATE_COOKIE = 'rkr_oauth_state';
@@ -311,35 +314,33 @@ function readCookie(req: FastifyRequest, name: string): string | undefined {
 }
 
 function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
+  const site = siteConfig();
   const tokenForm = opts.adminTokenAvailable
     ? `<form method="post" action="/admin/auth/token-login" class="rkr-login-form">
   <label>Admin token<input type="password" name="token" autocomplete="current-password" required/></label>
-  <button type="submit">Sign in with token</button>
+  <button type="submit" class="rkr-login-submit">Sign in with token</button>
 </form>`
     : '<p class="rkr-login-hint">Token login disabled (ADMIN_TOKEN not set).</p>';
+  const v = bundleVersion();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Sign in — rkroll admin</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 4rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
-  .rkr-login-google { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #888; border-radius: 4px; text-decoration: none; color: inherit; }
-  .rkr-login-form { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem; }
-  .rkr-login-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
-  .rkr-login-form input { padding: 0.5rem; font: inherit; border: 1px solid #aaa; border-radius: 4px; }
-  .rkr-login-form button { padding: 0.5rem 1rem; font: inherit; cursor: pointer; }
-  .rkr-login-hint { color: #666; font-size: 0.9rem; margin-top: 2rem; }
-  hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
-</style>
+<title>Sign in — ${escapeText(site.title)}</title>
+<link rel="stylesheet" href="/static/site.css${v}"/>
 </head>
 <body>
-<h1>Sign in to admin</h1>
+${siteHead(site)}
+<main id="main" tabindex="-1">
+<section class="rkr-login">
+<h1>Sign in</h1>
 <a class="rkr-login-google" href="/admin/auth/google/start">Sign in with Google</a>
 <hr/>
 ${tokenForm}
+</section>
+</main>
+${siteFoot(site)}
 </body>
 </html>`;
 }

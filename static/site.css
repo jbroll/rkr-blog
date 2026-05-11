@@ -154,6 +154,61 @@ main:focus-visible { outline: none; }
   font-size: 0.9rem;
 }
 
+/* ---- login (/admin/login) ---------------------------------------- */
+.rkr-login {
+  max-width: 24rem;
+  margin: 2rem auto;
+}
+.rkr-login h1 {
+  font-family: var(--rkr-display-font);
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem;
+}
+.rkr-login hr {
+  border: 0;
+  border-top: 1px solid var(--rkr-rule);
+  margin: 2rem 0;
+}
+.rkr-login-google {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--rkr-rule);
+  border-radius: var(--rkr-radius);
+  text-decoration: none;
+  color: var(--rkr-text);
+}
+.rkr-login-google:hover { color: var(--rkr-link); }
+.rkr-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.rkr-login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.rkr-login-form input {
+  padding: 0.5rem;
+  font: inherit;
+  border: 1px solid var(--rkr-rule);
+  border-radius: var(--rkr-radius);
+  background: var(--rkr-bg);
+  color: var(--rkr-text);
+}
+.rkr-login-submit {
+  padding: 0.5rem 1rem;
+  font: inherit;
+  background: var(--rkr-link);
+  color: var(--rkr-bg);
+  border: 1px solid var(--rkr-link);
+  border-radius: var(--rkr-radius);
+  cursor: pointer;
+}
+.rkr-login-submit:hover { background: var(--rkr-link-hover); border-color: var(--rkr-link-hover); }
+.rkr-login-hint { color: var(--rkr-muted); font-size: 0.9rem; }
+
 /* ---- admin posts list (admin-only /admin/posts) ----------------- */
 .rkr-admin-posts-heading {
   font-family: var(--rkr-display-font);
