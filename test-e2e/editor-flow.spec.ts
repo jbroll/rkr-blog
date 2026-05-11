@@ -40,6 +40,19 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
   ]);
 }
 
+// The slug input is `type="hidden"` (the admin doesn't need to see or
+// edit it — the server slugifies the title). Playwright's .fill()
+// requires a visible element, so tests that need to pin a specific
+// slug write the value via evaluate(). Also dispatches the same
+// rkr-slug-changed event the save flow uses so the Copy-link button's
+// disabled state updates if the test checks it.
+async function setSlug(page: import('@playwright/test').Page, slug: string): Promise<void> {
+  await page.locator('#rkr-slug').evaluate((el, v) => {
+    (el as HTMLInputElement).value = v as string;
+    window.dispatchEvent(new CustomEvent('rkr-slug-changed'));
+  }, slug);
+}
+
 // Poll OPFS until any file under `dir` contains `needle`. Replaces
 // `waitForTimeout(<debounce + margin>)` for draft / image-state
 // persistence: a timeout-based wait is brittle on a loaded CI
@@ -87,11 +100,17 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e flow');
+  await page.locator('#rkr-subtitle').fill('a subtitle for the e2e test');
   // Unique slug — the e2e site root persists for the run, so reusing one
   // would surface a "already exists" save error.
   const slug = `e2e-flow-${Date.now()}`;
-  await page.locator('#rkr-slug').fill(slug);
+  await setSlug(page, slug);
   await page.locator('#rkr-status').selectOption('published');
+  // Page-header Copy-link button: pinned top-right; the syncing
+  // listener enabled it as soon as setSlug() above dispatched the
+  // rkr-slug-changed event.
+  await expect(page.locator('#rkr-copy-link')).toBeVisible();
+  await expect(page.locator('#rkr-copy-link')).toBeEnabled();
 
   // ---- 1. insert image -------------------------------------------------
 
@@ -110,8 +129,9 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   // The figure node now lives in the editor; the attrs panel reveals
   // itself when the figure is selected (which insertContent does).
   await expect(page.locator('#rkr-figure-attrs')).toBeVisible();
-  // The 'ids' field is read-only and populated from the upload result
-  // — non-empty here means the round-trip from /admin/upload landed.
+  // The hidden 'ids' field is populated from the upload result; a
+  // non-empty value confirms the round-trip from /admin/upload landed.
+  // The input is type=hidden but toHaveValue reads the DOM value.
   await expect(page.locator('#rkr-figure-ids')).not.toHaveValue('');
 
   // ---- 2. set matrix ---------------------------------------------------
@@ -151,6 +171,9 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   const html = await res.text();
   expect(html).toContain('<title>e2e flow');
   expect(html).toMatch(/class="[^"]*rkr-figure/);
+  // Subtitle round-trips through frontmatter → render.
+  expect(html).toContain('a subtitle for the e2e test');
+  expect(html).toMatch(/class="rkr-post-subtitle"/);
 });
 
 // Image-edit pipeline coverage: rotate (a runEdit path) writes through
@@ -163,7 +186,7 @@ test('editor: rotate single image then save edits', async ({ page }) => {
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e rotate');
-  await page.locator('#rkr-slug').fill(`e2e-rotate-${Date.now()}`);
+  await setSlug(page, `e2e-rotate-${Date.now()}`);
 
   // Insert a single image so the image-edit section reveals (it only
   // shows when the figure has exactly one id).
@@ -211,7 +234,7 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e crop');
-  await page.locator('#rkr-slug').fill(`e2e-crop-${Date.now()}`);
+  await setSlug(page, `e2e-crop-${Date.now()}`);
 
   await page.locator('#rkr-image-input').setInputFiles({
     name: 'crop.png',
@@ -269,7 +292,7 @@ test('editor: per-cell selection drives the image-edit panel for multi-image fig
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e per-cell');
-  await page.locator('#rkr-slug').fill(`e2e-percell-${Date.now()}`);
+  await setSlug(page, `e2e-percell-${Date.now()}`);
 
   // Upload two distinct PNGs. cellA uses BLUE (matches the cropper
   // test which only opens-and-cancels — leaves no ops). cellB uses
@@ -381,7 +404,7 @@ test('editor: offline upload queues + drains on reconnect', async ({ page, conte
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e offline');
-  await page.locator('#rkr-slug').fill(`e2e-offline-${Date.now()}`);
+  await setSlug(page, `e2e-offline-${Date.now()}`);
 
   // ---- 1. go offline + upload --------------------------------------
   await context.setOffline(true);
@@ -442,7 +465,7 @@ test('editor: offline rotate+save queues setOps+bake, drains on reconnect', asyn
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e offline edit');
-  await page.locator('#rkr-slug').fill(`e2e-offlineedit-${Date.now()}`);
+  await setSlug(page, `e2e-offlineedit-${Date.now()}`);
 
   // Unique PNG to keep this test's sidecar state clean (cyan).
   const PNG_1X1_CYAN =
@@ -511,7 +534,7 @@ test('editor: offline savePost queues + drains on reconnect to publish /:slug', 
 
   const slug = `e2e-offline-save-${Date.now()}`;
   await page.locator('#rkr-title').fill('e2e offline save');
-  await page.locator('#rkr-slug').fill(slug);
+  await setSlug(page, slug);
   await page.locator('#rkr-status').selectOption('published');
 
   // Type a one-line body so the post has visible content on /:slug.
@@ -730,7 +753,7 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
 
   const slug = `e2e-conflict-${Date.now()}`;
   await page.locator('#rkr-title').fill('e2e conflict v1');
-  await page.locator('#rkr-slug').fill(slug);
+  await setSlug(page, slug);
   await page.locator('#rkr-status').selectOption('published');
   await page.evaluate(() => {
     const ed = (
@@ -864,7 +887,7 @@ test('editor: pin existing post → offline edit → reconnect drains', async ({
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
   await page.locator('#rkr-title').fill('e2e pin v2');
-  await page.locator('#rkr-slug').fill(slug);
+  await setSlug(page, slug);
   await page.locator('#rkr-status').selectOption('published');
   await page.evaluate(() => {
     const ed = (
@@ -909,7 +932,7 @@ test('editor: storage panel shows usage + sync-now + evict-all', async ({ page, 
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
   await page.locator('#rkr-title').fill('e2e panel');
-  await page.locator('#rkr-slug').fill(slug);
+  await setSlug(page, slug);
   await page.locator('#rkr-status').selectOption('published');
   await page.evaluate(() => {
     const ed = (

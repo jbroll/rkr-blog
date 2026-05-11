@@ -5,6 +5,8 @@ import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } f
 
 export interface PostPageData extends SiteChrome {
   title: string;
+  /** Optional secondary heading rendered under <h1>. */
+  subtitle?: string;
   slug: string;
   date?: string;
   bodyHtml: string;
@@ -17,6 +19,9 @@ export function renderPostPage(post: PostPageData): string {
   const dateBlock = post.date
     ? `<time datetime="${escapeAttr(post.date)}">${escapeText(post.date)}</time>`
     : /* c8 ignore next -- runReindex always supplies published_at */ '';
+  const subtitleBlock = post.subtitle
+    ? `<p class="rkr-post-subtitle">${escapeText(post.subtitle)}</p>`
+    : '';
 
   const v = bundleVersion();
   return `<!DOCTYPE html>
@@ -40,6 +45,7 @@ ${siteHead(post.site, { isAdmin: post.isAdmin, currentSlug: post.slug })}
 <article>
 <header>
 <h1>${escapeText(post.title)}</h1>
+${subtitleBlock}
 ${dateBlock}
 </header>
 ${post.bodyHtml}

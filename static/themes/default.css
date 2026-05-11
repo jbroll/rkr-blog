@@ -266,6 +266,16 @@ article > header h1 {
   letter-spacing: -0.02em;
   margin: 0 0 .5rem;
 }
+/* Subtitle: under the h1, muted, slightly larger than body so it
+   reads as a deck head rather than a stray paragraph. */
+.rkr-post-subtitle {
+  font-family: var(--rkr-display-font);
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: var(--rkr-muted);
+  margin: 0 0 .5rem;
+  line-height: 1.35;
+}
 article > header time {
   display: block;
   color: var(--rkr-muted);

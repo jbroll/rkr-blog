@@ -10,6 +10,8 @@ import { readRoot, writeRoot } from './opfs-schema.ts';
 export interface PinManifest {
   slug: string;
   title: string;
+  /** Optional secondary heading; only carried when the post has one. */
+  subtitle?: string;
   status: string;
   date?: string;
   lastModified: string;

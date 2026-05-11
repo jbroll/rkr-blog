@@ -52,6 +52,23 @@ ${stylesheetLinks()}
   }
   .rkr-admin-toplink a { color: var(--rkr-muted); text-decoration: none; }
   .rkr-admin-toplink a:hover { color: var(--rkr-link); text-decoration: underline; }
+  /* Copy-link button mirrors the back-link, pinned to the top-right
+     so it's reachable for every post without consuming layout. Stays
+     disabled until the slug is known (after a save or pin); the
+     handler in src/admin/page-title.ts writes the URL to the
+     clipboard and reports via setStatus. */
+  .rkr-admin-copylink {
+    position: fixed; top: .5rem; right: .75rem;
+    margin: 0; padding: .25rem .65rem;
+    font: inherit; font-size: .85rem;
+    background: var(--rkr-bg); color: var(--rkr-muted);
+    border: 1px solid var(--rkr-rule); border-radius: 999px;
+    cursor: pointer; z-index: 10;
+  }
+  .rkr-admin-copylink:hover:not(:disabled) {
+    color: var(--rkr-link); border-color: var(--rkr-link);
+  }
+  .rkr-admin-copylink:disabled { opacity: .5; cursor: not-allowed; }
   /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
      text / panel backgrounds so dark mode actually flips through. The
      fallbacks (after the comma) cover the case where site.css fails
@@ -315,10 +332,16 @@ ${stylesheetLinks()}
 </head>
 <body>
 <p class="rkr-admin-toplink"><a href="/" rel="nofollow">&larr; Back to site</a></p>
+<button type="button" id="rkr-copy-link" class="rkr-admin-copylink" disabled>Copy link</button>
 <h1 id="rkr-page-title">New post</h1>
 <div class="rkr-meta">
-  <label for="rkr-title">Title</label>   <input id="rkr-title" type="text"/>
-  <label for="rkr-slug">Slug</label>     <input id="rkr-slug" type="text"/>
+  <label for="rkr-title">Title</label>       <input id="rkr-title" type="text"/>
+  <label for="rkr-subtitle">Subtitle</label> <input id="rkr-subtitle" type="text" placeholder="optional"/>
+  <!-- Slug is internal: the server derives it from the title on first
+       save, and existing posts keep their loaded value. The admin
+       doesn't see or edit it; a Copy-link button on the toolbar
+       gives them the URL once the post has been saved. -->
+  <input id="rkr-slug" type="hidden"/>
   <label for="rkr-status">Status</label>
   <select id="rkr-status">
     <option value="draft" selected>draft</option>
@@ -328,15 +351,19 @@ ${stylesheetLinks()}
 <div id="rkroll-admin-toolbar"></div>
 <div id="rkr-figure-attrs" hidden>
   <h3>Figure attributes</h3>
-  <label for="rkr-figure-ids">IDs</label>
-  <input id="rkr-figure-ids" type="text" readonly placeholder="comma-separated; populated by upload"/>
+  <!-- Image ids stay internal: the figure node carries them in its
+       attrs and the save serialiser writes them into the ::figure
+       directive. The admin has no reason to read or edit the 64-char
+       hashes; keeping the input hidden (rather than removing it)
+       lets the existing population path in main.ts keep working. -->
+  <input id="rkr-figure-ids" type="hidden"/>
   <label for="rkr-figure-alts">Alt text</label>
   <textarea id="rkr-figure-alts" rows="3" placeholder="one alt per line, in id order; leave blank for decorative"></textarea>
   <label for="rkr-figure-caption">Caption</label>
   <input id="rkr-figure-caption" type="text" placeholder="optional caption shown below"/>
-  <label for="rkr-figure-matrix">Matrix</label>
+  <label for="rkr-figure-matrix">Layout</label>
   <input id="rkr-figure-matrix" type="text" placeholder="e.g. 1x2, 1x3, justified, masonry, 1x1 (carousel)"/>
-  <label for="rkr-figure-justify">Justify</label>
+  <label for="rkr-figure-justify">Position</label>
   <select id="rkr-figure-justify">
     <option value="center">center (default, breakout)</option>
     <option value="full">full (edge-to-edge)</option>

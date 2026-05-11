@@ -82,6 +82,7 @@ export function registerPostBundleRoutes(
       return {
         slug,
         title: fm.title,
+        ...(typeof fm.subtitle === 'string' && fm.subtitle.trim() ? { subtitle: fm.subtitle } : {}),
         status: fm.status,
         date: fm.date,
         lastModified: new Date(stat.mtimeMs).toISOString(),

@@ -154,6 +154,9 @@ export default async function publicRoutes(
     const html = renderPostPage({
       site,
       title: parsed.frontmatter.title,
+      ...(typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()
+        ? { subtitle: parsed.frontmatter.subtitle }
+        : {}),
       slug: parsed.frontmatter.slug,
       ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
       bodyHtml,

@@ -35,6 +35,9 @@ import type { DirectiveNode, WidgetRegistry } from './widgets.ts';
 
 export interface PostFrontmatter {
   title: string;
+  /** Optional secondary heading rendered under <h1> on the post page.
+   * Free-form text; not indexed or searchable. */
+  subtitle?: string;
   slug: string;
   date?: string;
   status?: 'draft' | 'published';

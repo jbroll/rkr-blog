@@ -29,7 +29,7 @@ import {
   persistImageState,
   saveImageEdits
 } from './image-edit';
-import { initPageTitle } from './page-title.ts';
+import { initCopyLink, initPageTitle } from './page-title.ts';
 import { openPerspective } from './perspective-modal';
 import { pickMany, uploadMany } from './pick';
 import { startOfflineInfrastructure } from './startup';
@@ -94,9 +94,10 @@ function mount(): void {
   // ?e2e=1 hook exposure internally.
   void startOfflineInfrastructure(editor);
 
-  // Page-title binding: keeps the editor <h1> and document.title
-  // synced with the title input + dirty state.
+  // Editor-page chrome: <h1>+document.title binding (drives the
+  // dirty marker) and the top-right Copy-link button.
   initPageTitle(editor);
+  initCopyLink();
 
   wireDragOverlay($('rkroll-admin-root'));
 

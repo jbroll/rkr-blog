@@ -21,6 +21,7 @@ import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { ingestStream } from '../lib/originals.ts';
+import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
@@ -117,26 +118,32 @@ export default async function adminRoutes(
     Body: {
       slug?: unknown;
       title?: unknown;
+      subtitle?: unknown;
       status?: unknown;
       date?: unknown;
       markdown?: unknown;
     };
   }>('/admin/posts', { ...guard }, async (request, reply) => {
-    const { slug, title, status, date, markdown } = request.body ?? {};
+    const { slug: slugRaw, title, subtitle, status, date, markdown } = request.body ?? {};
 
-    if (
-      typeof slug !== 'string' ||
-      slug.length > MAX_SLUG_LENGTH ||
-      !/^[a-z0-9][a-z0-9-]*$/i.test(slug)
-    ) {
-      return reply.code(400).send({ error: 'slug must be a kebab-case identifier (max 100)' });
-    }
     if (typeof title !== 'string' || !title.trim()) {
       return reply.code(400).send({ error: 'title is required' });
     }
     if (typeof markdown !== 'string') {
       return reply.code(400).send({ error: 'markdown must be a string' });
     }
+    // Empty slug → derive from the title. Existing posts carry the
+    // loaded slug verbatim (editor stamps it back into the hidden
+    // input after each save). Non-empty values still must pass the
+    // kebab-case regex + length cap.
+    const slugProvided = typeof slugRaw === 'string' && slugRaw.length > 0;
+    const slugValid =
+      !slugProvided || (slugRaw.length <= MAX_SLUG_LENGTH && /^[a-z0-9][a-z0-9-]*$/i.test(slugRaw));
+    if (!slugValid) {
+      return reply.code(400).send({ error: 'slug must be a kebab-case identifier (max 100)' });
+    }
+    const slug = slugProvided ? slugRaw : slugify(title);
+    const subtitleStr = typeof subtitle === 'string' ? subtitle.trim() : '';
     // YAML-smuggling guard: reject a body that opens with a YAML
     // frontmatter delimiter. Without this, a forged request could prepend
     // its own ---\nslug: ...\n--- block and parsePost would pick up the
@@ -151,15 +158,16 @@ export default async function adminRoutes(
     const finalStatus: 'draft' | 'published' = status === 'published' ? 'published' : 'draft';
     const dateStr = typeof date === 'string' && date.trim() ? date : new Date().toISOString();
 
-    const fm = [
-      '---',
-      `title: ${yamlScalar(title)}`,
+    const fmLines = ['---', `title: ${yamlScalar(title)}`];
+    if (subtitleStr) fmLines.push(`subtitle: ${yamlScalar(subtitleStr)}`);
+    fmLines.push(
       `slug: ${yamlScalar(slug)}`,
       `date: ${yamlScalar(dateStr)}`,
       `status: ${finalStatus}`,
       '---',
       ''
-    ].join('\n');
+    );
+    const fm = fmLines.join('\n');
     const trimmedMd = markdown.startsWith('\n') ? markdown.slice(1) : markdown;
     const file = `${fm}\n${trimmedMd}`;
 

@@ -103,10 +103,15 @@ async function runStart(editor: Editor): Promise<void> {
 function seedFormFields(manifest: PinManifest): void {
   const slugEl = document.getElementById('rkr-slug') as HTMLInputElement | null;
   const titleEl = document.getElementById('rkr-title') as HTMLInputElement | null;
+  const subtitleEl = document.getElementById('rkr-subtitle') as HTMLInputElement | null;
   const statusEl = document.getElementById('rkr-status') as HTMLSelectElement | null;
   if (slugEl) slugEl.value = manifest.slug;
   if (titleEl) titleEl.value = manifest.title;
+  if (subtitleEl) subtitleEl.value = manifest.subtitle ?? '';
   if (statusEl && (manifest.status === 'draft' || manifest.status === 'published')) {
     statusEl.value = manifest.status;
   }
+  // initCopyLink listens for this event so the page-header Copy-
+  // link button enables as soon as the pin manifest's slug lands.
+  window.dispatchEvent(new CustomEvent('rkr-slug-changed'));
 }

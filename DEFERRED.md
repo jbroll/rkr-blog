@@ -363,3 +363,74 @@ change. Adding them on demand keeps the bundle / static-dir lean.
 **Trigger.** Specific theme request, or a public-facing site that
 benefits from a curated picker.
 
+
+## Post-editor pass (2026-05-11)
+
+**Source.** Editor cleanup landed the same day surfaced several
+adjacent items that don't ship in this series.
+
+### Friendlier layout / position values
+
+**What.** The figure-attributes panel now renames "Matrix" →
+"Layout" and "Justify" → "Position", but the underlying values are
+still the same machine-friendly strings: `"1x2"`, `"justified"`,
+`"masonry"` for Layout and `"center"`, `"bleed"`, `"inline"` for
+Position. A `<select>` with author-friendly labels (Pair / Triptych
+/ Justified / Masonry / Carousel for Layout; Centered / Edge-to-
+edge / Inline / Float left / Float right for Position) would read
+much better than the current free-text input + jargon-y option
+text.
+
+**Why deferred.** Renaming the values is a UX pass on top of a
+schema migration (the markdown directive carries the value string,
+so existing posts have to keep working). The labels-only change
+this commit lands is already a meaningful improvement and is the
+cheap half of the work.
+
+**Trigger.** First author who finds the current values confusing,
+or any other significant figure-panel rework.
+
+### Advanced disclosure for width / aspect / fit / autoplay
+
+**What.** Four figure-attribute fields are presentation details
+that most posts don't need: width, aspect ratio, fit, and the
+carousel autoplay timer. They sit visible alongside the essentials
+(alt text, caption, layout, position). A `<details>` disclosure
+("Advanced") hiding them behind a single click would reduce the
+panel's visual weight for the common case.
+
+**Why deferred.** Same shape as the "friendly values" item — a
+real UX rework rather than a one-line edit. None of the four fields
+are currently confusing, just abundant.
+
+**Trigger.** Author feedback that the figure panel feels busy, or
+when adding more fields makes the panel unwieldy.
+
+### Slug renaming with URL redirects
+
+**What.** The editor hides the slug entirely; once a post is saved
+its URL is fixed. Renaming a published post (changing /old-slug to
+/new-slug) requires a redirect entry so inbound links don't break.
+No UI or storage for this today.
+
+**Why deferred.** This is the conventional CMS rename-and-redirect
+problem — it needs a `redirects` table or sidecar file, an admin
+flow to trigger the rename, and a public-route handler that serves
+301s for the old slug. Real work, not in scope for "hide the slug".
+
+**Trigger.** First author who needs to rename a published post.
+
+### Status pill / visibility chooser
+
+**What.** Status is still a tiny `<select>` of `draft` /
+`published`. The admin posts list already shows status as a pill;
+the editor could do the same — a toggle or two pills the author
+clicks to flip visibility, with a clearer label ("Visibility:
+Published / Draft" rather than "Status").
+
+**Why deferred.** Cosmetic; the current select works fine and
+two-value selects are the right primitive for a binary toggle. Worth
+considering when the editor's top form gets a broader visual pass.
+
+**Trigger.** Top-form layout pass, or when status grows a third
+value (e.g. "scheduled").

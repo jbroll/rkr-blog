@@ -8,8 +8,14 @@ export type OutboxOp = 'upload' | 'setOps' | 'bake' | 'savePost';
 
 /** @public */
 export interface SavePostPayload {
+  /** Empty string for brand-new posts; the server slugifies the
+   * title to fill it in. Existing posts loaded via pinPost carry
+   * their original slug here. */
   slug: string;
   title: string;
+  /** Optional secondary heading; written into the post's frontmatter
+   * when non-empty. */
+  subtitle?: string;
   status: 'draft' | 'published';
   date?: string;
   markdown: string;

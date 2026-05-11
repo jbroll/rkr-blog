@@ -35,9 +35,10 @@ async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
 export async function handleSave(editor: Editor): Promise<void> {
   const slug = $<HTMLInputElement>('rkr-slug').value.trim();
   const title = $<HTMLInputElement>('rkr-title').value.trim();
+  const subtitle = $<HTMLInputElement>('rkr-subtitle').value.trim();
   const status = $<HTMLSelectElement>('rkr-status').value as 'draft' | 'published';
-  if (!slug || !title) {
-    setStatus('slug and title are required');
+  if (!title) {
+    setStatus('title is required');
     return;
   }
   // Flush dirty image edits first: the saved markdown references
@@ -57,8 +58,11 @@ export async function handleSave(editor: Editor): Promise<void> {
   const draftId = await getOrCreateDraftId();
   const meta = await readMeta(draftId);
   const payload: SavePostPayload = {
+    // Empty slug → server slugifies the title to fill it in. Existing
+    // posts carry the slug they were loaded with.
     slug,
     title,
+    ...(subtitle ? { subtitle } : {}),
     status,
     markdown,
     lastSyncedAt: meta?.lastSyncedAt
@@ -67,7 +71,11 @@ export async function handleSave(editor: Editor): Promise<void> {
   if (getState() !== 'offline') {
     try {
       const result = await postSavePost(payload);
-      await updateMeta(draftId, { slug, lastSyncedAt: result.updatedAt });
+      // Echo the server-resolved slug back into the hidden input so
+      // the Copy-link button + next save's payload pick it up.
+      $<HTMLInputElement>('rkr-slug').value = result.slug;
+      window.dispatchEvent(new CustomEvent('rkr-slug-changed'));
+      await updateMeta(draftId, { slug: result.slug, lastSyncedAt: result.updatedAt });
       // Status carries a permalink so the author can verify the
       // rendered post in one click; markClean drops the dirty dot
       // from the browser tab title.

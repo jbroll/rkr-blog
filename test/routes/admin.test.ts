@@ -257,3 +257,78 @@ test('POST /admin/upload returns 400 when no file part is present', async (t) =>
   // @fastify/multipart treats this as no file; we return 400.
   assert.equal(res.statusCode, 400);
 });
+
+test('POST /admin/posts: empty slug + title → server slugifies title; subtitle round-trips', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  const app = await buildApp({ siteRoot: root, db });
+  t.after(async () => {
+    await app.close();
+    db.close();
+  });
+
+  // No slug in the payload — the server should slugify the title.
+  // Subtitle is passed; we expect to see it in the rendered post page.
+  const post = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: '',
+      title: 'Hello World!',
+      subtitle: 'a friendly subtitle',
+      status: 'published',
+      markdown: 'body\n'
+    }
+  });
+  assert.equal(post.statusCode, 200, post.body);
+  const body = post.json<{ slug: string }>();
+  assert.equal(body.slug, 'hello-world', 'server slugified the title');
+
+  // Subtitle landed in the frontmatter and renders on the post page.
+  const page = await app.inject({ method: 'GET', url: '/hello-world' });
+  assert.equal(page.statusCode, 200);
+  assert.match(page.body, /<p class="rkr-post-subtitle">a friendly subtitle</);
+
+  // The on-disk markdown carries the subtitle key (verifies the
+  // serialiser wrote it; future parsers will pick it up).
+  const md = fs.readFileSync(path.join(root, 'content', 'posts', 'hello-world.md'), 'utf8');
+  assert.match(md, /^subtitle: a friendly subtitle$/m);
+});
+
+test('POST /admin/posts: bare slug still rejected; subtitle is optional', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  const app = await buildApp({ siteRoot: root, db });
+  t.after(async () => {
+    await app.close();
+    db.close();
+  });
+
+  // Explicit bad slug → 400. Length cap + kebab-case regex still apply.
+  const bad = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: 'has..dots', title: 'T', markdown: 'b\n' }
+  });
+  assert.equal(bad.statusCode, 400);
+
+  // No subtitle → frontmatter omits the field (not a stray empty line).
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: '', title: 'no-sub', status: 'published', markdown: 'body\n' }
+  });
+  assert.equal(ok.statusCode, 200, ok.body);
+  const md = fs.readFileSync(path.join(root, 'content', 'posts', 'no-sub.md'), 'utf8');
+  assert.equal(md.includes('subtitle:'), false);
+});
