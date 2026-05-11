@@ -1,7 +1,14 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
+import {
+  bundleVersion,
+  postAdminFab,
+  type SiteChrome,
+  siteFoot,
+  siteHead,
+  stylesheetLinks
+} from './layout.ts';
 
 export interface PostPageData extends SiteChrome {
   title: string;
@@ -40,7 +47,7 @@ ${stylesheetLinks()}
 <script type="module" src="/static/site/carousel.js${v}" defer></script>
 </head>
 <body>
-${siteHead(post.site, { isAdmin: post.isAdmin, currentSlug: post.slug })}
+${siteHead(post.site, { isAdmin: post.isAdmin })}
 <main id="main" tabindex="-1">
 <article>
 <header>
@@ -52,6 +59,7 @@ ${post.bodyHtml}
 </article>
 </main>
 ${siteFoot(post.site, { isAdmin: post.isAdmin })}
+${post.isAdmin ? postAdminFab(post.slug) : ''}
 </body>
 </html>
 `;

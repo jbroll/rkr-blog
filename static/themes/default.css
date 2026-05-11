@@ -79,39 +79,9 @@ body {
   color: inherit;
   text-decoration: none;
 }
-.rkr-admin-strip {
-  max-width: var(--rkr-content);
-  margin: 0.5rem auto 0;
-  padding-top: 0.5rem;
-  display: flex;
-  gap: 0.75rem 1rem;
-  flex-wrap: wrap;
-  align-items: baseline;
-  font-size: 0.85rem;
-  color: var(--rkr-muted);
-}
-.rkr-admin-strip-link {
-  color: var(--rkr-muted);
-  text-decoration: none;
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-}
-.rkr-admin-strip-link:hover {
-  color: var(--rkr-link);
-  text-decoration: underline;
-}
-/* Push the logout form to the trailing end of the strip and slant
-   the label so it doesn't read as just another navigation link. */
-.rkr-admin-strip-logout {
-  margin: 0 0 0 auto;
-  display: inline;
-}
-.rkr-admin-strip-logout .rkr-admin-strip-link {
-  font-style: italic;
-}
+/* The header admin strip (New post / Posts / Settings / Edit /
+   Logout) was replaced by per-page FABs (.rkr-fab) and a footer
+   Login/Logout switch. The .rkr-admin-strip rules are gone with it. */
 .rkr-site-tagline {
   color: var(--rkr-muted);
   font-size: 0.9rem;
@@ -317,8 +287,41 @@ body {
   text-align: center;
 }
 .rkr-site-foot-sep { margin: 0 0.4rem; }
-.rkr-site-foot-admin { color: inherit; text-decoration: none; }
+.rkr-site-foot-admin {
+  color: inherit; text-decoration: none;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit;
+}
 .rkr-site-foot-admin:hover { color: var(--rkr-link); text-decoration: underline; }
+.rkr-site-foot-logout-form { display: inline; margin: 0; }
+
+/* Floating action buttons (FABs) — replaced the old admin chrome
+   strip. Circular icon buttons fixed to the bottom-right corner of
+   the viewport. Slots stack upward: --slot-1 is the lowest, --slot-2
+   sits above it, and so on. Page templates emit FABs only when
+   isAdmin so anonymous visitors see clean pages. */
+.rkr-fab {
+  position: fixed;
+  right: 1.25rem;
+  z-index: 50;
+  width: 3rem; height: 3rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--rkr-rule);
+  background: var(--rkr-bg);
+  color: var(--rkr-link);
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.rkr-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+.rkr-fab:focus-visible { outline: 2px solid var(--rkr-link); outline-offset: 2px; }
+.rkr-fab--slot-1 { bottom: 1.25rem; }
+.rkr-fab--slot-2 { bottom: 5rem; }
+.rkr-fab--slot-3 { bottom: 8.75rem; }
 
 /* ---- main column -------------------------------------------------- */
 

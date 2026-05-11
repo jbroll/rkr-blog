@@ -1,5 +1,13 @@
 // Shared site chrome: header + footer used by both /:slug and / templates.
 // Driven by SITE_TITLE / SITE_TAGLINE env vars (lib/config.ts).
+//
+// Admin chrome is split between two surfaces:
+//   * Floating action buttons (FABs) on the public pages — pencil
+//     icon on /:slug for "Edit this post", plus + and gear FABs on /
+//     for "New post" + "Settings". Rendered by each template; see
+//     adminFabs() helpers below.
+//   * The footer's discreet entry point: "Login" for anonymous,
+//     "Logout" for authed (POST form so CSRF/origin guards fire).
 
 import { resolveGitHash } from '../lib/build-info.ts';
 import { themeName } from '../lib/config.ts';
@@ -39,69 +47,72 @@ export interface SiteChrome {
 }
 
 export interface HeadOpts {
-  /** True when the request carries a valid admin session. Adds the
-   * admin strip to the header (New post / Edit / Logout). */
+  /** Admin context only affects the footer (Login → Logout swap)
+   * and the per-page FABs that templates render. The header chrome
+   * is identical for authed + anonymous visitors. */
   isAdmin?: boolean;
-  /** The slug of the post currently being viewed, if any. When set
-   * AND isAdmin, the strip includes an "Edit this post" link. */
-  currentSlug?: string;
 }
 
-export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string {
+export function siteHead(site: SiteChrome['site'], _opts: HeadOpts = {}): string {
   const tagline = site.tagline
     ? `<span class="rkr-site-tagline">${escapeText(site.tagline)}</span>`
     : '';
-  const adminStrip = opts.isAdmin ? renderAdminStrip(opts.currentSlug) : '';
   return `<a class="rkr-skip" href="#main">Skip to content</a>
 <header class="rkr-site-head">
   <div class="rkr-site-head-inner">
     <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
     ${tagline}
-  </div>${adminStrip}
+  </div>
 </header>`;
 }
 
-function renderAdminStrip(currentSlug?: string): string {
-  // Edit-this-post only appears on /:slug pages; the slug must be
-  // URL-encoded because the editor passes it via querystring.
-  const editLink = currentSlug
-    ? `<a class="rkr-admin-strip-link" href="/admin/editor?slug=${encodeURIComponent(currentSlug)}">Edit this post</a>`
-    : '';
-  // Logout is POST to defeat CSRF + the cross-origin guard; inline
-  // form-submit is the standard answer.
-  return `
-  <nav class="rkr-admin-strip" aria-label="Admin">
-    <a class="rkr-admin-strip-link" href="/admin/editor">New post</a>
-    <a class="rkr-admin-strip-link" href="/admin/settings">Settings</a>
-    ${editLink}
-    <form method="post" action="/admin/logout" class="rkr-admin-strip-logout">
-      <button type="submit" class="rkr-admin-strip-link">Logout</button>
-    </form>
-  </nav>`;
-}
-
 export interface FootOpts {
-  /** Suppresses the discreet `Admin` link to /admin/login. Authed
-   * sessions already see the admin strip in the header, so a second
-   * "log in" affordance in the footer is noise (and confusing — it
-   * points at the login page rather than back into the admin
-   * surface). */
+  /** When true the discreet footer link is "Logout" (POST form); when
+   * false (or omitted) it's "Login" pointing at /admin/login. */
   isAdmin?: boolean;
 }
 
 export function siteFoot(site: SiteChrome['site'], opts: FootOpts = {}): string {
   const year = new Date().getFullYear();
-  // /admin/login is reachable directly but no link from the public
-  // chrome would have you find it; a discreet footer link covers the
-  // anonymous-visitor entry point. When the visitor is already authed
-  // the link adds nothing — drop it (separator and all) so the footer
-  // collapses to just the copyright line.
+  // The footer carries the only auth-state affordance now that the
+  // admin strip is gone: anonymous visitors see a Login link;
+  // authed visitors see a Logout form-button (POST so the
+  // CSRF/origin guard fires).
   const adminLink = opts.isAdmin
-    ? ''
-    : `
-  <span class="rkr-site-foot-sep" aria-hidden="true">·</span>
-  <a class="rkr-site-foot-admin" href="/admin/login" rel="nofollow">Admin</a>`;
+    ? `<span class="rkr-site-foot-sep" aria-hidden="true">·</span>
+  <form method="post" action="/admin/logout" class="rkr-site-foot-logout-form">
+    <button type="submit" class="rkr-site-foot-admin">Logout</button>
+  </form>`
+    : `<span class="rkr-site-foot-sep" aria-hidden="true">·</span>
+  <a class="rkr-site-foot-admin" href="/admin/login" rel="nofollow">Login</a>`;
   return `<footer class="rkr-site-foot">
-  &copy; ${year} ${escapeAttr(site.title)}${adminLink}
+  &copy; ${year} ${escapeAttr(site.title)}
+  ${adminLink}
 </footer>`;
+}
+
+/** FAB row rendered on the homepage when the visitor is authed:
+ *  ⚙ Settings on top, + New post below. Stacked bottom-right. */
+export function indexAdminFabs(): string {
+  return `<a class="rkr-fab rkr-fab--slot-2" href="/admin/settings" aria-label="Settings" title="Settings">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false">
+    <path d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.04 7.04 0 0 0-1.62-.94l-.36-2.54A.5.5 0 0 0 13.91 2h-3.83a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.69 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.69.22l2.39-.96c.49.39 1.03.7 1.62.94l.36 2.54c.05.24.26.42.5.42h3.83c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.62-.94l2.39.96c.26.12.55.02.69-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/>
+  </svg>
+</a>
+<a class="rkr-fab rkr-fab--slot-1" href="/admin/editor" aria-label="New post" title="New post">
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true" focusable="false">
+    <path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/>
+  </svg>
+</a>`;
+}
+
+/** FAB rendered on /:slug pages when the visitor is authed:
+ * a pencil that routes into the editor with the post's slug. */
+export function postAdminFab(slug: string): string {
+  const href = `/admin/editor?slug=${encodeURIComponent(slug)}`;
+  return `<a class="rkr-fab rkr-fab--slot-1" href="${escapeAttr(href)}" aria-label="Edit this post" title="Edit this post">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false">
+    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+  </svg>
+</a>`;
 }

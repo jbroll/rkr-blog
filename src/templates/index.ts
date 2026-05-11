@@ -8,7 +8,14 @@
 // IS the dashboard.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
+import {
+  bundleVersion,
+  indexAdminFabs,
+  type SiteChrome,
+  siteFoot,
+  siteHead,
+  stylesheetLinks
+} from './layout.ts';
 
 interface IndexEntry {
   slug: string;
@@ -65,6 +72,7 @@ ${body}
 ${pager}
 </main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
+${data.isAdmin ? indexAdminFabs() : ''}
 ${postsListScript}
 </body>
 </html>

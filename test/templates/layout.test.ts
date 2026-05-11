@@ -3,7 +3,14 @@ import { afterEach, test } from 'node:test';
 
 import { _resetGitHashCache } from '../../src/lib/build-info.ts';
 import { _resetThemeNameCache } from '../../src/lib/config.ts';
-import { bundleVersion, siteFoot, siteHead, stylesheetLinks } from '../../src/templates/layout.ts';
+import {
+  bundleVersion,
+  indexAdminFabs,
+  postAdminFab,
+  siteFoot,
+  siteHead,
+  stylesheetLinks
+} from '../../src/templates/layout.ts';
 
 // resolveGitHash() + themeName() are process-cached; reset between
 // tests that probe env-driven branches.
@@ -30,47 +37,49 @@ test('bundleVersion: produces a stable ?v= suffix per process', () => {
   assert.equal(bundleVersion(), bundleVersion());
 });
 
-test('siteHead: anonymous visitor — no admin strip', () => {
-  const html = siteHead({ title: 'My site', tagline: 'wat' });
-  assert.match(html, /My site/);
-  assert.match(html, /wat/);
-  assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
+test('siteHead: renders site title + tagline; no admin strip in either mode', () => {
+  // The admin strip is gone — admin actions live in per-page FABs
+  // and the Login/Logout switch in siteFoot. siteHead is identical
+  // for anonymous and authed visitors.
+  const anon = siteHead({ title: 'My site', tagline: 'wat' });
+  const auth = siteHead({ title: 'My site', tagline: 'wat' }, { isAdmin: true });
+  for (const html of [anon, auth]) {
+    assert.match(html, /My site/);
+    assert.match(html, /wat/);
+    assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
+    assert.ok(!html.includes('New post'), 'New post moved to a FAB');
+    assert.ok(!html.includes('Logout'), 'Logout moved to the footer');
+  }
 });
 
-test('siteHead: isAdmin on index — New post + Settings + Logout, no Edit, no Posts', () => {
-  const html = siteHead({ title: 'My site' }, { isAdmin: true });
-  assert.match(html, /rkr-admin-strip/);
-  assert.match(html, />New post</);
-  assert.match(html, />Settings</);
-  assert.match(html, /<button[^>]*>Logout</);
-  // The "Posts" link is gone — the homepage doubles as the admin posts
-  // list now, so a separate entry point would just navigate back.
-  assert.ok(!html.includes('>Posts<'), 'no Posts link in the admin strip');
-  assert.ok(!html.includes('Edit this post'), 'no edit link without currentSlug');
-});
-
-test('siteHead: isAdmin on a post — adds Edit this post with URL-encoded slug', () => {
-  const html = siteHead({ title: 's' }, { isAdmin: true, currentSlug: 'hello world' });
-  assert.match(html, />Edit this post</);
-  assert.match(html, /href="\/admin\/editor\?slug=hello%20world"/);
-});
-
-test('siteFoot: anonymous visitor sees the discreet admin link', () => {
+test('siteFoot: anonymous visitor sees the Login link', () => {
   const html = siteFoot({ title: 'My site' });
   assert.match(html, /href="\/admin\/login"/);
+  assert.match(html, />Login</);
+  assert.ok(!html.includes('Logout'), 'no Logout for anonymous visitors');
   assert.match(html, /My site/);
 });
 
-test('siteFoot: authed visitor does not see the admin link', () => {
-  // The header already carries the admin strip (New post / Posts /
-  // Logout); a second "Admin" link in the footer pointing at
-  // /admin/login is noise + confusing (it suggests they're somehow
-  // not logged in). The separator pipe disappears with the link so
-  // the footer reads as a single line, not "© rkroll ·".
+test('siteFoot: authed visitor sees a POST-form Logout button', () => {
   const html = siteFoot({ title: 'My site' }, { isAdmin: true });
-  assert.doesNotMatch(html, /\/admin\/login/);
-  assert.doesNotMatch(html, /rkr-site-foot-admin/);
-  assert.doesNotMatch(html, /rkr-site-foot-sep/);
+  // Logout is POST (CSRF/origin guard fires); rendered as a button
+  // inside a tiny inline <form> so it sits next to the © line.
+  assert.match(html, /<form [^>]*method="post" [^>]*action="\/admin\/logout"/);
+  assert.match(html, /<button[^>]*>Logout</);
+  // No anonymous Login link when authed.
+  assert.ok(!html.includes('/admin/login'), 'no Login link when authed');
+});
+
+test('indexAdminFabs: renders + (New post) and ⚙ (Settings) as anchors', () => {
+  const html = indexAdminFabs();
+  assert.match(html, /class="rkr-fab[^"]*"[^>]*href="\/admin\/editor"[^>]*aria-label="New post"/);
+  assert.match(html, /class="rkr-fab[^"]*"[^>]*href="\/admin\/settings"[^>]*aria-label="Settings"/);
+});
+
+test('postAdminFab: pencil FAB carries the URL-encoded slug', () => {
+  const html = postAdminFab('hello world');
+  assert.match(html, /aria-label="Edit this post"/);
+  assert.match(html, /href="\/admin\/editor\?slug=hello%20world"/);
 });
 
 test('stylesheetLinks: default theme loads base + default only', () => {

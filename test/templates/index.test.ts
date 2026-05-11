@@ -69,11 +69,15 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
   assert.match(html, />2026-05-01</);
 
-  // siteHead is in admin mode (strip + no footer Admin link) and the
-  // posts-list bundle is loaded so the status select auto-submits
-  // and pin buttons read OPFS.
-  assert.match(html, /rkr-admin-strip/);
+  // The posts-list bundle is loaded so the status select auto-
+  // submits and pin buttons read OPFS. Admin FABs (+ + ⚙) replace
+  // the old admin strip; the strip itself is gone.
   assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
+  assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');
+  assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New post"/);
+  assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="Settings"/);
+  // Footer Login/Logout swap shows Logout (authed).
+  assert.match(html, /<form [^>]*action="\/admin\/logout"[^>]*>/);
 });
 
 test('renderIndexPage: admin view, empty state', () => {
