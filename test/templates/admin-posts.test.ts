@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { renderAdminPostsPage } from '../../src/templates/admin-posts.ts';
 
-test('renderAdminPostsPage: rows show title, status select, pin + edit + delete', () => {
+test('renderAdminPostsPage: rows show title, status select, pin + delete', () => {
   const html = renderAdminPostsPage({
     site: { title: 'rkroll' },
     posts: [
@@ -24,8 +24,10 @@ test('renderAdminPostsPage: rows show title, status select, pin + edit + delete'
   // Pin button is rendered disabled; the posts-list bundle enables
   // it after reading OPFS pin state.
   assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled>pin<\/button>/);
-  // Edit link routes into the editor with the slug pre-populated.
-  assert.match(html, /href="\/admin\/editor\?slug=hello"/);
+  // Title is the "open in editor" affordance — no separate edit
+  // button. Click-through routes into the editor with the slug
+  // pre-populated.
+  assert.match(html, /<a href="\/admin\/editor\?slug=hello">Hello<\/a>/);
   // Delete is a form POST so the CSRF / Origin guard catches it.
   assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
   assert.match(html, /method="post"/);
@@ -36,12 +38,26 @@ test('renderAdminPostsPage: rows show title, status select, pin + edit + delete'
   // The posts-list bundle is loaded so the status select auto-
   // submits on change and the pin button reads OPFS.
   assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
+  // Three columns now (Title / Updated / Actions) — status moved into
+  // the actions cell. The header row must match.
+  assert.match(
+    html,
+    /<th>Title<\/th><th>Updated<\/th><th class="rkr-admin-posts-actions">Actions<\/th>/
+  );
+  // The status form, pin button, and delete form all live inside the
+  // same right-aligned actions cell so every action sits on the right.
+  const actionsCell =
+    /<td class="rkr-admin-posts-actions">[\s\S]*?action="\/admin\/posts\/hello\/status"[\s\S]*?data-pin-toggle[\s\S]*?action="\/admin\/posts\/hello\/delete"[\s\S]*?<\/td>/;
+  assert.match(html, actionsCell);
 });
 
 test('renderAdminPostsPage: empty state', () => {
   const html = renderAdminPostsPage({ site: { title: 'rkroll' }, posts: [] });
   assert.match(html, /No posts yet/);
   assert.match(html, /href="\/admin\/editor"/);
+  // Empty-state cell spans every column; if we change the column count
+  // and forget to update the colspan, the empty row looks misaligned.
+  assert.match(html, /colspan="3"/);
 });
 
 test('renderAdminPostsPage: slug + title are URL/HTML-escaped', () => {
