@@ -1,6 +1,8 @@
 // Fastify app factory. Exports buildApp() so tests can drive the server
 // without binding a port, and startServer() for the bin entry point.
 
+import { createHash } from 'node:crypto';
+
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyServerOptions } from 'fastify';
@@ -125,6 +127,27 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       ok: true,
       gitHash,
       gitHashShort: gitHash === 'unknown' ? gitHash : gitHash.slice(0, 12)
+    };
+  });
+
+  // ⚠️  TEMPORARY DEBUG ENDPOINT — REMOVE BEFORE THIS BRANCH MERGES.
+  //
+  // Discloses ADMIN_TOKEN to anyone who knows the path. Re-added (this
+  // is the second time — see git history for the prior 72725aa /
+  // ab2a626 cycle) to diagnose a token-mismatch on rkr-blog.fly.dev
+  // where the operator can't reach fly's console on mobile and the
+  // value in local secret.env doesn't match what fly is running.
+  // Tracked in DEFERRED.md under "Remove /_debug/admin-token". Do
+  // NOT ship to anything other than a throwaway dev demo.
+  app.get('/_debug/admin-token', async (_req, reply) => {
+    const token = process.env.ADMIN_TOKEN;
+    if (!token) {
+      return reply.code(503).send({ error: 'ADMIN_TOKEN not set on this machine' });
+    }
+    return {
+      adminToken: token,
+      length: token.length,
+      sha256: createHash('sha256').update(token).digest('hex')
     };
   });
 
