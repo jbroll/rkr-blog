@@ -26,8 +26,8 @@
       "linesHit": 5
     },
     "src/admin/image-edit.ts": {
-      "linesFound": 58,
-      "linesHit": 50
+      "linesFound": 56,
+      "linesHit": 48
     },
     "src/admin/integrations/gdrive.ts": {
       "linesFound": 53,
@@ -50,48 +50,48 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 28,
-      "linesHit": 21
+      "linesFound": 27,
+      "linesHit": 20
     },
     "src/admin/toolbar.ts": {
-      "linesFound": 14,
-      "linesHit": 12
+      "linesFound": 13,
+      "linesHit": 11
     },
     "src/admin/upload.ts": {
-      "linesFound": 15,
-      "linesHit": 15
+      "linesFound": 14,
+      "linesHit": 14
     },
     "src/admin/opfs-schema.ts": {
-      "linesFound": 18,
-      "linesHit": 18
+      "linesFound": 16,
+      "linesHit": 16
     },
     "src/admin/opfs.ts": {
-      "linesFound": 52,
-      "linesHit": 52
+      "linesFound": 51,
+      "linesHit": 51
     },
     "src/admin/online-state.ts": {
       "linesFound": 28,
       "linesHit": 26
     },
     "src/admin/outbox.ts": {
-      "linesFound": 11,
-      "linesHit": 11
+      "linesFound": 7,
+      "linesHit": 7
     },
     "src/admin/sync.ts": {
-      "linesFound": 28,
-      "linesHit": 24
+      "linesFound": 27,
+      "linesHit": 23
     },
     "src/admin/startup.ts": {
-      "linesFound": 27,
-      "linesHit": 24
+      "linesFound": 25,
+      "linesHit": 22
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
       "linesHit": 1
     },
     "src/admin/drainers.ts": {
-      "linesFound": 20,
-      "linesHit": 19
+      "linesFound": 19,
+      "linesHit": 18
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -114,8 +114,8 @@
       "linesHit": 7
     },
     "src/lib/outbox-types.ts": {
-      "linesFound": 9,
-      "linesHit": 9
+      "linesFound": 8,
+      "linesHit": 8
     },
     "src/lib/prose-markdown.ts": {
       "linesFound": 102,
@@ -126,28 +126,28 @@
       "linesHit": 1
     },
     "src/admin/draft.ts": {
-      "linesFound": 44,
-      "linesHit": 42
+      "linesFound": 42,
+      "linesHit": 40
     },
     "src/admin/status-badge.ts": {
       "linesFound": 19,
       "linesHit": 18
     },
     "src/admin/pin.ts": {
-      "linesFound": 21,
-      "linesHit": 18
+      "linesFound": 34,
+      "linesHit": 31
     },
     "src/admin/eviction.ts": {
-      "linesFound": 31,
-      "linesHit": 30
+      "linesFound": 30,
+      "linesHit": 29
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
       "linesHit": 10
     },
     "src/admin/storage-panel.ts": {
-      "linesFound": 41,
-      "linesHit": 38
+      "linesFound": 38,
+      "linesHit": 35
     },
     "src/site/carousel.ts": {
       "linesFound": 43,
@@ -166,8 +166,8 @@
       "linesHit": 1
     },
     "src/admin/page-title.ts": {
-      "linesFound": 23,
-      "linesHit": 18
+      "linesFound": 22,
+      "linesHit": 17
     },
     "src/admin/image-edit-panel.ts": {
       "linesFound": 45,
@@ -176,6 +176,14 @@
     "src/admin/image-insert.ts": {
       "linesFound": 45,
       "linesHit": 37
+    },
+    "127.0.0.1-3789/static/admin/outbox-XMT7YGXK.js": {
+      "linesFound": 1,
+      "linesHit": 1
+    },
+    "src/admin/posts-list.ts": {
+      "linesFound": 40,
+      "linesHit": 35
     }
   }
 }

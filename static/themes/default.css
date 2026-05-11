@@ -207,20 +207,40 @@ body {
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
   border: 1px solid var(--rkr-rule);
+  background: transparent;
   color: var(--rkr-muted);
+  cursor: pointer;
+  font: inherit; font-size: 0.75rem;
 }
 .rkr-admin-posts-status.is-published {
   border-color: color-mix(in srgb, var(--rkr-link) 40%, transparent);
   color: var(--rkr-link);
 }
+.rkr-admin-posts-status-form { display: inline; margin: 0; }
+/* WCAG-compliant visually-hidden label for the per-row status select. */
+.rkr-vh {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 .rkr-admin-posts-actions { text-align: right; white-space: nowrap; }
 .rkr-admin-posts-edit { margin-right: 0.75rem; color: var(--rkr-link) !important; }
-.rkr-admin-posts-del { display: inline; margin: 0; }
+.rkr-admin-posts-del { display: inline; margin: 0 0 0 0.75rem; }
 .rkr-admin-posts-del-btn {
   background: none; border: 0; padding: 0; cursor: pointer;
   color: var(--rkr-muted); font: inherit; text-decoration: underline;
 }
 .rkr-admin-posts-del-btn:hover { color: #cf222e; }
+.rkr-admin-posts-pin {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--rkr-muted); font: inherit; text-decoration: underline;
+}
+.rkr-admin-posts-pin:hover:not(:disabled) { color: var(--rkr-link); }
+.rkr-admin-posts-pin:disabled { cursor: progress; opacity: 0.6; }
+.rkr-admin-posts-pin[aria-pressed="true"] {
+  color: var(--rkr-link);
+  font-weight: 600;
+}
 .rkr-admin-posts-empty {
   color: var(--rkr-muted);
   text-align: center;

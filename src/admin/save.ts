@@ -36,7 +36,6 @@ export async function handleSave(editor: Editor): Promise<void> {
   const slug = $<HTMLInputElement>('rkr-slug').value.trim();
   const title = $<HTMLInputElement>('rkr-title').value.trim();
   const subtitle = $<HTMLInputElement>('rkr-subtitle').value.trim();
-  const status = $<HTMLSelectElement>('rkr-status').value as 'draft' | 'published';
   if (!title) {
     setStatus('title is required');
     return;
@@ -59,11 +58,13 @@ export async function handleSave(editor: Editor): Promise<void> {
   const meta = await readMeta(draftId);
   const payload: SavePostPayload = {
     // Empty slug → server slugifies the title to fill it in. Existing
-    // posts carry the slug they were loaded with.
+    // posts carry the slug they were loaded with. Status is omitted
+    // from the editor's save: the server preserves the existing
+    // post's status (or defaults to 'draft' on insert), and the
+    // /admin/posts list owns the per-row status flip.
     slug,
     title,
     ...(subtitle ? { subtitle } : {}),
-    status,
     markdown,
     lastSyncedAt: meta?.lastSyncedAt
   };

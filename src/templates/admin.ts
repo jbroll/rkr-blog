@@ -46,13 +46,11 @@ ${ADMIN_CSS}
   <!-- Slug is internal: the server derives it from the title on first
        save, and existing posts keep their loaded value. The admin
        doesn't see or edit it; a Copy-link button on the toolbar
-       gives them the URL once the post has been saved. -->
+       gives them the URL once the post has been saved. Status is
+       likewise internal — it's edited per row on /admin/posts and the
+       save handler preserves the existing status when the editor
+       doesn't include one. -->
   <input id="rkr-slug" type="hidden"/>
-  <label for="rkr-status">Status</label>
-  <select id="rkr-status">
-    <option value="draft" selected>draft</option>
-    <option value="published">published</option>
-  </select>
 </div>
 <div id="rkroll-admin-toolbar"></div>
 <div id="rkr-figure-attrs" hidden>

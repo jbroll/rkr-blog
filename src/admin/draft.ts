@@ -44,6 +44,11 @@ export async function getOrCreateDraftId(): Promise<string> {
   if (root.currentDraftId) return root.currentDraftId;
   const draftId = crypto.randomUUID();
   await writeRoot({ ...root, currentDraftId: draftId });
+  // Brand-new drafts start pinned so an author who loses connection
+  // mid-compose doesn't lose work — eviction's 7-day cached TTL
+  // would reclaim a fresh draft far too aggressively. The author can
+  // unpin from /admin/posts after the post is saved + published.
+  await updateMeta(draftId, { mode: 'pinned' });
   return draftId;
 }
 

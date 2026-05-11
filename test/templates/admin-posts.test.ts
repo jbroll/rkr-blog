@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { renderAdminPostsPage } from '../../src/templates/admin-posts.ts';
 
-test('renderAdminPostsPage: rows show title, status pill, edit + delete', () => {
+test('renderAdminPostsPage: rows show title, status select, pin + edit + delete', () => {
   const html = renderAdminPostsPage({
     site: { title: 'rkroll' },
     posts: [
@@ -13,8 +13,17 @@ test('renderAdminPostsPage: rows show title, status pill, edit + delete', () => 
   });
   assert.match(html, /Hello/);
   assert.match(html, /WIP/);
-  assert.match(html, /is-published/);
-  assert.match(html, /is-draft/);
+  // Status is a per-row select wrapped in a form posting to the
+  // status-flip endpoint; the is-* class on the select carries the
+  // current value for the coloured-pill style.
+  assert.match(html, /action="\/admin\/posts\/hello\/status"/);
+  assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-published"/);
+  assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-draft"/);
+  assert.match(html, /<option value="published" selected>published<\/option>/);
+  assert.match(html, /<option value="draft" selected>draft<\/option>/);
+  // Pin button is rendered disabled; the posts-list bundle enables
+  // it after reading OPFS pin state.
+  assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled>pin<\/button>/);
   // Edit link routes into the editor with the slug pre-populated.
   assert.match(html, /href="\/admin\/editor\?slug=hello"/);
   // Delete is a form POST so the CSRF / Origin guard catches it.
@@ -24,6 +33,9 @@ test('renderAdminPostsPage: rows show title, status pill, edit + delete', () => 
   assert.match(html, />2026-05-01</);
   // siteHead is wired so the admin strip renders.
   assert.match(html, /rkr-admin-strip/);
+  // The posts-list bundle is loaded so the status select auto-
+  // submits on change and the pin button reads OPFS.
+  assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
 });
 
 test('renderAdminPostsPage: empty state', () => {

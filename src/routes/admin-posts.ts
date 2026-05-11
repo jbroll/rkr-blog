@@ -85,4 +85,57 @@ export function registerAdminPostsRoutes(
       return reply.redirect('/admin/posts', 303);
     }
   );
+
+  // Frontmatter-only status flip. Driven by the per-row status select
+  // on /admin/posts (form-encoded POST → 303 redirect lands back on
+  // the listing). Doesn't touch the body markdown — useful when an
+  // author wants to publish/unpublish without re-opening the editor.
+  fastify.post<{ Params: { slug: string }; Body: { status?: unknown } }>(
+    '/admin/posts/:slug/status',
+    { ...guard },
+    async (request, reply) => {
+      const { slug } = request.params;
+      if (typeof slug !== 'string' || slug.length > MAX_SLUG_LENGTH || !SLUG_RE.test(slug)) {
+        return reply.code(400).send({ error: 'invalid slug' });
+      }
+      const status = request.body?.status;
+      if (status !== 'draft' && status !== 'published') {
+        return reply.code(400).send({ error: 'status must be draft or published' });
+      }
+      const filePath = path.join(siteRoot, 'content', 'posts', `${slug}.md`);
+      if (!fs.existsSync(filePath)) {
+        return reply.code(404).send({ error: 'not found' });
+      }
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const updated = setStatusInFrontmatter(raw, status);
+      if (updated === null) {
+        return reply.code(400).send({ error: 'post missing frontmatter' });
+      }
+      if (updated !== raw) {
+        await fs.promises.writeFile(filePath, updated, 'utf8');
+        runReindex(siteRoot);
+      }
+      return reply.redirect('/admin/posts', 303);
+    }
+  );
+}
+
+/** Swap the `status:` line inside the YAML frontmatter block. Returns
+ * null if the file lacks frontmatter (`---` open + close) — we don't
+ * want to invent one for a malformed post. Returns the unchanged raw
+ * string when status was already correct so the caller can skip the
+ * reindex. */
+function setStatusInFrontmatter(raw: string, newStatus: 'draft' | 'published'): string | null {
+  if (!raw.startsWith('---\n')) return null;
+  const fmEnd = raw.indexOf('\n---', 4);
+  if (fmEnd < 0) return null;
+  const fm = raw.slice(0, fmEnd);
+  const body = raw.slice(fmEnd);
+  const re = /^status: (draft|published)$/m;
+  if (re.test(fm)) {
+    return fm.replace(re, `status: ${newStatus}`) + body;
+  }
+  // No status line — append one before the closing fence so the next
+  // parsePost sees it.
+  return `${fm}\nstatus: ${newStatus}${body}`;
 }

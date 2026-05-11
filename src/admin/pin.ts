@@ -2,9 +2,11 @@
 
 import { markdownToProse } from '../lib/prose-markdown.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
-import { updateMeta } from './draft.ts';
-import { readBlob, writeBlob, writeJson } from './opfs.ts';
+import { readMeta, updateMeta } from './draft.ts';
+import { listDir, readBlob, writeBlob, writeJson } from './opfs.ts';
 import { readRoot, writeRoot } from './opfs-schema.ts';
+
+const META_DIR = 'meta';
 
 /** @public */
 export interface PinManifest {
@@ -92,4 +94,37 @@ export async function pinPost(
   await writeRoot({ ...root, currentDraftId: draftId });
 
   return { draftId, manifest, progress };
+}
+
+/** Set of slugs whose draft meta is currently `mode: 'pinned'`.
+ * Used by the admin posts list to render the pin button's pressed
+ * state on page load. */
+export async function pinnedSlugs(): Promise<Set<string>> {
+  const slugs = new Set<string>();
+  for (const fname of await listDir(META_DIR)) {
+    if (!fname.endsWith('.json')) continue;
+    const draftId = fname.replace(/\.json$/, '');
+    const meta = await readMeta(draftId);
+    if (meta?.slug && meta.mode === 'pinned') slugs.add(meta.slug);
+  }
+  return slugs;
+}
+
+/** Flip every meta whose slug matches AND mode is 'pinned' back to
+ * 'cached'. The data stays in OPFS — eviction reclaims it on the
+ * next sweep — so re-pinning a recently-unpinned post is fast (the
+ * originals are still local). Returns the count flipped so the
+ * caller can update its status line. */
+export async function unpinSlug(slug: string): Promise<number> {
+  let flipped = 0;
+  for (const fname of await listDir(META_DIR)) {
+    if (!fname.endsWith('.json')) continue;
+    const draftId = fname.replace(/\.json$/, '');
+    const meta = await readMeta(draftId);
+    if (meta?.slug === slug && meta.mode === 'pinned') {
+      await updateMeta(draftId, { mode: 'cached' });
+      flipped++;
+    }
+  }
+  return flipped;
 }

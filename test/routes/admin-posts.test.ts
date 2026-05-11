@@ -262,6 +262,168 @@ test('POST /admin/posts: force-overwrite (no header) bypasses the conflict guard
   assert.match(onDisk, /title: v2 forced/);
 });
 
+// Status flip via the per-row select on /admin/posts. The form posts
+// to /admin/posts/:slug/status; the server rewrites just the
+// `status:` line in the file's frontmatter and reindexes.
+test('POST /admin/posts/:slug/status flips the frontmatter status line', async (t) => {
+  const { root, app } = await setup(t);
+
+  const seed = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: 'flip-me', title: 'Flip me', status: 'draft', markdown: 'body\n' }
+  });
+  assert.equal(seed.statusCode, 200);
+  const filePath = path.join(root, 'content', 'posts', 'flip-me.md');
+  assert.match(fs.readFileSync(filePath, 'utf8'), /^status: draft$/m);
+
+  const flip = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/flip-me/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=published'
+  });
+  assert.equal(flip.statusCode, 303);
+  assert.equal(flip.headers.location, '/admin/posts');
+  assert.match(fs.readFileSync(filePath, 'utf8'), /^status: published$/m);
+
+  // Reindex ran — /flip-me is now publicly visible.
+  const page = await app.inject({ method: 'GET', url: '/flip-me' });
+  assert.equal(page.statusCode, 200);
+});
+
+test('POST /admin/posts/:slug/status: 400 on bad slug + bad status, 404 on unknown slug', async (t) => {
+  const { app } = await setup(t);
+
+  const badSlug = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/has spaces/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=published'
+  });
+  assert.equal(badSlug.statusCode, 400);
+  assert.match(badSlug.json<{ error: string }>().error, /slug/);
+
+  const badStatus = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/x/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=trash'
+  });
+  assert.equal(badStatus.statusCode, 400);
+  assert.match(badStatus.json<{ error: string }>().error, /status/);
+
+  const missing = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/never-existed/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=published'
+  });
+  assert.equal(missing.statusCode, 404);
+});
+
+// No-op flip: setting status to its current value still 303s but
+// skips the disk write + reindex. Covers the early-return branch.
+test('POST /admin/posts/:slug/status: no-op when status already matches', async (t) => {
+  const { root, app } = await setup(t);
+  await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: 'noop', title: 'noop', status: 'draft', markdown: 'body\n' }
+  });
+  const filePath = path.join(root, 'content', 'posts', 'noop.md');
+  const mtimeBefore = fs.statSync(filePath).mtimeMs;
+  // Cross a tick so the assertion below would catch a stray write.
+  await new Promise((r) => setTimeout(r, 10));
+
+  const r = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/noop/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=draft'
+  });
+  assert.equal(r.statusCode, 303);
+  assert.equal(fs.statSync(filePath).mtimeMs, mtimeBefore);
+});
+
+// Frontmatter without a status: line is a legitimate edge case
+// (older imports, hand-edited posts). The flip endpoint inserts
+// `status: <new>` rather than 400-ing out.
+test('POST /admin/posts/:slug/status: inserts a status line when missing', async (t) => {
+  const { root, app } = await setup(t);
+  const postsDir = path.join(root, 'content', 'posts');
+  fs.mkdirSync(postsDir, { recursive: true });
+  // Hand-rolled file with no status — bypass POST /admin/posts which
+  // would always write one.
+  fs.writeFileSync(
+    path.join(postsDir, 'no-status.md'),
+    '---\ntitle: No status\nslug: no-status\ndate: 2026-01-01T00:00:00Z\n---\n\nbody\n'
+  );
+  const r = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/no-status/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=published'
+  });
+  assert.equal(r.statusCode, 303);
+  const onDisk = fs.readFileSync(path.join(postsDir, 'no-status.md'), 'utf8');
+  assert.match(onDisk, /^status: published$/m);
+});
+
+// Malformed frontmatter (no opening fence) returns 400 — we don't
+// invent a fence for a file we can't safely round-trip.
+test('POST /admin/posts/:slug/status: 400 on file missing frontmatter open', async (t) => {
+  const { root, app } = await setup(t);
+  const postsDir = path.join(root, 'content', 'posts');
+  fs.mkdirSync(postsDir, { recursive: true });
+  fs.writeFileSync(path.join(postsDir, 'malformed.md'), 'just body, no frontmatter\n');
+  const r = await app.inject({
+    method: 'POST',
+    url: '/admin/posts/malformed/status',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'status=published'
+  });
+  assert.equal(r.statusCode, 400);
+  assert.match(r.json<{ error: string }>().error, /frontmatter/);
+});
+
+// Save-handler precedence: when the editor save body omits status,
+// the server preserves the existing post's status. A regression here
+// would silently flip a published post to draft on every save.
+test('POST /admin/posts: omitted status preserves the existing file status', async (t) => {
+  const { root, app } = await setup(t);
+
+  const seed = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: 'preserve', title: 'v1', status: 'published', markdown: 'v1\n' }
+  });
+  assert.equal(seed.statusCode, 200);
+
+  const overwrite = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: 'preserve', title: 'v2', markdown: 'v2\n' }
+  });
+  assert.equal(overwrite.statusCode, 200);
+  const onDisk = fs.readFileSync(path.join(root, 'content', 'posts', 'preserve.md'), 'utf8');
+  assert.match(onDisk, /^status: published$/m);
+});
+
+// Inserting a brand-new post with no status defaults to 'draft' so a
+// stray API caller doesn't accidentally publish.
+test('POST /admin/posts: omitted status on insert defaults to draft', async (t) => {
+  const { root, app } = await setup(t);
+  const r = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: { slug: 'fresh', title: 'fresh', markdown: 'body\n' }
+  });
+  assert.equal(r.statusCode, 200);
+  const onDisk = fs.readFileSync(path.join(root, 'content', 'posts', 'fresh.md'), 'utf8');
+  assert.match(onDisk, /^status: draft$/m);
+});
+
 test('POST /admin/posts rejects bad slug / missing title / missing markdown', async (t) => {
   const { app } = await setup(t);
 

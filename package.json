@@ -26,7 +26,7 @@
     "test:coverage:full": "rm -rf coverage && npm run --silent test:coverage:report && npm run --silent build:admin && npm run --silent build:site && npm run --silent test:e2e",
     "format": "biome format --write",
     "check": "npm run typecheck && biome check && npm run test:coverage",
-    "build:admin": "esbuild src/admin/main.ts --bundle --format=esm --target=es2022 --outfile=static/admin/main.js --minify --sourcemap",
+    "build:admin": "esbuild src/admin/main.ts src/admin/posts-list.ts --bundle --splitting --format=esm --target=es2022 --outdir=static/admin --entry-names=[name] --minify --sourcemap",
     "build:site": "esbuild src/site/lightbox.ts src/site/carousel.ts src/site/img-retry.ts src/site/sw.ts src/site/sw-register.ts --bundle --splitting --format=esm --target=es2022 --outdir=static/site --sourcemap --minify",
     "build": "npm run build:admin && npm run build:site",
     "clean:admin": "rm -rf static/admin",

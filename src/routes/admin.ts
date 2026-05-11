@@ -24,6 +24,11 @@ import { ingestStream } from '../lib/originals.ts';
 import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
+import {
+  looksLikeFrontmatterDelimiter,
+  resolveSavedStatus,
+  yamlScalar
+} from './admin-frontmatter.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
@@ -155,7 +160,10 @@ export default async function adminRoutes(
     if (looksLikeFrontmatterDelimiter(markdown)) {
       return reply.code(400).send({ error: 'markdown body must not start with --- frontmatter' });
     }
-    const finalStatus: 'draft' | 'published' = status === 'published' ? 'published' : 'draft';
+    const finalStatus = resolveSavedStatus(
+      status,
+      path.join(siteRoot, 'content', 'posts', `${slug}.md`)
+    );
     const dateStr = typeof date === 'string' && date.trim() ? date : new Date().toISOString();
 
     const fmLines = ['---', `title: ${yamlScalar(title)}`];
@@ -456,45 +464,3 @@ const ADMIN_EDITOR_CSP = [
   "base-uri 'self'",
   "form-action 'self'"
 ].join('; ');
-
-function yamlScalar(s: string): string {
-  // Quote if the string contains characters that would be ambiguous in YAML.
-  if (/[:#&*!|>'"%@`,[\]{}\n]/.test(s) || /^[?]\s/.test(s) || /^\s|\s$/.test(s)) {
-    return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-  }
-  return s;
-}
-
-/**
- * Does the body open with a yaml frontmatter delimiter?
- *
- * Accepts: a leading BOM / unicode whitespace, then `---`, then a CR/LF,
- * then *something that resembles yaml content* — either another `---`
- * (empty frontmatter) or a `key:` mapping line. Matching only `---\n`
- * would false-positive on a leading `* * *` regression — we want to
- * reject the smuggling shape, not bare horizontal-rule punctuation.
- * CRLF and CR-only line endings are both handled.
- */
-function looksLikeFrontmatterDelimiter(s: string): boolean {
-  // Strip leading BOM + whitespace (incl. NBSP) so a one-byte prefix can't
-  // sidestep the check.
-  const trimmed = s.replace(/^[﻿\s]+/, '');
-  if (!trimmed.startsWith('---')) return false;
-  // Must be EOL right after the opening ---. Bare punctuation (`---foo`,
-  // `--- text`) isn't a delimiter.
-  const afterDashes = trimmed.slice(3);
-  const eolMatch = /^[\t  ]*(\r\n|\r|\n)/.exec(afterDashes);
-  if (!eolMatch) return false;
-  // Look at the first non-empty line that follows. If it's another `---`
-  // (empty frontmatter) or a `key:` mapping, this is yaml. A blank or
-  // prose-shaped line means it was punctuation that happened to look
-  // like our delimiter.
-  const rest = afterDashes.slice(eolMatch[0].length);
-  for (const line of rest.split(/\r\n|\r|\n/)) {
-    if (line.trim() === '') continue;
-    if (line.trim() === '---') return true;
-    if (/^[A-Za-z_][A-Za-z0-9_-]*\s*:/.test(line)) return true;
-    return false;
-  }
-  return false;
-}

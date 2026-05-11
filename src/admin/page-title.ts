@@ -18,7 +18,6 @@ let dirty = false;
 export function initPageTitle(editor: Editor): void {
   const titleInput = $<HTMLInputElement>('rkr-title');
   const subtitleInput = $<HTMLInputElement>('rkr-subtitle');
-  const statusSelect = $<HTMLSelectElement>('rkr-status');
   const h1 = $('rkr-page-title');
 
   const render = (): void => {
@@ -28,18 +27,15 @@ export function initPageTitle(editor: Editor): void {
   };
 
   // Reflect title-input edits into the h1 + tab title immediately.
-  // Subtitle + status changes mark dirty without re-rendering the h1
-  // (the h1 mirrors the title only).
+  // Subtitle changes mark dirty without re-rendering the h1 (the h1
+  // mirrors the title only). Status no longer lives in the editor —
+  // it's edited per-row on /admin/posts.
   titleInput.addEventListener('input', () => {
     dirty = true;
     render();
   });
   subtitleInput.addEventListener('input', () => {
     if (dirty) return;
-    dirty = true;
-    render();
-  });
-  statusSelect.addEventListener('change', () => {
     dirty = true;
     render();
   });

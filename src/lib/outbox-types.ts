@@ -16,7 +16,11 @@ export interface SavePostPayload {
   /** Optional secondary heading; written into the post's frontmatter
    * when non-empty. */
   subtitle?: string;
-  status: 'draft' | 'published';
+  /** Optional: when omitted, the server preserves the existing post's
+   * status (or defaults to 'draft' for a fresh post). The editor no
+   * longer carries the status select; status is edited per-row on
+   * /admin/posts via POST /admin/posts/:slug/status. */
+  status?: 'draft' | 'published';
   date?: string;
   markdown: string;
   /** Server-side updated_at the client saw at edit-start. Sent as

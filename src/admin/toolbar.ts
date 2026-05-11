@@ -1,17 +1,16 @@
 // Toolbar setup for the admin SPA. Builds the bold/italic/heading/link/
-// +image/save/pin buttons and exposes the helper that syncs each
-// button's active state to the editor's current selection.
+// +image/save buttons and exposes the helper that syncs each button's
+// active state to the editor's current selection.
 //
 // Lives in its own module so admin/main.ts can stay focused on figure
 // + image-edit panel orchestration; the toolbar is otherwise inert.
 // Image insertion is delegated to a single +Image button whose handler
 // (main.ts → insertFromAnySource('new')) opens a source picker
-// (local file / Google Drive / OneDrive).
+// (local file / Google Drive / OneDrive). Pin/unpin moved to the
+// per-row controls on /admin/posts.
 
 import type { Editor } from '@tiptap/core';
 
-import { setStatus } from './dom';
-import { pinPost } from './pin';
 import { handleSave } from './save';
 
 function makeButton(
@@ -59,35 +58,8 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       'link'
     ),
     makeButton('+Image', () => void insertImage(), 'image'),
-    makeButton('Save', () => void handleSave(editor), 'save', 'rkr-toolbar-primary'),
-    /* v8 ignore next -- prompt-driven UI; e2e drives __rkrPin directly */
-    makeButton('Pin', () => void runPin(), 'pin')
+    makeButton('Save', () => void handleSave(editor), 'save', 'rkr-toolbar-primary')
   );
-
-  /* v8 ignore start -- prompt-driven UI; e2e drives pinPost via
-     window.__rkrPin instead of clicking through prompt() */
-  /** Pin flow: prompt for the slug, fetch the bundle, reload so the
-   * editor mounts against the freshly-installed draft. Phase 3
-   * replaces the prompt with the storage panel's pinned-list. */
-  async function runPin(): Promise<void> {
-    const slug = prompt('Pin which slug?');
-    if (!slug) return;
-    setStatus(`pinning /${slug}…`);
-    try {
-      const result = await pinPost(slug, (p) => {
-        setStatus(`pinning /${slug}: ${p.fetched + p.skipped}/${p.total} originals`);
-      });
-      const note =
-        result.progress.failed > 0
-          ? `pinned /${slug} (${result.progress.failed} originals failed)`
-          : `pinned /${slug}`;
-      setStatus(note);
-      location.reload();
-    } catch (err) {
-      setStatus(`pin failed: ${(err as Error).message}`);
-    }
-  }
-  /* v8 ignore stop */
 
   return function syncActiveStates(): void {
     for (const b of toolbar.querySelectorAll<HTMLButtonElement>('button[data-cmd]')) {

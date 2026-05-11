@@ -46,6 +46,19 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 // slug write the value via evaluate(). Also dispatches the same
 // rkr-slug-changed event the save flow uses so the Copy-link button's
 // disabled state updates if the test checks it.
+/** Flip a saved post's status to 'published' via the new
+ * /admin/posts/:slug/status endpoint (the editor no longer carries a
+ * status select). The route 303-redirects to /admin/posts on success;
+ * Playwright follows the redirect so we accept 200 as well. */
+async function publishSlug(page: import('@playwright/test').Page, slug: string): Promise<void> {
+  const res = await page.request.post(`/admin/posts/${encodeURIComponent(slug)}/status`, {
+    form: { status: 'published' }
+  });
+  if (res.status() !== 200 && res.status() !== 303) {
+    throw new Error(`publish ${slug}: ${res.status()} ${await res.text()}`);
+  }
+}
+
 async function setSlug(page: import('@playwright/test').Page, slug: string): Promise<void> {
   await page.locator('#rkr-slug').evaluate((el, v) => {
     (el as HTMLInputElement).value = v as string;
@@ -105,7 +118,6 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   // would surface a "already exists" save error.
   const slug = `e2e-flow-${Date.now()}`;
   await setSlug(page, slug);
-  await page.locator('#rkr-status').selectOption('published');
   // Page-header Copy-link button: pinned top-right; the syncing
   // listener enabled it as soon as setSlug() above dispatched the
   // rkr-slug-changed event.
@@ -162,7 +174,10 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
 
   // ---- verify the post is reachable on the public site ----------------
 
-  // status=published was selected above, so /:slug renders the post.
+  // The editor saves as draft by default; the per-row status flip on
+  // /admin/posts is the publish gesture. Drive it directly here so
+  // /:slug renders publicly.
+  await publishSlug(page, slug);
   // The figure markdown directive becomes a <figure class="rkr-figure">
   // wrapper; checking for the slug-rendered page + the figure HTML
   // confirms the markdown round-tripped correctly.
@@ -639,7 +654,6 @@ test('editor: offline savePost queues + drains on reconnect to publish /:slug', 
   const slug = `e2e-offline-save-${Date.now()}`;
   await page.locator('#rkr-title').fill('e2e offline save');
   await setSlug(page, slug);
-  await page.locator('#rkr-status').selectOption('published');
 
   // Type a one-line body so the post has visible content on /:slug.
   await page.evaluate(() => {
@@ -666,7 +680,16 @@ test('editor: offline savePost queues + drains on reconnect to publish /:slug', 
   await context.setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
 
-  // Once drainSavePost succeeds, /:slug returns the rendered post.
+  // drainSavePost lands the post as draft (the editor doesn't
+  // carry status); flip to published so /:slug becomes reachable.
+  // Wait for the file to land first — the publish endpoint 404s
+  // until the drainer's POST hits the server.
+  await expect
+    .poll(async () => (await page.request.get(`/admin/post-bundle/${slug}?manifest=1`)).status(), {
+      timeout: 15_000
+    })
+    .toBe(200);
+  await publishSlug(page, slug);
   await expect
     .poll(async () => (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
       timeout: 15_000
@@ -872,7 +895,6 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   const slug = `e2e-conflict-${Date.now()}`;
   await page.locator('#rkr-title').fill('e2e conflict v1');
   await setSlug(page, slug);
-  await page.locator('#rkr-status').selectOption('published');
   await page.evaluate(() => {
     const ed = (
       window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
@@ -918,7 +940,10 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   // the entry → status returns to a non-conflict state.
   await expect(badge.locator('.rkr-sync-dot')).not.toHaveClass(/is-conflict/, { timeout: 10_000 });
 
-  // The public site renders v2.
+  // The public site renders v2 once we publish — the editor saves
+  // as draft now, with status owned by the per-row toggle on
+  // /admin/posts.
+  await publishSlug(page, slug);
   const html = await (await page.request.get(`/${slug}`)).text();
   expect(html).toContain('v2 body');
 });
@@ -1006,7 +1031,9 @@ test('editor: pin existing post → offline edit → reconnect drains', async ({
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
   await page.locator('#rkr-title').fill('e2e pin v2');
   await setSlug(page, slug);
-  await page.locator('#rkr-status').selectOption('published');
+  // Status was set to 'published' on the API seed above; the editor
+  // no longer carries a status select and the save handler preserves
+  // the existing status, so no per-save flip is needed here.
   await page.evaluate(() => {
     const ed = (
       window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
@@ -1051,7 +1078,6 @@ test('editor: storage panel shows usage + sync-now + evict-all', async ({ page, 
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
   await page.locator('#rkr-title').fill('e2e panel');
   await setSlug(page, slug);
-  await page.locator('#rkr-status').selectOption('published');
   await page.evaluate(() => {
     const ed = (
       window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
@@ -1224,6 +1250,71 @@ test('admin posts: lists drafts + published, delete removes the row', async ({ p
   await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
   await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'e2e published', exact: true })).toBeVisible();
+});
+
+// /admin/posts per-row status select + pin/unpin button. The status
+// form auto-submits on change; pin downloads the bundle into OPFS
+// and flips the button to "unpin"; clicking again flips meta.mode
+// back to 'cached'.
+test('admin posts: per-row status flip + pin/unpin', async ({ page }) => {
+  await login(page);
+
+  // Seed an image first so the pin path exercises the originals
+  // fetch loop (otherwise the manifest's originals[] is empty and
+  // that branch isn't covered).
+  const PNG_1X1_TEAL =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYJgPAAEDAQAhFqJVAAAAAElFTkSuQmCC';
+  const upload = await page.request.post('/admin/upload', {
+    multipart: {
+      file: { name: 'pin.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1X1_TEAL, 'base64') }
+    }
+  });
+  expect(upload.status()).toBe(200);
+  const { id: imageId } = (await upload.json()) as { id: string };
+
+  const slug = `e2e-row-${Date.now()}`;
+  const seed = await page.request.post('/admin/posts', {
+    data: {
+      slug,
+      title: 'e2e row',
+      status: 'draft',
+      markdown: `body\n\n::image{#${imageId.slice(0, 8)} alt="x"}\n`
+    }
+  });
+  expect(seed.status()).toBe(200);
+
+  await page.goto('/admin/posts');
+
+  const row = page.locator(`tr[data-slug="${slug}"]`);
+  await expect(row).toBeVisible();
+
+  // ---- 1. status flip: select 'published' → form auto-submits → 303
+  //         redirect → page reloads → row shows is-published.
+  await row.locator('select[name="status"]').selectOption('published');
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
+  await expect(row.locator('select[name="status"]')).toHaveValue('published');
+  await expect(row.locator('select[name="status"]')).toHaveClass(/is-published/);
+
+  // The frontmatter on disk really flipped — the public /:slug page
+  // is now reachable.
+  const pub = await page.request.get(`/${slug}`, { maxRedirects: 0 });
+  expect(pub.status()).toBe(200);
+
+  // ---- 2. pin: button enables once OPFS init resolves. Click pins
+  //         the post (downloads originals + sidecars + draft body) →
+  //         button flips to "unpin" with aria-pressed=true.
+  const pinBtn = row.locator('button[data-pin-toggle]');
+  await expect(pinBtn).toBeEnabled({ timeout: 10_000 });
+  await expect(pinBtn).toHaveText('pin');
+  await pinBtn.click();
+  await expect(pinBtn).toHaveText('unpin', { timeout: 15_000 });
+  await expect(pinBtn).toHaveAttribute('aria-pressed', 'true');
+
+  // ---- 3. unpin: flips meta.mode back to 'cached' (data stays in
+  //         OPFS so a re-pin doesn't have to refetch).
+  await pinBtn.click();
+  await expect(pinBtn).toHaveText('pin', { timeout: 5_000 });
+  await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
 });
 
 // Anonymous visitor sees no admin chrome.

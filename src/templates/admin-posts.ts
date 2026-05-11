@@ -43,24 +43,36 @@ ${rows}
 </table>
 </main>
 ${siteFoot(data.site)}
+<script type="module" src="/static/admin/posts-list.js"></script>
 </body>
 </html>
 `;
 }
 
 function renderRow(p: AdminPostRow): string {
-  // delete is a form POST so the CSRF / Origin guard fires; no JS
-  // confirmation here, the server handler is the source of truth.
-  // (A small JS onsubmit prompt is added by the public bundle if
-  // we ever ship one.)
+  // delete + status are both <form method="post"> so the CSRF /
+  // Origin guard fires and a no-JS browser still works — the small
+  // posts-list bundle just submits the status form on select-change
+  // for a smoother flow.
   const date = p.updatedAt.slice(0, 10);
-  return `  <tr>
+  const slugUri = encodeURIComponent(p.slug);
+  return `  <tr data-slug="${escapeAttr(p.slug)}">
     <td><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></td>
-    <td><span class="rkr-admin-posts-status is-${p.status}">${p.status}</span></td>
+    <td>
+      <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
+        <label class="rkr-vh" for="rkr-status-${escapeAttr(p.slug)}">Status for ${escapeAttr(p.title)}</label>
+        <select id="rkr-status-${escapeAttr(p.slug)}" name="status" class="rkr-admin-posts-status is-${p.status}">
+          <option value="draft"${p.status === 'draft' ? ' selected' : ''}>draft</option>
+          <option value="published"${p.status === 'published' ? ' selected' : ''}>published</option>
+        </select>
+        <noscript><button type="submit">apply</button></noscript>
+      </form>
+    </td>
     <td><time datetime="${escapeAttr(p.updatedAt)}">${escapeText(date)}</time></td>
     <td class="rkr-admin-posts-actions">
-      <a class="rkr-admin-posts-edit" href="/admin/editor?slug=${encodeURIComponent(p.slug)}">edit</a>
-      <form method="post" action="/admin/posts/${encodeURIComponent(p.slug)}/delete" class="rkr-admin-posts-del">
+      <a class="rkr-admin-posts-edit" href="/admin/editor?slug=${slugUri}">edit</a>
+      <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>pin</button>
+      <form method="post" action="/admin/posts/${slugUri}/delete" class="rkr-admin-posts-del">
         <button type="submit" class="rkr-admin-posts-del-btn" aria-label="Delete ${escapeAttr(p.title)}">delete</button>
       </form>
     </td>
