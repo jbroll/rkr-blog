@@ -160,6 +160,86 @@ transparently — on a 429 it sleeps until `x-ratelimit-reset` and
 retries once — but the wall-clock time scales with how often it has to
 back off. A 125-image seed lands in ~60s; budget accordingly.
 
+### 5. Refresh a single slug
+
+A full reset wipes every post on the target. When a bug only repros
+on one specific slug — say, after a `wp-import` change — overwriting
+that single post is faster and leaves the other demo posts in place:
+
+```bash
+bin/site-admin import-wp push "$WP_BASE" first-2-days-on-the-boats \
+  --to "$TARGET" --token "$ADMIN_TOKEN"
+```
+
+The remote `/admin/posts` accepts the slug in-place: the response
+`inserted: false` confirms an overwrite (vs. `true` for a fresh
+insert). The new image originals are content-addressed, so re-pushing
+the same bytes is a dedup hit on the target.
+
+Caveat: image IDs that the *previous* version of the post referenced
+but the *new* version doesn't end up orphaned in `originals/` +
+`sidecars/`. Run `bin/site-admin gc` (against the target) to reclaim
+them; the next scheduled gc on Fly does this automatically.
+
+### 6. Check image orientations
+
+`walk-site.sh` only HEADs each image for a 2xx — a photo rendered
+sideways still resolves, so the walk can't catch rotation regressions.
+`scripts/check-orientation.mjs` cross-references the target's rendered
+image bytes against the WP source's `<img width="…" height="…">`
+declarations and flags any pair whose landscape ↔ portrait
+orientation flipped:
+
+```bash
+# All posts on the target
+scripts/check-orientation.mjs "$WP_BASE" "$TARGET"
+
+# Just the slug under investigation
+scripts/check-orientation.mjs "$WP_BASE" "$TARGET" first-2-days-on-the-boats
+```
+
+Exit codes: 0 if every paired image's orientation matches, 1 if any
+flipped (regression), 2 if a post couldn't be retrieved from either
+end. Per-image FAIL lines name the slug, image index, and both pairs
+of dimensions:
+
+```
+first-2-days-on-the-boats img[0] FAIL: wp=768×1024 (portrait) target=1200×900 (landscape) /img/4074552f….jpeg
+```
+
+Aspect comparison is intentionally coarse — landscape vs. portrait vs.
+square (with a 5% square tolerance). The render pipeline resizes
+freely; only an orientation flip indicates the rotation pipeline lost
+information.
+
+Recommended cadence: run after every `wp-import` change, and after
+any reseed of the canonical demo. Bare-bones eyeball still wins for
+non-rotation regressions (cropping, colour shifts), but this catches
+the specific class of bug (`srcset` parsing dropping a `-rotated.jpeg`
+variant) that surfaced on /first-2-days-on-the-boats.
+
+### 7. Filesystem reset (local dev)
+
+`bin/site-admin reset` is HTTP-based and requires a running server.
+When the server itself is in a weird state (mid-migration, lock-file
+left over, port conflict from a runaway test process), wipe directly
+on disk and reinitialize:
+
+```bash
+SITE_ROOT="${SITE_ROOT:-$HOME/site}"
+rm -rf "$SITE_ROOT"/{content,originals,sidecars,cache,data}
+bin/site-admin init       # recreates the dir tree + runs migrations
+```
+
+`init` is idempotent: it only generates `data/secret.key` when absent,
+so existing sessions survive a re-run (provided you preserved that
+file). The other writable subtrees — `content/posts`, `originals`,
+`sidecars`, `cache/img`, `data` — are recreated empty.
+
+Never use this on the Fly demo. The Fly volume isn't a local
+filesystem you can rm + reinit; the HTTP `bin/site-admin reset
+--to https://rkr-blog.fly.dev …` path is the only safe wipe there.
+
 ## Troubleshooting
 
 - **`reset failed: 401 invalid token`** — The bearer token doesn't

@@ -18,6 +18,7 @@
     "scripts/check-duplicate-types.ts",
     "scripts/check-no-reexports.ts",
     "scripts/check-e2e-coverage.ts",
+    "scripts/check-orientation.mjs",
     "test/**/*.test.ts",
     "test-e2e/server-runner.ts",
     "test-e2e/coverage-fixtures.ts",
