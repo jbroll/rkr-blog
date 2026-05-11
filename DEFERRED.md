@@ -10,26 +10,6 @@ When you fix one, delete the entry. When something gets worse than expected,
 promote it. Newly-discovered work goes here, not into commit messages, so
 the queue is searchable.
 
-## REMOVE /_debug/admin-token before merging
-
-**Source.** 2026-05-11 — re-added (second cycle; see git log 72725aa /
-ab2a626 for the first add+revert pair) to diagnose a token mismatch on
-rkr-blog.fly.dev where the operator can't get console access to read
-`printenv ADMIN_TOKEN`.
-
-**What.** `src/server.ts` registers `GET /_debug/admin-token` which
-returns the live `process.env.ADMIN_TOKEN` value plus its length and
-sha256. The endpoint has no auth — anyone who knows the path can
-read the secret.
-
-**Why deferred.** Needed to unblock the Fly debug; tracked for
-removal rather than fixed in-line so the trigger condition is
-explicit.
-
-**Trigger.** As soon as the operator confirms they captured the
-value. Delete the route block + the unused `createHash` import +
-this entry. Do NOT merge this branch with the route still in place.
-
 ## Security audit (post-Step-8 audit, see git log around 2026-05-07)
 
 ### M3 — Sliding-session lookup timing
