@@ -291,3 +291,75 @@ Cheap remedy: add a `du -b static/admin static/site` line to the
 gauntlet that snapshots sizes and warns on >10% growth from the
 last commit.
 
+## UI review (2026-05-11)
+
+**Source.** Full-UI nav/aesthetic/usability review surfaced these
+items alongside the ones being fixed in the same series.
+
+### Public-side offline status indicator
+
+**What.** The editor has a sync badge (online / offline / verifying /
+conflict) bottom-right. The public site registers a service worker
+and caches pages/images for offline reading but exposes no UI signal
+when the reader is offline or when a cached copy is being served.
+
+**Why deferred.** Public-side offline is best-effort already; no
+reader has asked for visibility into it. The editor badge ships now
+because the author actively manages drafts and queue state.
+
+**Trigger.** First reader-side bug report that hinges on "is this
+the cached version?" or a deliberate push to make the site a fully
+offline-first PWA.
+
+### "Save & view" combined editor button
+
+**What.** After a successful save, the editor surfaces a "view →"
+permalink in the status line (Phase 1a). A single "Save & view"
+button that commits and navigates would shave one click off the
+common publish-then-check loop, but loses the ability to keep
+editing after save.
+
+**Why deferred.** The permalink covers 90% of the ergonomics for
+~2 lines of code. A combined button would need a confirm-on-dirty
+flow if the second save is implicit. Wait for actual author
+friction before adding it.
+
+**Trigger.** Author feedback that the two-step save→click pattern
+is friction in practice.
+
+### Owner / user management UI
+
+**What.** Users + sessions live in the DB; new owners are added by
+hand (DB row or the invite-email path). No admin UI to list users,
+revoke sessions, or rotate the bearer token.
+
+**Why deferred.** Single-author CMS; the owner is the only user.
+
+**Trigger.** First co-author or any multi-user pivot (also a
+trigger for the multi-tenant entries above).
+
+### User-facing theme picker
+
+**What.** Phase 2 lands `SITE_THEME` as an env var; switching
+themes is an ops action. No in-product UI to preview / pick / per-
+post-override themes.
+
+**Why deferred.** Most blogs pick one theme and stay; the env-var
+path covers that. A picker only earns its complexity if the author
+A/B tests themes or wants per-post overrides.
+
+**Trigger.** Author wants more than one theme live at once or
+requests a per-post override.
+
+### More ported SSG themes
+
+**What.** Phase 3 ports one theme (papermod-style) to prove the
+contract. The library should grow over time — more Hugo / Jekyll /
+Astro minimalist themes ported into `static/themes/`.
+
+**Why deferred.** Each theme is mechanical CSS work, not a code
+change. Adding them on demand keeps the bundle / static-dir lean.
+
+**Trigger.** Specific theme request, or a public-facing site that
+benefits from a curated picker.
+
