@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, type TestContext, test } from 'node:test';
 
 import {
   _resetThemeNameCache,
+  listAvailableThemes,
   paths,
+  readPersistedSiteConfig,
   serverConfig,
   siteConfig,
   siteRoot,
-  themeName
+  themeName,
+  writePersistedSiteConfig
 } from '../../src/lib/config.ts';
 
 // themeName() memoises within the process so the warning fires once;
@@ -15,6 +21,12 @@ import {
 afterEach(() => {
   _resetThemeNameCache();
 });
+
+function freshRoot(t: TestContext): { root: string; env: NodeJS.ProcessEnv } {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-cfg-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return { root, env: { SITE_ROOT: root } };
+}
 
 test('siteRoot defaults to /var/www/site when SITE_ROOT is unset', () => {
   assert.equal(siteRoot({}), '/var/www/site');
@@ -82,4 +94,112 @@ test('themeName: memoises across calls in a process', () => {
   // First call with custom env wins; second call ignores a different env.
   assert.equal(themeName({ SITE_THEME: 'default' }), 'default');
   assert.equal(themeName({ SITE_THEME: 'whatever-other' }), 'default');
+});
+
+test('paths: includes config dir + siteConfigFile', () => {
+  const p = paths({ SITE_ROOT: '/x' });
+  assert.equal(p.config, '/x/config');
+  assert.equal(p.siteConfigFile, '/x/config/site.json');
+});
+
+test('readPersistedSiteConfig: missing file → empty object', (t) => {
+  const { env } = freshRoot(t);
+  assert.deepEqual(readPersistedSiteConfig(env), {});
+});
+
+test('readPersistedSiteConfig: parses title/tagline/theme; rejects extras', (t) => {
+  const { root, env } = freshRoot(t);
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({
+      title: 'My Site',
+      tagline: 'photos',
+      theme: 'papermod',
+      // Garbage fields are silently dropped — the type guard wins.
+      malicious: '<script>',
+      title_typo: 'oops'
+    })
+  );
+  assert.deepEqual(readPersistedSiteConfig(env), {
+    title: 'My Site',
+    tagline: 'photos',
+    theme: 'papermod'
+  });
+});
+
+test('readPersistedSiteConfig: rejects wrong types per field', (t) => {
+  const { root, env } = freshRoot(t);
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ title: 42, tagline: ['nope'], theme: { obj: 'no' } })
+  );
+  // All three fields fail the typeof === 'string' check → empty result.
+  assert.deepEqual(readPersistedSiteConfig(env), {});
+});
+
+test('readPersistedSiteConfig: malformed JSON → empty, no throw', (t) => {
+  const { root, env } = freshRoot(t);
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'config', 'site.json'), '{not json');
+  assert.deepEqual(readPersistedSiteConfig(env), {});
+});
+
+test('writePersistedSiteConfig: creates config dir + merges partial updates', (t) => {
+  const { root, env } = freshRoot(t);
+  // Initial: nothing on disk. Write title only.
+  writePersistedSiteConfig({ title: 'First' }, env);
+  let p = readPersistedSiteConfig(env);
+  assert.equal(p.title, 'First');
+  assert.equal(p.tagline, undefined);
+  // Partial update keeps the prior title.
+  writePersistedSiteConfig({ tagline: 'subtitle' }, env);
+  p = readPersistedSiteConfig(env);
+  assert.equal(p.title, 'First');
+  assert.equal(p.tagline, 'subtitle');
+  // Theme too.
+  writePersistedSiteConfig({ theme: 'papermod' }, env);
+  p = readPersistedSiteConfig(env);
+  assert.equal(p.title, 'First');
+  assert.equal(p.tagline, 'subtitle');
+  assert.equal(p.theme, 'papermod');
+  // File is pretty-printed for human-edit-friendliness.
+  const raw = fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8');
+  assert.match(raw, /\n {2}"title": "First"/);
+});
+
+test('siteConfig: file overrides env, env overrides default', (t) => {
+  const { root, env } = freshRoot(t);
+  // No file, no env → default.
+  assert.deepEqual(siteConfig(env), { title: 'rkroll' });
+  // Env only.
+  assert.deepEqual(siteConfig({ ...env, SITE_TITLE: 'From Env' }), { title: 'From Env' });
+  // File overrides env.
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ title: 'From File', tagline: 'tag' })
+  );
+  assert.deepEqual(siteConfig({ ...env, SITE_TITLE: 'From Env', SITE_TAGLINE: 'envtag' }), {
+    title: 'From File',
+    tagline: 'tag'
+  });
+});
+
+test('themeName: file overrides SITE_THEME env', (t) => {
+  const { root, env } = freshRoot(t);
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'config', 'site.json'), JSON.stringify({ theme: 'papermod' }));
+  assert.equal(themeName({ ...env, SITE_THEME: 'default' }), 'papermod');
+});
+
+test('listAvailableThemes: default first, others sorted', () => {
+  const themes = listAvailableThemes();
+  assert.equal(themes[0], 'default');
+  assert.ok(themes.includes('papermod'), 'papermod should be available');
+  // The rest are sorted alphabetically.
+  const rest = themes.slice(1);
+  const sorted = [...rest].sort();
+  assert.deepEqual(rest, sorted);
 });
