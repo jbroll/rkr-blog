@@ -40,7 +40,11 @@ export function siteHead(site: SiteChrome['site']): string {
 
 export function siteFoot(site: SiteChrome['site']): string {
   const year = new Date().getFullYear();
+  // /admin/login is reachable directly but no link from the public
+  // chrome would have you find it; a discreet footer link is enough.
   return `<footer class="rkr-site-foot">
   &copy; ${year} ${escapeAttr(site.title)}
+  <span class="rkr-site-foot-sep" aria-hidden="true">·</span>
+  <a class="rkr-site-foot-admin" href="/admin/login" rel="nofollow">Admin</a>
 </footer>`;
 }
