@@ -184,8 +184,11 @@ ${stylesheetLinks()}
      spans full width and stacks its own grid beneath. */
   #rkr-image-edit { grid-column: 1 / -1; display: contents; }
   #rkr-image-edit[hidden] { display: none; }
-  /* Editor-side previews of multi-image directives: a labelled chip + a
-     thumbnail strip, just enough that the author sees what's grouped. */
+  /* Editor-side previews of figures: a labelled chip + a 3-col grid
+     of thumbs. Single-image figures share the same grid (one cell in
+     the first column); multi-image figures wrap across three columns
+     into N rows. The grid is for *editor browsing only* — the public
+     site honours the figure's declared matrix/justify/etc. */
   #rkroll-admin-root .rkr-multi {
     margin: 1rem 0; padding: .5rem; border: 1px dashed var(--rkr-rule); border-radius: 4px;
     background: color-mix(in srgb, var(--rkr-text) 3%, var(--rkr-bg));
@@ -194,10 +197,27 @@ ${stylesheetLinks()}
     font-family: ui-monospace, monospace; font-size: .8rem; color: var(--rkr-muted); margin-bottom: .25rem;
     text-transform: uppercase; letter-spacing: .05em;
   }
-  #rkroll-admin-root .rkr-multi-thumbs { display: flex; flex-wrap: wrap; gap: .35rem; }
-  #rkroll-admin-root .rkr-multi-thumb {
-    width: 6rem; height: 4rem; object-fit: cover; border-radius: 2px;
+  /* 3-col grid; rows grow to fit the tallest image in the row so
+     aspect ratio is preserved. align-items: start keeps shorter
+     images flush to the top of their row rather than vertically
+     centring inside whitespace. */
+  #rkroll-admin-root .rkr-multi-thumbs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .5rem;
+    align-items: start;
+  }
+  /* Higher specificity than the generic img.rkr-image rule below so
+     grid sizing wins. width:100% fills the 1fr cell; height:auto +
+     no object-fit clamp keeps the natural aspect ratio. */
+  #rkroll-admin-root img.rkr-multi-thumb {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    display: block;
+    border-radius: 2px;
     cursor: pointer;
+    margin: 0;
   }
   #rkroll-admin-root .rkr-multi-thumb.is-active-cell {
     outline: 2px solid var(--rkr-link, #1a4f7f);
