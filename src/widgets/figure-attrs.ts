@@ -8,50 +8,15 @@
 
 import { clampAlt } from '../lib/widget-helpers.ts';
 
+// Matrix types + parser live in lib/matrix.ts (shared with the editor's
+// visual control). Import directly from there — this file no longer
+// re-exports them.
+
 const VALID_JUSTIFY = new Set(['center', 'left', 'right', 'full', 'bleed', 'inline'] as const);
 export type Justify = typeof VALID_JUSTIFY extends Set<infer T> ? T : never;
 
 const VALID_FIT = new Set(['cover', 'contain'] as const);
 export type Fit = typeof VALID_FIT extends Set<infer T> ? T : never;
-
-export interface MatrixGrid {
-  kind: 'grid';
-  rows: number;
-  cols: number;
-}
-export interface MatrixFlow {
-  kind: 'justified' | 'masonry';
-  /** Row height (justified) / column count (masonry). */
-  param: number;
-}
-export type MatrixSpec = MatrixGrid | MatrixFlow;
-
-const MATRIX_DEFAULT: MatrixGrid = { kind: 'grid', rows: 1, cols: 1 };
-const FLOW_DEFAULTS = { justified: 240, masonry: 3 } as const;
-const MAX_MATRIX_DIM = 12; // sanity cap; 12×12=144 cells is more than any sane post
-
-export function parseMatrix(raw: unknown): MatrixSpec {
-  if (typeof raw !== 'string') return MATRIX_DEFAULT;
-  const s = raw.trim().toLowerCase();
-  const grid = /^(\d+)x(\d+)$/.exec(s);
-  if (grid) {
-    const rows = clampDim(Number(grid[1]));
-    const cols = clampDim(Number(grid[2]));
-    return { kind: 'grid', rows, cols };
-  }
-  const flow = /^(justified|masonry)(?::(\d+))?$/.exec(s);
-  if (flow) {
-    const kind = flow[1] as 'justified' | 'masonry';
-    const param = flow[2] ? Number(flow[2]) : FLOW_DEFAULTS[kind];
-    return { kind, param };
-  }
-  return MATRIX_DEFAULT;
-}
-
-function clampDim(n: number): number {
-  if (!Number.isFinite(n) || n < 1) return 1;
-  return Math.min(MAX_MATRIX_DIM, Math.floor(n));
-}
 
 export function parseJustify(raw: unknown): Justify {
   if (typeof raw === 'string' && VALID_JUSTIFY.has(raw as Justify)) return raw as Justify;

@@ -10,7 +10,6 @@
     "src/cli/import-wp.ts",
     "src/cli/reset.ts",
     "src/cli/jobs.ts",
-    "src/admin/main.ts",
     "src/admin/posts-list.ts",
     "src/site/carousel.ts",
     "src/site/img-retry.ts",

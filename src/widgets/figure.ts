@@ -49,15 +49,13 @@ export const variants: VariantSpec[] = [
 
 export const fallback: FallbackSpec = { w: 1200, format: 'jpeg', quality: 85 };
 
+import { type MatrixFlow, type MatrixGrid, parseMatrix } from '../lib/matrix.ts';
 import {
   type Fit,
   type Justify,
-  type MatrixFlow,
-  type MatrixGrid,
   parseAspect,
   parseFit,
   parseJustify,
-  parseMatrix,
   parsePerImageCaptions,
   parseTimer,
   parseWidth

@@ -67,8 +67,28 @@ ${ADMIN_CSS}
   <div id="rkr-figure-attrs-figure" class="rkr-attr-section" data-scope="figure">
     <label for="rkr-figure-caption">Caption (block)</label>
     <input id="rkr-figure-caption" type="text" placeholder="optional caption shown below the figure"/>
-    <label for="rkr-figure-matrix">Layout</label>
-    <input id="rkr-figure-matrix" type="text" placeholder="e.g. 1x2, 1x3, justified, masonry, 1x1 (carousel)"/>
+    <span class="rkr-attr-label">Layout</span>
+    <div id="rkr-figure-matrix" class="rkr-matrix-control">
+      <div class="rkr-matrix-modes" role="radiogroup" aria-label="Layout mode">
+        <label><input type="radio" name="rkr-matrix-mode" value="grid" checked/> Grid</label>
+        <label><input type="radio" name="rkr-matrix-mode" value="justified"/> Justified</label>
+        <label><input type="radio" name="rkr-matrix-mode" value="masonry"/> Masonry</label>
+      </div>
+      <div class="rkr-matrix-params" data-matrix-group="grid">
+        <label for="rkr-matrix-rows">Rows</label>
+        <input id="rkr-matrix-rows" type="number" min="1" max="12" step="1" value="1"/>
+        <label for="rkr-matrix-cols">Cols</label>
+        <input id="rkr-matrix-cols" type="number" min="1" max="12" step="1" value="1"/>
+      </div>
+      <div class="rkr-matrix-params" data-matrix-group="justified" hidden>
+        <label for="rkr-matrix-height">Row height (px)</label>
+        <input id="rkr-matrix-height" type="number" min="50" max="1000" step="10" value="240"/>
+      </div>
+      <div class="rkr-matrix-params" data-matrix-group="masonry" hidden>
+        <label for="rkr-matrix-mcols">Cols</label>
+        <input id="rkr-matrix-mcols" type="number" min="1" max="12" step="1" value="3"/>
+      </div>
+    </div>
     <label for="rkr-figure-justify">Position</label>
     <select id="rkr-figure-justify">
       <option value="center">center (default, breakout)</option>

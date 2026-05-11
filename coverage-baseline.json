@@ -184,6 +184,14 @@
     "src/admin/posts-list.ts": {
       "linesFound": 40,
       "linesHit": 35
+    },
+    "src/admin/matrix-control.ts": {
+      "linesFound": 26,
+      "linesHit": 25
+    },
+    "src/lib/matrix.ts": {
+      "linesFound": 17,
+      "linesHit": 12
     }
   }
 }

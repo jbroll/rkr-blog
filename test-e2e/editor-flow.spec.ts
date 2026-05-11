@@ -148,11 +148,13 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
 
   // ---- 2. set matrix ---------------------------------------------------
 
-  await page.locator('#rkr-figure-matrix').fill('1x2');
-  // Commit the change — main.ts wires `input` events on text fields. We
-  // dispatch one explicitly because Playwright's fill() does it for us,
-  // but blur is needed to flush remaining commits in some flows.
-  await page.locator('#rkr-figure-matrix').blur();
+  // Layout = Grid 1×2 (diptych). The matrix control is the radio +
+  // spinbox panel; the wire format is still the same `1x2` string the
+  // server expects. The cols spinbox change-fires on blur, which the
+  // commit listener picks up.
+  await expect(page.locator('input[name="rkr-matrix-mode"][value="grid"]')).toBeChecked();
+  await page.locator('#rkr-matrix-cols').fill('2');
+  await page.locator('#rkr-matrix-cols').blur();
 
   // Dynamic h1 + tab title: the title input drives both, with a "● "
   // prefix on document.title while the editor is dirty.

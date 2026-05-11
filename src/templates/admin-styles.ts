@@ -152,6 +152,18 @@ export const ADMIN_CSS = `
      because the [attr] selector beats the bare-class selector. */
   .rkr-attr-section { display: contents; }
   .rkr-attr-section[hidden] { display: none; }
+  /* Layout-mode label is a plain text span (no for=) so the grid still
+     aligns it against the matrix control on the right column. */
+  .rkr-attr-label { color: inherit; }
+  /* Matrix control: a vertical stack inside the right column — a radio
+     strip on top, then exactly one params row (grid / justified /
+     masonry) visible at a time. */
+  .rkr-matrix-control { display: flex; flex-direction: column; gap: .35rem; }
+  .rkr-matrix-modes { display: flex; gap: .75rem; flex-wrap: wrap; }
+  .rkr-matrix-modes label { display: inline-flex; align-items: center; gap: .25rem; }
+  .rkr-matrix-params { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .rkr-matrix-params[hidden] { display: none; }
+  .rkr-matrix-params input[type="number"] { width: 4.5rem; }
   /* Source-picker dialog: vertical button stack with a small inset.
      showModal()'s built-in backdrop dimming gives focus separation. */
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }

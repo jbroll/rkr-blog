@@ -14,6 +14,7 @@ import { type FigureAttrs, FigureNode } from './figure-node';
 import { dirtyImageStates } from './image-edit';
 import { wireImageEditPanel } from './image-edit-panel';
 import { createImageInserter } from './image-insert';
+import { mountMatrixControl } from './matrix-control';
 import { initCopyLink, initPageTitle } from './page-title.ts';
 import { startOfflineInfrastructure } from './startup';
 import { mountToolbar } from './toolbar';
@@ -37,7 +38,14 @@ function mount(): void {
   const attrIds = $<HTMLInputElement>('rkr-figure-ids');
   // Figure-level inputs.
   const attrCaption = $<HTMLInputElement>('rkr-figure-caption');
-  const attrMatrix = $<HTMLInputElement>('rkr-figure-matrix');
+  const attrMatrixRoot = $<HTMLDivElement>('rkr-figure-matrix');
+  // The matrix control compiles its radio + spinbox state into the
+  // wire-format string the figure attribute carries. commitFigureAttr
+  // is hoisted (function declaration) so the forward reference is
+  // safe; the call still no-ops while `populating` is true.
+  const matrixControl = mountMatrixControl(attrMatrixRoot, (raw) =>
+    commitFigureAttr('matrix', raw)
+  );
   const attrJustify = $<HTMLSelectElement>('rkr-figure-justify');
   const attrWidth = $<HTMLInputElement>('rkr-figure-width');
   const attrAspect = $<HTMLInputElement>('rkr-figure-aspect');
@@ -146,7 +154,7 @@ function mount(): void {
     populating = true;
     attrIds.value = ids;
     attrCaption.value = attrs.caption ?? '';
-    attrMatrix.value = attrs.matrix ?? '';
+    matrixControl.setFromRaw(attrs.matrix ?? '');
     attrJustify.value = attrs.justify ?? 'center';
     attrWidth.value = attrs.width ?? '';
     attrAspect.value = attrs.aspect ?? '';
@@ -292,7 +300,6 @@ function mount(): void {
     commitFigureAttr('caption', attrCaption.value);
     warnInlineCap();
   });
-  attrMatrix.addEventListener('input', () => commitFigureAttr('matrix', attrMatrix.value));
   attrJustify.addEventListener('change', () => {
     commitFigureAttr('justify', attrJustify.value);
     warnInlineCap();
