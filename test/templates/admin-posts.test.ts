@@ -38,17 +38,23 @@ test('renderAdminPostsPage: rows show title, status select, pin + delete', () =>
   // The posts-list bundle is loaded so the status select auto-
   // submits on change and the pin button reads OPFS.
   assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
-  // Three columns now (Title / Updated / Actions) — status moved into
-  // the actions cell. The header row must match.
+  // Each action gets its own column so the status / pin / delete
+  // controls line up vertically across rows like a real table.
+  assert.match(html, /<th>Title<\/th>/);
+  assert.match(html, /<th>Updated<\/th>/);
+  assert.match(html, /<th class="rkr-admin-posts-action">Status<\/th>/);
+  assert.match(html, /<th class="rkr-admin-posts-action">Pin<\/th>/);
+  assert.match(html, /<th class="rkr-admin-posts-action">Delete<\/th>/);
+  // Each action cell carries the single control it owns.
   assert.match(
     html,
-    /<th>Title<\/th><th>Updated<\/th><th class="rkr-admin-posts-actions">Actions<\/th>/
+    /<td class="rkr-admin-posts-action">\s*<form [^>]*action="\/admin\/posts\/hello\/status"/
   );
-  // The status form, pin button, and delete form all live inside the
-  // same right-aligned actions cell so every action sits on the right.
-  const actionsCell =
-    /<td class="rkr-admin-posts-actions">[\s\S]*?action="\/admin\/posts\/hello\/status"[\s\S]*?data-pin-toggle[\s\S]*?action="\/admin\/posts\/hello\/delete"[\s\S]*?<\/td>/;
-  assert.match(html, actionsCell);
+  assert.match(html, /<td class="rkr-admin-posts-action">\s*<button [^>]*data-pin-toggle/);
+  assert.match(
+    html,
+    /<td class="rkr-admin-posts-action">\s*<form [^>]*action="\/admin\/posts\/hello\/delete"/
+  );
 });
 
 test('renderAdminPostsPage: empty state', () => {
@@ -57,7 +63,7 @@ test('renderAdminPostsPage: empty state', () => {
   assert.match(html, /href="\/admin\/editor"/);
   // Empty-state cell spans every column; if we change the column count
   // and forget to update the colspan, the empty row looks misaligned.
-  assert.match(html, /colspan="3"/);
+  assert.match(html, /colspan="5"/);
 });
 
 test('renderAdminPostsPage: slug + title are URL/HTML-escaped', () => {

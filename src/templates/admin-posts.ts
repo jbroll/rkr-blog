@@ -35,7 +35,13 @@ ${siteHead(data.site, { isAdmin: true })}
 <h1 class="rkr-admin-posts-heading">All posts</h1>
 <table class="rkr-admin-posts">
   <thead>
-    <tr><th>Title</th><th>Updated</th><th class="rkr-admin-posts-actions">Actions</th></tr>
+    <tr>
+      <th>Title</th>
+      <th>Updated</th>
+      <th class="rkr-admin-posts-action">Status</th>
+      <th class="rkr-admin-posts-action">Pin</th>
+      <th class="rkr-admin-posts-action">Delete</th>
+    </tr>
   </thead>
   <tbody>
 ${rows}
@@ -58,13 +64,13 @@ function renderRow(p: AdminPostRow): string {
   const slugUri = encodeURIComponent(p.slug);
   // The title link IS the "open in editor" gesture — no separate edit
   // button. Public preview is one click via the save flow's `view →`
-  // permalink, so the posts list stays focused on management. Every
-  // action (status / pin / delete) lives in the right-aligned actions
-  // cell so the row reads title-on-the-left, controls-on-the-right.
+  // permalink, so the posts list stays focused on management. Each
+  // action gets its own column so the status / pin / delete controls
+  // align vertically across rows like a real table.
   return `  <tr data-slug="${escapeAttr(p.slug)}">
     <td><a href="/admin/editor?slug=${slugUri}">${escapeText(p.title)}</a></td>
     <td><time datetime="${escapeAttr(p.updatedAt)}">${escapeText(date)}</time></td>
-    <td class="rkr-admin-posts-actions">
+    <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
         <label class="rkr-vh" for="rkr-status-${escapeAttr(p.slug)}">Status for ${escapeAttr(p.title)}</label>
         <select id="rkr-status-${escapeAttr(p.slug)}" name="status" class="rkr-admin-posts-status is-${p.status}">
@@ -73,7 +79,11 @@ function renderRow(p: AdminPostRow): string {
         </select>
         <noscript><button type="submit">apply</button></noscript>
       </form>
+    </td>
+    <td class="rkr-admin-posts-action">
       <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>pin</button>
+    </td>
+    <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/delete" class="rkr-admin-posts-del">
         <button type="submit" class="rkr-admin-posts-del-btn" aria-label="Delete ${escapeAttr(p.title)}">delete</button>
       </form>
@@ -82,5 +92,5 @@ function renderRow(p: AdminPostRow): string {
 }
 
 function renderEmptyState(): string {
-  return `  <tr><td colspan="3" class="rkr-admin-posts-empty">No posts yet. <a href="/admin/editor">Create one</a>.</td></tr>`;
+  return `  <tr><td colspan="5" class="rkr-admin-posts-empty">No posts yet. <a href="/admin/editor">Create one</a>.</td></tr>`;
 }
