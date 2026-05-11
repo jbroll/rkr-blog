@@ -125,10 +125,10 @@ main:focus-visible { outline: none; }
   max-width: var(--rkr-content);
   margin: 0.5rem auto 0;
   padding-top: 0.5rem;
-  border-top: 1px dashed var(--rkr-rule);
   display: flex;
-  gap: 0.75rem;
-  align-items: center;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+  align-items: baseline;
   font-size: 0.85rem;
   color: var(--rkr-muted);
 }
@@ -145,9 +145,14 @@ main:focus-visible { outline: none; }
   color: var(--rkr-link);
   text-decoration: underline;
 }
+/* Push the logout form to the trailing end of the strip and slant
+   the label so it doesn't read as just another navigation link. */
 .rkr-admin-strip-logout {
-  margin: 0;
+  margin: 0 0 0 auto;
   display: inline;
+}
+.rkr-admin-strip-logout .rkr-admin-strip-link {
+  font-style: italic;
 }
 .rkr-site-tagline {
   color: var(--rkr-muted);
