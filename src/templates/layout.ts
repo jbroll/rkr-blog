@@ -15,14 +15,21 @@ export function bundleVersion(): string {
   return `?v=${resolveGitHash().slice(0, 12)}`;
 }
 
-/** `<link>` tags for the public-side stylesheets. base.css carries the
- * theme-invariant primitives (a11y, overflow-clip); the active theme
- * (default, or whatever SITE_THEME selects) follows so its values win
- * on the cascade. See docs/theming.md. */
+/** `<link>` tags for the public-side stylesheets, in cascade order:
+ *
+ *   1. base.css — a11y / overflow primitives that themes never override.
+ *   2. themes/default.css — the full structural sheet. Always loaded so
+ *      themes can layer on top without re-implementing the framework.
+ *   3. themes/<name>.css — the active theme's overrides. Skipped when
+ *      the active theme IS default. See docs/theming.md.
+ */
 export function stylesheetLinks(): string {
   const v = bundleVersion();
   const theme = themeName();
-  return `<link rel="stylesheet" href="/static/base.css${v}"/>
+  const base = `<link rel="stylesheet" href="/static/base.css${v}"/>
+<link rel="stylesheet" href="/static/themes/default.css${v}"/>`;
+  if (theme === 'default') return base;
+  return `${base}
 <link rel="stylesheet" href="/static/themes/${theme}.css${v}"/>`;
 }
 

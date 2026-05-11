@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
 import { _resetGitHashCache } from '../../src/lib/build-info.ts';
-import { bundleVersion, siteFoot, siteHead } from '../../src/templates/layout.ts';
+import { _resetThemeNameCache } from '../../src/lib/config.ts';
+import { bundleVersion, siteFoot, siteHead, stylesheetLinks } from '../../src/templates/layout.ts';
 
-// resolveGitHash() is process-cached, so each test that depends on a
-// specific GIT_HASH env value must clear the cache afterwards or
-// subsequent tests pick up the previous value.
+// resolveGitHash() + themeName() are process-cached; reset between
+// tests that probe env-driven branches.
 afterEach(() => {
   _resetGitHashCache();
+  _resetThemeNameCache();
 });
 
 test('bundleVersion: ?v=<12-char short hash> when GIT_HASH is set', () => {
@@ -55,4 +56,36 @@ test('siteFoot: discreet admin link to /admin/login', () => {
   const html = siteFoot({ title: 'My site' });
   assert.match(html, /href="\/admin\/login"/);
   assert.match(html, /My site/);
+});
+
+test('stylesheetLinks: default theme loads base + default only', () => {
+  const prev = process.env.SITE_THEME;
+  delete process.env.SITE_THEME;
+  try {
+    const html = stylesheetLinks();
+    assert.match(html, /\/static\/base\.css/);
+    assert.match(html, /\/static\/themes\/default\.css/);
+    // Default theme is already in the default.css path; no extra layer.
+    assert.equal(html.match(/\/static\/themes\//g)?.length, 1);
+  } finally {
+    if (prev !== undefined) process.env.SITE_THEME = prev;
+  }
+});
+
+test('stylesheetLinks: alternate theme layers on top of default', () => {
+  const prev = process.env.SITE_THEME;
+  process.env.SITE_THEME = 'papermod';
+  try {
+    const html = stylesheetLinks();
+    assert.match(html, /\/static\/base\.css/);
+    assert.match(html, /\/static\/themes\/default\.css/);
+    assert.match(html, /\/static\/themes\/papermod\.css/);
+    // Cascade order: default first, theme last.
+    const defaultIdx = html.indexOf('/static/themes/default.css');
+    const themeIdx = html.indexOf('/static/themes/papermod.css');
+    assert.ok(defaultIdx < themeIdx, 'default must come before the active theme');
+  } finally {
+    if (prev !== undefined) process.env.SITE_THEME = prev;
+    else delete process.env.SITE_THEME;
+  }
 });

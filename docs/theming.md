@@ -20,10 +20,21 @@ Set the environment variable before starting the server:
 SITE_THEME=papermod node bin/server.js
 ```
 
-The default theme (`static/themes/default.css`) is bundled with the
-site. To add a theme, drop `<name>.css` into `static/themes/`. An
-unknown `SITE_THEME` falls back to `default` with a server-log
-warning.
+The default theme (`static/themes/default.css`) is the full
+structural stylesheet; alternate themes (`static/themes/<name>.css`)
+layer on top of it and override only what they want to change. The
+cascade order is:
+
+1. `base.css` — a11y + overflow primitives.
+2. `themes/default.css` — the framework: full structural CSS + the
+   default look. Always loaded.
+3. `themes/<active>.css` — the chosen theme's overrides. Skipped when
+   the active theme IS `default`.
+
+To add a theme, drop `<name>.css` into `static/themes/`. The file can
+be small: redefine the custom-property surface, plus any rules that
+need to differ. An unknown `SITE_THEME` falls back to `default` with
+a one-shot stderr warning.
 
 ## HTML invariants
 

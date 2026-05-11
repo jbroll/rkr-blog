@@ -6,6 +6,7 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
+import { _resetThemeNameCache } from '../../src/lib/config.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
@@ -171,6 +172,38 @@ test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', as
   assert.equal(bad.statusCode, 400);
   const missing = await app.inject({ method: 'POST', url: '/admin/posts/ghost/delete' });
   assert.equal(missing.statusCode, 404);
+});
+
+test('GET /admin/posts honors SITE_THEME=papermod (smoke proof)', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const prev = process.env.SITE_THEME;
+  process.env.SITE_THEME = 'papermod';
+  _resetThemeNameCache();
+  t.after(() => {
+    if (prev !== undefined) process.env.SITE_THEME = prev;
+    else delete process.env.SITE_THEME;
+    _resetThemeNameCache();
+  });
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  const app = await buildApp({ siteRoot: root, db });
+  t.after(async () => {
+    await app.close();
+    db.close();
+  });
+
+  const res = await app.inject({ method: 'GET', url: '/admin/posts' });
+  assert.equal(res.statusCode, 200);
+  // Layering: base + default (always) + papermod (overrides).
+  assert.match(res.body, /\/static\/base\.css/);
+  assert.match(res.body, /\/static\/themes\/default\.css/);
+  assert.match(res.body, /\/static\/themes\/papermod\.css/);
 });
 
 test('GET /admin/posts empty state when no posts', async (t) => {
