@@ -66,9 +66,15 @@ async function runStart(editor: Editor): Promise<void> {
     // so handleSave overwrites the right post.
     const slugParam = new URLSearchParams(location.search).get('slug');
     if (slugParam) {
+      // pinPost downloads the post bundle (manifest + originals + side-
+      // cars). On a long post this is multi-second; show a loading
+      // status so the empty form fields read as "fetching" rather than
+      // "the editor is broken".
+      setStatus(`loading /${slugParam}…`);
       try {
         const { manifest } = await pinPost(slugParam);
         seedFormFields(manifest);
+        setStatus(`loaded /${slugParam}`);
       } catch (err) {
         setStatus(`could not load /${slugParam}: ${(err as Error).message}`);
       }

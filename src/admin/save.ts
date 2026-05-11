@@ -4,11 +4,12 @@
 import type { Editor } from '@tiptap/core';
 import type { SavePostPayload } from '../lib/outbox-types.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
-import { $, setStatus } from './dom';
+import { $, setStatus, setStatusWithLink } from './dom';
 import { getOrCreateDraftId, readMeta, updateMeta } from './draft.ts';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
 import { getState } from './online-state.ts';
 import { append as outboxAppend } from './outbox.ts';
+import { markClean } from './page-title.ts';
 import { tryDrain } from './sync.ts';
 
 interface SaveResponse {
@@ -67,7 +68,11 @@ export async function handleSave(editor: Editor): Promise<void> {
     try {
       const result = await postSavePost(payload);
       await updateMeta(draftId, { slug, lastSyncedAt: result.updatedAt });
-      setStatus(`saved /${result.slug}`);
+      // Status carries a permalink so the author can verify the
+      // rendered post in one click; markClean drops the dirty dot
+      // from the browser tab title.
+      setStatusWithLink(`saved /${result.slug}`, `/${result.slug}`, 'view →');
+      markClean();
       return;
     } catch {
       // Fall through to the outbox queue. A 409 conflict on the

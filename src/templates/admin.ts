@@ -40,6 +40,16 @@ export function renderAdminPage(data: AdminPageData): string {
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
+  /* Back-to-site link pinned to the top-left of the viewport so it
+     takes no layout space (the editor body packs many controls and
+     pushing things down even a line can drive the live preview below
+     the fold on test viewports). */
+  .rkr-admin-toplink {
+    position: fixed; top: .5rem; left: .75rem;
+    margin: 0; font-size: .85rem; z-index: 10;
+  }
+  .rkr-admin-toplink a { color: var(--rkr-muted); text-decoration: none; }
+  .rkr-admin-toplink a:hover { color: var(--rkr-link); text-decoration: underline; }
   /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
      text / panel backgrounds so dark mode actually flips through. The
      fallbacks (after the comma) cover the case where site.css fails
@@ -287,7 +297,8 @@ export function renderAdminPage(data: AdminPageData): string {
 </style>
 </head>
 <body>
-<h1>New post</h1>
+<p class="rkr-admin-toplink"><a href="/" rel="nofollow">&larr; Back to site</a></p>
+<h1 id="rkr-page-title">New post</h1>
 <div class="rkr-meta">
   <label for="rkr-title">Title</label>   <input id="rkr-title" type="text"/>
   <label for="rkr-slug">Slug</label>     <input id="rkr-slug" type="text"/>

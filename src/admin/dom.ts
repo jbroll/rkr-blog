@@ -18,3 +18,15 @@ export function $<T extends HTMLElement = HTMLElement>(id: string): T {
 export function setStatus(msg: string): void {
   $('rkroll-admin-status').textContent = msg;
 }
+
+/** Status line with a trailing link — used after a successful save to
+ * surface the public URL. Both args are inserted as text/attribute via
+ * the DOM API so no caller is responsible for escaping. */
+export function setStatusWithLink(msg: string, href: string, linkText: string): void {
+  const el = $('rkroll-admin-status');
+  el.textContent = `${msg} `;
+  const a = document.createElement('a');
+  a.href = href;
+  a.textContent = linkText;
+  el.appendChild(a);
+}

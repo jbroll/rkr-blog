@@ -122,12 +122,23 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   // but blur is needed to flush remaining commits in some flows.
   await page.locator('#rkr-figure-matrix').blur();
 
+  // Dynamic h1 + tab title: the title input drives both, with a "● "
+  // prefix on document.title while the editor is dirty.
+  await expect(page.locator('#rkr-page-title')).toHaveText('e2e flow');
+  await expect(page).toHaveTitle(/^● e2e flow/);
+  await expect(page.getByRole('link', { name: '← Back to site' })).toBeVisible();
+
   // ---- 3. save ---------------------------------------------------------
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
     timeout: 10_000
   });
+  // Status carries a permalink and the dirty dot clears from the tab.
+  await expect(
+    page.locator('#rkroll-admin-status').getByRole('link', { name: 'view →' })
+  ).toHaveAttribute('href', `/${slug}`);
+  await expect(page).toHaveTitle(/^e2e flow/);
 
   // ---- verify the post is reachable on the public site ----------------
 
