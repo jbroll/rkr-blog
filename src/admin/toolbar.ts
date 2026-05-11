@@ -1,15 +1,16 @@
 // Toolbar setup for the admin SPA. Builds the bold/italic/heading/link/
-// image/gallery/drive/onedrive/save buttons and exposes the helper that
-// syncs each button's active state to the editor's current selection.
+// +image/save/pin buttons and exposes the helper that syncs each
+// button's active state to the editor's current selection.
 //
 // Lives in its own module so admin/main.ts can stay focused on figure
 // + image-edit panel orchestration; the toolbar is otherwise inert.
+// Image insertion is delegated to a single +Image button whose handler
+// (main.ts → insertFromAnySource('new')) opens a source picker
+// (local file / Google Drive / OneDrive).
 
 import type { Editor } from '@tiptap/core';
 
 import { setStatus } from './dom';
-import { pickFromDrive } from './integrations/gdrive';
-import { pickFromOneDrive } from './integrations/onedrive';
 import { pinPost } from './pin';
 import { handleSave } from './save';
 
@@ -31,10 +32,10 @@ function makeButton(
 export interface ToolbarDeps {
   editor: Editor;
   toolbar: HTMLElement;
-  /** Hidden file input the Image button clicks. */
-  fileInput: HTMLInputElement;
-  /** Multi-upload trigger; main.ts owns the picker + uploadMany flow. */
-  insertGallery: () => Promise<void>;
+  /** Insert a new figure with images picked from any source. The handler
+   * lives in main.ts so the source picker + append-mode plumbing stays
+   * in one place; the toolbar only knows the entry point. */
+  insertImage: () => Promise<void>;
 }
 
 /** Build the toolbar's buttons in place and return a sync callback the
@@ -42,7 +43,7 @@ export interface ToolbarDeps {
  * `is-active` class tracks the live selection (bold inside a bold span,
  * heading inside an H2, etc.). */
 export function mountToolbar(deps: ToolbarDeps): () => void {
-  const { editor, toolbar, fileInput, insertGallery } = deps;
+  const { editor, toolbar, insertImage } = deps;
   toolbar.replaceChildren(
     makeButton('B', () => editor.chain().focus().toggleBold().run(), 'bold'),
     makeButton('I', () => editor.chain().focus().toggleItalic().run(), 'italic'),
@@ -57,26 +58,7 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       },
       'link'
     ),
-    makeButton('Image', () => fileInput.click(), 'image'),
-    makeButton('Gallery', () => void insertGallery(), 'gallery'),
-    makeButton(
-      'Drive',
-      () => {
-        void pickFromDrive(editor).catch((err: unknown) => {
-          setStatus(`Drive: ${(err as Error).message}`);
-        });
-      },
-      'gdrive'
-    ),
-    makeButton(
-      'OneDrive',
-      () => {
-        void pickFromOneDrive(editor).catch((err: unknown) => {
-          setStatus(`OneDrive: ${(err as Error).message}`);
-        });
-      },
-      'onedrive'
-    ),
+    makeButton('+Image', () => void insertImage(), 'image'),
     makeButton('Save', () => void handleSave(editor), 'save', 'rkr-toolbar-primary'),
     /* v8 ignore next -- prompt-driven UI; e2e drives __rkrPin directly */
     makeButton('Pin', () => void runPin(), 'pin')

@@ -5,8 +5,6 @@
 //
 // See DEFERRED.md for the picker-SDK upgrade entry.
 
-import type { Editor } from '@tiptap/core';
-
 import { setStatus } from '../dom';
 import type { UploadResponse } from '../upload';
 
@@ -36,40 +34,38 @@ async function importOneDriveFile(fileId: string): Promise<UploadResponse> {
 function parseOneDriveId(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  // /drive/items/<id> form (Graph URL or share link path).
   const m = /\/items\/([A-Za-z0-9!_-]+)/.exec(trimmed);
   if (m) return m[1] ?? null;
-  // Bare-ish id heuristic — OneDrive ids look like
-  // "01ABCDE234XYZ..." or use base64-ish chars; accept conservatively.
   if (/^[A-Za-z0-9!_-]+$/.test(trimmed)) return trimmed;
   return null;
 }
 
-export async function pickFromOneDrive(editor: Editor): Promise<void> {
+/** Prompt for a OneDrive item id, import it, and return the resulting
+ * stored image id (or [] if the user cancelled / parse failed). The
+ * caller decides how to insert into the editor — a fresh figure for
+ * +Image, or appended to an existing figure for in-figure +. */
+export async function pickFromOneDrive(): Promise<string[]> {
   const status = await oneDriveStatus();
   if (!status.connected) {
     if (confirm('OneDrive is not connected for your account. Open the connect flow now?')) {
       window.location.href = '/admin/integrations/onedrive/connect';
     }
-    return;
+    return [];
   }
   const input = prompt('OneDrive item id (or share link):', '');
-  if (!input) return;
+  if (!input) return [];
   const fileId = parseOneDriveId(input);
   if (!fileId) {
     setStatus('OneDrive: could not extract an item id from input');
-    return;
+    return [];
   }
   setStatus(`importing ${fileId.slice(0, 12)}… from OneDrive`);
   try {
     const r = await importOneDriveFile(fileId);
-    editor
-      .chain()
-      .focus()
-      .insertContent({ type: 'figure', attrs: { ids: r.id } })
-      .run();
     setStatus(`imported from OneDrive (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`);
+    return [r.id];
   } catch (err) {
     setStatus(`OneDrive import error: ${(err as Error).message}`);
+    return [];
   }
 }

@@ -1,0 +1,361 @@
+// Admin SPA stylesheet. Extracted from admin.ts so the page
+// template stays under the 500-line size cap; the rules here are
+// scoped under #rkroll-admin-root / its sibling overlays.
+
+export const ADMIN_CSS = `
+  /* Override site.css's body reset so the admin chrome keeps its own
+     layout. The editor's prose preview lives inside <article> below,
+     where site.css's prose rules apply naturally. */
+  body {
+    max-width: 56rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background: var(--rkr-bg, #fff);
+    color: var(--rkr-text, #1a1a1a);
+  }
+  /* Single font-family rule for all admin chrome (toolbar buttons,
+     status, meta, panels). Site.css would otherwise impose its serif
+     prose font on form controls, which is jarring for UI elements.
+     The editable region inside <article> still gets the prose font. */
+  body, button, input, select { font-family: system-ui, sans-serif; }
+  /* Back-to-site link pinned to the top-left of the viewport so it
+     takes no layout space (the editor body packs many controls and
+     pushing things down even a line can drive the live preview below
+     the fold on test viewports). */
+  .rkr-admin-toplink {
+    position: fixed; top: .5rem; left: .75rem;
+    margin: 0; font-size: .85rem; z-index: 10;
+  }
+  .rkr-admin-toplink a { color: var(--rkr-muted); text-decoration: none; }
+  .rkr-admin-toplink a:hover { color: var(--rkr-link); text-decoration: underline; }
+  /* Copy-link button mirrors the back-link, pinned to the top-right
+     so it's reachable for every post without consuming layout. Icon-
+     only with a native tooltip via the title attribute; stays
+     disabled until the slug is known (after save or pin). The
+     handler in src/admin/page-title.ts writes the URL to the
+     clipboard and reports via setStatus. */
+  .rkr-admin-copylink {
+    position: fixed; top: .5rem; right: .75rem;
+    margin: 0; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.9rem; height: 1.9rem;
+    background: var(--rkr-bg); color: var(--rkr-muted);
+    border: 1px solid var(--rkr-rule); border-radius: 50%;
+    cursor: pointer; z-index: 10;
+  }
+  .rkr-admin-copylink:hover:not(:disabled) {
+    color: var(--rkr-link); border-color: var(--rkr-link);
+  }
+  .rkr-admin-copylink:disabled { opacity: .5; cursor: not-allowed; }
+  .rkr-admin-copylink svg { display: block; }
+  /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
+     text / panel backgrounds so dark mode actually flips through. The
+     fallbacks (after the comma) cover the case where site.css fails
+     to load. */
+  #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid var(--rkr-rule); border-radius: 4px; }
+  #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
+  #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
+  /* Primary toolbar action (Save). Visually distinct from the icon
+     cluster around it: the doc publishes when you click this one.
+     The hover lifts brightness slightly via --rkr-link-hover. */
+  #rkroll-admin-toolbar button.rkr-toolbar-primary {
+    background: var(--rkr-link);
+    color: var(--rkr-bg);
+    border: 1px solid var(--rkr-link);
+    padding: .25rem .85rem;
+    font-weight: 500;
+    margin-left: auto;
+  }
+  #rkroll-admin-toolbar button.rkr-toolbar-primary:hover {
+    background: var(--rkr-link-hover);
+    border-color: var(--rkr-link-hover);
+  }
+  /* Editor preview frame: the ProseMirror editable lives inside an
+     <article>, so site.css's prose typography (max-width, font-family,
+     headings, blockquotes, code, hr) applies. */
+  #rkroll-admin-root {
+    margin-bottom: .5rem; padding: .25rem 1rem;
+    border: 1px solid var(--rkr-rule); border-radius: 4px;
+    transition: border-color .1s, background .1s;
+  }
+  /* Visual cue while the user is dragging files over the editor.
+     CSS-only via a JS-toggled class; see admin/main.ts mount(). */
+  #rkroll-admin-root.is-drag-over {
+    border-color: var(--rkr-link);
+    background: color-mix(in srgb, var(--rkr-link) 5%, var(--rkr-bg));
+  }
+  /* Visible focus ring on the editable region (WCAG 2.4.7). The
+     central control of the entire admin shouldn't be invisible. */
+  #rkroll-admin-root .ProseMirror { min-height: 20rem; outline: none; }
+  #rkroll-admin-root .ProseMirror:focus-visible {
+    outline: 2px solid var(--rkr-link);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  /* Site.css would normally constrain article width via max-width: --rkr-prose
+     and hide overflow; in the editor we let it stretch to the editable box. */
+  #rkroll-admin-root article { max-width: none; margin: 0; }
+  #rkroll-admin-status { margin-top: .5rem; color: var(--rkr-muted); font-size: .9rem; }
+  /* Sync status badge: bottom-right of the editor frame. Click opens
+     the storage panel (phase 3). Visual contract per spec-offline §8. */
+  #rkroll-admin-root { position: relative; }
+  #rkr-sync-badge {
+    position: absolute; right: .5rem; bottom: .5rem;
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .15rem .5rem;
+    font: inherit; font-size: .8rem;
+    background: var(--rkr-bg); color: var(--rkr-muted);
+    border: 1px solid var(--rkr-rule); border-radius: 999px;
+    cursor: pointer;
+  }
+  #rkr-sync-badge:hover { color: var(--rkr-fg); }
+  .rkr-sync-dot {
+    display: inline-block; width: .55rem; height: .55rem;
+    border-radius: 50%; background: var(--rkr-muted);
+  }
+  .rkr-sync-dot.is-online { background: #2ea44f; }
+  .rkr-sync-dot.is-offline { background: #cf222e; }
+  .rkr-sync-dot.is-verifying { background: #d4a72c; }
+  .rkr-sync-dot.is-conflict { background: #cf222e; box-shadow: 0 0 0 2px color-mix(in srgb, #cf222e 30%, transparent); }
+  /* Storage panel dialog (spec-offline §8). Opens from the badge
+     click; renders pinned/cached/pending lists + sync-now + evict-
+     all. */
+  #rkr-storage-panel { padding: 1rem; min-width: 24rem; max-width: 32rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
+  #rkr-storage-panel h2 { margin: 0 0 .5rem 0; }
+  #rkr-storage-panel h3 { margin: .75rem 0 .25rem 0; font-size: 1rem; }
+  #rkr-storage-panel ul { list-style: none; padding: 0; margin: 0; }
+  #rkr-storage-panel li { display: flex; gap: .5rem; align-items: center; padding: .15rem 0; }
+  #rkr-storage-panel .rkr-storage-slug { flex: 1; font-family: monospace; }
+  #rkr-storage-panel .rkr-storage-when { color: var(--rkr-muted); font-size: .85rem; }
+  #rkr-storage-panel .rkr-storage-empty { color: var(--rkr-muted); font-style: italic; }
+  #rkr-storage-panel .rkr-storage-actions { margin-top: 1rem; display: flex; gap: .5rem; }
+  #rkr-storage-close { float: right; background: none; border: none; font-size: 1.5rem; cursor: pointer; }
+  #rkr-storage-schema { color: var(--rkr-muted); font-size: .8rem; margin-top: 1rem; text-align: right; }
+  .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
+  .rkr-meta input, .rkr-meta select { padding: .25rem; }
+  /* Figure attribute panel: shown only when a figure node is selected.
+     Use a translucent overlay over --rkr-bg so dark mode works without
+     a separate color rule (color-mix maps to a slightly-darker neutral
+     in dark mode, slightly-lighter in light mode). */
+  #rkr-figure-attrs[hidden] { display: none; }
+  #rkr-figure-attrs {
+    display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
+    align-items: center; margin: .75rem 0;
+    padding: .5rem .75rem; border: 1px solid var(--rkr-rule); border-radius: 4px;
+    background: color-mix(in srgb, var(--rkr-text) 4%, var(--rkr-bg));
+  }
+  #rkr-figure-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: var(--rkr-muted); }
+  #rkr-figure-attrs input, #rkr-figure-attrs select, #rkr-figure-attrs textarea { padding: .25rem; }
+  /* Scoped sections inside the attr panel. display:contents flattens
+     the wrapper into the parent grid so the existing label/input two-
+     column layout still aligns; [hidden] short-circuits display:contents
+     because the [attr] selector beats the bare-class selector. */
+  .rkr-attr-section { display: contents; }
+  .rkr-attr-section[hidden] { display: none; }
+  /* Source-picker dialog: vertical button stack with a small inset.
+     showModal()'s built-in backdrop dimming gives focus separation. */
+  #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
+  #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }
+  #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
+  #rkr-source-picker button { padding: .4rem .75rem; cursor: pointer; text-align: left; }
+  #rkr-source-picker button[data-source=""] { margin-top: .5rem; color: var(--rkr-muted); }
+  /* In-figure "+ Add image" affordance: a small button rendered
+     BELOW the thumb grid (not as a grid cell) so the figure's
+     primary editable area is the images, not an empty slot at the
+     article's geometric centre. Author-clickable when the figure is
+     selected; main.ts's delegated handler opens the source picker
+     in append mode. */
+  #rkroll-admin-root button.rkr-multi-add {
+    display: inline-block;
+    margin-top: .35rem;
+    padding: .15rem .6rem;
+    background: transparent;
+    border: 1px dashed var(--rkr-rule);
+    border-radius: 3px;
+    color: var(--rkr-muted);
+    font: inherit; font-size: .85rem;
+    cursor: pointer;
+  }
+  #rkroll-admin-root button.rkr-multi-add:hover {
+    color: var(--rkr-text);
+    border-color: var(--rkr-text);
+  }
+  /* Browser-native :out-of-range styling for autoplay (input has
+     min=0/max=60 attrs). Gives the author a visual cue that >60 will
+     be silently clamped on save. */
+  #rkr-figure-timer:out-of-range {
+    border: 1px solid #c00;
+    background: color-mix(in srgb, #c00 12%, var(--rkr-bg));
+  }
+  /* Image-edit pipeline section nested inside the figure-attrs grid;
+     spans full width and stacks its own grid beneath. */
+  #rkr-image-edit { grid-column: 1 / -1; display: contents; }
+  #rkr-image-edit[hidden] { display: none; }
+  /* Editor-side previews of figures: a labelled chip + a 3-col grid
+     of thumbs. Single-image figures share the same grid (one cell in
+     the first column); multi-image figures wrap across three columns
+     into N rows. The grid is for *editor browsing only* — the public
+     site honours the figure's declared matrix/justify/etc. */
+  #rkroll-admin-root .rkr-multi {
+    margin: 1rem 0; padding: .5rem; border: 1px dashed var(--rkr-rule); border-radius: 4px;
+    background: color-mix(in srgb, var(--rkr-text) 3%, var(--rkr-bg));
+  }
+  #rkroll-admin-root .rkr-multi-label {
+    font-family: ui-monospace, monospace; font-size: .8rem; color: var(--rkr-muted); margin-bottom: .25rem;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  /* 3-col grid; rows grow to fit the tallest image in the row so
+     aspect ratio is preserved. align-items: start keeps shorter
+     images flush to the top of their row rather than vertically
+     centring inside whitespace. */
+  #rkroll-admin-root .rkr-multi-thumbs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .5rem;
+    align-items: start;
+  }
+  /* Higher specificity than the generic img.rkr-image rule below so
+     grid sizing wins. width:100% fills the 1fr cell; height:auto +
+     no object-fit clamp keeps the natural aspect ratio. */
+  #rkroll-admin-root img.rkr-multi-thumb {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    display: block;
+    border-radius: 2px;
+    cursor: pointer;
+    margin: 0;
+  }
+  #rkroll-admin-root .rkr-multi-thumb.is-active-cell {
+    outline: 2px solid var(--rkr-link, #1a4f7f);
+    outline-offset: 2px;
+  }
+  #rkroll-admin-root .rkr-multi-caption {
+    margin-top: .35rem; color: var(--rkr-muted); font-size: .85rem; font-style: italic;
+  }
+  /* Site.css's image positioning rules (rkr-pos-default, rkr-pos-full,
+     rkr-pos-left, rkr-pos-right) target the public-page <figure> wrapper
+     and assume the post is rendered inside the page's outer column. The
+     editor's ImageNode emits a bare <img class="rkr-image rkr-pos-X">
+     without that wrapper, so a user picking position=full would otherwise
+     trigger width:100vw + negative-margin breakout that escapes the
+     editor frame entirely. Clamp every editor image to the editable box;
+     the actual breakout/float behavior takes effect only on the published
+     page. Higher specificity than .rkr-pos-* so this wins without !important. */
+  #rkroll-admin-root img.rkr-image {
+    display: block;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    margin: .5rem 0;
+  }
+  /* Image-attribute action row + crop modal. flex-wrap so the dense
+     icon-button cluster wraps onto a second row on narrow viewports
+     instead of horizontally overflowing. */
+  .rkr-image-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .rkr-image-actions button { padding: .25rem .75rem; cursor: pointer; }
+  .rkr-image-actions button:disabled { opacity: .4; cursor: not-allowed; }
+  /* Save edits is the primary action: visually distinct from the
+     in-place ops (rotate/flip/etc) and the Reset escape hatch. The
+     dirty-state flip lives in JS via the disabled attribute. */
+  .rkr-image-actions button.rkr-image-save:not(:disabled) {
+    background: var(--rkr-link); color: var(--rkr-bg);
+    border: 1px solid var(--rkr-link);
+  }
+  /* Edits panel: ordered list of ops in click order, each with an
+     inline delete button. Spans the value column of the parent grid
+     so the label sits on its own row beside step 1. */
+  #rkr-image-edits-label { align-self: start; padding-top: .25rem; color: var(--rkr-muted); }
+  #rkr-image-edits {
+    margin: 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: .15rem;
+  }
+  #rkr-image-edits:empty::before {
+    content: 'no edits'; color: var(--rkr-muted); font-style: italic; font-size: .85rem;
+  }
+  #rkr-image-edits li {
+    display: flex; align-items: center; gap: .5rem;
+    font-family: ui-monospace, monospace; font-size: .85rem;
+  }
+  #rkr-image-edits .rkr-edits-step { flex: 1; }
+  #rkr-image-edits button.rkr-edits-del {
+    padding: 0 .35rem; background: transparent;
+    border: 1px solid var(--rkr-rule); border-radius: 2px;
+    cursor: pointer; font-size: .85rem; line-height: 1.4;
+  }
+  #rkr-image-edits button.rkr-edits-del:hover {
+    background: color-mix(in srgb, var(--rkr-text) 8%, var(--rkr-bg));
+  }
+  #rkr-crop-modal {
+    border: 1px solid var(--rkr-rule); border-radius: 6px; padding: 0;
+    width: min(80vw, 60rem); max-width: 95vw; max-height: 90vh;
+    background: var(--rkr-bg); color: var(--rkr-text);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  #rkr-crop-modal::backdrop { background: rgba(0,0,0,.6); }
+  #rkr-crop-modal h2 {
+    margin: 0; padding: .75rem 1rem;
+    font-size: 1rem; font-family: system-ui, sans-serif;
+    border-bottom: 1px solid var(--rkr-rule);
+  }
+  #rkr-crop-modal .rkr-crop-stage {
+    /* Cropper needs a contained stage that bounds the image so the
+       handles render inside the modal rather than at full image size. */
+    height: 60vh; max-height: 32rem;
+    background: color-mix(in srgb, var(--rkr-text) 90%, var(--rkr-bg));
+  }
+  #rkr-crop-modal .rkr-crop-stage img {
+    /* Cropper.js requires display:block + width:100% to attach handles. */
+    display: block; max-width: 100%;
+  }
+  #rkr-crop-modal .rkr-crop-actions {
+    display: flex; gap: .5rem; align-items: center; padding: .75rem;
+    border-top: 1px solid var(--rkr-rule); justify-content: flex-end;
+  }
+  #rkr-crop-modal #rkr-crop-status { flex: 1; color: var(--rkr-muted); font-size: .9rem; }
+  #rkr-crop-modal button { padding: .35rem .85rem; cursor: pointer; }
+  /* Perspective modal: same outer shell as the crop modal, but the
+     stage is custom (no Cropper.js). 4 absolutely-positioned handles
+     over the image, plus an SVG that draws the connecting quad. */
+  #rkr-persp-modal {
+    border: 1px solid var(--rkr-rule); border-radius: 6px; padding: 0;
+    width: min(80vw, 60rem); max-width: 95vw; max-height: 90vh;
+    background: var(--rkr-bg); color: var(--rkr-text);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  #rkr-persp-modal::backdrop { background: rgba(0,0,0,.6); }
+  #rkr-persp-modal h2 {
+    margin: 0; padding: .75rem 1rem; font-size: 1rem;
+    font-family: system-ui, sans-serif;
+    border-bottom: 1px solid var(--rkr-rule);
+  }
+  #rkr-persp-modal .rkr-persp-stage {
+    position: relative; height: 60vh; max-height: 32rem;
+    background: color-mix(in srgb, var(--rkr-text) 90%, var(--rkr-bg));
+    overflow: hidden;
+  }
+  #rkr-persp-modal .rkr-persp-stage img {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: 100%; max-height: 100%;
+    user-select: none; pointer-events: none;
+  }
+  #rkr-persp-modal .rkr-persp-stage svg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  #rkr-persp-modal .rkr-persp-handle {
+    position: absolute; width: 1.25rem; height: 1.25rem;
+    margin: -.625rem 0 0 -.625rem;
+    background: var(--rkr-link); border: 2px solid var(--rkr-bg);
+    border-radius: 50%; cursor: grab;
+    box-shadow: 0 0 0 1px var(--rkr-rule);
+    touch-action: none;
+  }
+  #rkr-persp-modal .rkr-persp-handle:active { cursor: grabbing; }
+  #rkr-persp-modal .rkr-persp-actions {
+    display: flex; gap: .5rem; align-items: center; padding: .75rem;
+    border-top: 1px solid var(--rkr-rule); justify-content: flex-end;
+  }
+  #rkr-persp-modal #rkr-persp-status { flex: 1; color: var(--rkr-muted); font-size: .9rem; }
+  #rkr-persp-modal button { padding: .35rem .85rem; cursor: pointer; }
+`;

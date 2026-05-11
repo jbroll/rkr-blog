@@ -22,31 +22,31 @@
       "linesHit": 5
     },
     "src/admin/figure-node.ts": {
-      "linesFound": 4,
-      "linesHit": 4
+      "linesFound": 5,
+      "linesHit": 5
     },
     "src/admin/image-edit.ts": {
       "linesFound": 58,
       "linesHit": 50
     },
     "src/admin/integrations/gdrive.ts": {
-      "linesFound": 48,
+      "linesFound": 53,
       "linesHit": 1
     },
     "src/admin/integrations/onedrive.ts": {
-      "linesFound": 28,
+      "linesFound": 26,
       "linesHit": 0
     },
     "src/admin/main.ts": {
-      "linesFound": 109,
-      "linesHit": 83
+      "linesFound": 74,
+      "linesHit": 59
     },
     "src/admin/perspective-modal.ts": {
       "linesFound": 73,
       "linesHit": 1
     },
     "src/admin/pick.ts": {
-      "linesFound": 14,
+      "linesFound": 7,
       "linesHit": 0
     },
     "src/admin/save.ts": {
@@ -54,8 +54,8 @@
       "linesHit": 21
     },
     "src/admin/toolbar.ts": {
-      "linesFound": 18,
-      "linesHit": 11
+      "linesFound": 14,
+      "linesHit": 12
     },
     "src/admin/upload.ts": {
       "linesFound": 15,
@@ -168,6 +168,14 @@
     "src/admin/page-title.ts": {
       "linesFound": 23,
       "linesHit": 18
+    },
+    "src/admin/image-edit-panel.ts": {
+      "linesFound": 45,
+      "linesHit": 34
+    },
+    "src/admin/image-insert.ts": {
+      "linesFound": 45,
+      "linesHit": 37
     }
   }
 }

@@ -198,7 +198,15 @@ test('editor: rotate single image then save edits', async ({ page }) => {
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded rotate\.png/, {
     timeout: 10_000
   });
+  // Click the image to enter per-cell mode (image-edit panel only
+  // reveals when a cell is explicitly selected — single-image
+  // figures no longer auto-select cell 0).
+  await page.locator('img[data-cell-index="0"]').click();
   await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  // Wait for ensureLocalState() to land before any rotate/crop click
+  // — getLocalEditState (sync) returns null until the meta fetch
+  // resolves, and silent no-ops here turn into flaky e2e timeouts.
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
 
   // Wait for ensureLocalState() to settle — the Save button starts
   // disabled and the rotate handler reads getLocalEditState which
@@ -244,7 +252,14 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded crop\.png/, {
     timeout: 10_000
   });
+  // Click the image to enter per-cell mode (image-edit panel only
+  // reveals when a cell is explicitly selected).
+  await page.locator('img[data-cell-index="0"]').click();
   await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  // Wait for ensureLocalState() to land before any rotate/crop click
+  // — getLocalEditState (sync) returns null until the meta fetch
+  // resolves, and silent no-ops here turn into flaky e2e timeouts.
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
 
   // Modal starts closed (no `open` attribute → not visible).
   const dialog = page.locator('#rkr-crop-modal');
@@ -391,6 +406,85 @@ test('editor: per-cell selection drives the image-edit panel for multi-image fig
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
 
+// Source-picker entry points: the toolbar's +Image button and each
+// figure's "+ Add image" button both route through the same picker
+// dialog. The Local branch sets pendingInsertMode (new vs append)
+// before triggering fileInput.click(), so the persistent change
+// listener can branch on insert-vs-append. e2e setInputFiles bypasses
+// the dialog entirely (the "main flow" tests above), so this spec
+// specifically exercises the dialog→Local→fileInput chain.
+test('editor: source picker drives both +Image (new) and figure + (append)', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.locator('#rkr-title').fill('e2e picker');
+  await setSlug(page, `e2e-picker-${Date.now()}`);
+
+  const dialog = page.locator('#rkr-source-picker');
+
+  // ---- 1. Toolbar +Image → Local: opens dialog, picks local source,
+  //         setInputFiles delivers the file, change listener inserts
+  //         a NEW figure (default mode).
+  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="local"]').click();
+  await expect(dialog).toBeHidden();
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'first.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLACK, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded first\.png/, {
+    timeout: 10_000
+  });
+  const idA = await page.locator('#rkr-figure-ids').inputValue();
+  expect(idA).toMatch(/^[0-9a-f]{8,}/);
+
+  // ---- 2. Figure "+ Add image" → Local: opens the same dialog,
+  //         this time pendingInsertMode='append' is stashed, so the
+  //         change listener appends to the active figure's ids.
+  await page.locator('button[data-add-image]').click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="local"]').click();
+  await expect(dialog).toBeHidden();
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'second.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_RED, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(
+    /^appended 1 image\(s\) to figure/,
+    { timeout: 10_000 }
+  );
+  // The figure now carries both ids. Read via the e2e __rkrEditor
+  // hook because the hidden #rkr-figure-ids input is only refreshed
+  // when a figure is selected — the dialog focus dance during append
+  // can leave the editor unfocused even though the doc state updated.
+  const figureIds = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed');
+    let ids = '';
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') ids = String((node.attrs as { ids: string }).ids ?? '');
+    });
+    return ids;
+  });
+  expect(figureIds.split(',').length).toBe(2);
+  expect(figureIds.startsWith(`${idA},`)).toBe(true);
+
+  // ---- 3. Cancel branch: dialog opens, Cancel closes it with no
+  //         further side effect (mode remains 'new' for the next
+  //         direct setInputFiles).
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source=""]').click();
+  await expect(dialog).toBeHidden();
+});
+
 // Offline upload flow (phase 1f): with the browser context offline,
 // uploadImage's POST fails, queueUpload writes the original to OPFS
 // + appends an `upload` outbox entry, returning a synthetic
@@ -481,12 +575,22 @@ test('editor: offline rotate+save queues setOps+bake, drains on reconnect', asyn
   const id = await page.locator('#rkr-figure-ids').inputValue();
   expect(id).toMatch(/^[0-9a-f]{64}$/);
 
+  // Enter per-cell mode while still online so ensureLocalState's
+  // initial meta fetch lands; otherwise rotate fires before the local
+  // state hydrates and the op silently drops.
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  // Wait for ensureLocalState() to land before any rotate/crop click
+  // — getLocalEditState (sync) returns null until the meta fetch
+  // resolves, and silent no-ops here turn into flaky e2e timeouts.
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+
   // ---- 1. go offline + rotate + save -------------------------------
   await context.setOffline(true);
   // Tell the SPA we're offline so getState() flips before Save fires.
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
 
-  await expect(page.locator('#rkr-image-edit')).toBeVisible();
   await page.locator('#rkr-image-rotate-r-btn').click();
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
   await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
@@ -652,7 +756,13 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
   });
   const id = await page.locator('#rkr-figure-ids').inputValue();
 
+  // Enter per-cell mode by clicking the image.
+  await page.locator('img[data-cell-index="0"]').click();
   await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  // Wait for ensureLocalState() to land before any rotate/crop click
+  // — getLocalEditState (sync) returns null until the meta fetch
+  // resolves, and silent no-ops here turn into flaky e2e timeouts.
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 
   await page.locator('#rkr-image-rotate-r-btn').click();
@@ -699,7 +809,15 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
     ed.commands.setNodeSelection(figurePos);
   }, id);
 
+  // Re-enter per-cell mode post-reload (selection restore picks the
+  // figure, but activeCellIndex isn't persisted; the click brings up
+  // the image-edit pipeline for cell 0).
+  await page.locator('img[data-cell-index="0"]').click();
   await expect(page.locator('#rkr-image-edit')).toBeVisible();
+  // Wait for ensureLocalState() to land before any rotate/crop click
+  // — getLocalEditState (sync) returns null until the meta fetch
+  // resolves, and silent no-ops here turn into flaky e2e timeouts.
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
   // Restored state has the rotate op still pending.
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(1, { timeout: 5_000 });
   await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();

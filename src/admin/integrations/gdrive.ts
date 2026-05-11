@@ -7,8 +7,6 @@
 // creates or opens via the picker are reachable. Tokens and picker
 // config arrive from per-user OAuth state stored in oauth_tokens.
 
-import type { Editor } from '@tiptap/core';
-
 import { setStatus } from '../dom';
 import type { UploadResponse } from '../upload';
 
@@ -55,7 +53,7 @@ interface GoogleGlobal {
     PickerBuilder: new () => PickerBuilder;
     DocsView: new (viewId?: unknown) => unknown;
     ViewId: { DOCS_IMAGES: unknown };
-    Action: { PICKED: string };
+    Action: { PICKED: string; CANCEL: string };
   };
 }
 interface GapiGlobal {
@@ -130,16 +128,18 @@ async function importGdriveFile(fileId: string): Promise<UploadResponse> {
 }
 
 /**
- * Open Drive picker → on selection, import each chosen file and insert as
- * an image node in the editor. Resolves after every file has been imported.
+ * Open Drive picker → on selection, import each chosen file and resolve
+ * with the resulting stored image ids. Cancelled / no-pick resolves []
+ * so callers can branch without a try/catch. The caller decides how to
+ * insert into the editor (new figure vs append to an existing one).
  */
-export async function pickFromDrive(editor: Editor): Promise<void> {
+export async function pickFromDrive(): Promise<string[]> {
   const status = await gdriveStatus();
   if (!status.connected) {
     if (confirm('Google Drive is not connected for your account. Open the connect flow now?')) {
       window.location.href = '/admin/integrations/gdrive/connect';
     }
-    return;
+    return [];
   }
 
   const [token, config, picker] = await Promise.all([
@@ -148,30 +148,35 @@ export async function pickFromDrive(editor: Editor): Promise<void> {
     loadPicker()
   ]);
 
-  const view = new picker.DocsView(picker.ViewId.DOCS_IMAGES);
-  const instance = new picker.PickerBuilder()
-    .addView(view)
-    .setOAuthToken(token.accessToken)
-    .setDeveloperKey(config.developerKey)
-    .setAppId(config.appId)
-    .setCallback(async (data) => {
-      if (data.action !== picker.Action.PICKED) return;
-      const docs = data.docs ?? [];
-      for (const doc of docs) {
-        setStatus(`importing ${doc.name ?? doc.id} from Drive…`);
-        try {
-          const r = await importGdriveFile(doc.id);
-          editor
-            .chain()
-            .focus()
-            .insertContent({ type: 'figure', attrs: { ids: r.id } })
-            .run();
-          setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
-        } catch (err) {
-          setStatus(`Drive import error: ${(err as Error).message}`);
+  // Picker is callback-driven; bridge to a Promise so the caller can
+  // await ids. CANCEL / no-pick resolves an empty array.
+  return new Promise<string[]>((resolve) => {
+    const view = new picker.DocsView(picker.ViewId.DOCS_IMAGES);
+    const instance = new picker.PickerBuilder()
+      .addView(view)
+      .setOAuthToken(token.accessToken)
+      .setDeveloperKey(config.developerKey)
+      .setAppId(config.appId)
+      .setCallback(async (data) => {
+        if (data.action === picker.Action.CANCEL) {
+          resolve([]);
+          return;
         }
-      }
-    })
-    .build();
-  instance.setVisible(true);
+        if (data.action !== picker.Action.PICKED) return;
+        const ids: string[] = [];
+        for (const doc of data.docs ?? []) {
+          setStatus(`importing ${doc.name ?? doc.id} from Drive…`);
+          try {
+            const r = await importGdriveFile(doc.id);
+            ids.push(r.id);
+            setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
+          } catch (err) {
+            setStatus(`Drive import error: ${(err as Error).message}`);
+          }
+        }
+        resolve(ids);
+      })
+      .build();
+    instance.setVisible(true);
+  });
 }

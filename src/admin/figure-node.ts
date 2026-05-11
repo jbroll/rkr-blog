@@ -81,6 +81,11 @@ export const FigureNode = Node.create({
       }
     ]);
     const matrixLabel = attrs.matrix ? attrs.matrix : `1x${idList.length || 1}`;
+    // The "+" affordance sits BELOW the thumb grid (not as a grid
+    // cell) so the figure's editable click-area is the images
+    // themselves, not an empty slot at the article's geometric
+    // centre. main.ts's delegated click handler routes
+    // [data-add-image] clicks to the source picker in append mode.
     return [
       'div',
       mergeAttributes(HTMLAttributes, {
@@ -91,6 +96,17 @@ export const FigureNode = Node.create({
       }),
       ['div', { class: 'rkr-multi-label' }, `figure ${matrixLabel} (${idList.length})`],
       ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
+      [
+        'button',
+        {
+          type: 'button',
+          class: 'rkr-multi-add',
+          'data-add-image': 'true',
+          'aria-label': 'Add image to figure',
+          title: 'Add image'
+        },
+        '+ Add image'
+      ],
       ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])
     ];
   }
