@@ -34,6 +34,7 @@ import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
 import { registerAdminPostsRoutes } from './admin-posts.ts';
 import { prewarmVariants } from './admin-prewarm.ts';
+import { registerAdminSettingsRoutes } from './admin-settings.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -110,6 +111,10 @@ export default async function adminRoutes(
   if (opts.db) {
     registerAdminPostsRoutes(fastify, { siteRoot, db: opts.db, guard });
   }
+
+  // Site settings (title / tagline / theme) — surfaces the persisted
+  // config that lib/config.ts already reads on every request.
+  registerAdminSettingsRoutes(fastify, { guard });
 
   const { invalidate: invalidateSidecarListCache } = registerImageLookupRoutes(fastify, {
     siteRoot,

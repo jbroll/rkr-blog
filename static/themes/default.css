@@ -262,6 +262,52 @@ body {
 }
 .rkr-admin-posts-empty a { color: var(--rkr-link); }
 
+/* Settings page: a vertical two-column grid mirroring the editor's
+   meta panel (label on the left, input on the right). */
+.rkr-admin-settings-heading { font-size: 1.5rem; margin: 1rem 0; }
+.rkr-admin-settings {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  max-width: 40rem;
+  margin: 1rem 0;
+}
+.rkr-admin-settings label { color: var(--rkr-muted); }
+.rkr-admin-settings input,
+.rkr-admin-settings select { padding: 0.35rem 0.5rem; font: inherit; }
+.rkr-admin-settings-hint {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0;
+  color: var(--rkr-muted);
+  font-size: 0.85rem;
+}
+.rkr-admin-settings-hint code {
+  background: color-mix(in srgb, var(--rkr-text) 8%, transparent);
+  padding: 0 0.25rem;
+  border-radius: 3px;
+}
+.rkr-admin-settings-submit {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+.rkr-admin-settings-flash {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rkr-rule);
+  border-radius: 4px;
+  max-width: 40rem;
+}
+.rkr-admin-settings-flash.is-ok {
+  border-color: color-mix(in srgb, var(--rkr-link) 40%, transparent);
+  color: var(--rkr-link);
+}
+.rkr-admin-settings-flash.is-error {
+  border-color: #cf222e;
+  color: #cf222e;
+}
+
 .rkr-site-foot {
   border-top: 1px solid var(--rkr-rule);
   margin-top: 4rem;
