@@ -48,7 +48,7 @@ ${rows}
   </tbody>
 </table>
 </main>
-${siteFoot(data.site)}
+${siteFoot(data.site, { isAdmin: true })}
 <script type="module" src="/static/admin/posts-list.js"></script>
 </body>
 </html>

@@ -80,13 +80,28 @@ function renderAdminStrip(currentSlug?: string): string {
   </nav>`;
 }
 
-export function siteFoot(site: SiteChrome['site']): string {
+export interface FootOpts {
+  /** Suppresses the discreet `Admin` link to /admin/login. Authed
+   * sessions already see the admin strip in the header, so a second
+   * "log in" affordance in the footer is noise (and confusing — it
+   * points at the login page rather than back into the admin
+   * surface). */
+  isAdmin?: boolean;
+}
+
+export function siteFoot(site: SiteChrome['site'], opts: FootOpts = {}): string {
   const year = new Date().getFullYear();
   // /admin/login is reachable directly but no link from the public
-  // chrome would have you find it; a discreet footer link is enough.
-  return `<footer class="rkr-site-foot">
-  &copy; ${year} ${escapeAttr(site.title)}
+  // chrome would have you find it; a discreet footer link covers the
+  // anonymous-visitor entry point. When the visitor is already authed
+  // the link adds nothing — drop it (separator and all) so the footer
+  // collapses to just the copyright line.
+  const adminLink = opts.isAdmin
+    ? ''
+    : `
   <span class="rkr-site-foot-sep" aria-hidden="true">·</span>
-  <a class="rkr-site-foot-admin" href="/admin/login" rel="nofollow">Admin</a>
+  <a class="rkr-site-foot-admin" href="/admin/login" rel="nofollow">Admin</a>`;
+  return `<footer class="rkr-site-foot">
+  &copy; ${year} ${escapeAttr(site.title)}${adminLink}
 </footer>`;
 }

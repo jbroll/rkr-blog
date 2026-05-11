@@ -51,7 +51,7 @@ ${dateBlock}
 ${post.bodyHtml}
 </article>
 </main>
-${siteFoot(post.site)}
+${siteFoot(post.site, { isAdmin: post.isAdmin })}
 </body>
 </html>
 `;

@@ -57,7 +57,7 @@ ${items}
 </ul>
 ${pager}
 </main>
-${siteFoot(data.site)}
+${siteFoot(data.site, { isAdmin: data.isAdmin })}
 </body>
 </html>
 `;

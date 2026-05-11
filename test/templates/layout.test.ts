@@ -52,10 +52,22 @@ test('siteHead: isAdmin on a post — adds Edit this post with URL-encoded slug'
   assert.match(html, /href="\/admin\/editor\?slug=hello%20world"/);
 });
 
-test('siteFoot: discreet admin link to /admin/login', () => {
+test('siteFoot: anonymous visitor sees the discreet admin link', () => {
   const html = siteFoot({ title: 'My site' });
   assert.match(html, /href="\/admin\/login"/);
   assert.match(html, /My site/);
+});
+
+test('siteFoot: authed visitor does not see the admin link', () => {
+  // The header already carries the admin strip (New post / Posts /
+  // Logout); a second "Admin" link in the footer pointing at
+  // /admin/login is noise + confusing (it suggests they're somehow
+  // not logged in). The separator pipe disappears with the link so
+  // the footer reads as a single line, not "© rkroll ·".
+  const html = siteFoot({ title: 'My site' }, { isAdmin: true });
+  assert.doesNotMatch(html, /\/admin\/login/);
+  assert.doesNotMatch(html, /rkr-site-foot-admin/);
+  assert.doesNotMatch(html, /rkr-site-foot-sep/);
 });
 
 test('stylesheetLinks: default theme loads base + default only', () => {
