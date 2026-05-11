@@ -1,0 +1,55 @@
+/* base.css — theme-invariant primitives. Themes layer on top.
+ *
+ * Loaded BEFORE the active theme so themed property values apply.
+ * Anything that affects accessibility (skip link, focus rings) or
+ * layout correctness (overflow-clip for the breakout figure layout)
+ * lives here so a theme can't silently break it.
+ *
+ * See docs/theming.md for the full contract.
+ */
+
+* { box-sizing: border-box; }
+
+html {
+  font-size: var(--rkr-base-size, 1.0625rem);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  /* rkr-pos-full breaks out via `width: 100vw; margin-left: calc(-50vw + 50%)`.
+     On browsers with always-present scrollbars 100vw is wider than the
+     viewport's content area, producing a 1-px horizontal scroll. Clip
+     here so the breakout never overflows. */
+  overflow-x: clip;
+}
+
+/* Skip-to-content link: hidden until focused, then visible at top-left.
+   First tab stop on every page lets keyboard users jump past the chrome. */
+.rkr-skip {
+  position: absolute;
+  left: 0; top: 0;
+  padding: .5rem .75rem;
+  background: var(--rkr-bg, #fff);
+  color: var(--rkr-link, #1a4f7f);
+  border: 2px solid var(--rkr-link, #1a4f7f);
+  border-radius: var(--rkr-radius, 4px);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.rkr-skip:focus, .rkr-skip:focus-visible {
+  transform: translateY(0);
+  z-index: 1000;
+  outline: none;
+}
+
+/* Global keyboard-focus indicator. Without this, links and buttons on
+   the public side have no visible focus state — WCAG 2.4.7 fail. */
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--rkr-link, #1a4f7f);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* main is focusable for skip-link target — hide its outline (the focus
+   ring on the post body would be more confusing than helpful). */
+main:focus-visible { outline: none; }

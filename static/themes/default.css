@@ -1,11 +1,10 @@
-/*  rkroll public theme — single stylesheet, no dependencies.
-    Photo-friendly: prose stays narrow for readability; figures break out
-    of the prose column to fill the wider content area.
-
-    Layered for future image-display widgets (gallery, carousel, matrix,
-    lightbox) — they'll define their own .rkr-* classes and inherit the
-    color + spacing tokens defined in :root.
-*/
+/*  rkroll default theme.
+ *
+ *  Photo-friendly: prose stays narrow for readability; figures break
+ *  out of the prose column to fill the wider content area. Drives the
+ *  custom-property surface documented in docs/theming.md; layered on
+ *  top of base.css (which carries a11y + overflow primitives).
+ */
 
 :root {
   /* color tokens */
@@ -44,58 +43,17 @@
   }
 }
 
-* { box-sizing: border-box; }
-
-html {
-  font-size: var(--rkr-base-size);
-  -webkit-text-size-adjust: 100%;
-}
-
+/* Theme-owned body typography. base.css covers margin reset +
+   overflow-clip; everything visual (font, line height, colors)
+   belongs to the theme. */
 body {
-  margin: 0;
   font-family: var(--rkr-prose-font);
   line-height: var(--rkr-line-height);
   color: var(--rkr-text);
   background: var(--rkr-bg);
-  /* rkr-pos-full breaks out via `width: 100vw; margin-left: calc(-50vw + 50%)`.
-     On browsers with always-present scrollbars 100vw is wider than the
-     viewport's content area, producing a 1-px horizontal scroll. Clip
-     here so the breakout never overflows. */
-  overflow-x: clip;
 }
 
 /* ---- site chrome -------------------------------------------------- */
-
-/* Skip-to-content link: hidden until focused, then visible at top-left.
-   First tab stop on every page lets keyboard users jump past the chrome. */
-.rkr-skip {
-  position: absolute;
-  left: 0; top: 0;
-  padding: .5rem .75rem;
-  background: var(--rkr-bg);
-  color: var(--rkr-link);
-  border: 2px solid var(--rkr-link);
-  border-radius: var(--rkr-radius);
-  text-decoration: none;
-  /* Off-screen until focused. */
-  transform: translateY(-200%);
-}
-.rkr-skip:focus, .rkr-skip:focus-visible {
-  transform: translateY(0);
-  z-index: 1000;
-  outline: none;
-}
-
-/* Global keyboard-focus indicator. Without this, links and buttons on
-   the public side have no visible focus state — WCAG 2.4.7 fail. */
-:where(a, button, [tabindex]):focus-visible {
-  outline: 2px solid var(--rkr-link);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-/* main is focusable for skip-link target — hide its outline (the focus
-   ring on the post body would be more confusing than helpful). */
-main:focus-visible { outline: none; }
 
 .rkr-site-head {
   border-bottom: 1px solid var(--rkr-rule);

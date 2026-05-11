@@ -1,7 +1,7 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead } from './layout.ts';
+import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface PostPageData extends SiteChrome {
   title: string;
@@ -25,7 +25,7 @@ export function renderPostPage(post: PostPageData): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
-<link rel="stylesheet" href="/static/site.css${v}"/>
+${stylesheetLinks()}
 <link rel="stylesheet" href="/static/site/lightbox.css${v}"/>
 <link rel="manifest" href="/static/manifest.webmanifest"/>
 <meta name="theme-color" content="#1a4f7f"/>

@@ -51,9 +51,10 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   assert.match(res.body, /<article id="rkroll-admin-article"><\/article>/);
   assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js"><\/script>/);
 
-  // Public theme stylesheet is loaded so the editor preview matches the
-  // rendered post — figures, prose width, gallery placeholder styles.
-  assert.match(res.body, /<link rel="stylesheet" href="\/static\/site\.css"\/>/);
+  // Public theme stylesheets (base + the active theme) are loaded so
+  // the editor preview matches the rendered post.
+  assert.match(res.body, /<link rel="stylesheet" href="\/static\/base\.css"\/>/);
+  assert.match(res.body, /<link rel="stylesheet" href="\/static\/themes\/default\.css"\/>/);
 
   // Security headers: TipTap is bundled into the admin entry, so
   // script-src does NOT include esm.sh or any 'unsafe-inline'. The

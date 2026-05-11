@@ -1,7 +1,7 @@
 // Index page template. Plain template-literal HTML (spec.md §8 content model).
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead } from './layout.ts';
+import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 interface IndexEntry {
   slug: string;
@@ -43,7 +43,7 @@ export function renderIndexPage(data: IndexPageData): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(data.site.title)}</title>
-<link rel="stylesheet" href="/static/site.css${v}"/>
+${stylesheetLinks()}
 <link rel="manifest" href="/static/manifest.webmanifest"/>
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="/static/site/sw-register.js${v}" defer></script>

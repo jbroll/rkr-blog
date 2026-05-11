@@ -5,7 +5,7 @@
 // Uses the public siteHead/siteFoot so themes apply here too.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead } from './layout.ts';
+import { type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 interface AdminPostRow {
   slug: string;
@@ -21,14 +21,13 @@ export interface AdminPostsPageData extends SiteChrome {
 
 export function renderAdminPostsPage(data: AdminPostsPageData): string {
   const rows = data.posts.length === 0 ? renderEmptyState() : data.posts.map(renderRow).join('\n');
-  const v = bundleVersion();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Posts — ${escapeText(data.site.title)}</title>
-<link rel="stylesheet" href="/static/site.css${v}"/>
+${stylesheetLinks()}
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: true })}

@@ -25,7 +25,7 @@ import {
   NotInvitedError,
   type User
 } from '../lib/users.ts';
-import { bundleVersion, siteFoot, siteHead } from '../templates/layout.ts';
+import { siteFoot, siteHead, stylesheetLinks } from '../templates/layout.ts';
 
 const SESSION_COOKIE = 'rkr_session';
 const OAUTH_STATE_COOKIE = 'rkr_oauth_state';
@@ -321,14 +321,13 @@ function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
   <button type="submit" class="rkr-login-submit">Sign in with token</button>
 </form>`
     : '<p class="rkr-login-hint">Token login disabled (ADMIN_TOKEN not set).</p>';
-  const v = bundleVersion();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Sign in — ${escapeText(site.title)}</title>
-<link rel="stylesheet" href="/static/site.css${v}"/>
+${stylesheetLinks()}
 </head>
 <body>
 ${siteHead(site)}

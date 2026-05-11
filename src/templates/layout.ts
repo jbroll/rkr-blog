@@ -14,6 +14,15 @@ export function bundleVersion(): string {
   return `?v=${resolveGitHash().slice(0, 12)}`;
 }
 
+/** `<link>` tags for the public-side stylesheets. base.css carries the
+ * theme-invariant primitives (a11y, overflow-clip); the theme follows
+ * so its values win on the cascade. See docs/theming.md. */
+export function stylesheetLinks(): string {
+  const v = bundleVersion();
+  return `<link rel="stylesheet" href="/static/base.css${v}"/>
+<link rel="stylesheet" href="/static/themes/default.css${v}"/>`;
+}
+
 export interface SiteChrome {
   /** Resolved site config — owner-side branding only; never per-request. */
   site: { title: string; tagline?: string };

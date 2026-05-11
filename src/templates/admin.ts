@@ -21,7 +21,8 @@ export function renderAdminPage(data: AdminPageData): string {
      will have (figures, prose width, headings, gallery/carousel placeholders).
      Loaded BEFORE the admin overrides so the inline styles below win for
      admin chrome (toolbar, panels, body layout). -->
-<link rel="stylesheet" href="/static/site.css"/>
+<link rel="stylesheet" href="/static/base.css"/>
+<link rel="stylesheet" href="/static/themes/default.css"/>
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
 <link rel="stylesheet" href="/static/admin/main.css"/>
 <style>
