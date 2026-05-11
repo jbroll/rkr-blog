@@ -49,6 +49,7 @@ import {
   type RenderResult,
   renderDerivative
 } from '../lib/render.ts';
+import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
@@ -88,6 +89,14 @@ export default async function publicRoutes(
   // many parallel image fetches for the same variant URL (or two
   // browsers hit the same article at the same time).
   const inflightRenders = new Map<string, Promise<RenderResult>>();
+
+  // Inline-render concurrency cap. Without this, a 30-image post
+  // opening in a browser fires 30 simultaneous renderDerivative
+  // calls; with sharp.concurrency(1) that's 30 libvips threads
+  // context-switching on whatever CPU the fly machine has. Default
+  // 2 is right for a single-vCPU box; override via
+  // RKR_INLINE_RENDER_CONCURRENCY for larger machines.
+  const renderSemaphore = new Semaphore(resolveInlineConcurrency());
 
   const widgets = new WidgetRegistry();
   // ::figure is the only image widget (spec.md §9 unification).
@@ -196,12 +205,19 @@ export default async function publicRoutes(
       // await the same promise. The map entry is cleared on settle
       // so the next cache-miss request re-enters renderDerivative
       // (which itself short-circuits on cache hit). The live-render
-      // gauge is bumped only by the originating request — duplicate
-      // awaiters share the same pause without double-counting.
+      // gauge + the semaphore slot are taken only by the
+      // originating request — duplicate awaiters ride along.
       let renderPromise = inflightRenders.get(filename);
       if (!renderPromise) {
         noteLiveRender(1);
-        renderPromise = renderDerivative(args).finally(() => {
+        renderPromise = (async () => {
+          await renderSemaphore.acquire();
+          try {
+            return await renderDerivative(args);
+          } finally {
+            renderSemaphore.release();
+          }
+        })().finally(() => {
           inflightRenders.delete(filename);
           noteLiveRender(-1);
         });
@@ -263,4 +279,11 @@ function findVariantOutput(sidecar: Sidecar, ophash: string): VariantOutputMatch
     }
   }
   return null;
+}
+
+function resolveInlineConcurrency(): number {
+  const raw = process.env.RKR_INLINE_RENDER_CONCURRENCY;
+  if (!raw) return 2;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 2;
 }
