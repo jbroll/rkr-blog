@@ -18,17 +18,7 @@ export const ADMIN_CSS = `
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
-  /* Back-to-site link pinned to the top-left of the viewport so it
-     takes no layout space (the editor body packs many controls and
-     pushing things down even a line can drive the live preview below
-     the fold on test viewports). */
-  .rkr-admin-toplink {
-    position: fixed; top: .5rem; left: .75rem;
-    margin: 0; font-size: .85rem; z-index: 10;
-  }
-  .rkr-admin-toplink a { color: var(--rkr-muted); text-decoration: none; }
-  .rkr-admin-toplink a:hover { color: var(--rkr-link); text-decoration: underline; }
-  /* Copy-link button mirrors the back-link, pinned to the top-right
+  /* Copy-link button pinned to the top-right of the viewport so it
      so it's reachable for every post without consuming layout. Icon-
      only with a native tooltip via the title attribute; stays
      disabled until the slug is known (after save or pin). The

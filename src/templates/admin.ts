@@ -5,10 +5,11 @@
 // network dependency at runtime, which keeps the editor's CSP tight
 // (script-src 'self' only, no esm.sh / CDN allowance).
 
+import { escapeText } from '../lib/content.ts';
 import { ADMIN_CSS } from './admin-styles.ts';
-import { stylesheetLinks } from './layout.ts';
+import { type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 
-export interface AdminPageData {
+export interface AdminPageData extends SiteChrome {
   /** Where the compiled admin bundle is mounted on the URL space. */
   bundleUrl: string;
 }
@@ -19,7 +20,7 @@ export function renderAdminPage(data: AdminPageData): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>rkroll admin</title>
+<title>Editor — ${escapeText(data.site.title)}</title>
 <!-- Public theme: gives the editor preview the same look the published post
      will have (figures, prose width, headings, gallery/carousel placeholders).
      Loaded BEFORE the admin overrides so the inline styles below win for
@@ -32,7 +33,7 @@ ${ADMIN_CSS}
 </style>
 </head>
 <body>
-<p class="rkr-admin-toplink"><a href="/" rel="nofollow">&larr; Back to site</a></p>
+${siteHead(data.site, { isAdmin: true })}
 <button type="button" id="rkr-copy-link" class="rkr-admin-copylink" title="Copy link" aria-label="Copy link" disabled>
   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
     <rect x="5" y="5" width="9" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>

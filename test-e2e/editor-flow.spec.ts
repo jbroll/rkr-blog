@@ -160,7 +160,10 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   // prefix on document.title while the editor is dirty.
   await expect(page.locator('#rkr-page-title')).toHaveText('e2e flow');
   await expect(page).toHaveTitle(/^● e2e flow/);
-  await expect(page.getByRole('link', { name: '← Back to site' })).toBeVisible();
+  // Site head renders the configured title as the home link — same
+  // affordance the public chrome uses, no editor-specific back link
+  // any more.
+  await expect(page.locator('.rkr-site-title a[href="/"]')).toBeVisible();
 
   // ---- 3. save ---------------------------------------------------------
 

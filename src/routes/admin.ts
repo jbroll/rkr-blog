@@ -17,7 +17,7 @@ import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
-import { paths } from '../lib/config.ts';
+import { paths, siteConfig } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { ingestStream } from '../lib/originals.ts';
@@ -103,7 +103,7 @@ export default async function adminRoutes(
       .header('Content-Security-Policy', ADMIN_EDITOR_CSP)
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
-      .send(renderAdminPage({ bundleUrl: '/static/admin/main.js' }));
+      .send(renderAdminPage({ site: siteConfig(), bundleUrl: '/static/admin/main.js' }));
   });
 
   // Admin posts listing + delete extracted into a sibling module —
