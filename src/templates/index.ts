@@ -94,15 +94,21 @@ ${items}
 }
 
 function renderAdminTable(posts: IndexEntry[]): string {
+  // The table is wider than the viewport on a phone. Wrap it in a
+  // .rkr-admin-posts-scroll container so the overflow scrolls inside
+  // the wrapper instead of expanding the body — when the body widens
+  // past the viewport, iOS Safari anchors `position: fixed` elements
+  // (the FAB stack) to the body's right edge, shoving them off-
+  // screen. Keeping the body viewport-width keeps the FABs visible.
   if (posts.length === 0) {
-    return `<table class="rkr-admin-posts">
+    return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
   <thead><tr><th>Title</th><th>Updated</th><th class="rkr-admin-posts-action">Status</th><th class="rkr-admin-posts-action">Pin</th><th class="rkr-admin-posts-action">Delete</th></tr></thead>
   <tbody>
     <tr><td colspan="5" class="rkr-admin-posts-empty">No posts yet. <a href="/admin/editor">Create one</a>.</td></tr>
   </tbody>
-</table>`;
+</table></div>`;
   }
-  return `<table class="rkr-admin-posts">
+  return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
   <thead>
     <tr>
       <th>Title</th>
@@ -115,7 +121,7 @@ function renderAdminTable(posts: IndexEntry[]): string {
   <tbody>
 ${posts.map(renderAdminRow).join('\n')}
   </tbody>
-</table>`;
+</table></div>`;
 }
 
 function renderAdminRow(p: IndexEntry): string {

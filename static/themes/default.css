@@ -148,11 +148,28 @@ body {
   font-size: 1.5rem;
   margin: 0 0 1rem;
 }
+/* Horizontal-scroll container for the admin posts table on narrow
+   viewports. Without this, the table widens the body past the
+   viewport and iOS Safari anchors fixed-position FABs to the body's
+   right edge — shoving the + and gear buttons off-screen. The
+   wrapper absorbs the overflow so the body stays viewport-width. */
+.rkr-admin-posts-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -0.5rem;
+  padding: 0 0.5rem;
+}
 .rkr-admin-posts {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
+  /* Don't let cell wrap on narrow viewports — the scroll container
+     above provides the horizontal escape. Specific cells (title)
+     can opt into wrapping locally. */
+  white-space: nowrap;
 }
+.rkr-admin-posts td:first-child,
+.rkr-admin-posts th:first-child { white-space: normal; }
 .rkr-admin-posts th, .rkr-admin-posts td {
   text-align: left;
   padding: 0.5rem 0.75rem;

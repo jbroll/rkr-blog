@@ -49,6 +49,10 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
       }
     ]
   });
+  // The table is wrapped in an overflow-x scroll container so a
+  // wide admin layout doesn't push the body past viewport width
+  // (which on iOS Safari sends the fixed-position FABs off-screen).
+  assert.match(html, /<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">/);
   // Table headers match the standalone admin-posts page that this
   // replaces.
   assert.match(html, /<th>Title<\/th>/);
