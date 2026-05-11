@@ -37,10 +37,16 @@ primary_region = "ams"
     hard_limit = 100
 
 [[vm]]
-  # 1 shared CPU + 512 MB is enough for a single-author CMS with a
-  # warm sharp pipeline. Bump if /img/ pre-render bursts hit OOM.
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  # 2 shared CPU + 2 GB. Sized for the image-render pipeline: a fresh
+  # reseed pre-warms variants for every image referenced by every
+  # post (multi-image figures × multiple output formats × multiple
+  # widths), and sharp decodes the source into uncompressed buffers
+  # before resizing. A 24-image post with 12-MP source photos chewed
+  # past the previous 512 MB ceiling and the machine OOM'd mid-burst.
+  # Adjust here (fly.toml, not the Fly UI) and re-deploy — Fly
+  # auto-deploys this branch via the GitHub app on every push.
+  size = "shared-cpu-2x"
+  memory = "2gb"
 
 # Persistent data lives on a Fly volume mounted at SITE_ROOT (=/site).
 # The volume must exist before deploy: create it once in the Fly

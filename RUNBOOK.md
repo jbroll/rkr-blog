@@ -22,7 +22,7 @@ the auth source change.
 | Target            | Base URL                                | `ADMIN_TOKEN` source                       |
 |-------------------|-----------------------------------------|--------------------------------------------|
 | Local dev         | `http://127.0.0.1:3000` (or your `PORT`)| your `.env` / shell — whatever you started the server with |
-| Remote (Fly demo) | `https://rkr-blog.fly.dev`              | `fly secrets list --app rkr-blog` (the value lives in Fly, not the repo) |
+| Remote (Fly demo) | `https://rkr-blog.fly.dev`              | repo's `secret.env` (gitignored) — `set -a; . secret.env; set +a` exposes `ADMIN_TOKEN`. Fly itself reads the same value from `fly secrets list --app rkr-blog`. |
 
 `fly.toml` pins the public URL to `rkr-blog.fly.dev`; `rkr-blog.fly.io`
 redirects but isn't the canonical host.
@@ -239,6 +239,36 @@ file). The other writable subtrees — `content/posts`, `originals`,
 Never use this on the Fly demo. The Fly volume isn't a local
 filesystem you can rm + reinit; the HTTP `bin/site-admin reset
 --to https://rkr-blog.fly.dev …` path is the only safe wipe there.
+
+## Fly machine sizing
+
+The Fly demo's VM size lives in `fly.toml` (`[[vm]]` block), not in
+the Fly dashboard. Fly's UI exposes start/stop/restart but resizing
+goes through the deployed config:
+
+```toml
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+```
+
+Edit, commit, push. The GitHub-app integration auto-deploys this
+branch on push; the new machine spec rolls out with the next
+deploy. The previous machine is replaced (not scaled alongside) —
+brief downtime during the roll is expected.
+
+When to bump: image-render bursts (`/img/<id>.<hash>.<fmt>`) trip
+OOM during the post-reseed pre-warm. Each variant render decodes
+the source JPEG into uncompressed pixel buffers before resizing,
+and a 24-image post at 12-MP source resolution × multiple variants
+× multiple output formats burns through 512 MB quickly. 2 GB is a
+comfortable floor for the current photo-heavy demo seed; if a
+single image's source resolution is in the high tens of megapixels,
+bump further.
+
+`fly status --app rkr-blog` confirms the current size; `fly logs
+--app rkr-blog` shows the kernel OOM message when the cap is hit
+(`Killed (out of memory)`).
 
 ## Troubleshooting
 
