@@ -1,0 +1,56 @@
+/* solarized.css — Ethan Schoonover's Solarized palette
+ * (https://ethanschoonover.com/solarized) as a warm reading theme.
+ * Cream "base3" background, slate "base00" text, blue accent.
+ *
+ * SITE_THEME=solarized. See docs/theming.md.
+ */
+
+:root {
+  /* Solarized Light */
+  --rkr-bg: #fdf6e3;             /* base3 */
+  --rkr-text: #586e75;           /* base01 */
+  --rkr-muted: #93a1a1;          /* base1 */
+  --rkr-rule: #eee8d5;           /* base2 */
+  --rkr-link: #268bd2;           /* blue */
+  --rkr-link-hover: #2aa198;     /* cyan */
+  --rkr-shadow: rgba(101, 123, 131, 0.12);
+
+  --rkr-content: 60rem;
+  --rkr-prose: 38rem;
+  --rkr-radius: 4px;
+
+  --rkr-prose-font: "Source Serif Pro", "Source Serif 4", Georgia,
+    "Times New Roman", serif;
+  --rkr-display-font: "Source Sans Pro", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --rkr-mono-font: "Source Code Pro", ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Solarized Dark */
+    --rkr-bg: #002b36;            /* base03 */
+    --rkr-text: #93a1a1;          /* base1 */
+    --rkr-muted: #586e75;         /* base01 */
+    --rkr-rule: #073642;          /* base02 */
+    --rkr-link: #268bd2;
+    --rkr-link-hover: #2aa198;
+  }
+}
+
+/* Headings in slightly stronger contrast — base02 in light, base2 in dark. */
+article > header h1,
+article h2, article h3, article h4 {
+  color: #073642;
+}
+@media (prefers-color-scheme: dark) {
+  article > header h1,
+  article h2, article h3, article h4 { color: #eee8d5; }
+}
+
+/* Code blocks pick up base2/base02 — distinct from body bg. */
+article code, article pre { background: var(--rkr-rule); color: var(--rkr-text); }
+
+/* Solarized's signature: orange "yellow" used for admin draft status. */
+.rkr-admin-posts-status.is-draft { border-color: #b58900; color: #b58900; }
+.rkr-admin-posts-status.is-published { border-color: #859900; color: #859900; }

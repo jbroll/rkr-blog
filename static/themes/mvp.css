@@ -1,0 +1,65 @@
+/* mvp.css — classless-CSS-framework feel inspired by MVP.css
+ * (https://andybrewer.github.io/mvp/). Browser-friendly typography,
+ * generous whitespace, blue accent, small headings. Reads "Web 1.0
+ * sensible" without looking dated.
+ *
+ * SITE_THEME=mvp. See docs/theming.md.
+ */
+
+:root {
+  --rkr-bg: #ffffff;
+  --rkr-text: #2c3e50;
+  --rkr-muted: #7f8c8d;
+  --rkr-rule: #ecf0f1;
+  --rkr-link: #2980b9;
+  --rkr-link-hover: #1a5276;
+  --rkr-shadow: rgba(0, 0, 0, 0.08);
+
+  --rkr-content: 60rem;
+  --rkr-prose: 40rem;
+  --rkr-radius: 8px;
+
+  /* MVP.css uses the system stack with serif body. We invert: clean
+     sans-serif body, system stack throughout. */
+  --rkr-prose-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  --rkr-display-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  --rkr-base-size: 1.05rem;
+  --rkr-line-height: 1.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rkr-bg: #1c2833;
+    --rkr-text: #ecf0f1;
+    --rkr-muted: #95a5a6;
+    --rkr-rule: #2c3e50;
+    --rkr-link: #5dade2;
+    --rkr-link-hover: #aed6f1;
+  }
+}
+
+/* MVP.css-style centred header with the title large and a tagline
+   line beneath. */
+.rkr-site-head { text-align: center; padding: 2rem 1.5rem 1rem; }
+.rkr-site-head .rkr-site-head-inner {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rkr-site-title { font-size: 2rem; font-weight: 700; }
+.rkr-site-tagline { font-size: 1rem; }
+
+/* Admin strip recenters with the header. */
+.rkr-admin-strip { justify-content: center; }
+.rkr-admin-strip-logout { margin-left: 1rem; }
+
+/* Code blocks get a card look — soft border + slightly raised. */
+article pre {
+  border: 1px solid var(--rkr-rule);
+  box-shadow: 0 1px 2px var(--rkr-shadow);
+}
+
+/* Article body headings slightly bolder. */
+article > header h1 { font-weight: 700; }

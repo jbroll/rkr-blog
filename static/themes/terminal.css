@@ -1,0 +1,70 @@
+/* terminal.css — retro-terminal theme inspired by Hugo's "terminal"
+ * theme (https://github.com/panr/hugo-theme-terminal). Monospace
+ * throughout, phosphor-green accent, dark background.
+ *
+ * SITE_THEME=terminal. See docs/theming.md.
+ */
+
+:root {
+  --rkr-bg: #1a1a1a;
+  --rkr-text: #d8d8d8;
+  --rkr-muted: #8a8a8a;
+  --rkr-rule: #2e2e2e;
+  --rkr-link: #5ad67d;           /* phosphor green */
+  --rkr-link-hover: #7af0a0;
+  --rkr-shadow: rgba(0, 0, 0, 0.5);
+
+  --rkr-content: 56rem;
+  --rkr-prose: 40rem;
+  --rkr-radius: 2px;
+
+  /* Monospace everywhere — the whole point of the theme. */
+  --rkr-prose-font: "Fira Code", "JetBrains Mono", "Source Code Pro",
+    Menlo, Consolas, ui-monospace, monospace;
+  --rkr-display-font: "Fira Code", "JetBrains Mono", "Source Code Pro",
+    Menlo, Consolas, ui-monospace, monospace;
+  --rkr-mono-font: "Fira Code", "JetBrains Mono", "Source Code Pro",
+    Menlo, Consolas, ui-monospace, monospace;
+  --rkr-base-size: 1rem;
+  --rkr-line-height: 1.55;
+}
+
+@media (prefers-color-scheme: light) {
+  /* Lock dark — the terminal aesthetic doesn't translate to light bg. */
+  :root {
+    --rkr-bg: #1a1a1a;
+    --rkr-text: #d8d8d8;
+    --rkr-muted: #8a8a8a;
+    --rkr-rule: #2e2e2e;
+    --rkr-link: #5ad67d;
+    --rkr-link-hover: #7af0a0;
+  }
+}
+
+body { caret-color: var(--rkr-link); }
+
+/* "$ " prompt prefix on the site title — quoting the terminal feel. */
+.rkr-site-title a::before {
+  content: "$ ";
+  color: var(--rkr-link);
+}
+.rkr-site-title { font-weight: 700; }
+
+/* Square underline on links — looks more like a teletype cursor. */
+article a {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+/* Headings: no smoothing, sharp. */
+article h2, article h3, article h4 {
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+article h2::before { content: "## "; color: var(--rkr-muted); }
+article h3::before { content: "### "; color: var(--rkr-muted); }
+
+/* Status pills: rectangular, no rounding. */
+.rkr-admin-posts-status { border-radius: 0; }

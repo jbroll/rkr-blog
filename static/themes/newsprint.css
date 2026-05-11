@@ -1,0 +1,82 @@
+/* newsprint.css — newspaper feel: cream paper, dense serif body, big
+ * masthead with rules above and below. Inspired by Jekyll's
+ * "newsprint" line of themes.
+ *
+ * SITE_THEME=newsprint. See docs/theming.md.
+ */
+
+:root {
+  --rkr-bg: #f4ecd8;             /* old-paper cream */
+  --rkr-text: #1d1d1b;
+  --rkr-muted: #6e6353;
+  --rkr-rule: #c8b994;
+  --rkr-link: #8b2a1a;            /* ink red */
+  --rkr-link-hover: #4f160c;
+  --rkr-shadow: rgba(0, 0, 0, 0.08);
+
+  --rkr-content: 60rem;
+  --rkr-prose: 36rem;
+  --rkr-radius: 0;
+
+  /* Old-style serif body, slab/transitional display for the masthead. */
+  --rkr-prose-font: "PT Serif", "Source Serif Pro", Georgia, Cambria,
+    "Times New Roman", Times, serif;
+  --rkr-display-font: "Playfair Display", "Bodoni Moda", Georgia,
+    "Times New Roman", serif;
+  --rkr-base-size: 1.05rem;
+  --rkr-line-height: 1.7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rkr-bg: #1c1814;
+    --rkr-text: #ebe1c6;
+    --rkr-muted: #998b6e;
+    --rkr-rule: #4b4131;
+    --rkr-link: #d28665;
+    --rkr-link-hover: #efb091;
+  }
+}
+
+/* Masthead: rules above + below, centred, all-small-caps title. */
+.rkr-site-head {
+  text-align: center;
+  padding: 1.25rem 1.5rem;
+  border-top: 4px double var(--rkr-rule);
+  border-bottom: 4px double var(--rkr-rule);
+}
+.rkr-site-head .rkr-site-head-inner { flex-direction: column; align-items: center; gap: 0.25rem; }
+.rkr-site-title {
+  font-family: var(--rkr-display-font);
+  font-size: 2.5rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+.rkr-site-tagline { font-style: italic; font-size: 0.95rem; }
+
+/* Drop cap on the first paragraph of each article. */
+article > header + p::first-letter,
+article > p:first-of-type::first-letter {
+  font-family: var(--rkr-display-font);
+  float: left;
+  font-size: 3.2rem;
+  line-height: 0.95;
+  padding: 0.25rem 0.4rem 0 0;
+  color: var(--rkr-link);
+}
+
+article > header h1 {
+  font-family: var(--rkr-display-font);
+  font-weight: 900;
+  font-size: 2.4rem;
+  letter-spacing: 0;
+}
+
+/* Centred admin strip + small-caps pills. */
+.rkr-admin-strip { justify-content: center; }
+.rkr-admin-posts-status {
+  text-transform: uppercase;
+  font-family: var(--rkr-display-font);
+  font-weight: 700;
+}

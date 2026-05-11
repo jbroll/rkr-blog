@@ -1,0 +1,68 @@
+/* tufte.css — typography-led theme inspired by Tufte CSS
+ * (https://edwardtufte.github.io/tufte-css/). Wide left margin, ET
+ * Book–style serif, light cream background. Side-marginalia not
+ * supported by our HTML, so the cream + spacious column does the
+ * heavy lifting.
+ *
+ * SITE_THEME=tufte. See docs/theming.md.
+ */
+
+:root {
+  --rkr-bg: #fffff8;
+  --rkr-text: #111111;
+  --rkr-muted: #6b6b6b;
+  --rkr-rule: #d8d8d2;
+  --rkr-link: #1f3a5f;
+  --rkr-link-hover: #b14b00;
+  --rkr-shadow: rgba(0, 0, 0, 0.05);
+
+  /* Tufte's narrow text column, wide left rail. We can't easily render
+     marginalia inline, but the column widths preserve the feel. */
+  --rkr-content: 56rem;
+  --rkr-prose: 36rem;
+  --rkr-radius: 0;
+
+  --rkr-prose-font: "et-book", Palatino, "Palatino Linotype",
+    "Palatino LT STD", "Book Antiqua", Georgia, serif;
+  --rkr-display-font: "et-book", Palatino, "Palatino Linotype",
+    "Palatino LT STD", "Book Antiqua", Georgia, serif;
+  --rkr-base-size: 1.125rem;
+  --rkr-line-height: 1.65;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rkr-bg: #151515;
+    --rkr-text: #efefe8;
+    --rkr-muted: #a6a6a0;
+    --rkr-rule: #333329;
+    --rkr-link: #b6c8e0;
+    --rkr-link-hover: #e2a878;
+  }
+}
+
+/* Left-aligned content — Tufte's reading column starts at the
+   left rail rather than centring. */
+main { margin-left: 8%; margin-right: auto; }
+article { max-width: var(--rkr-prose); margin-left: 0; }
+.post-list { margin-left: 0; }
+.rkr-site-head .rkr-site-head-inner { margin-left: 8%; }
+
+/* Headings: italic, smaller weight, generous lead-in. */
+article > header h1 {
+  font-weight: 400;
+  font-style: italic;
+  font-size: 2.2rem;
+  line-height: 1.2;
+}
+article h2 { font-weight: 400; font-style: italic; }
+article h3 { font-weight: 400; font-style: italic; font-size: 1.1rem; }
+
+/* Blockquotes get a hanging rule rather than the default left border. */
+article blockquote {
+  border-left: 0;
+  font-style: italic;
+  margin-left: 2rem;
+}
+
+.rkr-site-title { font-style: italic; font-weight: 400; }

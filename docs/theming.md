@@ -14,11 +14,13 @@ structure.
 
 ## Switching themes
 
-Set the environment variable before starting the server:
+Two ways to pick a theme, in precedence order (highest first):
 
-```
-SITE_THEME=papermod node bin/server.js
-```
+1. **Persistent**: `<siteRoot>/config/site.json#theme`. The admin
+   settings UI writes this; survives restarts and lives with the
+   site's content.
+2. **Env var**: `SITE_THEME=papermod node bin/server.js`. The
+   fallback for deployments that don't run an admin UI.
 
 The default theme (`static/themes/default.css`) is the full
 structural stylesheet; alternate themes (`static/themes/<name>.css`)
@@ -33,8 +35,24 @@ cascade order is:
 
 To add a theme, drop `<name>.css` into `static/themes/`. The file can
 be small: redefine the custom-property surface, plus any rules that
-need to differ. An unknown `SITE_THEME` falls back to `default` with
-a one-shot stderr warning.
+need to differ. An unknown theme name falls back to `default` with a
+one-shot stderr warning.
+
+### Bundled themes
+
+The repo seeds the picker with eight themes. Each is a single CSS
+file layered on `default.css`:
+
+| Name        | Feel                                                        |
+| ----------- | ----------------------------------------------------------- |
+| `default`   | Photo-friendly serif body, blue accent, light/dark.         |
+| `papermod`  | Monochrome sans-serif, pill admin links (Hugo PaperMod).    |
+| `tufte`     | Cream paper, italic display, wide left rail (Tufte CSS).    |
+| `dracula`   | Vivid dark palette with cyan/green/pink accents.            |
+| `terminal`  | Monospace throughout, phosphor green on black.              |
+| `solarized` | Solarized cream + slate, with the `light`/`dark` palette.   |
+| `mvp`       | Classless-CSS-framework feel, centred masthead, soft cards. |
+| `newsprint` | Newspaper masthead, double rules, drop caps, ink red.       |
 
 ## HTML invariants
 

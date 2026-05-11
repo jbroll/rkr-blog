@@ -174,37 +174,47 @@ test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', as
   assert.equal(missing.statusCode, 404);
 });
 
-test('GET /admin/posts honors SITE_THEME=papermod (smoke proof)', async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
-  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
-    fs.mkdirSync(path.join(root, sub), { recursive: true });
-  }
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+// One smoke test per theme: each must render /admin/posts under its
+// SITE_THEME, with the three-layer stylesheet chain (base + default +
+// active) in the expected cascade order. This catches a missing CSS
+// file, a typo in the theme name list, or a regression in the layout
+// helper.
+for (const theme of ['papermod', 'tufte', 'dracula', 'terminal', 'solarized', 'mvp', 'newsprint']) {
+  test(`GET /admin/posts honors SITE_THEME=${theme} (smoke)`, async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
+    for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
+      fs.mkdirSync(path.join(root, sub), { recursive: true });
+    }
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
-  const prev = process.env.SITE_THEME;
-  process.env.SITE_THEME = 'papermod';
-  _resetThemeNameCache();
-  t.after(() => {
-    if (prev !== undefined) process.env.SITE_THEME = prev;
-    else delete process.env.SITE_THEME;
+    const prev = process.env.SITE_THEME;
+    process.env.SITE_THEME = theme;
     _resetThemeNameCache();
-  });
+    t.after(() => {
+      if (prev !== undefined) process.env.SITE_THEME = prev;
+      else delete process.env.SITE_THEME;
+      _resetThemeNameCache();
+    });
 
-  const db = open(path.join(root, 'data', 'site.db'));
-  migrate(db);
-  const app = await buildApp({ siteRoot: root, db });
-  t.after(async () => {
-    await app.close();
-    db.close();
-  });
+    const db = open(path.join(root, 'data', 'site.db'));
+    migrate(db);
+    const app = await buildApp({ siteRoot: root, db });
+    t.after(async () => {
+      await app.close();
+      db.close();
+    });
 
-  const res = await app.inject({ method: 'GET', url: '/admin/posts' });
-  assert.equal(res.statusCode, 200);
-  // Layering: base + default (always) + papermod (overrides).
-  assert.match(res.body, /\/static\/base\.css/);
-  assert.match(res.body, /\/static\/themes\/default\.css/);
-  assert.match(res.body, /\/static\/themes\/papermod\.css/);
-});
+    const res = await app.inject({ method: 'GET', url: '/admin/posts' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /\/static\/base\.css/);
+    assert.match(res.body, /\/static\/themes\/default\.css/);
+    assert.match(res.body, new RegExp(`/static/themes/${theme}\\.css`));
+    // Cascade order: default precedes active so the active wins.
+    const defaultIdx = res.body.indexOf('/static/themes/default.css');
+    const activeIdx = res.body.indexOf(`/static/themes/${theme}.css`);
+    assert.ok(defaultIdx < activeIdx, `default must come before ${theme} in cascade`);
+  });
+}
 
 test('GET /admin/posts empty state when no posts', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));

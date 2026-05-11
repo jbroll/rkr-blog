@@ -1,0 +1,67 @@
+/* dracula.css — the Dracula palette (https://draculatheme.com)
+ * applied as a dark-by-default theme. Vivid accents, soft contrast,
+ * sans-serif throughout.
+ *
+ * SITE_THEME=dracula. See docs/theming.md.
+ */
+
+:root {
+  /* Dark by default — overrides the OS-prefers branch in default.css. */
+  --rkr-bg: #282a36;
+  --rkr-text: #f8f8f2;
+  --rkr-muted: #6272a4;          /* Dracula's "comment" colour */
+  --rkr-rule: #44475a;           /* "current line" */
+  --rkr-link: #8be9fd;           /* cyan */
+  --rkr-link-hover: #50fa7b;     /* green */
+  --rkr-shadow: rgba(0, 0, 0, 0.5);
+
+  --rkr-content: 56rem;
+  --rkr-prose: 38rem;
+  --rkr-radius: 6px;
+
+  --rkr-prose-font: "Source Sans Pro", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --rkr-display-font: "Source Sans Pro", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --rkr-mono-font: "Fira Code", "Source Code Pro", ui-monospace, monospace;
+}
+
+/* Dracula reads better in dark mode universally — opt into the dark
+   palette regardless of OS preference. The light branch in default.css
+   is left for users who explicitly want the inverse, by adding a
+   prefers-color-scheme override here. */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Keep the dark palette — Dracula is a dark theme. */
+    --rkr-bg: #282a36;
+    --rkr-text: #f8f8f2;
+    --rkr-muted: #6272a4;
+    --rkr-rule: #44475a;
+    --rkr-link: #8be9fd;
+    --rkr-link-hover: #50fa7b;
+  }
+}
+
+/* Accent-coloured site title — Dracula's pink. */
+.rkr-site-title a { color: #ff79c6; }
+
+/* Code blocks: Dracula's "selection" hue background. */
+article code, article pre {
+  background: #44475a;
+  color: #f8f8f2;
+}
+article a {
+  color: var(--rkr-link);
+  text-decoration-color: #ff79c6;
+}
+
+/* Admin status pill: published in green, draft in yellow (Dracula
+   conventions). */
+.rkr-admin-posts-status.is-published {
+  border-color: #50fa7b;
+  color: #50fa7b;
+}
+.rkr-admin-posts-status.is-draft {
+  border-color: #f1fa8c;
+  color: #f1fa8c;
+}
