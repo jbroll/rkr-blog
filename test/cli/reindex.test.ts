@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
-import { readIndexedPostBySlug, readIndexedPosts, runReindex } from '../../src/cli/reindex.ts';
+import {
+  readAllIndexedPosts,
+  readIndexedPostBySlug,
+  readIndexedPosts,
+  runReindex
+} from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -102,4 +107,36 @@ test('runReindex skips files with bad frontmatter rather than failing the whole 
   const r = runReindex(root);
   assert.equal(r.inserted, 1);
   assert.equal(r.updated, 0);
+});
+
+test('readAllIndexedPosts returns drafts + published, newest-updated first', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(
+    root,
+    'a.md',
+    { slug: 'a', title: 'A', status: 'draft', date: '2026-05-01T00:00:00Z' },
+    'body'
+  );
+  writePost(
+    root,
+    'b.md',
+    { slug: 'b', title: 'B', status: 'published', date: '2026-05-02T00:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const all = readAllIndexedPosts(db);
+    assert.equal(all.length, 2);
+    // Both drafts and published surface; updated_at is the file mtime
+    // so order between the two writes is filesystem-dependent. We just
+    // assert membership.
+    const slugs = new Set(all.map((p) => p.slug));
+    assert.ok(slugs.has('a') && slugs.has('b'));
+    const statuses = new Set(all.map((p) => p.status));
+    assert.ok(statuses.has('draft') && statuses.has('published'));
+  } finally {
+    db.close();
+  }
 });

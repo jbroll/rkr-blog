@@ -26,6 +26,7 @@ import { renderAdminPage } from '../templates/admin.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
+import { registerAdminPostsRoutes } from './admin-posts.ts';
 import { prewarmVariants } from './admin-prewarm.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 
@@ -97,6 +98,12 @@ export default async function adminRoutes(
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(renderAdminPage({ bundleUrl: '/static/admin/main.js' }));
   });
+
+  // Admin posts listing + delete extracted into a sibling module —
+  // db must be present, the editor SPA still mounts without it.
+  if (opts.db) {
+    registerAdminPostsRoutes(fastify, { siteRoot, db: opts.db, guard });
+  }
 
   const { invalidate: invalidateSidecarListCache } = registerImageLookupRoutes(fastify, {
     siteRoot,

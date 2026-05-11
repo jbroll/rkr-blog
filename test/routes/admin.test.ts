@@ -6,6 +6,8 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
+import { open } from '../../src/lib/db.ts';
+import { migrate } from '../../src/lib/migrate.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { buildApp } from '../../src/server.ts';
 import { buildMultipart } from '../helpers/multipart.ts';
@@ -115,6 +117,79 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
   const res = await app.inject({ method: 'POST', url: '/admin/upload', payload, headers });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorBody>().error, /not a recognized image/);
+});
+
+test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  // Two posts on disk + a db that the route can read.
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', 'hello.md'),
+    '---\ntitle: Hello\nslug: hello\nstatus: published\ndate: 2026-05-01T00:00:00Z\n---\n\nbody\n'
+  );
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', 'wip.md'),
+    '---\ntitle: WIP\nslug: wip\nstatus: draft\ndate: 2026-05-02T00:00:00Z\n---\n\nbody\n'
+  );
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  const app = await buildApp({ siteRoot: root, db });
+  t.after(async () => {
+    await app.close();
+    db.close();
+  });
+
+  // runReindex runs on first POST; trigger it via a noop GET to /admin/posts.
+  // Actually the listing route reads the index directly; force a reindex by
+  // calling runReindex synchronously via require — simpler: hit /admin/posts
+  // which queries an empty index until we reindex. Call runReindex directly.
+  const { runReindex } = await import('../../src/cli/reindex.ts');
+  runReindex(root);
+
+  const list = await app.inject({ method: 'GET', url: '/admin/posts' });
+  assert.equal(list.statusCode, 200);
+  assert.match(list.body, /Hello/);
+  assert.match(list.body, /WIP/);
+  assert.match(list.body, /is-draft/);
+  assert.match(list.body, /is-published/);
+  // edit links + delete forms are rendered for each row
+  assert.match(list.body, /\/admin\/editor\?slug=hello/);
+  assert.match(list.body, /action="\/admin\/posts\/wip\/delete"/);
+
+  // Delete one post → 303 back to the listing, file gone.
+  const del = await app.inject({ method: 'POST', url: '/admin/posts/wip/delete' });
+  assert.equal(del.statusCode, 303);
+  assert.equal(del.headers.location, '/admin/posts');
+  assert.equal(fs.existsSync(path.join(root, 'content', 'posts', 'wip.md')), false);
+
+  // Bad slug → 400; unknown slug → 404.
+  const bad = await app.inject({ method: 'POST', url: '/admin/posts/has..dots/delete' });
+  assert.equal(bad.statusCode, 400);
+  const missing = await app.inject({ method: 'POST', url: '/admin/posts/ghost/delete' });
+  assert.equal(missing.statusCode, 404);
+});
+
+test('GET /admin/posts empty state when no posts', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  const app = await buildApp({ siteRoot: root, db });
+  t.after(async () => {
+    await app.close();
+    db.close();
+  });
+
+  const res = await app.inject({ method: 'GET', url: '/admin/posts' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /No posts yet/);
 });
 
 test('POST /admin/upload returns 400 when no file part is present', async (t) => {

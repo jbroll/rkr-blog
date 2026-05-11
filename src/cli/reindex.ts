@@ -142,6 +142,19 @@ export function readIndexedPosts(
     .all(status, limit, offset);
 }
 
+/** All indexed posts (drafts + published), newest-updated first.
+ * Backs the admin posts page (`GET /admin/posts`) where the author
+ * needs visibility into drafts that the public index hides. */
+export function readAllIndexedPosts(db: Db): IndexedPost[] {
+  return db
+    .prepare<IndexedPost>(
+      `SELECT slug, title, status, created_at, updated_at, published_at, path
+         FROM posts
+        ORDER BY updated_at DESC, slug ASC`
+    )
+    .all();
+}
+
 export function readIndexedPostBySlug(db: Db, slug: string): IndexedPost | undefined {
   return db
     .prepare<IndexedPost>(

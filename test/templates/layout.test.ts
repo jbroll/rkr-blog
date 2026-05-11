@@ -36,10 +36,11 @@ test('siteHead: anonymous visitor — no admin strip', () => {
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
 });
 
-test('siteHead: isAdmin on index — New post + Logout, no Edit', () => {
+test('siteHead: isAdmin on index — New post + Posts + Logout, no Edit', () => {
   const html = siteHead({ title: 'My site' }, { isAdmin: true });
   assert.match(html, /rkr-admin-strip/);
   assert.match(html, />New post</);
+  assert.match(html, />Posts</);
   assert.match(html, /<button[^>]*>Logout</);
   assert.ok(!html.includes('Edit this post'), 'no edit link without currentSlug');
 });

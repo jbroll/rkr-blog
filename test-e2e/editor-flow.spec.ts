@@ -1051,6 +1051,40 @@ test('admin chrome: New post + Edit this post route into the editor', async ({ p
   await expect(page.locator('#rkroll-admin-article')).toContainText('chrome body');
 });
 
+// /admin/posts lists drafts + published, surfaces edit + delete.
+test('admin posts: lists drafts + published, delete removes the row', async ({ page }) => {
+  await login(page);
+
+  // Seed one published + one draft so the listing has both.
+  const stamp = Date.now();
+  const pubSlug = `e2e-pub-${stamp}`;
+  const draftSlug = `e2e-draft-${stamp}`;
+  for (const [slug, status] of [
+    [pubSlug, 'published'],
+    [draftSlug, 'draft']
+  ] as const) {
+    const res = await page.request.post('/admin/posts', {
+      data: { slug, title: `e2e ${status}`, status, markdown: 'body\n' }
+    });
+    expect(res.status()).toBe(200);
+  }
+
+  // Admin strip's "Posts" link routes into the listing.
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Posts' }).click();
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
+
+  // Both rows present, status pills reflect status.
+  await expect(page.getByRole('cell', { name: 'e2e published', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toBeVisible();
+
+  // Delete the draft via the row's submit form.
+  await page.locator(`form[action="/admin/posts/${draftSlug}/delete"] button`).click();
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
+  await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: 'e2e published', exact: true })).toBeVisible();
+});
+
 // Anonymous visitor sees no admin chrome.
 test('admin chrome: hidden for anonymous visitors', async ({ browser }) => {
   // Fresh context = no session cookie.
