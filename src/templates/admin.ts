@@ -5,6 +5,8 @@
 // network dependency at runtime, which keeps the editor's CSP tight
 // (script-src 'self' only, no esm.sh / CDN allowance).
 
+import { stylesheetLinks } from './layout.ts';
+
 export interface AdminPageData {
   /** Where the compiled admin bundle is mounted on the URL space. */
   bundleUrl: string;
@@ -21,8 +23,7 @@ export function renderAdminPage(data: AdminPageData): string {
      will have (figures, prose width, headings, gallery/carousel placeholders).
      Loaded BEFORE the admin overrides so the inline styles below win for
      admin chrome (toolbar, panels, body layout). -->
-<link rel="stylesheet" href="/static/base.css"/>
-<link rel="stylesheet" href="/static/themes/default.css"/>
+${stylesheetLinks()}
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
 <link rel="stylesheet" href="/static/admin/main.css"/>
 <style>

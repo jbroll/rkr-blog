@@ -2,6 +2,7 @@
 // Driven by SITE_TITLE / SITE_TAGLINE env vars (lib/config.ts).
 
 import { resolveGitHash } from '../lib/build-info.ts';
+import { themeName } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 
 /** ?v=<short-hash> suffix appended to public-side bundle / stylesheet
@@ -15,12 +16,14 @@ export function bundleVersion(): string {
 }
 
 /** `<link>` tags for the public-side stylesheets. base.css carries the
- * theme-invariant primitives (a11y, overflow-clip); the theme follows
- * so its values win on the cascade. See docs/theming.md. */
+ * theme-invariant primitives (a11y, overflow-clip); the active theme
+ * (default, or whatever SITE_THEME selects) follows so its values win
+ * on the cascade. See docs/theming.md. */
 export function stylesheetLinks(): string {
   const v = bundleVersion();
+  const theme = themeName();
   return `<link rel="stylesheet" href="/static/base.css${v}"/>
-<link rel="stylesheet" href="/static/themes/default.css${v}"/>`;
+<link rel="stylesheet" href="/static/themes/${theme}.css${v}"/>`;
 }
 
 export interface SiteChrome {

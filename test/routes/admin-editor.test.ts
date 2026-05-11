@@ -53,8 +53,11 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
 
   // Public theme stylesheets (base + the active theme) are loaded so
   // the editor preview matches the rendered post.
-  assert.match(res.body, /<link rel="stylesheet" href="\/static\/base\.css"\/>/);
-  assert.match(res.body, /<link rel="stylesheet" href="\/static\/themes\/default\.css"\/>/);
+  assert.match(res.body, /<link rel="stylesheet" href="\/static\/base\.css(\?v=[^"]+)?"\/>/);
+  assert.match(
+    res.body,
+    /<link rel="stylesheet" href="\/static\/themes\/[a-z][a-z0-9-]*\.css(\?v=[^"]+)?"\/>/
+  );
 
   // Security headers: TipTap is bundled into the admin entry, so
   // script-src does NOT include esm.sh or any 'unsafe-inline'. The
