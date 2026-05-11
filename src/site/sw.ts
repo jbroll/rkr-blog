@@ -95,10 +95,28 @@ sw.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Authed visitors bypass the page cache. Public HTML varies with
+  // the session (admin strip in the header, hidden Admin link in the
+  // footer, "Edit this post" affordance), so an SWR'd anonymous body
+  // would shadow the admin chrome for the first navigation after
+  // login. Logged-out visitors continue to hit the SWR path — they
+  // keep the offline-friendly browse cache.
+  if (hasSessionCookie(req)) return;
+
   // / and /:slug — rendered pages. SWR with cap so a long browse
   // history doesn't eat the visitor's storage.
   event.respondWith(staleWhileRevalidate(req, PAGES, PAGES_CAP));
 });
+
+/** Does the request carry an admin-session cookie? Same-origin
+ * navigation requests include cookies on the fetch event, so we can
+ * key on session presence without round-tripping to the network. The
+ * cookie name matches src/routes/auth.ts SESSION_COOKIE. */
+function hasSessionCookie(req: Request): boolean {
+  const cookie = req.headers.get('cookie');
+  if (!cookie) return false;
+  return /(?:^|;\s*)rkr_session=/.test(cookie);
+}
 
 /** Cache-first: serve from cache if present, else fetch + cache.
  * Used for /img/* derivatives — content-addressed URLs are immutable
