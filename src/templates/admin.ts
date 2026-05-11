@@ -53,22 +53,25 @@ ${stylesheetLinks()}
   .rkr-admin-toplink a { color: var(--rkr-muted); text-decoration: none; }
   .rkr-admin-toplink a:hover { color: var(--rkr-link); text-decoration: underline; }
   /* Copy-link button mirrors the back-link, pinned to the top-right
-     so it's reachable for every post without consuming layout. Stays
-     disabled until the slug is known (after a save or pin); the
+     so it's reachable for every post without consuming layout. Icon-
+     only with a native tooltip via the title attribute; stays
+     disabled until the slug is known (after save or pin). The
      handler in src/admin/page-title.ts writes the URL to the
      clipboard and reports via setStatus. */
   .rkr-admin-copylink {
     position: fixed; top: .5rem; right: .75rem;
-    margin: 0; padding: .25rem .65rem;
-    font: inherit; font-size: .85rem;
+    margin: 0; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.9rem; height: 1.9rem;
     background: var(--rkr-bg); color: var(--rkr-muted);
-    border: 1px solid var(--rkr-rule); border-radius: 999px;
+    border: 1px solid var(--rkr-rule); border-radius: 50%;
     cursor: pointer; z-index: 10;
   }
   .rkr-admin-copylink:hover:not(:disabled) {
     color: var(--rkr-link); border-color: var(--rkr-link);
   }
   .rkr-admin-copylink:disabled { opacity: .5; cursor: not-allowed; }
+  .rkr-admin-copylink svg { display: block; }
   /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
      text / panel backgrounds so dark mode actually flips through. The
      fallbacks (after the comma) cover the case where site.css fails
@@ -332,7 +335,12 @@ ${stylesheetLinks()}
 </head>
 <body>
 <p class="rkr-admin-toplink"><a href="/" rel="nofollow">&larr; Back to site</a></p>
-<button type="button" id="rkr-copy-link" class="rkr-admin-copylink" disabled>Copy link</button>
+<button type="button" id="rkr-copy-link" class="rkr-admin-copylink" title="Copy link" aria-label="Copy link" disabled>
+  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+    <rect x="5" y="5" width="9" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M3 11.5V3.5A1.5 1.5 0 0 1 4.5 2H11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+</button>
 <h1 id="rkr-page-title">New post</h1>
 <div class="rkr-meta">
   <label for="rkr-title">Title</label>       <input id="rkr-title" type="text"/>
