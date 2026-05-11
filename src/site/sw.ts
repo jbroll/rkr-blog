@@ -95,28 +95,16 @@ sw.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Authed visitors bypass the page cache. Public HTML varies with
-  // the session (admin strip in the header, hidden Admin link in the
-  // footer, "Edit this post" affordance), so an SWR'd anonymous body
-  // would shadow the admin chrome for the first navigation after
-  // login. Logged-out visitors continue to hit the SWR path — they
-  // keep the offline-friendly browse cache.
-  if (hasSessionCookie(req)) return;
-
   // / and /:slug — rendered pages. SWR with cap so a long browse
-  // history doesn't eat the visitor's storage.
+  // history doesn't eat the visitor's storage. The server marks
+  // authed responses with `Cache-Control: private, no-store`; the
+  // SWR helper honours it and skips caching so an authed view
+  // doesn't shadow the next anonymous load (and vice versa).
+  // Chromium hides the Cookie header from SW fetch events for
+  // navigations, so we can't key on session up here — the server's
+  // Cache-Control is the only signal the SW can see.
   event.respondWith(staleWhileRevalidate(req, PAGES, PAGES_CAP));
 });
-
-/** Does the request carry an admin-session cookie? Same-origin
- * navigation requests include cookies on the fetch event, so we can
- * key on session presence without round-tripping to the network. The
- * cookie name matches src/routes/auth.ts SESSION_COOKIE. */
-function hasSessionCookie(req: Request): boolean {
-  const cookie = req.headers.get('cookie');
-  if (!cookie) return false;
-  return /(?:^|;\s*)rkr_session=/.test(cookie);
-}
 
 /** Cache-first: serve from cache if present, else fetch + cache.
  * Used for /img/* derivatives — content-addressed URLs are immutable
@@ -134,7 +122,14 @@ async function cacheFirst(req: Request, cacheName: string, cap: number): Promise
 
 /** Stale-while-revalidate: serve cached copy immediately if present,
  * fetch in the background and update the cache for the next visit.
- * If nothing's cached yet, fall through to network. */
+ * If nothing's cached yet, fall through to network. Skips caching
+ * when the response carries `Cache-Control: …no-store…` — that's
+ * the server's signal that the body is session-private (authed
+ * homepage / post page) and must not survive into the next
+ * navigation. Authed pages still get the SWR delivery on the hit
+ * side (immediate serve from cache if anything was cached before
+ * the no-store reached us); the background fetch tears down the
+ * cache instead of replacing it. */
 async function staleWhileRevalidate(
   req: Request,
   cacheName: string,
@@ -144,9 +139,12 @@ async function staleWhileRevalidate(
   const hit = await cache.match(req);
   const network = fetch(req)
     .then((res) => {
-      if (res.ok && res.status === 200) {
-        void cacheWithCap(cache, req, res.clone(), cap);
+      if (!res.ok || res.status !== 200) return res;
+      if (isNoStore(res)) {
+        void cache.delete(req);
+        return res;
       }
+      void cacheWithCap(cache, req, res.clone(), cap);
       return res;
     })
     .catch((err) => {
@@ -156,6 +154,14 @@ async function staleWhileRevalidate(
       return hit;
     });
   return hit ?? network;
+}
+
+/** Does the response opt out of caching via Cache-Control? Matches
+ * `no-store` anywhere in the header value (case-insensitive). */
+function isNoStore(res: Response): boolean {
+  const cc = res.headers.get('cache-control');
+  if (!cc) return false;
+  return /\bno-store\b/i.test(cc);
 }
 
 /** Add `req → res` to `cache`, then trim to the cap by deleting the

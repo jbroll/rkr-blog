@@ -37,12 +37,15 @@ test('siteHead: anonymous visitor — no admin strip', () => {
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
 });
 
-test('siteHead: isAdmin on index — New post + Posts + Logout, no Edit', () => {
+test('siteHead: isAdmin on index — New post + Settings + Logout, no Edit, no Posts', () => {
   const html = siteHead({ title: 'My site' }, { isAdmin: true });
   assert.match(html, /rkr-admin-strip/);
   assert.match(html, />New post</);
-  assert.match(html, />Posts</);
+  assert.match(html, />Settings</);
   assert.match(html, /<button[^>]*>Logout</);
+  // The "Posts" link is gone — the homepage doubles as the admin posts
+  // list now, so a separate entry point would just navigate back.
+  assert.ok(!html.includes('>Posts<'), 'no Posts link in the admin strip');
   assert.ok(!html.includes('Edit this post'), 'no edit link without currentSlug');
 });
 

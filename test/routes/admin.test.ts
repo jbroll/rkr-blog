@@ -120,18 +120,19 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
   assert.match(res.json<ErrorBody>().error, /not a recognized image/);
 });
 
-test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', async (t) => {
+test('GET /admin/posts → 301 redirect to /; POST /:slug/delete still works', async (t) => {
+  // The standalone admin posts page is gone — the homepage doubles
+  // as the admin posts list when authed (see public.ts: drafts +
+  // status / pin / delete render when req.user is set). The legacy
+  // URL 301s so bookmarks and any pre-removal admin-strip clicks
+  // still land in the right place. The POST /:slug/delete endpoint
+  // is unchanged — the new homepage's per-row delete form points at
+  // it directly.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
   for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
     fs.mkdirSync(path.join(root, sub), { recursive: true });
   }
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  // Two posts on disk + a db that the route can read.
-  fs.writeFileSync(
-    path.join(root, 'content', 'posts', 'hello.md'),
-    '---\ntitle: Hello\nslug: hello\nstatus: published\ndate: 2026-05-01T00:00:00Z\n---\n\nbody\n'
-  );
   fs.writeFileSync(
     path.join(root, 'content', 'posts', 'wip.md'),
     '---\ntitle: WIP\nslug: wip\nstatus: draft\ndate: 2026-05-02T00:00:00Z\n---\n\nbody\n'
@@ -143,30 +144,17 @@ test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', as
     await app.close();
     db.close();
   });
-
-  // runReindex runs on first POST; trigger it via a noop GET to /admin/posts.
-  // Actually the listing route reads the index directly; force a reindex by
-  // calling runReindex synchronously via require — simpler: hit /admin/posts
-  // which queries an empty index until we reindex. Call runReindex directly.
   const { runReindex } = await import('../../src/cli/reindex.ts');
   runReindex(root);
 
-  const list = await app.inject({ method: 'GET', url: '/admin/posts' });
-  assert.equal(list.statusCode, 200);
-  assert.match(list.body, /Hello/);
-  assert.match(list.body, /WIP/);
-  assert.match(list.body, /is-draft/);
-  assert.match(list.body, /is-published/);
-  // Title links to the public post view (the admin strip's
-  // "Edit this post" is the editor entry point); delete is a form
-  // POST so the CSRF / Origin guard fires.
-  assert.match(list.body, /<a href="\/hello">Hello<\/a>/);
-  assert.match(list.body, /action="\/admin\/posts\/wip\/delete"/);
+  const redirect = await app.inject({ method: 'GET', url: '/admin/posts' });
+  assert.equal(redirect.statusCode, 301);
+  assert.equal(redirect.headers.location, '/');
 
-  // Delete one post → 303 back to the listing, file gone.
+  // Delete still removes the markdown file + returns 303.
   const del = await app.inject({ method: 'POST', url: '/admin/posts/wip/delete' });
   assert.equal(del.statusCode, 303);
-  assert.equal(del.headers.location, '/admin/posts');
+  assert.equal(del.headers.location, '/');
   assert.equal(fs.existsSync(path.join(root, 'content', 'posts', 'wip.md')), false);
 
   // Bad slug → 400; unknown slug → 404.
@@ -176,13 +164,14 @@ test('GET /admin/posts lists drafts + published; POST /:slug/delete removes', as
   assert.equal(missing.statusCode, 404);
 });
 
-// One smoke test per theme: each must render /admin/posts under its
+// One smoke test per theme: each must render the homepage under its
 // SITE_THEME, with the three-layer stylesheet chain (base + default +
 // active) in the expected cascade order. This catches a missing CSS
 // file, a typo in the theme name list, or a regression in the layout
-// helper.
+// helper. (Previously this checked /admin/posts; that page is now a
+// 301 to / and the cascade matters most on the public-facing index.)
 for (const theme of ['papermod', 'tufte', 'dracula', 'terminal', 'solarized', 'mvp', 'newsprint']) {
-  test(`GET /admin/posts honors SITE_THEME=${theme} (smoke)`, async (t) => {
+  test(`GET / honors SITE_THEME=${theme} (smoke)`, async (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
     for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
       fs.mkdirSync(path.join(root, sub), { recursive: true });
@@ -206,7 +195,7 @@ for (const theme of ['papermod', 'tufte', 'dracula', 'terminal', 'solarized', 'm
       db.close();
     });
 
-    const res = await app.inject({ method: 'GET', url: '/admin/posts' });
+    const res = await app.inject({ method: 'GET', url: '/' });
     assert.equal(res.statusCode, 200);
     assert.match(res.body, /\/static\/base\.css/);
     assert.match(res.body, /\/static\/themes\/default\.css/);
@@ -218,7 +207,7 @@ for (const theme of ['papermod', 'tufte', 'dracula', 'terminal', 'solarized', 'm
   });
 }
 
-test('GET /admin/posts empty state when no posts', async (t) => {
+test('GET /admin/posts empty state still 301-redirects', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
   for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
     fs.mkdirSync(path.join(root, sub), { recursive: true });
@@ -233,8 +222,8 @@ test('GET /admin/posts empty state when no posts', async (t) => {
   });
 
   const res = await app.inject({ method: 'GET', url: '/admin/posts' });
-  assert.equal(res.statusCode, 200);
-  assert.match(res.body, /No posts yet/);
+  assert.equal(res.statusCode, 301);
+  assert.equal(res.headers.location, '/');
 });
 
 test('POST /admin/upload returns 400 when no file part is present', async (t) => {

@@ -1252,18 +1252,17 @@ test('admin posts: lists drafts + published, delete removes the row', async ({ p
     expect(res.status()).toBe(200);
   }
 
-  // Admin strip's "Posts" link routes into the listing.
+  // The homepage doubles as the admin posts list when authed; no
+  // separate /admin/posts tab any more.
   await page.goto('/');
-  await page.getByRole('link', { name: 'Posts' }).click();
-  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
-
-  // Both rows present, status pills reflect status.
   await expect(page.getByRole('cell', { name: 'e2e published', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toBeVisible();
 
-  // Delete the draft via the row's submit form.
+  // Delete the draft via the row's submit form. The form 303-
+  // redirects back to /admin/posts; that route 301s to / so the
+  // browser ends up on the homepage with the draft row gone.
   await page.locator(`form[action="/admin/posts/${draftSlug}/delete"] button`).click();
-  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/');
   await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'e2e published', exact: true })).toBeVisible();
 });
@@ -1299,15 +1298,16 @@ test('admin posts: per-row status flip + pin/unpin', async ({ page }) => {
   });
   expect(seed.status()).toBe(200);
 
-  await page.goto('/admin/posts');
+  // The homepage doubles as the admin posts list when authed.
+  await page.goto('/');
 
   const row = page.locator(`tr[data-slug="${slug}"]`);
   await expect(row).toBeVisible();
 
   // ---- 1. status flip: select 'published' → form auto-submits → 303
-  //         redirect → page reloads → row shows is-published.
+  //         redirect → 301 → / → row shows is-published.
   await row.locator('select[name="status"]').selectOption('published');
-  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/posts');
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/');
   await expect(row.locator('select[name="status"]')).toHaveValue('published');
   await expect(row.locator('select[name="status"]')).toHaveClass(/is-published/);
 

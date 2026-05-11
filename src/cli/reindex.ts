@@ -126,11 +126,24 @@ function listMarkdown(dir: string): string[] {
 
 export function readIndexedPosts(
   db: Db,
-  opts: { limit?: number; offset?: number; status?: 'draft' | 'published' } = {}
+  opts: { limit?: number; offset?: number; status?: 'draft' | 'published' | null } = {}
 ): IndexedPost[] {
-  const status = opts.status ?? 'published';
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
+  // status === null → no filter (admin view: drafts + published).
+  // status === undefined → default to 'published' (anonymous view).
+  // status === 'draft' | 'published' → filter to that status.
+  if (opts.status === null) {
+    return db
+      .prepare<IndexedPost>(
+        `SELECT slug, title, status, created_at, updated_at, published_at, path
+           FROM posts
+          ORDER BY updated_at DESC, slug ASC
+          LIMIT ? OFFSET ?`
+      )
+      .all(limit, offset);
+  }
+  const status = opts.status ?? 'published';
   return db
     .prepare<IndexedPost>(
       `SELECT slug, title, status, created_at, updated_at, published_at, path

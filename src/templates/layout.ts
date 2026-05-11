@@ -72,7 +72,6 @@ function renderAdminStrip(currentSlug?: string): string {
   return `
   <nav class="rkr-admin-strip" aria-label="Admin">
     <a class="rkr-admin-strip-link" href="/admin/editor">New post</a>
-    <a class="rkr-admin-strip-link" href="/admin/posts">Posts</a>
     <a class="rkr-admin-strip-link" href="/admin/settings">Settings</a>
     ${editLink}
     <form method="post" action="/admin/logout" class="rkr-admin-strip-logout">

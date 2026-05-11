@@ -209,3 +209,86 @@ test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking he
     );
   }
 });
+
+// Auth-gated branch of the GET / handler: when the request carries
+// a bearer token matching ADMIN_TOKEN, the response includes drafts
+// (alongside published) in the admin-table render, AND sets
+// Cache-Control: private, no-store so the SW + intermediaries don't
+// shadow the session-private body into the next anonymous load.
+//
+// Bearer auth requires auth-middleware to be registered, which the
+// default setup() skips (public routes don't need it). Build a
+// one-off app with the auth opt threaded through so req.user can
+// actually be set from the Authorization header.
+test('GET / authed: includes drafts + admin table + no-store header', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-public-authed-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data', 'cache/img']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const prevToken = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'test-public-admin-token';
+  t.after(() => {
+    if (prevToken === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = prevToken;
+  });
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: {
+      // Bearer-token path doesn't exchange OAuth codes, but the auth
+      // opt object is required to register the middleware that
+      // reads the Authorization header.
+      exchange: {
+        authorizationUrl: () => new URL('https://example.com/'),
+        exchange: async () => {
+          throw new Error('not used');
+        }
+      },
+      secureCookies: false,
+      skipGate: true
+    }
+  });
+  t.after(async () => {
+    await app.close();
+    events.removeAllListeners('enqueued');
+  });
+
+  writePost(root, 'pub.md', { slug: 'pub', title: 'Pub', status: 'published' }, 'b');
+  writePost(root, 'draft.md', { slug: 'draft', title: 'Drafty', status: 'draft' }, 'b');
+  runReindex(root);
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/',
+    headers: { authorization: 'Bearer test-public-admin-token' }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Drafty/);
+  assert.match(res.body, /Pub/);
+  // Admin-table markers from the renderIndexPage admin branch.
+  assert.match(res.body, /<th class="rkr-admin-posts-action">Status<\/th>/);
+  assert.match(res.body, /action="\/admin\/posts\/draft\/status"/);
+  assert.match(res.body, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
+  // SW honours no-store on the response and skips caching so a
+  // post-action redirect doesn't shadow the next load.
+  assert.match(res.headers['cache-control'] as string, /no-store/);
+});
+
+// Anonymous GET / must NOT carry no-store; SWR caching is the
+// offline-browse path for logged-out visitors.
+test('GET / anonymous: no Cache-Control no-store header', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(root, 'pub.md', { slug: 'pub', title: 'Pub', status: 'published' }, 'b');
+  runReindex(root);
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  const cc = (res.headers['cache-control'] as string | undefined) ?? '';
+  assert.ok(!/no-store/i.test(cc), `unexpected no-store: ${cc}`);
+});

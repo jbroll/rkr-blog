@@ -10,17 +10,13 @@ import path from 'node:path';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { readAllIndexedPosts, runReindex } from '../cli/reindex.ts';
-import { siteConfig } from '../lib/config.ts';
-import type { Db } from '../lib/db.ts';
-import { renderAdminPostsPage } from '../templates/admin-posts.ts';
+import { runReindex } from '../cli/reindex.ts';
 
 const MAX_SLUG_LENGTH = 100;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
 
 export interface AdminPostsRoutesOpts {
   siteRoot: string;
-  db: Db;
   /** Same `{ preHandler }` shape adminRoutes uses; empty when
    * `requireAuth` is off. */
   guard: Record<string, unknown>;
@@ -30,8 +26,7 @@ export function registerAdminPostsRoutes(
   fastify: FastifyInstance,
   opts: AdminPostsRoutesOpts
 ): void {
-  const { siteRoot, db, guard } = opts;
-  const site = siteConfig();
+  const { siteRoot, guard } = opts;
 
   // The delete form on the listing submits as
   // application/x-www-form-urlencoded. Register a parser so Fastify
@@ -53,14 +48,13 @@ export function registerAdminPostsRoutes(
     );
   }
 
+  // /admin/posts used to be the standalone admin posts list. The
+  // homepage now doubles as that list for authed visitors (see
+  // public.ts: drafts + status / pin / delete render when req.user
+  // is set), so this route is a 301 to "/". Kept around for the few
+  // bookmarks or old admin-strip clicks pointing here.
   fastify.get('/admin/posts', { ...guard }, async (_req, reply) => {
-    const rows = readAllIndexedPosts(db).map((r) => ({
-      slug: r.slug,
-      title: r.title,
-      status: r.status,
-      updatedAt: r.updated_at
-    }));
-    return reply.type('text/html; charset=utf-8').send(renderAdminPostsPage({ site, posts: rows }));
+    return reply.redirect('/', 301);
   });
 
   // Method is POST (not DELETE) so a plain HTML <form> can drive it
@@ -82,7 +76,7 @@ export function registerAdminPostsRoutes(
       }
       await fs.promises.unlink(filePath);
       runReindex(siteRoot);
-      return reply.redirect('/admin/posts', 303);
+      return reply.redirect('/', 303);
     }
   );
 
@@ -115,7 +109,7 @@ export function registerAdminPostsRoutes(
         await fs.promises.writeFile(filePath, updated, 'utf8');
         runReindex(siteRoot);
       }
-      return reply.redirect('/admin/posts', 303);
+      return reply.redirect('/', 303);
     }
   );
 }

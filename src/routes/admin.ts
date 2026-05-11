@@ -106,11 +106,10 @@ export default async function adminRoutes(
       .send(renderAdminPage({ site: siteConfig(), bundleUrl: '/static/admin/main.js' }));
   });
 
-  // Admin posts listing + delete extracted into a sibling module —
-  // db must be present, the editor SPA still mounts without it.
-  if (opts.db) {
-    registerAdminPostsRoutes(fastify, { siteRoot, db: opts.db, guard });
-  }
+  // /admin/posts (now 301 → /) + per-row status / delete endpoints.
+  // The handlers touch the filesystem + runReindex (which opens its
+  // own DB), so they no longer need opts.db to be present.
+  registerAdminPostsRoutes(fastify, { siteRoot, guard });
 
   // Site settings (title / tagline / theme) — surfaces the persisted
   // config that lib/config.ts already reads on every request.

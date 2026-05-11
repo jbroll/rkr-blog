@@ -112,15 +112,21 @@ export default async function publicRoutes(
     const requested = Number.parseInt(req.query.page ?? '1', 10);
     const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
     const offset = (page - 1) * PAGE_SIZE;
-
-    const total = (
-      db
-        .prepare<{ n: number }>("SELECT COUNT(*) AS n FROM posts WHERE status = 'published'")
-        .get() ?? { n: 0 }
-    ).n;
+    const isAdmin = !!req.user;
+    // Authed visitors see drafts + published (the homepage doubles as
+    // the admin posts list). Anonymous visitors keep the published-
+    // only filter so drafts stay invisible until promotion.
+    const countSql = isAdmin
+      ? 'SELECT COUNT(*) AS n FROM posts'
+      : "SELECT COUNT(*) AS n FROM posts WHERE status = 'published'";
+    const total = (db.prepare<{ n: number }>(countSql).get() ?? { n: 0 }).n;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    const rows = readIndexedPosts(db, { limit: PAGE_SIZE, offset, status: 'published' });
+    const rows = readIndexedPosts(db, {
+      limit: PAGE_SIZE,
+      offset,
+      status: isAdmin ? null : 'published'
+    });
     const html = renderIndexPage({
       site,
       page,
@@ -128,12 +134,18 @@ export default async function publicRoutes(
       posts: rows.map((r) => ({
         slug: r.slug,
         title: r.title,
-        ...(r.published_at ? { date: r.published_at } : {})
+        ...(r.published_at ? { date: r.published_at } : {}),
+        ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
       })),
-      isAdmin: !!req.user
+      isAdmin
     });
 
     setPublicSecurityHeaders(reply);
+    // Authed responses carry session-private chrome (admin strip,
+    // per-row controls). Mark them no-store so the SW + any HTTP
+    // intermediary skip caching — a post-action 303 redirect to /
+    // would otherwise serve the previously-cached pre-action body.
+    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
     return reply.type('text/html; charset=utf-8').send(html);
   });
 
@@ -164,6 +176,7 @@ export default async function publicRoutes(
     });
 
     setPublicSecurityHeaders(reply);
+    if (req.user) reply.header('Cache-Control', 'private, no-store');
     return reply.type('text/html; charset=utf-8').send(html);
   });
 

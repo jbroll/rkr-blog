@@ -284,7 +284,7 @@ test('POST /admin/posts/:slug/status flips the frontmatter status line', async (
     payload: 'status=published'
   });
   assert.equal(flip.statusCode, 303);
-  assert.equal(flip.headers.location, '/admin/posts');
+  assert.equal(flip.headers.location, '/');
   assert.match(fs.readFileSync(filePath, 'utf8'), /^status: published$/m);
 
   // Reindex ran — /flip-me is now publicly visible.
