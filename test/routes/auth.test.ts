@@ -185,7 +185,7 @@ test('callback: invited owner email is bootstrapped as owner', async (t) => {
     headers: { cookie }
   });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor');
+  assert.equal(res.headers.location, '/');
 
   const user = findUserByEmail(db, 'owner@example.com');
   assert.ok(user);
@@ -480,7 +480,7 @@ test('POST /admin/auth/token-login: correct token → session cookie + 302', asy
   const { db, app } = await setup(t, { idTokenPayload: {} });
   const res = await postTokenLogin(app, 'right-token');
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor');
+  assert.equal(res.headers.location, '/');
 
   const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as string | string[]);
   const sessionCookie = setCookie.find((c) => c.startsWith('rkr_session='));

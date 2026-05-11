@@ -13,6 +13,8 @@ export interface IndexPageData extends SiteChrome {
   posts: IndexEntry[];
   page: number;
   totalPages: number;
+  /** Logged-in admin → render the admin strip in siteHead. */
+  isAdmin?: boolean;
 }
 
 export function renderIndexPage(data: IndexPageData): string {
@@ -47,7 +49,7 @@ export function renderIndexPage(data: IndexPageData): string {
 <script type="module" src="/static/site/sw-register.js${v}" defer></script>
 </head>
 <body>
-${siteHead(data.site)}
+${siteHead(data.site, { isAdmin: data.isAdmin })}
 <main id="main" tabindex="-1">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
 <ul class="post-list">

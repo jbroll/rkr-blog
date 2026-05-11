@@ -8,6 +8,9 @@ export interface PostPageData extends SiteChrome {
   slug: string;
   date?: string;
   bodyHtml: string;
+  /** Logged-in admin → render admin strip with an "Edit this post"
+   * link in siteHead. */
+  isAdmin?: boolean;
 }
 
 export function renderPostPage(post: PostPageData): string {
@@ -32,7 +35,7 @@ export function renderPostPage(post: PostPageData): string {
 <script type="module" src="/static/site/carousel.js${v}" defer></script>
 </head>
 <body>
-${siteHead(post.site)}
+${siteHead(post.site, { isAdmin: post.isAdmin, currentSlug: post.slug })}
 <main id="main" tabindex="-1">
 <article>
 <header>

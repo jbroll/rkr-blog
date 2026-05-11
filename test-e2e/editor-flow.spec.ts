@@ -32,11 +32,12 @@ const PNG_1X1_YELLOW =
 async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/admin/login');
   await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
+  // Post-login redirects to the public index; callers that need the
+  // editor mount follow up with their own page.goto('/admin/editor').
   await Promise.all([
-    page.waitForURL('**/admin/editor'),
+    page.waitForURL((url) => new URL(url).pathname === '/'),
     page.getByRole('button', { name: /Sign in with token/ }).click()
   ]);
-  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 }
 
 // Poll OPFS until any file under `dir` contains `needle`. Replaces
@@ -82,6 +83,8 @@ async function waitForOpfsContains(
 
 test('editor: insert image, set matrix, save publishes to /:slug', async ({ page }) => {
   await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e flow');
   // Unique slug — the e2e site root persists for the run, so reusing one
@@ -145,6 +148,8 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
 // runEdit/refreshAfterEdit glue in main.ts.
 test('editor: rotate single image then save edits', async ({ page }) => {
   await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e rotate');
   await page.locator('#rkr-slug').fill(`e2e-rotate-${Date.now()}`);
@@ -191,6 +196,8 @@ test('editor: rotate single image then save edits', async ({ page }) => {
 // and that Cancel closes it without mutating the ops list.
 test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
   await page.locator('#rkr-title').fill('e2e crop');
   await page.locator('#rkr-slug').fill(`e2e-crop-${Date.now()}`);
@@ -984,4 +991,62 @@ test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async (
 
   expect(seqs).toHaveLength(n);
   expect(new Set(seqs).size).toBe(n);
+});
+
+// Admin chrome on the public site: post-login lands on /, the admin
+// strip shows New post + Logout; on a /:slug page the strip also
+// shows Edit this post → /admin/editor?slug=<slug>; the editor
+// pre-populates the form + body from the existing post.
+test('admin chrome: New post + Edit this post route into the editor', async ({ page }) => {
+  await login(page);
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/');
+
+  // Seed an existing post so /:slug renders something to edit.
+  const slug = `e2e-chrome-${Date.now()}`;
+  const seed = await page.request.post('/admin/posts', {
+    data: {
+      slug,
+      title: 'admin-chrome seed',
+      status: 'published',
+      markdown: 'chrome body\n'
+    }
+  });
+  expect(seed.status()).toBe(200);
+
+  // Index: New post link is in the admin strip, takes us to the editor.
+  await page.goto('/');
+  await page.getByRole('link', { name: 'New post' }).click();
+  await expect(page).toHaveURL((url) => new URL(url).pathname === '/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  // Post page: Edit this post link is in the admin strip and routes
+  // into the editor with ?slug=<slug>. After clicking we re-navigate
+  // with &e2e=1 appended (the link itself doesn't carry it) so the
+  // offline-ready hook becomes available for the rest of the test.
+  await page.goto(`/${slug}`);
+  await expect(page.getByRole('link', { name: 'Edit this post' })).toBeVisible();
+  await page.getByRole('link', { name: 'Edit this post' }).click();
+  await expect(page).toHaveURL((url) => {
+    const u = new URL(url);
+    return u.pathname === '/admin/editor' && u.searchParams.get('slug') === slug;
+  });
+  await page.goto(`/admin/editor?slug=${slug}&e2e=1`);
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+  // Editor pre-populated from the bundle pinPost wrote into OPFS.
+  await expect(page.locator('#rkr-slug')).toHaveValue(slug);
+  await expect(page.locator('#rkr-title')).toHaveValue('admin-chrome seed');
+  await expect(page.locator('#rkroll-admin-article')).toContainText('chrome body');
+});
+
+// Anonymous visitor sees no admin chrome.
+test('admin chrome: hidden for anonymous visitors', async ({ browser }) => {
+  // Fresh context = no session cookie.
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'New post' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Logout' })).toHaveCount(0);
+  await ctx.close();
 });

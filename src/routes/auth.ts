@@ -43,7 +43,9 @@ export interface AuthRoutesOpts {
   exchange?: TokenExchange;
   /** Production verifier hits Google's JWKS endpoint. Tests inject a stub. */
   verifier?: IdTokenVerifier;
-  /** When set, the post-login redirect goes here (default /admin/editor). */
+  /** When set, the post-login redirect goes here. Default `/`: the
+   * admin lands on the public index and reaches the editor via the
+   * admin strip rendered in siteHead. */
   postLoginPath?: string;
   /** Use Secure cookie attribute (true in prod over TLS). Default true. */
   secureCookies?: boolean;
@@ -57,7 +59,7 @@ export default async function authRoutes(
   fastify: FastifyInstance,
   opts: AuthRoutesOpts
 ): Promise<void> {
-  const { db, postLoginPath = '/admin/editor', secureCookies = true } = opts;
+  const { db, postLoginPath = '/', secureCookies = true } = opts;
   const exchange = opts.exchange ?? makeGoogleExchange();
   const verifier =
     opts.verifier ??

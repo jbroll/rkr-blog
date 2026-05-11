@@ -129,7 +129,8 @@ export default async function publicRoutes(
         slug: r.slug,
         title: r.title,
         ...(r.published_at ? { date: r.published_at } : {})
-      }))
+      })),
+      isAdmin: !!req.user
     });
 
     setPublicSecurityHeaders(reply);
@@ -155,7 +156,8 @@ export default async function publicRoutes(
       title: parsed.frontmatter.title,
       slug: parsed.frontmatter.slug,
       ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
-      bodyHtml
+      bodyHtml,
+      isAdmin: !!req.user
     });
 
     setPublicSecurityHeaders(reply);

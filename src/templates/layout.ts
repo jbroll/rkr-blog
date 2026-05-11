@@ -19,23 +19,45 @@ export interface SiteChrome {
   site: { title: string; tagline?: string };
 }
 
-export function siteHead(site: SiteChrome['site']): string {
+export interface HeadOpts {
+  /** True when the request carries a valid admin session. Adds the
+   * admin strip to the header (New post / Edit / Logout). */
+  isAdmin?: boolean;
+  /** The slug of the post currently being viewed, if any. When set
+   * AND isAdmin, the strip includes an "Edit this post" link. */
+  currentSlug?: string;
+}
+
+export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string {
   const tagline = site.tagline
     ? `<span class="rkr-site-tagline">${escapeText(site.tagline)}</span>`
     : '';
-  // Skip-to-content link (visually hidden until focused) so keyboard
-  // users can jump past the chrome on every page. Targets <main>, which
-  // gets a matching id + tabindex via the post / index templates.
-  // Site title is a <p>, not <h1> — post pages have their own <h1>
-  // (the post title) and the index would otherwise have an h1 with
-  // no document content underneath.
+  const adminStrip = opts.isAdmin ? renderAdminStrip(opts.currentSlug) : '';
   return `<a class="rkr-skip" href="#main">Skip to content</a>
 <header class="rkr-site-head">
   <div class="rkr-site-head-inner">
     <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
     ${tagline}
-  </div>
+  </div>${adminStrip}
 </header>`;
+}
+
+function renderAdminStrip(currentSlug?: string): string {
+  // Edit-this-post only appears on /:slug pages; the slug must be
+  // URL-encoded because the editor passes it via querystring.
+  const editLink = currentSlug
+    ? `<a class="rkr-admin-strip-link" href="/admin/editor?slug=${encodeURIComponent(currentSlug)}">Edit this post</a>`
+    : '';
+  // Logout is POST to defeat CSRF + the cross-origin guard; inline
+  // form-submit is the standard answer.
+  return `
+  <nav class="rkr-admin-strip" aria-label="Admin">
+    <a class="rkr-admin-strip-link" href="/admin/editor">New post</a>
+    ${editLink}
+    <form method="post" action="/admin/logout" class="rkr-admin-strip-logout">
+      <button type="submit" class="rkr-admin-strip-link">Logout</button>
+    </form>
+  </nav>`;
 }
 
 export function siteFoot(site: SiteChrome['site']): string {

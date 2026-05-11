@@ -11,6 +11,7 @@ import { runEviction } from './eviction.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { append as outboxAppend, list as outboxList, pendingCount } from './outbox.ts';
+import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
 import { openStoragePanel } from './storage-panel.ts';
@@ -56,6 +57,22 @@ async function runStart(editor: Editor): Promise<void> {
     registerDrainer('setOps', drainSetOps);
     registerDrainer('bake', drainBake);
     registerDrainer('savePost', drainSavePost);
+    // ?slug=foo: caller asked to edit an existing post. Pin its
+    // bundle into OPFS (writes drafts/<new-id>.json + meta,
+    // bumps currentDraftId), then fall through to the normal
+    // draft restore which picks up the fresh draft. Any prior
+    // in-progress draft is orphaned in OPFS; eviction reclaims.
+    // Also seed the title/slug/status form fields from the bundle
+    // so handleSave overwrites the right post.
+    const slugParam = new URLSearchParams(location.search).get('slug');
+    if (slugParam) {
+      try {
+        const { manifest } = await pinPost(slugParam);
+        seedFormFields(manifest);
+      } catch (err) {
+        setStatus(`could not load /${slugParam}: ${(err as Error).message}`);
+      }
+    }
     const draftId = await getOrCreateDraftId();
     const restored = (await loadDraft(draftId)) as JSONContent | null;
     if (restored) {
@@ -74,5 +91,16 @@ async function runStart(editor: Editor): Promise<void> {
     await tryDrain();
   } catch (err) {
     setStatus(`offline cache init failed: ${(err as Error).message}`);
+  }
+}
+
+function seedFormFields(manifest: PinManifest): void {
+  const slugEl = document.getElementById('rkr-slug') as HTMLInputElement | null;
+  const titleEl = document.getElementById('rkr-title') as HTMLInputElement | null;
+  const statusEl = document.getElementById('rkr-status') as HTMLSelectElement | null;
+  if (slugEl) slugEl.value = manifest.slug;
+  if (titleEl) titleEl.value = manifest.title;
+  if (statusEl && (manifest.status === 'draft' || manifest.status === 'published')) {
+    statusEl.value = manifest.status;
   }
 }

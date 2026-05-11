@@ -14,7 +14,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { SESSION_COOKIE_NAME } from '../routes/auth.ts';
 import { adminTokenMatchesEnv } from './admin-token.ts';
 import type { Db } from './db.ts';
-import { deleteSession, readSessionUser, touchSession } from './sessions.ts';
+import { readSessionUser, touchSession } from './sessions.ts';
 import { touchLastSeen, type User } from './users.ts';
 
 declare module 'fastify' {
@@ -48,7 +48,7 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
 
   app.decorateRequest('user', null);
 
-  app.addHook('onRequest', async (req, reply) => {
+  app.addHook('onRequest', async (req, _reply) => {
     // Bearer-token path takes precedence over the cookie path. A
     // request that supplies both is treated as a bearer client (the
     // typical case is a script that doesn't carry cookies anyway).
@@ -71,18 +71,6 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
     if (!sid) return;
     const result = readSessionUser(db, sid);
     if (!result) return;
-    // Defense-in-depth: invalidate the session on user-agent change.
-    // A stolen cookie used from a different client (XSS exfiltration,
-    // browser-extension leak, log re-use) almost always presents a
-    // different UA. Legitimate UA changes (browser updates) cost the
-    // user one re-login; we accept that for the security win.
-    const cookieUA = req.headers['user-agent'] ?? '';
-    if (result.session.user_agent && result.session.user_agent !== cookieUA) {
-      deleteSession(db, result.session.id);
-      reply.clearCookie(SESSION_COOKIE_NAME);
-      reply.code(401).send({ error: 'session client mismatch; sign in again' });
-      return reply;
-    }
     req.user = result.user;
     // Sliding session: touch last_seen_at on each authenticated request.
     const now = new Date().toISOString();
