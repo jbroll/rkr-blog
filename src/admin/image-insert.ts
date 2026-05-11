@@ -80,15 +80,13 @@ export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
         .map((s) => s.trim())
         .filter(Boolean);
       const combined = [...existing, ...ids];
-      // Promote to a multi-image matrix once we cross two images and
-      // the author hadn't already set one explicitly. Keep an existing
-      // matrix verbatim — that's an authored choice we shouldn't stomp.
+      // Promote to a carousel (1x1) once we cross two images and the
+      // author hadn't already set a matrix. Carousel is the safest
+      // default for the grow-by-one gesture — the author can swap to
+      // 1x2/justified/masonry from the layout field if they prefer a
+      // tiled layout. An explicit matrix is kept verbatim.
       const matrix =
-        attrs.matrix && attrs.matrix.length > 0
-          ? attrs.matrix
-          : combined.length > 1
-            ? 'justified'
-            : '';
+        attrs.matrix && attrs.matrix.length > 0 ? attrs.matrix : combined.length > 1 ? '1x1' : '';
       editor
         .chain()
         .focus()
