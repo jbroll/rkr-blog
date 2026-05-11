@@ -32,9 +32,8 @@ function mount(): void {
   //     figure is selected but no specific cell is active).
   //   data-scope="cell"   — per-image controls (visible when the user
   //     has clicked one image in the figure).
-  const attrPanel = $<HTMLDivElement>('rkr-figure-attrs');
-  const attrSectionFigure = $<HTMLDivElement>('rkr-figure-attrs-figure');
-  const attrSectionCell = $<HTMLDivElement>('rkr-figure-attrs-cell');
+  const figureDialog = $<HTMLDialogElement>('rkr-figure-dialog');
+  const cellDialog = $<HTMLDialogElement>('rkr-cell-dialog');
   const attrIds = $<HTMLInputElement>('rkr-figure-ids');
   // Figure-level inputs.
   const attrCaption = $<HTMLInputElement>('rkr-figure-caption');
@@ -137,11 +136,12 @@ function mount(): void {
 
     const isFigure = editor.isActive('figure');
     if (!isFigure) {
-      attrPanel.hidden = true;
       imageEditSection.hidden = true;
       activeCellIndex = null;
       lastFigurePos = null;
       clearActiveCellHighlight();
+      if (cellDialog.open) cellDialog.close();
+      if (figureDialog.open) figureDialog.close();
       return;
     }
     const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
@@ -161,7 +161,6 @@ function mount(): void {
     attrFit.value = attrs.fit ?? 'cover';
     attrTimer.value = String(attrs.timer ?? 0);
     populating = false;
-    attrPanel.hidden = false;
 
     // Reset cell selection when the active figure changes (different
     // node position). Same-figure re-selects (e.g. attribute edits
@@ -182,14 +181,17 @@ function mount(): void {
     populateImageEditForActiveCell(idList);
   });
 
-  /** Toggle the figure-level vs per-cell sections of the attr panel,
-   * and seed the per-cell caption/alt inputs from the active cell's
-   * pipe-separated entry. */
+  /** Show/hide the per-cell modal dialog. Open when a cell is
+   * selected (showModal native-stacks above the side panel + traps
+   * focus); close clears activeCellIndex via the dialog's own close
+   * listener so the figure-level state is consistent. Also seeds the
+   * caption + alt inputs from the active cell's pipe-separated entry. */
   function syncScopeVisibility(idList: string[]): void {
     const cellMode = activeCellIndex !== null;
-    attrSectionFigure.hidden = cellMode;
-    attrSectionCell.hidden = !cellMode;
-    if (!cellMode) return;
+    if (!cellMode) {
+      if (cellDialog.open) cellDialog.close();
+      return;
+    }
     const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
     const captionsList = (attrs.captions ?? '').split('|');
     const altsList = (attrs.alts ?? '').split(',').map((s) => s.trim());
@@ -198,6 +200,7 @@ function mount(): void {
     attrCellCaption.value = captionsList[idx] ?? '';
     attrCellAlt.value = altsList[idx] ?? '';
     populating = false;
+    if (!cellDialog.open) cellDialog.showModal();
     // idList is the source of truth; we only read it here to keep the
     // signature parallel with populateImageEditForActiveCell.
     void idList;
@@ -240,8 +243,11 @@ function mount(): void {
   // In-figure click delegation. Two shapes:
   //   [data-add-image] — the "+" cell that opens the source picker in
   //                       append mode (append to this figure's ids).
-  //   img[data-cell-index] — a thumb; click selects that cell, which
-  //                       reveals the per-cell attribute section.
+  //   [data-figure-config] — the gear button that opens the figure-
+  //                       level config dialog. Selection-update has
+  //                       already populated its inputs.
+  //   img[data-cell-index] — a thumb; click opens the per-image
+  //                       dialog scoped to that cell.
   // ProseMirror handles click-to-select-figure on its own (atom node),
   // so by the time this bubble handler runs the figure is active.
   editor.view.dom.addEventListener('click', (ev) => {
@@ -251,6 +257,11 @@ function mount(): void {
     if (target.closest('[data-add-image]')) {
       ev.preventDefault();
       void inserter.appendToActive();
+      return;
+    }
+    if (target.closest('[data-figure-config]')) {
+      ev.preventDefault();
+      if (!figureDialog.open) figureDialog.showModal();
       return;
     }
     if (!target.matches('img[data-cell-index]')) return;
@@ -266,6 +277,31 @@ function mount(): void {
     activeCellIndex = idx;
     syncScopeVisibility(idList);
     populateImageEditForActiveCell(idList);
+  });
+
+  // Dialog teardown: any close path (✕ button, ESC, or backdrop click
+  // via the listener below) clears the active cell so the next
+  // figure-level edit doesn't keep stale per-cell state. The dialog's
+  // <form method="dialog"> submit fires `close` natively.
+  cellDialog.addEventListener('close', () => {
+    if (activeCellIndex === null) return;
+    activeCellIndex = null;
+    clearActiveCellHighlight();
+    editPanel.deactivate();
+  });
+  // Backdrop click → close. Native <dialog>::backdrop intercepts the
+  // click and bubbles it on the dialog element itself; comparing
+  // event.target to the dialog distinguishes that from a click on a
+  // child input/button.
+  cellDialog.addEventListener('click', (ev) => {
+    if (ev.target === cellDialog) cellDialog.close();
+  });
+  // Figure dialog uses the same backdrop-click-to-close pattern; no
+  // `close` listener needed since the dialog state doesn't shadow
+  // anything in the editor (no activeFigureIndex equivalent — the
+  // ProseMirror selection IS the source of truth for "which figure").
+  figureDialog.addEventListener('click', (ev) => {
+    if (ev.target === figureDialog) figureDialog.close();
   });
 
   /** Patch a single figure attr. Field name maps directly to a

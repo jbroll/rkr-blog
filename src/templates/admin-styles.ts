@@ -123,25 +123,13 @@ export const ADMIN_CSS = `
   #rkr-storage-schema { color: var(--rkr-muted); font-size: .8rem; margin-top: 1rem; text-align: right; }
   .rkr-meta { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; margin-bottom: 1rem; align-items: center; }
   .rkr-meta input, .rkr-meta select { padding: .25rem; }
-  /* Figure attribute panel: shown only when a figure node is selected.
-     Use a translucent overlay over --rkr-bg so dark mode works without
-     a separate color rule (color-mix maps to a slightly-darker neutral
-     in dark mode, slightly-lighter in light mode). */
-  #rkr-figure-attrs[hidden] { display: none; }
-  #rkr-figure-attrs {
-    display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
-    align-items: center; margin: .75rem 0;
-    padding: .5rem .75rem; border: 1px solid var(--rkr-rule); border-radius: 4px;
-    background: color-mix(in srgb, var(--rkr-text) 4%, var(--rkr-bg));
-  }
-  #rkr-figure-attrs h3 { grid-column: 1 / -1; margin: 0; font-size: .9rem; color: var(--rkr-muted); }
-  #rkr-figure-attrs input, #rkr-figure-attrs select, #rkr-figure-attrs textarea { padding: .25rem; }
-  /* Scoped sections inside the attr panel. display:contents flattens
-     the wrapper into the parent grid so the existing label/input two-
-     column layout still aligns; [hidden] short-circuits display:contents
-     because the [attr] selector beats the bare-class selector. */
-  .rkr-attr-section { display: contents; }
-  .rkr-attr-section[hidden] { display: none; }
+  /* Figure + cell config moved to <dialog>s opened by the in-figure
+     buttons; the side panel that used to live at #rkr-figure-attrs
+     is gone. Both dialogs share the .rkr-cell-dialog-* classes for
+     head/close-button styling; field layout uses the grid below. */
+  #rkr-figure-attrs-figure input,
+  #rkr-figure-attrs-figure select,
+  #rkr-figure-attrs-figure textarea { padding: .25rem; }
   /* Layout-mode label is a plain text span (no for=) so the grid still
      aligns it against the matrix control on the right column. */
   .rkr-attr-label { color: inherit; }
@@ -156,6 +144,46 @@ export const ADMIN_CSS = `
   .rkr-matrix-params input[type="number"] { width: 4.5rem; }
   /* Source-picker dialog: vertical button stack with a small inset.
      showModal()'s built-in backdrop dimming gives focus separation. */
+  /* Per-image modal — opened when the author clicks one image inside
+     a figure. Hosts the cell caption + alt and the full image-edit
+     pipeline. Width capped so it doesn't span the full viewport on
+     large screens; native ::backdrop dims the editor behind. */
+  #rkr-cell-dialog {
+    padding: 0;
+    border: 1px solid var(--rkr-rule);
+    border-radius: 6px;
+    background: var(--rkr-bg);
+    color: var(--rkr-text);
+    max-width: min(640px, 95vw);
+    width: 32rem;
+  }
+  #rkr-cell-dialog::backdrop,
+  #rkr-figure-dialog::backdrop { background: rgba(0,0,0,.4); }
+  #rkr-figure-dialog {
+    padding: 0;
+    border: 1px solid var(--rkr-rule);
+    border-radius: 6px;
+    background: var(--rkr-bg);
+    color: var(--rkr-text);
+    max-width: min(640px, 95vw);
+    width: 32rem;
+  }
+  .rkr-cell-dialog-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 0; padding: .5rem .75rem;
+    border-bottom: 1px solid var(--rkr-rule);
+  }
+  .rkr-cell-dialog-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+  .rkr-cell-dialog-close {
+    background: none; border: 0; padding: .15rem .35rem; cursor: pointer;
+    font: inherit; color: var(--rkr-muted);
+  }
+  .rkr-cell-dialog-close:hover { color: var(--rkr-text); }
+  .rkr-cell-dialog-body {
+    display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem;
+    align-items: center; padding: .75rem;
+  }
+  .rkr-cell-dialog-body #rkr-image-edit { grid-column: 1 / -1; display: contents; }
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
   #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }
   #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
@@ -167,9 +195,17 @@ export const ADMIN_CSS = `
      article's geometric centre. Author-clickable when the figure is
      selected; main.ts's delegated handler opens the source picker
      in append mode. */
-  #rkroll-admin-root button.rkr-multi-add {
-    display: inline-block;
+  /* Per-figure action row: the "+ Add image" and "⚙ Configure"
+     buttons share the same dashed pill style and sit below the
+     thumb grid. main.ts's delegated handler routes each via its
+     data attribute. */
+  .rkr-multi-actions {
+    display: flex; gap: .5rem; align-items: center;
     margin-top: .35rem;
+  }
+  #rkroll-admin-root button.rkr-multi-add,
+  #rkroll-admin-root button.rkr-multi-config {
+    display: inline-block;
     padding: .15rem .6rem;
     background: transparent;
     border: 1px dashed var(--rkr-rule);
@@ -178,7 +214,8 @@ export const ADMIN_CSS = `
     font: inherit; font-size: .85rem;
     cursor: pointer;
   }
-  #rkroll-admin-root button.rkr-multi-add:hover {
+  #rkroll-admin-root button.rkr-multi-add:hover,
+  #rkroll-admin-root button.rkr-multi-config:hover {
     color: var(--rkr-text);
     border-color: var(--rkr-text);
   }

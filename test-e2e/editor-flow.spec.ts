@@ -138,23 +138,27 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
     timeout: 10_000
   });
 
-  // The figure node now lives in the editor; the attrs panel reveals
-  // itself when the figure is selected (which insertContent does).
-  await expect(page.locator('#rkr-figure-attrs')).toBeVisible();
-  // The hidden 'ids' field is populated from the upload result; a
-  // non-empty value confirms the round-trip from /admin/upload landed.
-  // The input is type=hidden but toHaveValue reads the DOM value.
+  // The figure node now lives in the editor. The figure-config gear
+  // button is rendered inside the figure body alongside +Add image.
+  await expect(page.locator('button[data-figure-config]')).toBeVisible();
+  // The hidden 'ids' field is populated from the upload result on
+  // selection-update; a non-empty value confirms the round-trip from
+  // /admin/upload landed.
   await expect(page.locator('#rkr-figure-ids')).not.toHaveValue('');
 
   // ---- 2. set matrix ---------------------------------------------------
 
-  // Layout = Grid 1×2 (diptych). The matrix control is the radio +
-  // spinbox panel; the wire format is still the same `1x2` string the
-  // server expects. The cols spinbox change-fires on blur, which the
-  // commit listener picks up.
+  // Open the figure-config dialog and set Layout = Grid 1×2 (diptych).
+  // The matrix control is the radio + spinbox panel; the wire format
+  // is still the same `1x2` string the server expects. The cols
+  // spinbox change-fires on blur, which the commit listener picks up.
+  await page.locator('button[data-figure-config]').click();
+  await expect(page.locator('#rkr-figure-dialog')).toBeVisible();
   await expect(page.locator('input[name="rkr-matrix-mode"][value="grid"]')).toBeChecked();
   await page.locator('#rkr-matrix-cols').fill('2');
   await page.locator('#rkr-matrix-cols').blur();
+  await page.locator('#rkr-figure-dialog .rkr-cell-dialog-close').click();
+  await expect(page.locator('#rkr-figure-dialog')).not.toBeVisible();
 
   // Dynamic h1 + tab title: the title input drives both, with a "● "
   // prefix on document.title while the editor is dirty.
@@ -389,14 +393,15 @@ test('editor: per-cell selection drives the image-edit panel for multi-image fig
     { a: idA, b: idB }
   );
 
-  // The figure now has ids="A,B". The image-edit panel should be
-  // hidden because no cell is selected yet.
-  await expect(page.locator('#rkr-figure-attrs')).toBeVisible();
+  // The figure now has ids="A,B". The figure-config gear is the only
+  // surfaced affordance until a cell is clicked; neither dialog is
+  // open yet.
+  await expect(page.locator('button[data-figure-config]')).toBeVisible();
   await expect(page.locator('#rkr-figure-ids')).toHaveValue(`${idA},${idB}`);
-  await expect(page.locator('#rkr-image-edit')).toBeHidden();
+  await expect(page.locator('#rkr-cell-dialog')).not.toBeVisible();
 
-  // Click the second thumb (data-cell-index="1"). Panel reveals
-  // scoped to that cell's id.
+  // Click the second thumb (data-cell-index="1"). Per-image dialog
+  // opens scoped to that cell's id.
   await page.locator('img[data-cell-index="1"]').click();
   await expect(page.locator('#rkr-image-edit')).toBeVisible();
   await expect(page.locator('img[data-cell-index="1"]')).toHaveClass(/is-active-cell/);
@@ -417,9 +422,15 @@ test('editor: per-cell selection drives the image-edit panel for multi-image fig
     { timeout: 10_000 }
   );
 
-  // Switch to the first cell. Its panel should show the empty state
-  // (no ops applied yet), distinct from the second cell.
+  // Switch to the first cell. The per-image controls live in a modal
+  // dialog now, so we close the current dialog before clicking the
+  // next cell (the modal's backdrop blocks pass-through clicks by
+  // design — one image at a time). The first cell's panel shows the
+  // empty state (no ops applied yet), distinct from the second cell.
+  await page.locator('#rkr-cell-dialog .rkr-cell-dialog-close').click();
+  await expect(page.locator('#rkr-cell-dialog')).not.toBeVisible();
   await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-cell-dialog')).toBeVisible();
   await expect(page.locator('img[data-cell-index="0"]')).toHaveClass(/is-active-cell/);
   await expect(page.locator('img[data-cell-index="1"]')).not.toHaveClass(/is-active-cell/);
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(0);
@@ -539,7 +550,7 @@ test('editor: offline upload queues + drains on reconnect', async ({ page, conte
     timeout: 10_000
   });
 
-  await expect(page.locator('#rkr-figure-attrs')).toBeVisible();
+  await expect(page.locator('button[data-figure-config]')).toBeVisible();
   const id = await page.locator('#rkr-figure-ids').inputValue();
   expect(id).toMatch(/^[0-9a-f]{64}$/);
 

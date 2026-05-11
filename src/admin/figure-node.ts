@@ -97,15 +97,30 @@ export const FigureNode = Node.create({
       ['div', { class: 'rkr-multi-label' }, `figure ${matrixLabel} (${idList.length})`],
       ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
       [
-        'button',
-        {
-          type: 'button',
-          class: 'rkr-multi-add',
-          'data-add-image': 'true',
-          'aria-label': 'Add image to figure',
-          title: 'Add image'
-        },
-        '+ Add image'
+        'div',
+        { class: 'rkr-multi-actions' },
+        [
+          'button',
+          {
+            type: 'button',
+            class: 'rkr-multi-add',
+            'data-add-image': 'true',
+            'aria-label': 'Add image to figure',
+            title: 'Add image'
+          },
+          '+ Add image'
+        ],
+        [
+          'button',
+          {
+            type: 'button',
+            class: 'rkr-multi-config',
+            'data-figure-config': 'true',
+            'aria-label': 'Configure figure',
+            title: 'Configure figure'
+          },
+          '⚙ Configure'
+        ]
       ],
       ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])
     ];

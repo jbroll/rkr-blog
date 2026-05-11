@@ -54,18 +54,23 @@ ${siteHead(data.site, { isAdmin: true })}
   <input id="rkr-slug" type="hidden"/>
 </div>
 <div id="rkroll-admin-toolbar"></div>
-<div id="rkr-figure-attrs" hidden>
-  <h3>Figure</h3>
-  <!-- Image ids stay internal: the figure node carries them in its
-       attrs and the save serialiser writes them into the ::figure
-       directive. Keeping the input hidden (rather than removing it)
-       lets the existing population path in main.ts keep working. -->
-  <input id="rkr-figure-ids" type="hidden"/>
+<!-- Image ids stay internal: the figure node carries them in its
+     attrs and the save serialiser writes them into the ::figure
+     directive. Keeping the input hidden (rather than removing it)
+     lets the existing population path in main.ts keep working, and
+     e2e tests can read it from any time the figure is selected
+     without opening a dialog. -->
+<input id="rkr-figure-ids" type="hidden"/>
 
-  <!-- Figure-level controls — visible when the figure is selected but
-       no specific image is. Authors enter this mode by selecting the
-       figure (or by being placed here right after insertion). -->
-  <div id="rkr-figure-attrs-figure" class="rkr-attr-section" data-scope="figure">
+<!-- Figure-level controls live in a modal dialog opened by the
+     "Configure" button rendered inside each figure (figure-node.ts).
+     Symmetric with the per-image dialog below. -->
+<dialog id="rkr-figure-dialog" aria-labelledby="rkr-figure-dialog-title">
+  <form method="dialog" class="rkr-cell-dialog-head">
+    <h2 id="rkr-figure-dialog-title">Figure</h2>
+    <button type="submit" class="rkr-cell-dialog-close" aria-label="Close">✕</button>
+  </form>
+  <div id="rkr-figure-attrs-figure" class="rkr-cell-dialog-body" data-scope="figure">
     <label for="rkr-figure-caption">Caption (block)</label>
     <input id="rkr-figure-caption" type="text" placeholder="optional caption shown below the figure"/>
     <span class="rkr-attr-label">Layout</span>
@@ -111,12 +116,16 @@ ${siteHead(data.site, { isAdmin: true })}
     <label for="rkr-figure-timer">Autoplay (s)</label>
     <input id="rkr-figure-timer" type="number" min="0" max="60" step="1"/>
   </div>
-
-  <!-- Per-image controls — visible when the author has clicked one
-       image inside the figure. The image-edit pipeline (crop / rotate
-       / flip / perspective / resample + ops list) is scoped to that
-       cell's id. -->
-  <div id="rkr-figure-attrs-cell" class="rkr-attr-section" data-scope="cell" hidden>
+</dialog>
+<!-- Per-image properties live in a modal dialog opened on cell click;
+     hosts the cell caption + alt and the full image-edit pipeline
+     (crop / rotate / flip / perspective / resample + ops list). -->
+<dialog id="rkr-cell-dialog" aria-labelledby="rkr-cell-dialog-title">
+  <form method="dialog" class="rkr-cell-dialog-head">
+    <h2 id="rkr-cell-dialog-title">Image</h2>
+    <button type="submit" class="rkr-cell-dialog-close" aria-label="Close">✕</button>
+  </form>
+  <div id="rkr-figure-attrs-cell" class="rkr-cell-dialog-body" data-scope="cell">
     <label for="rkr-cell-caption">Caption</label>
     <input id="rkr-cell-caption" type="text" placeholder="caption for this image"/>
     <label for="rkr-cell-alt">Alt text</label>
@@ -144,7 +153,7 @@ ${siteHead(data.site, { isAdmin: true })}
       <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
     </div>
   </div>
-</div>
+</dialog>
 <dialog id="rkr-source-picker" aria-labelledby="rkr-source-picker-title">
   <h2 id="rkr-source-picker-title">Add image</h2>
   <div class="rkr-source-actions">
