@@ -224,7 +224,16 @@ function imageItemFromFigure(figure: HastNode): FigureImage | null {
   const dataSrc = String(props.dataSrc ?? '');
   const src = String(props.src ?? '');
   const dataSrcset = String(props.dataSrcset ?? '');
-  const srcset = String(props.srcset ?? '');
+  // rehype-parse normalizes the standard `srcset` HTML attribute to the
+  // camelCase `srcSet` property name (matching React's DOM bindings).
+  // The data-* form (`data-srcset`) is preserved verbatim as
+  // `dataSrcset`. Reading the wrong key silently dropped srcset entirely,
+  // so the picker fell through to the un-suffixed master URL — for a
+  // WP image with EXIF orientation baked into a `-rotated.jpeg` srcset
+  // entry, that meant fetching the unrotated raw file and rendering it
+  // sideways. Fall back to the lowercase form too in case a future
+  // parser swap shifts the casing again.
+  const srcset = String(props.srcSet ?? props.srcset ?? '');
   const masterUrl = pickMasterUrl(dataSrc, src, dataSrcset, srcset);
   const alt = String(props.alt ?? '');
   const caption = extractFigcaption(figure, false);

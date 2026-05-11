@@ -179,6 +179,44 @@ test('importPost: legacy theme figure (no wp-block-image class) still ingests', 
   assert.doesNotMatch(result.markdown, /dropped non-WP figure/);
 });
 
+// Regression: WP serves a srcset with a `-rotated.jpeg` entry for
+// images whose EXIF orientation has been baked into a separate file.
+// The unrotated master + the `-WxH` thumbnails are derived from the
+// raw landscape pixels; the `-rotated.jpeg` is the portrait result of
+// applying the EXIF rotation. Picking the un-suffixed master fetches
+// the unrotated landscape — so the post renders the photo sideways.
+// rehype-parse exposes the `srcset` HTML attribute as `props.srcSet`
+// (camelCase, matching React's DOM binding), but wp-import was
+// reading `props.srcset` — empty → the picker fell through to the
+// `src` attribute and stripped its `-WxH` suffix to land on the
+// unrotated master. Read `srcSet` so the largest srcset entry wins,
+// which in this scenario is the rotated portrait variant.
+test('importPost: prefers the rotated srcset entry over the unrotated master', async (t) => {
+  const root = freshSiteRoot(t);
+  const seenUrls: string[] = [];
+  const fetcher = stubFetcher();
+  const wrappedFetcher = async (url: string): Promise<Readable> => {
+    seenUrls.push(url);
+    return fetcher(url);
+  };
+  // Single <figure> with the WP-style srcset that includes a
+  // `-rotated.jpeg` entry at the largest width. The `src` attribute
+  // points at a sized thumbnail to match what WP actually serves.
+  const html = `
+<figure class="wp-block-image">
+  <img src="https://example.com/wp-content/uploads/foo-768x1024.jpeg"
+       srcset="https://example.com/wp-content/uploads/foo-768x1024.jpeg 768w,
+               https://example.com/wp-content/uploads/foo-1536x2048.jpeg 1536w,
+               https://example.com/wp-content/uploads/foo-rotated.jpeg 1701w"
+       alt="rotated portrait"/>
+</figure>`;
+  await importPost(makePost(html), {
+    siteRoot: root,
+    fetchImage: wrappedFetcher
+  });
+  assert.deepEqual(seenUrls, ['https://example.com/wp-content/uploads/foo-rotated.jpeg']);
+});
+
 test('importPost: master URL is fetched (WP -WxH suffix stripped)', async (t) => {
   // The figure has data-src=...-1024x768.jpg; pickMasterUrl should
   // strip the suffix and fetch the un-suffixed master.
