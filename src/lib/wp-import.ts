@@ -240,22 +240,32 @@ function imageItemFromFigure(figure: HastNode): FigureImage | null {
   return { imgNode: img, masterUrl, alt, caption };
 }
 
-/** Pick the highest-resolution URL we can find. WP serves `<file>.jpg`
- * (master) at the un-suffixed path; if any URL has a `-WxH.jpg`
- * suffix, strip it. Falls back to the largest srcset entry. */
+/** Pick the URL to fetch for this <img>. WP's srcset is the source of
+ * truth: every entry there is already orientation-correct (WP rotates
+ * thumbnails before saving them, and emits a `-rotated.jpeg` variant
+ * for the full-size case). The previous behaviour stripped the
+ * `-WxH` suffix off the chosen entry to "upgrade" to the master file,
+ * but that master is exactly the file WP stripped EXIF Orientation
+ * from — so the upgrade turned a known-correct URL into the one
+ * sideways file in the bundle.
+ *
+ * Take the URL WP gave us. Fall back to dataSrc / src only when there
+ * is no srcset at all (older WP themes that only emit a bare `src`);
+ * there the strip is the only way to get above thumbnail resolution,
+ * and orientation isn't relevant because those themes pre-date the
+ * orientation-aware media pipeline. */
 function pickMasterUrl(
   dataSrc: string,
   src: string,
   dataSrcset: string,
   srcset: string
 ): string | null {
-  // Skip placeholder data: URLs.
   const real = (u: string): boolean => Boolean(u) && !u.startsWith('data:');
-  // Largest srcset entry first.
-  let best: string | null = null;
+  // Largest srcset entry wins. WP picks the variant — we don't.
   for (const ss of [dataSrcset, srcset]) {
     if (!ss) continue;
     let bestW = 0;
+    let best: string | null = null;
     for (const part of ss.split(',')) {
       const m = part.trim().match(/^(\S+)\s+(\d+)w$/);
       if (m && Number(m[2]) > bestW) {
@@ -263,13 +273,13 @@ function pickMasterUrl(
         best = m[1] as string;
       }
     }
-    if (best) break;
+    if (best) return best;
   }
-  if (!best && real(dataSrc)) best = dataSrc;
-  if (!best && real(src)) best = src;
-  if (!best) return null;
-  // Strip WP's -WxH suffix to get the master.
-  return best.replace(/-\d+x\d+(?=\.[A-Za-z]+$)/, '');
+  // No srcset → legacy theme. Promote a bare `src` thumbnail to its
+  // un-suffixed master so we don't ingest at 300px.
+  const flat = real(dataSrc) ? dataSrc : real(src) ? src : null;
+  if (!flat) return null;
+  return flat.replace(/-\d+x\d+(?=\.[A-Za-z]+$)/, '');
 }
 
 function directiveForFigure(fig: CollectedFigure, idsByImg: Map<unknown, string>): string {

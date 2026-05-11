@@ -191,6 +191,31 @@ test('importPost: legacy theme figure (no wp-block-image class) still ingests', 
 // `src` attribute and stripped its `-WxH` suffix to land on the
 // unrotated master. Read `srcSet` so the largest srcset entry wins,
 // which in this scenario is the rotated portrait variant.
+// Stripping the `-WxH` suffix off a srcset entry to "upgrade" to the
+// un-suffixed master defeats WP's orientation handling: WP rotates the
+// thumbnails before saving them, but strips EXIF Orientation from the
+// master during compress, so the stripped URL is the one sideways file
+// in the bundle. A srcset with only `-WxH` entries (no -rotated
+// variant) must therefore land on the largest thumbnail verbatim.
+test('importPost: uses the largest srcset entry verbatim (no -WxH strip)', async (t) => {
+  const root = freshSiteRoot(t);
+  const seenUrls: string[] = [];
+  const wrappedFetcher = async (url: string): Promise<Readable> => {
+    seenUrls.push(url);
+    return stubFetcher()(url);
+  };
+  const html = `
+<figure class="wp-block-image">
+  <img src="https://example.com/wp-content/uploads/foo-150x150.jpeg"
+       srcset="https://example.com/wp-content/uploads/foo-300x400.jpeg 300w,
+               https://example.com/wp-content/uploads/foo-768x1024.jpeg 768w,
+               https://example.com/wp-content/uploads/foo-1536x2048.jpeg 1536w"
+       alt="portrait"/>
+</figure>`;
+  await importPost(makePost(html), { siteRoot: root, fetchImage: wrappedFetcher });
+  assert.deepEqual(seenUrls, ['https://example.com/wp-content/uploads/foo-1536x2048.jpeg']);
+});
+
 test('importPost: prefers the rotated srcset entry over the unrotated master', async (t) => {
   const root = freshSiteRoot(t);
   const seenUrls: string[] = [];
