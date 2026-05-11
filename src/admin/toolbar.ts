@@ -13,11 +13,17 @@ import { pickFromOneDrive } from './integrations/onedrive';
 import { pinPost } from './pin';
 import { handleSave } from './save';
 
-function makeButton(label: string, onClick: () => void, name?: string): HTMLButtonElement {
+function makeButton(
+  label: string,
+  onClick: () => void,
+  name?: string,
+  className?: string
+): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.textContent = label;
   if (name) b.dataset.cmd = name;
+  if (className) b.className = className;
   b.addEventListener('click', onClick);
   return b;
 }
@@ -71,7 +77,7 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       },
       'onedrive'
     ),
-    makeButton('Save', () => void handleSave(editor), 'save'),
+    makeButton('Save', () => void handleSave(editor), 'save', 'rkr-toolbar-primary'),
     /* v8 ignore next -- prompt-driven UI; e2e drives __rkrPin directly */
     makeButton('Pin', () => void runPin(), 'pin')
   );

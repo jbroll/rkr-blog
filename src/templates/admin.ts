@@ -57,6 +57,21 @@ export function renderAdminPage(data: AdminPageData): string {
   #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid var(--rkr-rule); border-radius: 4px; }
   #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
   #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
+  /* Primary toolbar action (Save). Visually distinct from the icon
+     cluster around it: the doc publishes when you click this one.
+     The hover lifts brightness slightly via --rkr-link-hover. */
+  #rkroll-admin-toolbar button.rkr-toolbar-primary {
+    background: var(--rkr-link);
+    color: var(--rkr-bg);
+    border: 1px solid var(--rkr-link);
+    padding: .25rem .85rem;
+    font-weight: 500;
+    margin-left: auto;
+  }
+  #rkroll-admin-toolbar button.rkr-toolbar-primary:hover {
+    background: var(--rkr-link-hover);
+    border-color: var(--rkr-link-hover);
+  }
   /* Editor preview frame: the ProseMirror editable lives inside an
      <article>, so site.css's prose typography (max-width, font-family,
      headings, blockquotes, code, hr) applies. */
