@@ -72,7 +72,10 @@ test('siteFoot: authed visitor sees a POST-form Logout button', () => {
 
 test('indexAdminFabs: renders + (New post) and ⚙ (Settings) as anchors', () => {
   const html = indexAdminFabs();
-  assert.match(html, /class="rkr-fab[^"]*"[^>]*href="\/admin\/editor"[^>]*aria-label="New post"/);
+  assert.match(
+    html,
+    /class="rkr-fab[^"]*"[^>]*href="\/admin\/editor\?new=1"[^>]*aria-label="New post"/
+  );
   assert.match(html, /class="rkr-fab[^"]*"[^>]*href="\/admin\/settings"[^>]*aria-label="Settings"/);
 });
 

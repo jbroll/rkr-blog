@@ -82,8 +82,8 @@
       "linesHit": 23
     },
     "src/admin/startup.ts": {
-      "linesFound": 25,
-      "linesHit": 22
+      "linesFound": 29,
+      "linesHit": 26
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,

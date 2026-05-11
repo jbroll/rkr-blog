@@ -964,6 +964,54 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   expect(html).toContain('v2 body');
 });
 
+// Regression: + New post FAB must give a fresh draft, not resurrect
+// whatever post was last edited. The bug: getOrCreateDraftId returns
+// the existing currentDraftId from OPFS if any, so opening the editor
+// without ?slug + without ?new restored the previous post's body.
+// The fix is the ?new=1 querystring that startup.ts honours by
+// clearing currentDraftId before getOrCreateDraftId runs.
+test('editor: + New post (?new=1) starts a blank draft, not the prior one', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Seed a draft with a recognisable body — pretend the author was
+  // mid-compose on some other post.
+  await page.locator('#rkr-title').fill('previous draft');
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>OLD DRAFT BODY DO NOT RESTORE</p>');
+  });
+  // Wait until the draft has been written to OPFS so the next page
+  // load can see it. Persistence debounces at 500ms.
+  await waitForOpfsContains(page, 'drafts', 'OLD DRAFT BODY DO NOT RESTORE');
+
+  // Reopen with no params — confirms the OLD draft restores
+  // (sanity check on the existing default-restore behaviour).
+  await page.goto('/admin/editor?e2e=1');
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+  await expect(page.locator('#rkroll-admin-article')).toContainText(
+    'OLD DRAFT BODY DO NOT RESTORE'
+  );
+
+  // Now open with ?new=1 (what the + FAB emits) — startup must
+  // clear currentDraftId and the editor must mount blank.
+  await page.goto('/admin/editor?new=1&e2e=1');
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+  await expect(page.locator('#rkroll-admin-article')).not.toContainText(
+    'OLD DRAFT BODY DO NOT RESTORE'
+  );
+  await expect(page.locator('#rkr-title')).toHaveValue('');
+});
+
 // Pin existing post for offline edit (phase 2). Seed v1 via the API,
 // clear OPFS so the pin pulls fresh, then __rkrPin(slug) pulls the
 // bundle, reload to mount the pinned draft, go offline + edit + Save

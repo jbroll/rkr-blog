@@ -9,7 +9,7 @@ import { getOrCreateDraftId, loadDraft, startDraftPersistence } from './draft.ts
 import { drainBake, drainSavePost, drainSetOps, drainUpload } from './drainers.ts';
 import { runEviction } from './eviction.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
-import { ensureSchema } from './opfs-schema.ts';
+import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
 import { append as outboxAppend, list as outboxList, pendingCount } from './outbox.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
@@ -57,6 +57,27 @@ async function runStart(editor: Editor): Promise<void> {
     registerDrainer('setOps', drainSetOps);
     registerDrainer('bake', drainBake);
     registerDrainer('savePost', drainSavePost);
+    // URL drives one of three startup modes:
+    //   ?slug=foo  → pin the named post, edit it.
+    //   ?new=1     → discard any in-progress draftId and create a
+    //                fresh blank one. The previous draft stays in
+    //                OPFS (eviction reclaims it later if not pinned)
+    //                so the author doesn't lose work; we just stop
+    //                pointing at it from `currentDraftId`. Without
+    //                this branch, clicking "+ New post" from the
+    //                index would resurrect whatever post the author
+    //                was last editing.
+    //   (neither)  → restore the existing currentDraftId (default).
+    const params = new URLSearchParams(location.search);
+    const newParam = params.get('new');
+    if (newParam) {
+      const root = await readRoot();
+      /* v8 ignore next 3 -- ensureSchema runs first */
+      if (!root) {
+        throw new Error('startup: _root.json missing — ensureSchema not called?');
+      }
+      await writeRoot({ ...root, currentDraftId: '' });
+    }
     // ?slug=foo: caller asked to edit an existing post. Pin its
     // bundle into OPFS (writes drafts/<new-id>.json + meta,
     // bumps currentDraftId), then fall through to the normal
@@ -64,7 +85,7 @@ async function runStart(editor: Editor): Promise<void> {
     // in-progress draft is orphaned in OPFS; eviction reclaims.
     // Also seed the title/slug/status form fields from the bundle
     // so handleSave overwrites the right post.
-    const slugParam = new URLSearchParams(location.search).get('slug');
+    const slugParam = params.get('slug');
     if (slugParam) {
       // pinPost downloads the post bundle (manifest + originals + side-
       // cars). On a long post this is multi-second; show a loading
