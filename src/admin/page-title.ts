@@ -1,10 +1,16 @@
 // Editor heading + tab title binding.
 //
 // Keeps three things in sync:
-//   1. The <h1 id="rkr-page-title"> shown above the meta form,
-//      reflecting the current post's title (or "New post" when empty).
-//   2. document.title — same string, prefixed with a dot when the
-//      editor has unsaved changes ("● Editing — <title>").
+//   1. The <h1 id="rkr-page-title"> shown above the meta form. It's
+//      a mode label — "New post" until the post has a slug,
+//      "Edit post" afterwards — NOT the post's title. The post's
+//      title goes in the Title input field below. Using the h1 as
+//      a mode label rather than a title echo means "the h1 is empty"
+//      never happens, and the post being edited is identified by
+//      the form fields the author actually sees and changes.
+//   2. document.title — uses the post's title for the tab cue
+//      (findability) with the same "New post" / "Edit post"
+//      fallback, prefixed by ● when the editor has unsaved changes.
 //   3. A dirty flag bumped by editor updates and meta-input changes,
 //      cleared by markClean() after a successful save.
 
@@ -15,21 +21,27 @@ import { $ } from './dom.ts';
 const BASE_TITLE_SUFFIX = ' — rkroll editor';
 let dirty = false;
 
+function render(): void {
+  const titleInput = $<HTMLInputElement>('rkr-title');
+  const slugInput = $<HTMLInputElement>('rkr-slug');
+  const h1 = $('rkr-page-title');
+  // Slug is the load-state signal: new drafts start blank, the
+  // server fills it in on save, pin loads seed it from the bundle.
+  const label = slugInput.value.trim() ? 'Edit post' : 'New post';
+  h1.textContent = label;
+  const tabTitle = titleInput.value.trim() || label;
+  document.title = `${dirty ? '● ' : ''}${tabTitle}${BASE_TITLE_SUFFIX}`;
+}
+
 export function initPageTitle(editor: Editor): void {
   const titleInput = $<HTMLInputElement>('rkr-title');
   const subtitleInput = $<HTMLInputElement>('rkr-subtitle');
-  const h1 = $('rkr-page-title');
 
-  const render = (): void => {
-    const t = titleInput.value.trim() || 'New post';
-    h1.textContent = t;
-    document.title = `${dirty ? '● ' : ''}${t}${BASE_TITLE_SUFFIX}`;
-  };
-
-  // Reflect title-input edits into the h1 + tab title immediately.
-  // Subtitle changes mark dirty without re-rendering the h1 (the h1
-  // mirrors the title only). Status no longer lives in the editor —
-  // it's edited per-row on /admin/posts.
+  // Title-input edits affect the TAB title (so the browser tab is
+  // findable) but the h1 stays a mode label — the author already
+  // sees their title in the input. Subtitle changes mark the doc
+  // dirty without rerendering the h1 since it's not part of the
+  // tab title either.
   titleInput.addEventListener('input', () => {
     dirty = true;
     render();
@@ -52,11 +64,17 @@ export function initPageTitle(editor: Editor): void {
   render();
 }
 
+/** Refresh the heading + tab title from current DOM state. Callers
+ * use this after programmatic slug / title updates that don't fire
+ * 'input' events — seedFormFields (pin load) and the post-save
+ * slug echo. Doesn't touch the dirty flag. */
+export function refreshPageTitle(): void {
+  render();
+}
+
 /** Called by handleSave after a successful publish/save. Clears the
  * dirty dot from the tab title without otherwise touching the h1. */
 export function markClean(): void {
   dirty = false;
-  const titleInput = $<HTMLInputElement>('rkr-title');
-  const t = titleInput.value.trim() || 'New post';
-  document.title = `${t}${BASE_TITLE_SUFFIX}`;
+  render();
 }

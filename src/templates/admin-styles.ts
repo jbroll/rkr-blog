@@ -18,6 +18,18 @@ export const ADMIN_CSS = `
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
+  /* Editor mode label ("New post" / "Edit post"). Not a content
+     header — the post's title goes in the input field below — so
+     it's deliberately small and muted, just enough to identify the
+     surface and the create-vs-edit mode at a glance. */
+  #rkr-page-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--rkr-muted, #707070);
+    margin: 0 0 .75rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
   /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
      text / panel backgrounds so dark mode actually flips through. The
      fallbacks (after the comma) cover the case where site.css fails

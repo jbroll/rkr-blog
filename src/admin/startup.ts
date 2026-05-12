@@ -11,6 +11,7 @@ import { runEviction } from './eviction.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
 import { append as outboxAppend, list as outboxList, pendingCount } from './outbox.ts';
+import { refreshPageTitle } from './page-title.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
@@ -128,4 +129,7 @@ function seedFormFields(manifest: PinManifest): void {
   if (slugEl) slugEl.value = manifest.slug;
   if (titleEl) titleEl.value = manifest.title;
   if (subtitleEl) subtitleEl.value = manifest.subtitle ?? '';
+  // Programmatic value assignment doesn't fire 'input' events, so the
+  // page-title binding wouldn't see the new slug otherwise.
+  refreshPageTitle();
 }

@@ -151,9 +151,11 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   await page.locator('#rkr-figure-dialog .rkr-cell-dialog-close').click();
   await expect(page.locator('#rkr-figure-dialog')).not.toBeVisible();
 
-  // Dynamic h1 + tab title: the title input drives both, with a "● "
-  // prefix on document.title while the editor is dirty.
-  await expect(page.locator('#rkr-page-title')).toHaveText('e2e flow');
+  // h1 is the mode label ("New post" until the post has a slug,
+  // "Edit post" afterwards); tab title shows the actual post title
+  // with a "● " prefix while the editor is dirty for at-a-glance
+  // findability.
+  await expect(page.locator('#rkr-page-title')).toHaveText('New post');
   await expect(page).toHaveTitle(/^● e2e flow/);
   // Site head renders the configured title as the home link — same
   // affordance the public chrome uses, no editor-specific back link
