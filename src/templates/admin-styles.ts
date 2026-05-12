@@ -204,7 +204,7 @@ export const ADMIN_CSS = `
   .rkr-matrix-modes label { display: inline-flex; align-items: center; gap: .25rem; }
   .rkr-matrix-params { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .rkr-matrix-params[hidden] { display: none; }
-  .rkr-matrix-params input[type="number"] { width: 4.5rem; }
+  .rkr-matrix-params input[type="number"] { width: 3rem; }
   /* Source-picker dialog: vertical button stack with a small inset.
      showModal()'s built-in backdrop dimming gives focus separation. */
   /* Per-image modal — opened when the author clicks one image inside
