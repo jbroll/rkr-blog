@@ -23,6 +23,22 @@ export const ADMIN_CSS = `
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
+  /* When any editor dialog is open the document behind it must stop
+     scrolling — native <dialog> renders in the top layer but doesn't
+     lock the body, so wheel / touch scroll still moves the article
+     underneath. body:has() catches the open state without JS, and
+     overscroll-behavior: contain on the dialog itself stops the
+     scroll chain when the author reaches the top/bottom of the
+     dialog's own scroll region (e.g. the cell dialog's preview
+     image). */
+  body:has(dialog[open]) {
+    overflow: hidden;
+  }
+  dialog {
+    overscroll-behavior: contain;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
   /* Suppress the OS / browser cut-copy-paste overlay on every admin
      surface that isn't prose-editable. The author is editing one
      specific area (the contenteditable article + the form inputs);
