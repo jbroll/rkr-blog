@@ -10,7 +10,12 @@ import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts'
 import { runEviction } from './eviction.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
-import { append as outboxAppend, list as outboxList, pendingCount } from './outbox.ts';
+import {
+  dropLegacyOpEntries,
+  append as outboxAppend,
+  list as outboxList,
+  pendingCount
+} from './outbox.ts';
 import { refreshPageTitle } from './page-title.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
@@ -57,6 +62,10 @@ async function runStart(editor: Editor): Promise<void> {
     registerDrainer('upload', drainUpload);
     registerDrainer('commitImageEdit', drainCommitImageEdit);
     registerDrainer('savePost', drainSavePost);
+    // One-shot migration: pre-/commit outboxes carry op='setOps' and
+    // op='bake' entries that have no drainer in this build. Drop them
+    // up front so the drain loop doesn't halt on the first one.
+    void dropLegacyOpEntries();
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.
     //   ?new=1     → discard any in-progress draftId and create a

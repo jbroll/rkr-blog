@@ -93,7 +93,14 @@ export const FigureNode = Node.create({
         class: 'rkr-multi rkr-figure-placeholder',
         'data-kind': 'figure',
         'data-matrix': attrs.matrix ?? '',
-        'data-count': String(idList.length)
+        'data-count': String(idList.length),
+        // Take the placeholder out of the editing context: CSS
+        // user-select: none is the primary defense, but inside a
+        // parent contenteditable="true" Webkit still pops the OS
+        // cut/copy/paste menu on long-press of whitespace between
+        // thumbs. contenteditable="false" on the node wrapper makes
+        // the placeholder non-editable, killing that flow.
+        contenteditable: 'false'
       }),
       ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
       [

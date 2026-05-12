@@ -95,6 +95,34 @@ export async function remove(entry: Pick<OutboxEntry, 'seq' | 'op'>): Promise<vo
 export async function readEntryBlob(seq: number): Promise<Blob | null> {
   return readBlob(blobPath(seq));
 }
+
+/** One-shot migration: drop outbox entries with a legacy op kind
+ * ('setOps' or 'bake') that no longer has a registered drainer after
+ * the /commit endpoint replaced the /ops + /bake split. Without this,
+ * an upgraded client with pending pre-migration entries halts on
+ * "no drainer for op=setOps" forever.
+ *
+ * Filename convention is `<seq>.<op>.json`, so we can identify legacy
+ * entries by name without parsing JSON. Best-effort; failures don't
+ * block startup. Runs once on every page load and is a no-op when no
+ * legacy entries exist, which is the common case.
+ * @public */
+export async function dropLegacyOpEntries(): Promise<number> {
+  const LEGACY = new Set(['setOps', 'bake']);
+  let dropped = 0;
+  const names = await listDir(OUTBOX_DIR).catch(() => [] as string[]);
+  for (const name of names) {
+    const m = /^(\d+)\.([^.]+)\.json$/.exec(name);
+    if (!m) continue;
+    const op = m[2] as string;
+    if (!LEGACY.has(op)) continue;
+    const seq = Number(m[1]);
+    await removeFile(`${OUTBOX_DIR}/${name}`);
+    await removeFile(blobPath(seq));
+    dropped++;
+  }
+  return dropped;
+}
 /* v8 ignore stop */
 
 export async function pendingCount(): Promise<number> {

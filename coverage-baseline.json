@@ -83,7 +83,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 30,
-      "linesHit": 26
+      "linesHit": 27
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -202,6 +202,10 @@
       "linesHit": 18
     },
     "127.0.0.1-3789/static/admin/outbox-6VWBYZMC.js": {
+      "linesFound": 1,
+      "linesHit": 1
+    },
+    "127.0.0.1-3789/static/admin/outbox-NCY57AV6.js": {
       "linesFound": 1,
       "linesHit": 1
     }
