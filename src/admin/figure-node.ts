@@ -102,10 +102,10 @@ export const FigureNode = Node.create({
         // the placeholder non-editable, killing that flow.
         contenteditable: 'false'
       }),
-      ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
+      ['div', { class: 'rkr-multi-thumbs', contenteditable: 'false' }, ...thumbs],
       [
         'div',
-        { class: 'rkr-multi-actions' },
+        { class: 'rkr-multi-actions', contenteditable: 'false' },
         [
           'button',
           {
@@ -142,7 +142,16 @@ export const FigureNode = Node.create({
           iconSpec('trash2', 16)
         ]
       ],
-      ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])
+      // contenteditable="false" on every inner div as well as the
+      // wrapper. Firefox Android's contenteditable inheritance is
+      // patchy on touch — the OS cut/copy/paste action bar pops on
+      // scroll when the touch lands on placeholder whitespace (CSS
+      // gap between thumbs / actions / caption). Setting the bit
+      // explicitly at every structural layer closes that inheritance
+      // hole; the figure stays a normal selectable atom otherwise.
+      ...(attrs.caption
+        ? [['div', { class: 'rkr-multi-caption', contenteditable: 'false' }, attrs.caption]]
+        : [])
     ];
   }
 });
