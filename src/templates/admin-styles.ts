@@ -66,12 +66,15 @@ export const ADMIN_CSS = `
     user-select: text;
     -webkit-user-select: text;
   }
-  #rkroll-admin-article img,
-  .rkr-cell-preview,
-  dialog img {
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
+  #rkroll-admin-article img, .rkr-cell-preview, dialog img {
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
+  /* The figure placeholder sits inside contenteditable="true" so the
+     earlier re-enable made its padding / grid gaps text-selectable.
+     The placeholder isn't prose — re-disable on it and its descendants. */
+  #rkroll-admin-article .rkr-multi,
+  #rkroll-admin-article .rkr-multi * {
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
   /* Editor mode label ("New post" / "Edit post"). Not a content
      header — the post's title goes in the input field below — so
