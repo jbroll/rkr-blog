@@ -26,8 +26,8 @@
       "linesHit": 4
     },
     "src/admin/image-edit.ts": {
-      "linesFound": 56,
-      "linesHit": 48
+      "linesFound": 62,
+      "linesHit": 49
     },
     "src/admin/integrations/gdrive.ts": {
       "linesFound": 53,
@@ -78,12 +78,12 @@
       "linesHit": 7
     },
     "src/admin/sync.ts": {
-      "linesFound": 29,
-      "linesHit": 23
+      "linesFound": 39,
+      "linesHit": 31
     },
     "src/admin/startup.ts": {
       "linesFound": 30,
-      "linesHit": 27
+      "linesHit": 26
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -91,7 +91,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 20,
-      "linesHit": 20
+      "linesHit": 19
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 37
+      "linesHit": 34
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -211,7 +211,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 20,
-      "linesHit": 20
+      "linesHit": 19
     }
   }
 }

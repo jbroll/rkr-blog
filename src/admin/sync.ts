@@ -45,6 +45,18 @@ interface SyncEvent {
   status: DrainStatus;
 }
 
+/** Cross-tab cache-invalidation broadcast. Sent after a
+ * commitImageEdit drain succeeds so other tabs can drop their
+ * in-memory `localEditState` for the id and the stale
+ * `image-state/<id>.json` in OPFS — preventing tab B from
+ * clobbering tab A's just-committed ops on a later save. */
+interface InvalidateImageStateEvent {
+  type: 'invalidate-image-state';
+  id: string;
+}
+
+type ChannelMessage = SyncEvent | InvalidateImageStateEvent;
+
 const channel: BroadcastChannel | null =
   typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null;
 
@@ -59,6 +71,48 @@ function publish(status: DrainStatus): void {
   /* v8 ignore next 3 -- BroadcastChannel-less env */
   if (channel) {
     channel.postMessage({ type: 'status', status } satisfies SyncEvent);
+  }
+}
+
+// Local fan-out for image-state invalidations — BroadcastChannel
+// doesn't deliver to its own posters, so same-tab subscribers
+// (the editor's in-memory localEditState) need a separate fan-out.
+// We do NOT call same-tab handlers from publishImageStateInvalidation
+// because the same tab that drained the commit just adopted the
+// normalised ops as its baseline — invalidating its own cache would
+// throw that work away. Cross-tab delivery only.
+const localImageStateHandlers = new Set<(id: string) => void>();
+
+/** @public */
+export function onImageStateInvalidated(handler: (id: string) => void): () => void {
+  localImageStateHandlers.add(handler);
+  const cleanupLocal = (): void => {
+    localImageStateHandlers.delete(handler);
+  };
+  /* v8 ignore next 3 -- BroadcastChannel-less env */
+  if (!channel) return cleanupLocal;
+  const listener = (ev: MessageEvent<ChannelMessage>): void => {
+    if (ev.data?.type === 'invalidate-image-state') handler(ev.data.id);
+  };
+  channel.addEventListener('message', listener);
+  return () => {
+    cleanupLocal();
+    channel.removeEventListener('message', listener);
+  };
+}
+
+/** Broadcast that an image's persisted state has moved on (tab A
+ * drained a commit; tab B's cached state is now stale). Local
+ * subscribers are NOT invoked — the publisher already adopted the
+ * normalised ops as baseline. Cross-tab listeners drop their cache.
+ * @public */
+export function publishImageStateInvalidation(id: string): void {
+  /* v8 ignore next 3 -- BroadcastChannel-less env */
+  if (channel) {
+    channel.postMessage({
+      type: 'invalidate-image-state',
+      id
+    } satisfies InvalidateImageStateEvent);
   }
 }
 
@@ -229,6 +283,11 @@ async function drainLoop(): Promise<void> {
       return;
     }
     await outboxRemove(head);
+    // Tell other tabs to drop their cached state for this image so
+    // their next save doesn't clobber the just-committed ops.
+    if (head.op === 'commitImageEdit') {
+      publishImageStateInvalidation(head.payload.id);
+    }
     remaining = (await outboxList()).length;
     publish({ kind: 'draining', remaining });
   }

@@ -5,10 +5,11 @@ import { isDirty, type LocalEditState } from '../lib/image-edit-ops.ts';
 import { validateOps } from '../lib/ops-validation.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
+import { setStatus } from './dom.ts';
 import { getState } from './online-state.ts';
-import { readJson, writeJson } from './opfs.ts';
+import { readJson, removeFile, writeJson } from './opfs.ts';
 import { append as outboxAppend } from './outbox.ts';
-import { tryDrain } from './sync.ts';
+import { onImageStateInvalidated, publishImageStateInvalidation, tryDrain } from './sync.ts';
 
 const IMAGE_STATE_DIR = 'image-state';
 
@@ -71,6 +72,22 @@ async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
 }
 
 const localEditState = new Map<string, LocalEditState>();
+
+// Cross-tab cache invalidation: another tab just drained a commit
+// for this id, so the server has moved on. Drop our cached state
+// so the next access refetches the fresh baseline from the server.
+// Skip when the local tab has unsaved edits — clobbering live work
+// would be worse than the stale-cache risk; the user gets a warning
+// instead and can resolve by saving (last-write-wins) or reloading.
+onImageStateInvalidated((id) => {
+  const s = localEditState.get(id);
+  if (s && isDirty(s)) {
+    setStatus(`image ${id.slice(0, 8)}… diverged in another tab; save or reload to merge`);
+    return;
+  }
+  localEditState.delete(id);
+  void removeFile(`${IMAGE_STATE_DIR}/${id}.json`);
+});
 
 export function getLocalEditState(id: string): LocalEditState | undefined {
   return localEditState.get(id);
@@ -136,6 +153,9 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
       s.redoStack = normalized.redoStack;
       s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
       persistImageState(id, s);
+      // Server's state moved on. Tell other tabs to drop their
+      // cached state for this id so their next save doesn't clobber.
+      publishImageStateInvalidation(id);
       return;
     } catch (err) {
       console.warn('saveImageEdits online failed, queueing offline:', err);
