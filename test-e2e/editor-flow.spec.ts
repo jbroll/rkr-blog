@@ -1552,6 +1552,86 @@ test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async (
   expect(new Set(seqs).size).toBe(n);
 });
 
+// Regression: a saved crop must persist visually across editor
+// reloads. Before the hydrateLocalThumbs outbox gate, mount-time
+// hydration unconditionally swapped every thumb's src to a blob:
+// URL backed by the OPFS raw original — which has NO ops applied.
+// Result: blog page showed the cropped image (server applies
+// sidecar.ops), but the editor showed the uncropped raw after
+// every refresh.
+//
+// Pipes browser console messages out to stderr so future failures
+// here can be diagnosed without re-running with --headed.
+test('editor: cropped image survives an editor reload', async ({ page }) => {
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' || msg.type() === 'warning') {
+      // biome-ignore lint/suspicious/noConsole: e2e debug surface
+      console.log(`[browser ${msg.type()}] ${msg.text()}`);
+    }
+  });
+  page.on('pageerror', (err) => {
+    // biome-ignore lint/suspicious/noConsole: e2e debug surface
+    console.log(`[browser pageerror] ${err.message}`);
+  });
+
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e crop persists');
+  await setSlug(page, `e2e-crop-persist-${Date.now()}`);
+
+  // 16×16 PNG — at/above the MIN_RENDER_DIM guard, enough room for
+  // the cropper UI to mount and a non-trivial extract op to apply.
+  const buf = await sharp({
+    create: { width: 16, height: 16, channels: 3, background: { r: 200, g: 60, b: 60 } }
+  })
+    .png()
+    .toBuffer();
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'crop-persist.png',
+    mimeType: 'image/png',
+    buffer: buf
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded crop-persist/, {
+    timeout: 10_000
+  });
+
+  // Open the image-edit panel, drive the cropper to save a full-
+  // extent crop (autoCropArea: 1 → the entire image is selected).
+  // The op is a no-op pixel-wise but still appends a crop entry
+  // with a fresh ophash — enough for /admin/preview/<id> to redirect
+  // to a different URL than the no-ops case.
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await page.locator('#rkr-image-crop-btn').click();
+  await expect(page.locator('#rkr-crop-modal')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#rkr-crop-status')).toContainText(/×/, { timeout: 5_000 });
+  await page.locator('#rkr-crop-save').click();
+  await expect(page.locator('#rkr-crop-modal')).toBeHidden();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^crop /, { timeout: 5_000 });
+
+  // Wait for the commitImageEdit to drain to the server (online
+  // direct-POST path; saveImageEdits' close hook is the save button).
+  await page.locator('#rkr-image-save-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, {
+    timeout: 10_000
+  });
+
+  // Reload the editor. Without the fix, mount-time hydration
+  // clobbers the thumb src with a blob: URL → uncropped raw.
+  await page.reload();
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  // The figure's thumb src must stay on /admin/preview/<id> so the
+  // browser follows the 302 to the post-ops derivative — NOT a
+  // blob: URL backed by the OPFS raw.
+  const thumb = page.locator('img[data-cell-index="0"]');
+  await expect(thumb).toBeVisible();
+  const src = await thumb.getAttribute('src');
+  expect(src).toMatch(/\/admin\/preview\//);
+  expect(src).not.toMatch(/^blob:/);
+});
+
 // DEFERRED 9a: figure-caption / per-cell-caption / per-cell-alt
 // inputs used to fire one TipTap transaction per keystroke. The
 // new attr-commit module debounces them; handleSave flushes any

@@ -19,7 +19,15 @@ import { imageInfo } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
+import { imageDimensions } from '../lib/widget-helpers.ts';
 import { fallback as imageFallback } from '../widgets/figure.ts';
+
+/** Smallest source dimension the /img derivative pipeline accepts.
+ * Mirrors the guard in src/routes/public.ts. Below this, /admin/preview
+ * falls back to serving the original bytes — the editor needs to
+ * display SOMETHING for tiny inputs, and a 422 derivative would
+ * just show a broken image. */
+const MIN_RENDER_DIM = 16;
 
 /** Sidecar-list cache TTL. Short enough that a freshly-uploaded image
  * becomes findable by short prefix within a few seconds; long enough
@@ -73,6 +81,15 @@ export function registerImageLookupRoutes(
       }
       const sidecar = await sidecarRead(siteRoot, fullId);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+
+      // Inputs too small for the derivative pipeline (1×1 test
+      // fixtures, corrupt EXIF-claimed-0×0) would 422 on /img/.
+      // Serve the original bytes directly instead — the editor
+      // needs to display SOMETHING in the figure thumb.
+      const dims = await imageDimensions(siteRoot, fullId, sidecar);
+      if (dims.width < MIN_RENDER_DIM || dims.height < MIN_RENDER_DIM) {
+        return reply.redirect(`/admin/original/${fullId}`, 302);
+      }
 
       const ophash = cacheKey({
         originalId: fullId,
