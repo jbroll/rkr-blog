@@ -514,6 +514,62 @@ test('POST /admin/sidecar/:id/bake 409s when X-Rkr-Bake-Ops-Hash does not match 
   assert.equal(fs.existsSync(bakePath(root, ingest.id)), true);
 });
 
+test('round-trip: float-coord crop normalized by server matches client hash without 409', async (t) => {
+  // Regression: validateOps Math.floors crop x/y/w/h, but the client
+  // used to compute X-Rkr-Bake-Ops-Hash against its un-normalized
+  // in-memory ops. A canvas crop with subpixel coords would then
+  // 409 deterministically — single-tab, single-flow. Fix: POST /ops
+  // returns the normalized ops in its body, and the client adopts
+  // them as authoritative before hashing + uploading the bake.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpegSized(400, 300)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'sample.jpg' }
+  });
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Client posts a crop with float coords (typical canvas drag output).
+  const floatCrop = { type: 'crop', x: 10.7, y: 20.3, w: 200.9, h: 150.4 };
+  const opsRes = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/ops`,
+    payload: { ops: [floatCrop] }
+  });
+  assert.equal(opsRes.statusCode, 200);
+  const normalized = opsRes.json<{ ops: SidecarOp[] }>();
+  // Server floored the coords.
+  assert.deepEqual(normalized.ops, [{ type: 'crop', x: 10, y: 20, w: 200, h: 150 }]);
+
+  // Client hashes the NORMALIZED ops (post-fix behavior) and uploads.
+  const bake = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: {
+      'content-type': 'image/webp',
+      'x-rkr-bake-ops-hash': bakeOpsHash(normalized.ops)
+    },
+    payload: await makeWebp(200, 150)
+  });
+  assert.equal(bake.statusCode, 200, `bake should succeed; got body: ${bake.body}`);
+
+  // The pre-fix behavior — hashing un-normalized client ops — would 409.
+  // Verify the same hash mismatch story still applies, so the fix is
+  // about the *client* adopting normalized ops, not the server relaxing
+  // the guard.
+  const stale = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/bake`,
+    headers: {
+      'content-type': 'image/webp',
+      'x-rkr-bake-ops-hash': bakeOpsHash([floatCrop as unknown as SidecarOp])
+    },
+    payload: await makeWebp(200, 150)
+  });
+  assert.equal(stale.statusCode, 409);
+});
+
 // ---- /admin/sidecar/:id/meta + /admin/sidecar/:id/ops -----------------
 // Backing endpoints for the crop UI: meta supplies original-pixel
 // dimensions so the cropper can scale display coords; ops replaces the

@@ -3,6 +3,7 @@
 
 import { bakeOpsHash } from '../lib/bake-ops-hash.ts';
 import { isDirty, type LocalEditState } from '../lib/image-edit-ops.ts';
+import { validateOps } from '../lib/ops-validation.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal, uploadBake } from './canvas-loaders';
 import { getState } from './online-state.ts';
@@ -98,17 +99,25 @@ export async function ensureLocalState(id: string): Promise<LocalEditState> {
   return fresh;
 }
 
+/** POST /admin/sidecar/:id/ops. The server runs `validateOps` and
+ * stores the *normalized* form (Math.floor on crop/resample coords,
+ * mod-360 on rotate, default fit, etc.); the response body returns
+ * those normalized ops. Callers must adopt them as authoritative
+ * before producing a bake — otherwise bakeOpsHash(client.ops) won't
+ * match the server's hash over canonical(sidecar.ops) and the bake
+ * 409s on upload. */
 async function postOpsToServer(
   id: string,
   ops: SidecarOp[],
   redoStack: SidecarOp[]
-): Promise<void> {
+): Promise<{ ops: SidecarOp[]; redoStack: SidecarOp[] }> {
   const res = await fetch(`/admin/sidecar/${id}/ops`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ops, redoStack })
   });
   if (!res.ok) throw new Error(`ops: ${res.status} ${await res.text()}`);
+  return (await res.json()) as { ops: SidecarOp[]; redoStack: SidecarOp[] };
 }
 
 export async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
@@ -135,7 +144,13 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
 }
 
 async function commitOnline(id: string, s: LocalEditState): Promise<void> {
-  await postOpsToServer(id, s.ops, s.redoStack);
+  // Adopt the server-normalized ops as authoritative before baking.
+  // Canvas re-renders against the same coords the server's live-render
+  // fallback would use, and bakeOpsHash now hashes the form the server
+  // will compare against → no 409 from float-coord normalization.
+  const normalized = await postOpsToServer(id, s.ops, s.redoStack);
+  s.ops = normalized.ops;
+  s.redoStack = normalized.redoStack;
   if (s.ops.length > 0) {
     const blob = await renderBakeBlob(id, s.ops);
     await uploadBake(id, blob, s.ops);
@@ -143,6 +158,20 @@ async function commitOnline(id: string, s: LocalEditState): Promise<void> {
 }
 
 async function commitOffline(id: string, s: LocalEditState): Promise<void> {
+  // Pre-normalize client-side using the same validator the server runs.
+  // Without this, the offline bake hash is computed against
+  // pre-normalization ops, drain hits 409, and the outbox wedges
+  // forever. On validation failure leave s.ops untouched — the drain
+  // will surface the real error (the user-visible offline-error
+  // pipeline is a separate concern).
+  const v = validateOps(s.ops, { width: s.sourceWidth ?? 0, height: s.sourceHeight ?? 0 });
+  if (v.ok) s.ops = v.ops;
+  const rs = validateOps(s.redoStack, {
+    width: s.sourceWidth ?? 0,
+    height: s.sourceHeight ?? 0
+  });
+  if (rs.ok) s.redoStack = rs.ops;
+
   // setOps before bake matches the online order — server unlinks
   // the bake on ops change.
   await outboxAppend({

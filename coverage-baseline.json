@@ -26,8 +26,8 @@
       "linesHit": 5
     },
     "src/admin/image-edit.ts": {
-      "linesFound": 56,
-      "linesHit": 48
+      "linesFound": 61,
+      "linesHit": 53
     },
     "src/admin/integrations/gdrive.ts": {
       "linesFound": 53,
@@ -196,6 +196,10 @@
     "src/site/copy-link.ts": {
       "linesFound": 7,
       "linesHit": 7
+    },
+    "src/lib/ops-validation.ts": {
+      "linesFound": 65,
+      "linesHit": 18
     }
   }
 }
