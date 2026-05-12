@@ -13,6 +13,14 @@
 html {
   font-size: var(--rkr-base-size, 1.0625rem);
   -webkit-text-size-adjust: 100%;
+  /* Tell the browser the page works in both schemes so it paints
+     the initial canvas (the area shown before CSS body backgrounds
+     apply) in the user's preferred scheme — without this, dark-mode
+     visitors see a white flash on every navigation until our themed
+     body background loads. Per-theme stylesheets can narrow this
+     (e.g. terminal.css → `color-scheme: dark`) if a theme genuinely
+     supports only one mode. */
+  color-scheme: light dark;
 }
 
 body {
