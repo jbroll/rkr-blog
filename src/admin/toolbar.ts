@@ -11,35 +11,16 @@
 
 import type { Editor } from '@tiptap/core';
 
-import { handleSave } from './save';
+import { icon } from '../templates/icons.ts';
 
-// SVG glyphs for the icon-style toolbar buttons. Static strings, so
-// the innerHTML assignment in makeButton is safe (no user input).
-// Link: two interlocking link rings; +Image: framed picture with a
-// plus badge in the bottom-right. Both currentColor + 16x16 so they
-// inherit the toolbar's text colour and align with the B / I / H2
-// glyphs that stayed as text.
-const LINK_ICON = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-  <path d="M7 9.5l2-3M6 10.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l2-2a2.5 2.5 0 0 1 3.5 0M10 5.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-2 2a2.5 2.5 0 0 1-3.5 0"
-        fill="none" stroke="currentColor" stroke-width="1.5"
-        stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
-const ADD_IMAGE_ICON = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-  <rect x="1.5" y="2.5" width="10" height="8" rx="1.5"
-        fill="none" stroke="currentColor" stroke-width="1.5"/>
-  <circle cx="4.5" cy="5.25" r="1" fill="currentColor"/>
-  <path d="M2.5 9.5l2-2 2 2 1.5-1.5 3 3" fill="none"
-        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-  <path d="M12.5 11.5v4M10.5 13.5h4" fill="none"
-        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-</svg>`;
+import { handleSave } from './save';
 
 interface MakeButtonOpts {
   cmd?: string;
   className?: string;
   /** When set, the button renders as an icon with `label` carried as
    * the accessible name (title + aria-label). Static SVG only. */
-  icon?: string;
+  iconSvg?: string;
 }
 
 function makeButton(
@@ -49,8 +30,8 @@ function makeButton(
 ): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
-  if (opts.icon) {
-    b.innerHTML = opts.icon;
+  if (opts.iconSvg) {
+    b.innerHTML = opts.iconSvg;
     b.title = label;
     b.setAttribute('aria-label', label);
   } else {
@@ -93,9 +74,12 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
         if (!url) return;
         editor.chain().focus().setLink({ href: url }).run();
       },
-      { cmd: 'link', icon: LINK_ICON }
+      { cmd: 'link', iconSvg: icon('link', 16) }
     ),
-    makeButton('+Image', () => void insertImage(), { cmd: 'image', icon: ADD_IMAGE_ICON }),
+    makeButton('+Image', () => void insertImage(), {
+      cmd: 'image',
+      iconSvg: icon('imagePlus', 16)
+    }),
     makeButton('Save', () => void handleSave(editor), {
       cmd: 'save',
       className: 'rkr-toolbar-primary'

@@ -1,6 +1,7 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { icon } from './icons.ts';
 import {
   bundleVersion,
   postAdminFab,
@@ -52,12 +53,7 @@ ${siteHead(post.site, { isAdmin: post.isAdmin })}
 <main id="main" tabindex="-1">
 <article>
 <header>
-<h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">
-<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-<rect x="5" y="5" width="9" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-<path d="M3 11.5V3.5A1.5 1.5 0 0 1 4.5 2H11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-</svg>
-</button></h1>
+<h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>
 ${subtitleBlock}
 ${dateBlock}
 </header>
