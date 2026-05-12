@@ -285,9 +285,33 @@ function mount(): void {
   // <form method="dialog"> submit fires `close` natively.
   cellDialog.addEventListener('close', () => {
     if (activeCellIndex === null) return;
+    const figurePos = lastFigurePos;
     activeCellIndex = null;
     clearActiveCellHighlight();
     editPanel.deactivate();
+    // Two-step cleanup so the close path doesn't leave the editor
+    // in a state that touch browsers misread as "user has an active
+    // text selection":
+    //   1. Collapse the figure's NodeSelection to a TextSelection
+    //      just past the atom. Without this, ProseMirror's selection
+    //      rectangle paints across the placeholder's bounding box
+    //      when focus returns to the contenteditable article, and
+    //      the surrounding whitespace gets picked up by the OS
+    //      action bar (cut / copy / paste pop-up).
+    //   2. Blur the editor. The native <dialog> close hands focus
+    //      back to the previously-focused element (the article);
+    //      blurring redirects it to document.body so the soft
+    //      keyboard doesn't auto-open. The author clicks back into
+    //      the prose when they want to type.
+    if (figurePos !== null) {
+      editor
+        .chain()
+        .setTextSelection(figurePos + 1)
+        .blur()
+        .run();
+    } else {
+      editor.commands.blur();
+    }
   });
   // Backdrop click → close. Native <dialog>::backdrop intercepts the
   // click and bubbles it on the dialog element itself; comparing
