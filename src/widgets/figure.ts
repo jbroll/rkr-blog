@@ -13,15 +13,14 @@
 // ignored. The directive should be cheap to author.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { dimensionsAfterOps } from '../lib/ops-validation.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import {
   extractDirectiveCaption,
   extractImageIdsAndAlts,
   getKnownIds,
+  imageDimensions,
   indent,
-  pictureAspect,
   renderPicture,
   resolveIds
 } from '../lib/widget-helpers.ts';
@@ -83,11 +82,14 @@ function buildCells(node: DirectiveNode, ctx: WidgetCtx): CellInput[] {
   }));
 }
 
-async function loadFirstSidecar(cells: CellInput[], ctx: WidgetCtx): Promise<Sidecar | null> {
+async function loadFirstSidecar(
+  cells: CellInput[],
+  ctx: WidgetCtx
+): Promise<{ id: string; sidecar: Sidecar } | null> {
   for (const c of cells) {
     if (!c.id) continue;
     const s = await sidecarRead(ctx.siteRoot, c.id);
-    if (s) return s;
+    if (s) return { id: c.id, sidecar: s };
   }
   return null;
 }
@@ -130,12 +132,21 @@ async function renderCell(cell: CellInput, ctx: WidgetCtx): Promise<string> {
     return `<!-- figure: no sidecar for ${escapeAttr(cell.id)} -->`;
   }
   const alt = escapeAttr(cell.alt);
-  const picture = renderPicture({ id: cell.id, sidecar, variants, fallback, alt, lightbox: true });
+  const picture = await renderPicture({
+    siteRoot: ctx.siteRoot,
+    id: cell.id,
+    sidecar,
+    variants,
+    fallback,
+    alt,
+    lightbox: true
+  });
   const cap = cell.caption ? `\n${escapeText(cell.caption)}` : '';
   // Each cell carries the image's native aspect as a CSS variable for
   // CLS-friendly layout reservation in flow modes; matrix mode uses
   // the figure-level --rkr-cell-aspect instead.
-  const cellAspect = pictureAspect(sidecar);
+  const dims = await imageDimensions(ctx.siteRoot, cell.id, sidecar);
+  const cellAspect = (dims.width / Math.max(1, dims.height)).toFixed(4);
   const cellAttr = ` style="--rkr-image-aspect: ${cellAspect}"`;
   return `<div class="rkr-figure-cell"${cellAttr}>\n${indent(picture, '  ')}${cap}\n</div>`;
 }
@@ -155,7 +166,14 @@ async function renderInline(
   const sidecar = await sidecarRead(ctx.siteRoot, first.id);
   if (!sidecar) return `<!-- figure: no sidecar for ${escapeAttr(first.id)} -->`;
   const alt = escapeAttr(first.alt);
-  const picture = renderPicture({ id: first.id, sidecar, variants, fallback, alt });
+  const picture = await renderPicture({
+    siteRoot: ctx.siteRoot,
+    id: first.id,
+    sidecar,
+    variants,
+    fallback,
+    alt
+  });
   return renderShell({
     justify,
     fit,
@@ -173,11 +191,13 @@ async function resolveAutoAspect(
   aspectCss: string | null
 ): Promise<string | null> {
   if (aspectCss !== null) return aspectCss;
-  const firstSidecar = await loadFirstSidecar(cells, ctx);
-  if (!firstSidecar) return null;
-  // Use post-ops dimensions: a 4000×3000 source cropped to 4000×1500
-  // must lay out at 8:3, not the original 4:3 stored in metadata.
-  const { width, height } = dimensionsAfterOps(firstSidecar.metadata, firstSidecar.ops);
+  const first = await loadFirstSidecar(cells, ctx);
+  if (!first) return null;
+  // Pull the actual on-disk dimensions of whatever the renderer will
+  // serve (bake or original). The file is the source of truth — a
+  // cropped or rotated image lays out at its real aspect without us
+  // needing to recompute anything from ops.
+  const { width, height } = await imageDimensions(ctx.siteRoot, first.id, first.sidecar);
   const w = width || 1;
   const h = height || 1;
   return `${w}/${h}`;

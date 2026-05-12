@@ -5,8 +5,10 @@
 // and multi-image widgets all share — keeping the cache-key + srcset
 // machinery in exactly one place.
 
+import sharp from 'sharp';
+
 import { cacheKey } from './hash.ts';
-import { dimensionsAfterOps } from './ops-validation.ts';
+import { bakePath } from './originals.ts';
 import { listSidecarIds } from './posts.ts';
 import type { OutputFormat } from './render.ts';
 import type { Sidecar } from './sidecar-types.ts';
@@ -124,6 +126,8 @@ const QUALITY_BY_FORMAT: Record<string, number> = {
 };
 
 export interface PictureArgs {
+  /** Site root for filesystem reads (the bake / original files). */
+  siteRoot: string;
   id: string;
   sidecar: Sidecar;
   variants: VariantSpec[];
@@ -146,8 +150,17 @@ export interface PictureArgs {
  * a JPEG `<img>` fallback. Output has no leading indent — callers wrap
  * it in their own figure / slide / cell shell and indent as needed.
  */
-export function renderPicture(args: PictureArgs): string {
-  const { id, sidecar, variants, fallback, alt = '', loading = 'lazy', lightbox = false } = args;
+export async function renderPicture(args: PictureArgs): Promise<string> {
+  const {
+    siteRoot,
+    id,
+    sidecar,
+    variants,
+    fallback,
+    alt = '',
+    loading = 'lazy',
+    lightbox = false
+  } = args;
   const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
 
   const formats = unique(variants.flatMap((v) => v.formats));
@@ -183,7 +196,8 @@ export function renderPicture(args: PictureArgs): string {
   ].join('\n');
 
   if (!lightbox) return pictureBlock;
-  return wrapLightboxAnchor(pictureBlock, { id, sidecar, variants, alt, ops });
+  const dims = await imageDimensions(siteRoot, id, sidecar);
+  return wrapLightboxAnchor(pictureBlock, { id, variants, alt, ops, dims });
 }
 
 /** Wrap a `<picture>` block in the PhotoSwipe-compatible anchor. The
@@ -196,13 +210,13 @@ function wrapLightboxAnchor(
   pictureBlock: string,
   ctx: {
     id: string;
-    sidecar: Sidecar;
     variants: VariantSpec[];
     alt: string;
     ops: Parameters<typeof cacheKey>[0]['ops'];
+    dims: { width: number; height: number };
   }
 ): string {
-  const { id, sidecar, variants, alt, ops } = ctx;
+  const { id, variants, alt, ops, dims } = ctx;
   const widest = variants.reduce((acc, v) => (v.w > acc.w ? v : acc), variants[0] as VariantSpec);
   // Prefer webp for the lightbox target — it's the format every modern
   // browser supports and the smallest-bytes choice for photographic
@@ -219,13 +233,8 @@ function wrapLightboxAnchor(
   });
   const lbUrl = `/img/${id}.${lbHash}.${lbFormat}`;
 
-  // Post-ops dimensions: PhotoSwipe's data-pswp-width/height must
-  // match the actual pixels at the lightbox URL (which renders ops +
-  // resize). A cropped or rotated image otherwise opens in the
-  // lightbox at the wrong aspect.
-  const effective = dimensionsAfterOps(sidecar.metadata, sidecar.ops);
-  const srcW = effective.width || widest.w;
-  const srcH = effective.height || Math.round(widest.w / 1.5);
+  const srcW = dims.width || widest.w;
+  const srcH = dims.height || Math.round(widest.w / 1.5);
   const lbW = Math.min(widest.w, srcW);
   const lbH = Math.max(1, Math.round(lbW * (srcH / srcW)));
 
@@ -236,15 +245,31 @@ function wrapLightboxAnchor(
   ].join('\n');
 }
 
-/** Aspect ratio (w/h) as a 4-decimal string from sidecar metadata
- * adjusted by sidecar.ops — a cropped/rotated image lays out at its
- * displayed aspect, not the raw original's. Used in the `--aspect`
- * CSS variable on gallery/carousel/diptych cells. */
-export function pictureAspect(sidecar: Sidecar): string {
-  const { width, height } = dimensionsAfterOps(sidecar.metadata, sidecar.ops);
-  const w = width || 1;
-  const h = height || 1;
-  return (w / h).toFixed(4);
+/** Read the actual on-disk dimensions of the image the renderer will
+ * serve: the bake when ops are applied and the bake exists; the
+ * original otherwise. The file IS the source of truth — recording dims
+ * elsewhere is a synchronization problem we don't need. The brief
+ * in-flight window (ops just changed, bake not yet uploaded) falls
+ * back to sidecar.metadata; layout will be very slightly off until
+ * the bake lands. */
+export async function imageDimensions(
+  siteRoot: string,
+  id: string,
+  sidecar: Sidecar
+): Promise<{ width: number; height: number }> {
+  const ops = sidecar.ops ?? [];
+  if (ops.length > 0) {
+    try {
+      const meta = await sharp(bakePath(siteRoot, id)).metadata();
+      if (meta.width && meta.height) return { width: meta.width, height: meta.height };
+    } catch {
+      /* bake missing or undecodable → fall through to metadata */
+    }
+  }
+  return {
+    width: sidecar.metadata.width ?? 1,
+    height: sidecar.metadata.height ?? 1
+  };
 }
 
 function unique<T>(arr: T[]): T[] {
