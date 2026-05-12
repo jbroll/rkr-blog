@@ -53,6 +53,7 @@ function mount(): void {
   // Per-cell inputs (active cell only).
   const attrCellCaption = $<HTMLInputElement>('rkr-cell-caption');
   const attrCellAlt = $<HTMLInputElement>('rkr-cell-alt');
+  const attrCellDeleteBtn = $<HTMLButtonElement>('rkr-cell-delete-btn');
   // Source picker dialog (shared by toolbar +Image and the in-figure
   // "+" cell). Resolves to a source choice; the caller drives the
   // resulting upload + insert/append.
@@ -355,6 +356,61 @@ function mount(): void {
     if (populating || activeCellIndex === null || !editor.isActive('figure')) return;
     const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).alts ?? '';
     commitFigureAttr('alts', spliceCellSlot(cur, ',', activeCellIndex, attrCellAlt.value.trim()));
+  });
+
+  // Remove the active cell from the figure. The image bytes + sidecar
+  // stay on disk (other posts may reference the same id); only this
+  // figure's reference is dropped. Confirm before splicing so a stray
+  // click can't blow away unsaved per-cell edits or attributes.
+  attrCellDeleteBtn.addEventListener('click', () => {
+    if (activeCellIndex === null || !editor.isActive('figure')) return;
+    if (
+      !window.confirm(
+        'Remove this image from the figure? The image file is kept; only this figure stops referencing it.'
+      )
+    ) {
+      return;
+    }
+    const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
+    const ids = (attrs.ids ?? '').split(',').map((s) => s.trim());
+    const alts = (attrs.alts ?? '').split(',').map((s) => s.trim());
+    const captions = (attrs.captions ?? '').split('|');
+    const idx = activeCellIndex;
+    if (idx < ids.length) ids.splice(idx, 1);
+    if (idx < alts.length) alts.splice(idx, 1);
+    if (idx < captions.length) captions.splice(idx, 1);
+    while (alts.length > ids.length) alts.pop();
+    while (captions.length > ids.length) captions.pop();
+    const patch = {
+      ids: ids.filter(Boolean).join(','),
+      alts: alts.join(','),
+      captions: captions.join('|')
+    };
+    // setNodeMarkup directly: walking the doc to find the figure by
+    // ids-set avoids the selection-anchor flakiness of the chain
+    // helper, which silently no-ops when ProseMirror's selection has
+    // drifted off the atom (e.g. after a focus-stealing dialog click).
+    const preIds = attrs.ids ?? '';
+    editor.commands.command(({ tr, state, dispatch }) => {
+      let target: number | null = null;
+      state.doc.descendants((node, pos) => {
+        if (node.type.name === 'figure' && target === null) {
+          const nodeIds = (node.attrs.ids as string | undefined) ?? '';
+          if (nodeIds === preIds) target = pos;
+        }
+        return target === null;
+      });
+      if (target === null) return false;
+      if (dispatch) {
+        const node = state.doc.nodeAt(target);
+        if (!node) return false;
+        dispatch(tr.setNodeMarkup(target, undefined, { ...node.attrs, ...patch }));
+      }
+      return true;
+    });
+    activeCellIndex = null;
+    if (cellDialog.open) cellDialog.close();
+    clearActiveCellHighlight();
   });
 
   /** Resolve the currently-active image id (the id of the cell the

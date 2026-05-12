@@ -430,6 +430,123 @@ test('editor: per-cell selection drives the image-edit panel for multi-image fig
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
 
+// "Remove image from figure" in the per-cell dialog. Removes the
+// active cell's id from the figure's ids/alts/captions arrays after a
+// confirm prompt. Image bytes + sidecar stay on disk; only the
+// figure's reference is dropped.
+test('editor: per-cell delete removes one image from a multi-image figure', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e per-cell delete');
+  await setSlug(page, `e2e-percell-del-${Date.now()}`);
+
+  // Same setup as the per-cell test: upload two distinct PNGs, merge
+  // into one figure with two cells in 1×2 mode.
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'delA.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded delA\.png/, {
+    timeout: 10_000
+  });
+  const idA = await page.locator('#rkr-figure-ids').inputValue();
+
+  await page.locator('#rkroll-admin-article').click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'delB.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_GREEN, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded delB\.png/, {
+    timeout: 10_000
+  });
+  const idB = await page.locator('#rkr-figure-ids').inputValue();
+  expect(idB).not.toBe(idA);
+
+  await page.evaluate(
+    ({ a, b }: { a: string; b: string }) => {
+      const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+      if (!ed) throw new Error('window.__rkrEditor not exposed; ?e2e=1 missing');
+      const positions: number[] = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'figure') positions.push(pos);
+      });
+      const [firstPos, secondPos] = positions as [number, number];
+      ed.chain()
+        .focus()
+        .deleteRange({ from: secondPos, to: secondPos + 1 })
+        .setNodeSelection(firstPos)
+        .updateAttributes('figure', { ids: `${a},${b}`, alts: 'alpha,beta', matrix: '1x2' })
+        .run();
+    },
+    { a: idA, b: idB }
+  );
+  await expect(page.locator('#rkr-figure-ids')).toHaveValue(`${idA},${idB}`);
+
+  // Open the per-cell dialog for the second cell. Accept the confirm
+  // prompt that fires on the delete click.
+  await page.locator('img[data-cell-index="1"]').click();
+  await expect(page.locator('#rkr-cell-dialog')).toBeVisible();
+  page.once('dialog', (d) => void d.accept());
+  await page.locator('#rkr-cell-delete-btn').click();
+
+  // Dialog closes; the figure's ids + alts collapse to just the first
+  // cell's slot. Read via the editor hook directly: the hidden
+  // #rkr-figure-ids input is a mirror populated on selectionUpdate,
+  // which doesn't necessarily fire after a setNodeMarkup transaction.
+  // The editor's own attrs are the source of truth.
+  await expect(page.locator('#rkr-cell-dialog')).not.toBeVisible();
+  const after = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    const a = ed?.getAttributes('figure') as { ids?: string; alts?: string } | undefined;
+    return { ids: a?.ids ?? '', alts: a?.alts ?? '' };
+  });
+  expect(after.ids).toBe(idA);
+  expect(after.alts).toBe('alpha');
+});
+
+// Per-cell delete: declining the confirm prompt must be a no-op (the
+// figure's ids stay intact). Defends against the destructive action
+// firing on a misclick that the author then cancels at the prompt.
+test('editor: per-cell delete is a no-op when confirm is declined', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e percell del-cancel');
+  await setSlug(page, `e2e-percell-delcancel-${Date.now()}`);
+
+  // Single-image figure — enough to surface the delete button via the
+  // per-cell dialog. (The "cell" is just cell-index=0.)
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'cancel.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded cancel\.png/, {
+    timeout: 10_000
+  });
+  const id = await page.locator('#rkr-figure-ids').inputValue();
+  expect(id).toMatch(/^[0-9a-f]{8,}/);
+
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-cell-dialog')).toBeVisible();
+  page.once('dialog', (d) => void d.dismiss());
+  await page.locator('#rkr-cell-delete-btn').click();
+
+  // Dialog stays open; figure ids unchanged (read editor state, not
+  // the hidden mirror).
+  await expect(page.locator('#rkr-cell-dialog')).toBeVisible();
+  const after = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    return (ed?.getAttributes('figure') as { ids?: string } | undefined)?.ids ?? '';
+  });
+  expect(after).toBe(id);
+});
+
 // Source-picker entry points: the toolbar's +Image button and each
 // figure's "+ Add image" button both route through the same picker
 // dialog. The Local branch sets pendingInsertMode (new vs append)

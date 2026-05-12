@@ -39,16 +39,11 @@ export const ADMIN_CSS = `
     max-height: 90vh;
     overflow-y: auto;
   }
-  /* Suppress the OS / browser cut-copy-paste overlay on every admin
-     surface that isn't prose-editable. The author is editing one
-     specific area (the contenteditable article + the form inputs);
-     long-pressing a toolbar button or the page-mode label was popping
-     the native menu and getting in the way of the click. Re-enables
-     selection inside form fields and the contenteditable region so
-     text editing still works. Images inside the article and the
-     in-dialog preview <img> also need -webkit-touch-callout: none —
-     without it iOS pops the "Save image" / "Copy image" menu on
-     long-press, which interrupts the figure-config flow. */
+  /* Suppress the OS cut-copy-paste overlay outside prose-editable
+     surfaces; long-pressing a toolbar button shouldn't pop the menu.
+     Form fields + contenteditable re-enable text selection; images
+     need -webkit-touch-callout: none so iOS doesn't open "Save image"
+     on long-press inside the figure-config flow. */
   .rkr-admin-content,
   .rkr-admin-content button,
   #rkr-page-title,
@@ -115,15 +110,11 @@ export const ADMIN_CSS = `
     box-shadow: 0 4px 6px -4px var(--rkr-shadow, rgba(0, 0, 0, 0.08));
   }
   #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
-  /* Icon-style toolbar buttons (Link, +Image): show the SVG glyph
-     centered; padding matches the text buttons so the row stays
-     aligned. The SVG inherits currentColor so the active-state
-     invert keeps working. */
+  /* Icon-style toolbar buttons (Link, +Image). SVG inherits
+     currentColor so the active-state invert keeps working. */
   #rkroll-admin-toolbar button svg { display: block; }
   #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
-  /* Primary toolbar action (Save). Visually distinct from the icon
-     cluster around it: the doc publishes when you click this one.
-     The hover lifts brightness slightly via --rkr-link-hover. */
+  /* Primary toolbar action (Save). Hover lifts via --rkr-link-hover. */
   #rkroll-admin-toolbar button.rkr-toolbar-primary {
     background: var(--rkr-link);
     color: var(--rkr-bg);
@@ -260,21 +251,28 @@ export const ADMIN_CSS = `
     align-items: center; padding: .75rem;
   }
   .rkr-cell-dialog-body #rkr-image-edit { grid-column: 1 / -1; display: contents; }
-  /* Live image preview inside the cell dialog. Spans the full grid
-     width below the edits list; max-height keeps the modal from
-     pushing past the viewport on a tall portrait crop. The checker
-     fallback background shows when the image has transparency so
-     the author can see alpha effects of an edit. */
+  /* Live image preview inside the cell dialog. max-height keeps the
+     modal from pushing past the viewport on a tall portrait crop. */
   .rkr-cell-preview {
-    grid-column: 1 / -1;
-    display: block;
-    max-width: 100%;
-    max-height: 45vh;
-    margin: .5rem auto 0;
-    object-fit: contain;
+    grid-column: 1 / -1; display: block; max-width: 100%; max-height: 45vh;
+    margin: .5rem auto 0; object-fit: contain;
     background: color-mix(in srgb, var(--rkr-muted) 12%, transparent);
-    border: 1px solid var(--rkr-rule);
-    border-radius: 4px;
+    border: 1px solid var(--rkr-rule); border-radius: 4px;
+  }
+  /* Destructive: removes the active cell from the figure. Separated
+     from the edit-ops row by a top rule so a stray click on Save
+     doesn't land here. */
+  .rkr-cell-delete-row {
+    grid-column: 1 / -1; display: flex; justify-content: flex-end;
+    margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--rkr-rule);
+  }
+  #rkroll-admin-root button.rkr-cell-delete {
+    background: transparent; color: #c00; padding: .35rem .75rem;
+    border: 1px solid color-mix(in srgb, #c00 50%, var(--rkr-rule));
+    border-radius: 4px; cursor: pointer;
+  }
+  #rkroll-admin-root button.rkr-cell-delete:hover {
+    background: color-mix(in srgb, #c00 10%, var(--rkr-bg)); border-color: #c00;
   }
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
   #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }

@@ -154,6 +154,15 @@ ${siteHead(data.site, { isAdmin: true })}
            the modal. -->
       <img id="rkr-cell-preview" class="rkr-cell-preview" alt="" hidden/>
     </div>
+    <!-- Remove this image from the figure. Destructive but
+         recoverable: the image bytes + sidecar stay on disk, only the
+         figure's reference is dropped. Confirm prompt fires before
+         the splice so a stray click can't blow away unsaved edits. -->
+    <div class="rkr-cell-delete-row">
+      <button type="button" id="rkr-cell-delete-btn" class="rkr-cell-delete">
+        Remove image from figure
+      </button>
+    </div>
   </div>
 </dialog>
 <dialog id="rkr-source-picker" aria-labelledby="rkr-source-picker-title">
