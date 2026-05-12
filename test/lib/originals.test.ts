@@ -18,6 +18,18 @@ function freshSiteRoot(t: TestContext): string {
   return root;
 }
 
+/** Persist an ingestResize block to <root>/config/site.json so the
+ * next ingestStream call picks it up. Mirrors what /admin/settings
+ * writes via writePersistedSiteConfig. */
+function writeIngestResizeConfig(
+  root: string,
+  ingestResize: { maxDim?: number; scalePct?: number; webpQuality?: number }
+): void {
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'site.json'), JSON.stringify({ ingestResize }, null, 2));
+}
+
 async function makeJpeg({ width = 64, height = 48, color = { r: 30, g: 60, b: 120 } } = {}) {
   return sharp({
     create: { width, height, channels: 3, background: color }
@@ -287,8 +299,9 @@ test('ingestStream applies portrait orientation BEFORE the resize clamp', async 
   assert.equal(sidecar.metadata.height, 3200);
 });
 
-test('ingestStream honors per-call resize overrides', async (t) => {
+test('ingestStream reads ingestResize knobs from site config', async (t) => {
   const root = freshSiteRoot(t);
+  writeIngestResizeConfig(root, { maxDim: 800, webpQuality: 60 });
   const bytes = await sharp({
     create: { width: 2000, height: 1500, channels: 3, background: { r: 60, g: 60, b: 60 } }
   })
@@ -298,16 +311,39 @@ test('ingestStream honors per-call resize overrides', async (t) => {
   const result = await ingestStream({
     stream: Readable.from([bytes]),
     siteRoot: root,
-    source: { kind: 'upload', originalName: 'override.jpg' },
-    resize: { maxDim: 800, webpQuality: 60 }
+    source: { kind: 'upload', originalName: 'site-config.jpg' }
   });
 
   const sidecar = await sidecarRead(root, result.id);
   assert.ok(sidecar);
   assert.equal(sidecar.source.resize?.maxDim, 800);
   assert.equal(sidecar.source.resize?.webpQuality, 60);
+  // scalePct wasn't set → falls back to compile-time default (100).
+  assert.equal(sidecar.source.resize?.scalePct, 100);
   assert.equal(sidecar.metadata.width, 800);
   assert.equal(sidecar.metadata.height, 600);
+});
+
+test('ingestStream falls back to compile-time defaults when site.json is absent', async (t) => {
+  const root = freshSiteRoot(t);
+  const bytes = await sharp({
+    create: { width: 400, height: 400, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const result = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'no-config.jpg' }
+  });
+
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  // DEFAULT_INGEST_RESIZE = { maxDim: 3200, scalePct: 100, webpQuality: 82 }
+  assert.equal(sidecar.source.resize?.maxDim, 3200);
+  assert.equal(sidecar.source.resize?.scalePct, 100);
+  assert.equal(sidecar.source.resize?.webpQuality, 82);
 });
 
 test('ingestStream passes animated GIFs through unchanged', async (t) => {
@@ -334,21 +370,24 @@ test('ingestStream passes animated GIFs through unchanged', async (t) => {
   assert.equal(sidecar.source.resize?.encoding, 'passthrough');
 });
 
-test('ingestStream preserves the first sidecar on dedup even if knobs differ', async (t) => {
+test('ingestStream preserves the first sidecar on dedup even if knobs change', async (t) => {
   const root = freshSiteRoot(t);
   const bytes = await makeJpeg();
 
+  // First ingest with quality=90 in site config.
+  writeIngestResizeConfig(root, { webpQuality: 90 });
   const first = await ingestStream({
     stream: Readable.from([bytes]),
     siteRoot: root,
-    source: { kind: 'upload', originalName: 'a.jpg' },
-    resize: { webpQuality: 90 }
+    source: { kind: 'upload', originalName: 'a.jpg' }
   });
+  // Operator changes the knob between uploads. The second ingest is a
+  // dedup hit — the first sidecar (and its q=90 record) must stand.
+  writeIngestResizeConfig(root, { webpQuality: 30 });
   const second = await ingestStream({
     stream: Readable.from([bytes]),
     siteRoot: root,
-    source: { kind: 'upload', originalName: 'b.jpg' },
-    resize: { webpQuality: 30 }
+    source: { kind: 'upload', originalName: 'b.jpg' }
   });
 
   assert.equal(second.deduplicated, true);

@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { INGEST_RESIZE_BOUNDS } from './image-constants.ts';
+
 export interface Paths {
   root: string;
   originals: string;
@@ -31,15 +33,31 @@ export interface ServerConfig {
 export interface SiteConfig {
   title: string;
   tagline?: string;
+  /** Persisted ingest-resize overrides. Undefined → use compile-time
+   * defaults from image-constants.ts. Individual fields can be
+   * missing; the resize helper merges them with DEFAULT_INGEST_RESIZE. */
+  ingestResize?: PersistedIngestResize;
+}
+
+/** Blog-level defaults for the ingest-time downsample + re-encode
+ * (see lib/ingest-resize.ts). Stored under `ingestResize` in
+ * config/site.json; the admin settings UI edits these. All three
+ * fields are independent: a missing field falls through to the
+ * compile-time default in image-constants.ts. */
+export interface PersistedIngestResize {
+  maxDim?: number;
+  scalePct?: number;
+  webpQuality?: number;
 }
 
 /** Schema of `<siteRoot>/config/site.json`. All fields optional — a
  * missing field falls through to the env var, then to a hard-coded
- * default. The admin settings UI will rewrite this file. */
+ * default. The admin settings UI rewrites this file. */
 export interface PersistedSiteConfig {
   title?: string;
   tagline?: string;
   theme?: string;
+  ingestResize?: PersistedIngestResize;
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
@@ -72,18 +90,48 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   if (typeof r.title === 'string') out.title = r.title;
   if (typeof r.tagline === 'string') out.tagline = r.tagline;
   if (typeof r.theme === 'string') out.theme = r.theme;
+  const ingest = pickPersistedIngestResize(r.ingestResize);
+  if (ingest) out.ingestResize = ingest;
   return out;
+}
+
+/** Validate + clamp ingestResize knobs at read time. Anything outside
+ * INGEST_RESIZE_BOUNDS snaps to the nearest bound (mirrors the same
+ * clamp the resize helper applies internally), and non-numeric values
+ * are dropped entirely so they fall back to compile-time defaults. */
+function pickPersistedIngestResize(raw: unknown): PersistedIngestResize | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: PersistedIngestResize = {};
+  const md = clampInt(r.maxDim, INGEST_RESIZE_BOUNDS.maxDim);
+  if (md !== undefined) out.maxDim = md;
+  const sp = clampInt(r.scalePct, INGEST_RESIZE_BOUNDS.scalePct);
+  if (sp !== undefined) out.scalePct = sp;
+  const wq = clampInt(r.webpQuality, INGEST_RESIZE_BOUNDS.webpQuality);
+  if (wq !== undefined) out.webpQuality = wq;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function clampInt(v: unknown, bounds: { min: number; max: number }): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+  return Math.max(bounds.min, Math.min(bounds.max, Math.round(v)));
 }
 
 /** Persist the blog-level config. Read-modify-writes the JSON file so
  * a partial update from the admin UI keeps fields it didn't change.
- * Creates the config dir if missing. */
+ * Nested ingestResize merges per-field (a patch with maxDim only
+ * preserves the existing scalePct / webpQuality). Creates the config
+ * dir if missing. */
 export function writePersistedSiteConfig(
   patch: PersistedSiteConfig,
   env: Env = process.env
 ): PersistedSiteConfig {
   const current = readPersistedSiteConfig(env);
-  const next: PersistedSiteConfig = { ...current, ...pickPersistedFields(patch) };
+  const sanitized = pickPersistedFields(patch);
+  const next: PersistedSiteConfig = { ...current, ...sanitized };
+  if (sanitized.ingestResize || current.ingestResize) {
+    next.ingestResize = { ...current.ingestResize, ...sanitized.ingestResize };
+  }
   const p = paths(env).siteConfigFile;
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
@@ -98,6 +146,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   const tagline = persisted.tagline ?? env.SITE_TAGLINE;
   const out: SiteConfig = { title };
   if (tagline) out.tagline = tagline;
+  if (persisted.ingestResize) out.ingestResize = persisted.ingestResize;
   return out;
 }
 

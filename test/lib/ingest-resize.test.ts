@@ -5,7 +5,7 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
-import { parseResizeOverrides, resizeAndEncode } from '../../src/lib/ingest-resize.ts';
+import { resizeAndEncode } from '../../src/lib/ingest-resize.ts';
 
 /** Hand-crafted 2-frame 1×1 animated GIF (GIF89a + NETSCAPE2.0 loop).
  * Sharp's metadata reports pages=2 on this without {animated:true}, so
@@ -209,24 +209,4 @@ test('resizeAndEncode applies defaults when options is undefined', async (t) => 
 
   const result = await resizeAndEncode({ inputPath, meta, tmpDir: tmp });
   assert.deepEqual(result.applied, { maxDim: 3200, scalePct: 100, webpQuality: 82 });
-});
-
-test('parseResizeOverrides extracts numeric fields and coerces strings', () => {
-  assert.equal(parseResizeOverrides(undefined), undefined);
-  assert.equal(parseResizeOverrides(null), undefined);
-  assert.equal(parseResizeOverrides('not an object'), undefined);
-  assert.equal(parseResizeOverrides({}), undefined);
-  // No recognized fields → undefined (let defaults win in the helper).
-  assert.equal(parseResizeOverrides({ unrelated: 5 }), undefined);
-
-  assert.deepEqual(parseResizeOverrides({ maxDim: 1600 }), { maxDim: 1600 });
-  // Strings (from multipart fields) coerce.
-  assert.deepEqual(parseResizeOverrides({ maxDim: '1600', scalePct: '75' }), {
-    maxDim: 1600,
-    scalePct: 75
-  });
-  // Garbage values get dropped, not propagated.
-  assert.deepEqual(parseResizeOverrides({ maxDim: 'banana', webpQuality: 60 }), {
-    webpQuality: 60
-  });
 });

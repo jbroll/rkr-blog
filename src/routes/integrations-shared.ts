@@ -12,10 +12,6 @@ export interface ProviderImportBody {
   fileId?: unknown;
   name?: unknown;
   mimeType?: unknown;
-  /** Per-upload resize overrides routed to ingestStream (see
-   * lib/ingest-resize.ts). Untyped at this layer because each
-   * provider re-validates via parseResizeOverrides. */
-  resize?: unknown;
 }
 
 /** Query string for the OAuth callback. `error` is set by the provider

@@ -15,8 +15,9 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
+import { readPersistedSiteConfig } from './config.ts';
 import { FORMAT_TO_EXT, SHARP_INGEST_PIXEL_LIMIT } from './image-constants.ts';
-import type { ResizeOptions, ResizeResult } from './ingest-resize.ts';
+import type { ResizeResult } from './ingest-resize.ts';
 import { resizeAndEncode } from './ingest-resize.ts';
 import { read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
 import type { Sidecar, SidecarResizeRecord } from './sidecar-types.ts';
@@ -63,10 +64,6 @@ export interface IngestArgs {
   source: IngestSource;
   /** Override timestamp for tests; default new Date().toISOString(). */
   now?: string;
-  /** Per-upload overrides for the ingest-time downsample. Absent →
-   * defaults from DEFAULT_INGEST_RESIZE. The values landing in the
-   * sidecar are the clamped/effective ones, not these raw inputs. */
-  resize?: ResizeOptions;
 }
 
 export interface IngestResult {
@@ -83,9 +80,18 @@ export async function ingestStream({
   stream,
   siteRoot,
   source,
-  now,
-  resize
+  now
 }: IngestArgs): Promise<IngestResult> {
+  // Operator-tuned defaults from /admin/settings live in
+  // <siteRoot>/config/site.json. Read it via the siteRoot arg rather
+  // than siteConfig()'s env-driven default, so an ingest into a tmp
+  // siteRoot (tests, multi-site harnesses) picks up the JSON sitting
+  // next to it. Undefined → resizeAndEncode uses its compile-time
+  // defaults. No per-request override — this is the only knob.
+  const persistedResize = readPersistedSiteConfig({
+    ...process.env,
+    SITE_ROOT: siteRoot
+  }).ingestResize;
   const tmpDir = path.join(siteRoot, 'originals', '.tmp');
   await fs.promises.mkdir(tmpDir, { recursive: true });
 
@@ -191,7 +197,7 @@ export async function ingestStream({
         inputPath: tmpPath,
         meta,
         tmpDir,
-        options: resize
+        ...(persistedResize ? { options: persistedResize } : {})
       });
     } catch (err) {
       await safeUnlink(tmpPath);

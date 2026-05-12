@@ -151,6 +151,65 @@ test('POST /admin/settings: 303 with err= when subtitle exceeds the cap', async 
   assert.match(res.headers.location as string, /err=.*subtitle/);
 });
 
+test('POST /admin/settings: persists ingestResize knobs in config/site.json', async (t) => {
+  const { root, app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload:
+      'title=&tagline=&theme=default&ingestMaxDim=2400&ingestScalePct=80&ingestWebpQuality=70'
+  });
+  assert.equal(res.statusCode, 303);
+  assert.equal(res.headers.location, '/admin/settings?flash=saved');
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.deepEqual(onDisk.ingestResize, { maxDim: 2400, scalePct: 80, webpQuality: 70 });
+});
+
+test('POST /admin/settings: partial ingestResize patch merges with existing', async (t) => {
+  const { root, app } = await setup(t);
+  // Seed an existing ingestResize block on disk.
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ ingestResize: { maxDim: 3000, scalePct: 100, webpQuality: 90 } })
+  );
+  // Operator submits only a new maxDim. The other two must survive.
+  await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=&tagline=&theme=default&ingestMaxDim=1600&ingestScalePct=&ingestWebpQuality='
+  });
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.deepEqual(onDisk.ingestResize, { maxDim: 1600, scalePct: 100, webpQuality: 90 });
+});
+
+test('POST /admin/settings: 303 with err= on out-of-range ingest knob', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    // INGEST_RESIZE_BOUNDS.maxDim.max = 8000; 99999 must reject.
+    payload: 'title=&tagline=&theme=default&ingestMaxDim=99999&ingestScalePct=&ingestWebpQuality='
+  });
+  assert.equal(res.statusCode, 303);
+  assert.match(res.headers.location as string, /err=.*max%20image%20dimension/);
+});
+
+test('POST /admin/settings: 303 with err= on non-numeric ingest knob', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=&tagline=&theme=default&ingestMaxDim=banana'
+  });
+  assert.equal(res.statusCode, 303);
+  assert.match(res.headers.location as string, /err=.*must%20be%20a%20number/);
+});
+
 test('POST /admin/settings: missing body fields fall back to empty strings', async (t) => {
   // A bare POST with no form body should NOT crash; the typeof
   // string-or-empty guards keep the handler defensive against

@@ -14,10 +14,12 @@ import type { FastifyInstance } from 'fastify';
 
 import {
   listAvailableThemes,
+  type PersistedIngestResize,
   readPersistedSiteConfig,
   siteConfig,
   writePersistedSiteConfig
 } from '../lib/config.ts';
+import { INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 
 const MAX_TITLE = 200;
@@ -52,7 +54,14 @@ export function registerAdminSettingsRoutes(
   );
 
   fastify.post<{
-    Body: { title?: unknown; tagline?: unknown; theme?: unknown };
+    Body: {
+      title?: unknown;
+      tagline?: unknown;
+      theme?: unknown;
+      ingestMaxDim?: unknown;
+      ingestScalePct?: unknown;
+      ingestWebpQuality?: unknown;
+    };
   }>('/admin/settings', { ...guard }, async (request, reply) => {
     const body = request.body ?? {};
     const titleRaw = typeof body.title === 'string' ? body.title.trim() : '';
@@ -80,6 +89,31 @@ export function registerAdminSettingsRoutes(
       );
     }
 
+    // Ingest knobs: blank string clears the override, otherwise parse
+    // and reject anything outside INGEST_RESIZE_BOUNDS so the operator
+    // sees a flash error instead of a silent clamp. Returning the form
+    // value verbatim on error would be friendlier, but the redirect
+    // pattern this route uses doesn't carry state — the form re-renders
+    // from persisted (which we haven't written yet), so a typo just
+    // doesn't take effect rather than being preserved-with-warning.
+    const maxDim = parseIngestField(body.ingestMaxDim, 'max image dimension');
+    if ('error' in maxDim) {
+      return reply.redirect(`/admin/settings?err=${encodeURIComponent(maxDim.error)}`, 303);
+    }
+    const scalePct = parseIngestField(body.ingestScalePct, 'scale percentage');
+    if ('error' in scalePct) {
+      return reply.redirect(`/admin/settings?err=${encodeURIComponent(scalePct.error)}`, 303);
+    }
+    const webpQuality = parseIngestField(body.ingestWebpQuality, 'webp quality');
+    if ('error' in webpQuality) {
+      return reply.redirect(`/admin/settings?err=${encodeURIComponent(webpQuality.error)}`, 303);
+    }
+    const ingestResize = buildIngestResize({
+      maxDim: maxDim.value,
+      scalePct: scalePct.value,
+      webpQuality: webpQuality.value
+    });
+
     // Persist the form values verbatim, empty strings included.
     // siteConfig() / themeName() each treat an empty-string persisted
     // field as falsy (the `||` chain falls through to SITE_TITLE /
@@ -87,10 +121,52 @@ export function registerAdminSettingsRoutes(
     // re-engages the env-var fallback at read time. The on-disk JSON
     // ends up with `"title": ""` for a cleared override — cosmetic,
     // but unambiguous about what the operator set.
-    writePersistedSiteConfig({ title: titleRaw, tagline: taglineRaw, theme: themeRaw });
+    writePersistedSiteConfig({
+      title: titleRaw,
+      tagline: taglineRaw,
+      theme: themeRaw,
+      ...(ingestResize ? { ingestResize } : {})
+    });
 
     return reply.redirect('/admin/settings?flash=saved', 303);
   });
+}
+
+/** Form-field parser for the three numeric ingest knobs. Returns
+ * `{ value }` (number when set, undefined when the operator cleared
+ * the field) or `{ error }` for non-numeric / out-of-bounds input. */
+function parseIngestField(
+  raw: unknown,
+  label: string
+): { value: number | undefined } | { error: string } {
+  if (raw === undefined || raw === null) return { value: undefined };
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (s === '') return { value: undefined };
+  const n = Number(s);
+  if (!Number.isFinite(n)) return { error: `${label} must be a number` };
+  const bounds = boundsForLabel(label);
+  if (n < bounds.min || n > bounds.max) {
+    return { error: `${label} must be between ${bounds.min} and ${bounds.max}` };
+  }
+  return { value: Math.round(n) };
+}
+
+function boundsForLabel(label: string): { min: number; max: number } {
+  if (label === 'max image dimension') return INGEST_RESIZE_BOUNDS.maxDim;
+  if (label === 'scale percentage') return INGEST_RESIZE_BOUNDS.scalePct;
+  return INGEST_RESIZE_BOUNDS.webpQuality;
+}
+
+function buildIngestResize(parts: {
+  maxDim: number | undefined;
+  scalePct: number | undefined;
+  webpQuality: number | undefined;
+}): PersistedIngestResize | undefined {
+  const out: PersistedIngestResize = {};
+  if (parts.maxDim !== undefined) out.maxDim = parts.maxDim;
+  if (parts.scalePct !== undefined) out.scalePct = parts.scalePct;
+  if (parts.webpQuality !== undefined) out.webpQuality = parts.webpQuality;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function decodeFlash(query: {

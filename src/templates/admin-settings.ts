@@ -10,6 +10,7 @@
 // behind requireUser.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface AdminSettingsPageData extends SiteChrome {
@@ -21,6 +22,11 @@ export interface AdminSettingsPageData extends SiteChrome {
     title?: string;
     tagline?: string;
     theme?: string;
+    ingestResize?: {
+      maxDim?: number;
+      scalePct?: number;
+      webpQuality?: number;
+    };
   };
   /** All themes available on disk, default-first. Drives the <select>
    * options. */
@@ -57,9 +63,29 @@ ${flash}
     ${renderThemeOptions(data.themes, data.persisted.theme)}
   </select>
 
+  <h2 class="rkr-admin-settings-section">Image uploads</h2>
   <p class="rkr-admin-settings-hint">
-    Leaving title or subtitle blank falls back to the <code>SITE_TITLE</code> / <code>SITE_TAGLINE</code> environment variables (current default in the placeholder).
+    Master files in <code>originals/</code> are downsampled + re-encoded to WebP on ingest (PNG uses lossless WebP). These knobs tune that step; blank fields fall back to the built-in defaults.
   </p>
+
+  <label for="rkr-settings-ingest-max-dim">Max long edge (px)</label>
+  <input id="rkr-settings-ingest-max-dim" name="ingestMaxDim" type="number"
+    min="${INGEST_RESIZE_BOUNDS.maxDim.min}" max="${INGEST_RESIZE_BOUNDS.maxDim.max}" step="1"
+    value="${data.persisted.ingestResize?.maxDim ?? ''}"
+    placeholder="${DEFAULT_INGEST_RESIZE.maxDim}"/>
+
+  <label for="rkr-settings-ingest-scale">Downscale (%)</label>
+  <input id="rkr-settings-ingest-scale" name="ingestScalePct" type="number"
+    min="${INGEST_RESIZE_BOUNDS.scalePct.min}" max="${INGEST_RESIZE_BOUNDS.scalePct.max}" step="1"
+    value="${data.persisted.ingestResize?.scalePct ?? ''}"
+    placeholder="${DEFAULT_INGEST_RESIZE.scalePct}"/>
+
+  <label for="rkr-settings-ingest-quality">WebP quality (lossy)</label>
+  <input id="rkr-settings-ingest-quality" name="ingestWebpQuality" type="number"
+    min="${INGEST_RESIZE_BOUNDS.webpQuality.min}" max="${INGEST_RESIZE_BOUNDS.webpQuality.max}" step="1"
+    value="${data.persisted.ingestResize?.webpQuality ?? ''}"
+    placeholder="${DEFAULT_INGEST_RESIZE.webpQuality}"/>
+
   <button type="submit" class="rkr-admin-settings-submit">Save settings</button>
 </form>
 </main>

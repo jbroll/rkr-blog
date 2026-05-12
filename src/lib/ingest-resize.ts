@@ -27,7 +27,7 @@ import {
   SHARP_INGEST_PIXEL_LIMIT
 } from './image-constants.ts';
 
-export interface ResizeOptions {
+interface ResizeOptions {
   /** Long-edge pixel cap. Image is shrunk so max(width,height) ≤ maxDim.
    * No upscaling regardless. Default DEFAULT_INGEST_RESIZE.maxDim. */
   maxDim?: number;
@@ -87,6 +87,8 @@ export async function resizeAndEncode(args: ResizeArgs): Promise<ResizeResult> {
 
   const srcW = meta.width ?? 0;
   const srcH = meta.height ?? 0;
+  /* c8 ignore next 3 -- sharp.metadata() always supplies dimensions for the
+     raster formats this branch reaches; this guard is belt-and-braces */
   if (srcW <= 0 || srcH <= 0) {
     throw new Error(`resizeAndEncode: missing dimensions on input (format=${meta.format})`);
   }
@@ -97,10 +99,10 @@ export async function resizeAndEncode(args: ResizeArgs): Promise<ResizeResult> {
   const reason: ResizeReason = target >= longEdge ? 'no-shrink-needed' : 'resized';
 
   const encoding: ResizeEncoding = meta.format === 'png' ? 'lossless' : 'lossy';
+  /* c8 ignore next 5 -- FORMAT_TO_EXT.webp is module-local in image-constants.ts;
+     the lookup can't actually return undefined, but throwing beats trusting it */
   const ext = FORMAT_TO_EXT.webp;
   if (!ext) {
-    // Defensive — FORMAT_TO_EXT is module-local, this can't actually
-    // happen, but throwing beats trusting an undefined.
     throw new Error('resizeAndEncode: FORMAT_TO_EXT.webp missing');
   }
 
@@ -185,6 +187,8 @@ async function passthrough(
     // SVG dimensions from sharp can be unreliable (viewBox vs px);
     // best-effort — the public render pipeline rasterizes SVG with
     // explicit width anyway.
+    /* c8 ignore start -- only triggers on SVG inputs sharp can't introspect
+       (no intrinsic size); test fixtures all carry width/height attrs */
     try {
       const m = await sharp(outPath).metadata();
       width = m.width ?? 0;
@@ -192,6 +196,7 @@ async function passthrough(
     } catch {
       /* SVG without intrinsic size — leave at 0 */
     }
+    /* c8 ignore stop */
   }
 
   return {
@@ -206,34 +211,6 @@ async function passthrough(
     encoding: 'passthrough',
     applied
   };
-}
-
-/** Parse a loose record (multipart field, JSON body, query string) into
- * a ResizeOptions object suitable for ingestStream. Non-numeric values
- * are ignored (treated as "not provided" → default); the helper itself
- * clamps to INGEST_RESIZE_BOUNDS so callers don't need to validate
- * ranges. Returns undefined when no recognized fields were present so
- * the caller can pass undefined through and get defaults. */
-export function parseResizeOverrides(input: unknown): ResizeOptions | undefined {
-  if (!input || typeof input !== 'object') return undefined;
-  const rec = input as Record<string, unknown>;
-  const opts: ResizeOptions = {};
-  const md = coerceNumber(rec.maxDim);
-  if (md !== undefined) opts.maxDim = md;
-  const sp = coerceNumber(rec.scalePct);
-  if (sp !== undefined) opts.scalePct = sp;
-  const wq = coerceNumber(rec.webpQuality);
-  if (wq !== undefined) opts.webpQuality = wq;
-  return Object.keys(opts).length > 0 ? opts : undefined;
-}
-
-function coerceNumber(v: unknown): number | undefined {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
 }
 
 async function hashFile(p: string): Promise<string> {
