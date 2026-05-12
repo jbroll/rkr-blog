@@ -197,7 +197,7 @@ export async function renderDerivative(
 
 // ---- ops & output -------------------------------------------------------
 
-function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
+export function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
   switch (op.type) {
     case 'crop':
       return p.extract({ left: op.x, top: op.y, width: op.w, height: op.h });

@@ -5,13 +5,17 @@
 // and multi-image widgets all share — keeping the cache-key + srcset
 // machinery in exactly one place.
 
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
 import { bakePath, imageInfo } from './originals.ts';
 import { listSidecarIds } from './posts.ts';
-import type { OutputFormat } from './render.ts';
-import type { Sidecar, SidecarOp } from './sidecar-types.ts';
+import { applyOp, type Op, type OutputFormat } from './render.ts';
+import type { Sidecar } from './sidecar-types.ts';
 import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
@@ -258,106 +262,65 @@ export async function imageDimensions(
   sidecar: Sidecar
 ): Promise<{ width: number; height: number }> {
   const ops = sidecar.ops ?? [];
-  if (ops.length > 0) {
-    // The atomic /commit endpoint guarantees the bake is on disk
-    // whenever ops are non-empty. Render it for layout dims.
-    try {
-      const meta = await sharp(bakePath(siteRoot, id)).metadata();
-      if (meta.width && meta.height) return { width: meta.width, height: meta.height };
-    } catch {
-      /* bake missing (offline edit mid-drain, pre-/commit-migration
-         leftovers) → fall through to original + apply ops. NOT
-         falling back to raw original dims: render.ts applies ops
-         live when the bake is missing, so the served image's aspect
-         is post-ops, and using the original's aspect for the
-         lightbox stretches the displayed image. */
-    }
+  if (ops.length === 0) {
+    const info = await imageInfo(siteRoot, id);
+    return { width: info?.width ?? 1, height: info?.height ?? 1 };
   }
-  const info = await imageInfo(siteRoot, id);
-  const baseW = info?.width ?? 1;
-  const baseH = info?.height ?? 1;
-  if (ops.length === 0) return { width: baseW, height: baseH };
-  return dimensionsAfterOps(baseW, baseH, ops);
+  // Ops present: the post-ops bake on disk IS the source of truth
+  // for dims (file == truth). If missing, recreate it server-side
+  // from the original + ops via sharp. ensureBake throws for the
+  // perspective branch sharp can't handle, surfaced upstream so the
+  // operator notices instead of getting silent wrong dims.
+  return ensureBake(siteRoot, id, sidecar);
 }
 
-/** Compute the dimensions the render pipeline produces when applying
- * `ops` to a source of (w, h). Mirrors render.ts:applyOp semantics
- * for crop / rotate / flip / resample. Perspective uses the corner
- * bounding box as an estimate (sharp can't apply perspective; the
- * server returns 500 for perspective+no-bake, so we'd only hit this
- * branch in error paths).
+/** Return the bake's on-disk dimensions, recreating the file from
+ * the original + ops when missing. Server-applicable ops (crop /
+ * rotate / flip / resample) are recreated via sharp. Perspective
+ * can only be baked by the canvas pipeline — if a sidecar with a
+ * perspective op has no bake, we can't recover; throw and let the
+ * caller decide whether to surface the error.
  *
- * Used as the bake-missing fallback in imageDimensions. The render
- * pipeline applies the same ops to the same source, so the layout
- * dims match the served pixels. */
-function dimensionsAfterOps(
-  w: number,
-  h: number,
-  ops: readonly SidecarOp[]
-): { width: number; height: number } {
-  let width = w;
-  let height = h;
-  for (const raw of ops) {
-    const op = raw as Record<string, unknown>;
-    switch (op.type) {
-      case 'crop':
-        width = Number(op.w) || width;
-        height = Number(op.h) || height;
-        break;
-      case 'rotate': {
-        const norm = ((Number(op.degrees ?? 0) % 360) + 360) % 360;
-        if (norm === 90 || norm === 270) [width, height] = [height, width];
-        break;
-      }
-      case 'flip':
-        break;
-      case 'resample': {
-        const tW = op.w !== undefined ? Number(op.w) : undefined;
-        const tH = op.h !== undefined ? Number(op.h) : undefined;
-        const fit = typeof op.fit === 'string' ? op.fit : 'inside';
-        if (fit === 'fill') {
-          if (tW !== undefined) width = tW;
-          if (tH !== undefined) height = tH;
-          break;
-        }
-        // inside / contain / cover / outside: fit-with-aspect.
-        // render.ts uses sharp.resize({ fit, withoutEnlargement:true }).
-        const sW = tW !== undefined ? tW / width : Number.POSITIVE_INFINITY;
-        const sH = tH !== undefined ? tH / height : Number.POSITIVE_INFINITY;
-        const inside = fit === 'inside' || fit === 'contain';
-        let scale = inside
-          ? Math.min(sW, sH)
-          : Math.max(
-              sW === Number.POSITIVE_INFINITY ? 0 : sW,
-              sH === Number.POSITIVE_INFINITY ? 0 : sH
-            );
-        if (!Number.isFinite(scale) || scale > 1) scale = 1;
-        width = Math.max(1, Math.round(width * scale));
-        height = Math.max(1, Math.round(height * scale));
-        break;
-      }
-      case 'perspective': {
-        const corners = op.corners as ReadonlyArray<readonly [number, number]> | undefined;
-        if (!Array.isArray(corners) || corners.length !== 4) break;
-        let minX = Number.POSITIVE_INFINITY;
-        let minY = Number.POSITIVE_INFINITY;
-        let maxX = Number.NEGATIVE_INFINITY;
-        let maxY = Number.NEGATIVE_INFINITY;
-        for (const c of corners) {
-          const cx = Number(c[0]);
-          const cy = Number(c[1]);
-          if (cx < minX) minX = cx;
-          if (cy < minY) minY = cy;
-          if (cx > maxX) maxX = cx;
-          if (cy > maxY) maxY = cy;
-        }
-        width = Math.max(1, Math.round(maxX - minX));
-        height = Math.max(1, Math.round(maxY - minY));
-        break;
-      }
-    }
+ * Net effect: callers always get dims that match the served pixels,
+ * and any pre-/commit-migration sidecars (ops set, bake missing)
+ * self-heal on first request. */
+async function ensureBake(
+  siteRoot: string,
+  id: string,
+  sidecar: Sidecar
+): Promise<{ width: number; height: number }> {
+  const bp = bakePath(siteRoot, id);
+  try {
+    const meta = await sharp(bp).metadata();
+    if (meta.width && meta.height) return { width: meta.width, height: meta.height };
+  } catch {
+    /* missing or unreadable; recreate below */
   }
-  return { width, height };
+  const ops = (sidecar.ops ?? []) as Op[];
+  if (ops.some((o) => o.type === 'perspective')) {
+    throw new Error(
+      `widget-helpers: bake missing for ${id.slice(0, 8)}… with a perspective op; can't recreate server-side (re-save in the editor)`
+    );
+  }
+  const info = await imageInfo(siteRoot, id);
+  if (!info) {
+    throw new Error(`widget-helpers: original missing for ${id.slice(0, 8)}…`);
+  }
+  let pipeline = sharp(info.path, { failOn: 'error' });
+  for (const op of ops) pipeline = applyOp(pipeline, op);
+  await fs.promises.mkdir(path.dirname(bp), { recursive: true });
+  const tmp = `${bp}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await pipeline.webp({ quality: 90 }).toFile(tmp);
+    await fs.promises.rename(tmp, bp);
+  } catch (err) {
+    await fs.promises.unlink(tmp).catch(() => {});
+    throw err;
+  }
+  // biome-ignore lint/suspicious/noConsole: surface to fly logs when self-healing pre-migration sidecars
+  console.warn(`widget-helpers: recreated missing bake for ${id.slice(0, 8)}…`);
+  const meta = await sharp(bp).metadata();
+  return { width: meta.width ?? 1, height: meta.height ?? 1 };
 }
 
 function unique<T>(arr: T[]): T[] {

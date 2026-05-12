@@ -14,6 +14,7 @@ import sharp from 'sharp';
 
 import { bakePath, ingestStream } from '../../src/lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../../src/lib/sidecar.ts';
+import type { SidecarOp } from '../../src/lib/sidecar-types.ts';
 import { imageDimensions } from '../../src/lib/widget-helpers.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -130,7 +131,66 @@ test('imageDimensions: resample fit=inside on bake-missing fallback clamps', asy
   assert.equal(dims.height, 600);
 });
 
-test('imageDimensions: bake-missing fallback handles all op shapes', async (t) => {
+/** Spin up a fresh siteRoot + ingest a JPEG of (w, h), return the
+ * sidecar pre-loaded so the caller can set ops and call imageDimensions. */
+async function freshOps(
+  t: TestContext,
+  w: number,
+  h: number,
+  ops: SidecarOp[]
+): Promise<{ width: number; height: number }> {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg(w, h)]),
+    siteRoot: root,
+    source: { kind: 'upload' }
+  });
+  const sidecar = await sidecarRead(root, r.id);
+  if (!sidecar) throw new Error('sidecar missing');
+  sidecar.ops = ops;
+  await sidecarWrite(root, r.id, sidecar);
+  return imageDimensions(root, r.id, sidecar);
+}
+
+test('imageDimensions: bake-missing fallback — rotate 180 keeps dims', async (t) => {
+  assert.deepEqual(await freshOps(t, 800, 600, [{ type: 'rotate', degrees: 180 }]), {
+    width: 800,
+    height: 600
+  });
+});
+
+test('imageDimensions: bake-missing fallback — rotate 270 swaps dims', async (t) => {
+  assert.deepEqual(await freshOps(t, 800, 600, [{ type: 'rotate', degrees: 270 }]), {
+    width: 600,
+    height: 800
+  });
+});
+
+test('imageDimensions: bake-missing fallback — flip keeps dims', async (t) => {
+  assert.deepEqual(await freshOps(t, 800, 600, [{ type: 'flip', axis: 'horizontal' }]), {
+    width: 800,
+    height: 600
+  });
+});
+
+test('imageDimensions: bake-missing fallback — resample with only w scales proportionally', async (t) => {
+  assert.deepEqual(await freshOps(t, 800, 600, [{ type: 'resample', w: 400, fit: 'inside' }]), {
+    width: 400,
+    height: 300
+  });
+});
+
+test('imageDimensions: bake-missing fallback — resample fit=fill sets dims absolutely', async (t) => {
+  assert.deepEqual(
+    await freshOps(t, 800, 600, [{ type: 'resample', w: 100, h: 100, fit: 'fill' }]),
+    { width: 100, height: 100 }
+  );
+});
+
+test('imageDimensions: bake-missing self-heals (creates the bake on disk)', async (t) => {
+  // The whole point of ensureBake is that the bake stops being
+  // missing after the first request. Subsequent requests read it
+  // directly without re-running sharp.
   const root = freshSiteRoot(t);
   const r = await ingestStream({
     stream: Readable.from([await makeJpeg(800, 600)]),
@@ -139,39 +199,26 @@ test('imageDimensions: bake-missing fallback handles all op shapes', async (t) =
   });
   const sidecar = await sidecarRead(root, r.id);
   assert.ok(sidecar);
-
-  // rotate 180 → dims unchanged.
-  sidecar.ops = [{ type: 'rotate', degrees: 180 }];
+  sidecar.ops = [{ type: 'crop', x: 0, y: 0, w: 400, h: 200 }];
   await sidecarWrite(root, r.id, sidecar);
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 800, height: 600 });
+  assert.equal(fs.existsSync(bakePath(root, r.id)), false, 'bake should start missing');
 
-  // rotate 270 → swap.
-  sidecar.ops = [{ type: 'rotate', degrees: 270 }];
-  await sidecarWrite(root, r.id, sidecar);
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 600, height: 800 });
+  await imageDimensions(root, r.id, sidecar);
+  assert.equal(fs.existsSync(bakePath(root, r.id)), true, 'bake should exist after first call');
+  const meta = await sharp(bakePath(root, r.id)).metadata();
+  assert.equal(meta.width, 400);
+  assert.equal(meta.height, 200);
+});
 
-  // flip → dims unchanged (both axes).
-  sidecar.ops = [{ type: 'flip', axis: 'horizontal' }];
-  await sidecarWrite(root, r.id, sidecar);
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 800, height: 600 });
-
-  // resample with only w → height scales proportionally.
-  sidecar.ops = [{ type: 'resample', w: 400, fit: 'inside' }];
-  await sidecarWrite(root, r.id, sidecar);
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 400, height: 300 });
-
-  // resample fit=fill → both dims set absolutely.
-  sidecar.ops = [{ type: 'resample', w: 100, h: 100, fit: 'fill' }];
-  await sidecarWrite(root, r.id, sidecar);
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 100, height: 100 });
-
-  // resample fit=cover (outside) → max scale; withoutEnlargement caps at 1.
-  sidecar.ops = [{ type: 'resample', w: 200, h: 100, fit: 'cover' }];
-  await sidecarWrite(root, r.id, sidecar);
-  // 800×600 → scale = max(200/800, 100/600) = 0.25 → 200×150.
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 200, height: 150 });
-
-  // perspective → corner bbox.
+test('imageDimensions: throws when a perspective op has no bake (unrecoverable)', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload' }
+  });
+  const sidecar = await sidecarRead(root, r.id);
+  assert.ok(sidecar);
   sidecar.ops = [
     {
       type: 'perspective',
@@ -184,5 +231,9 @@ test('imageDimensions: bake-missing fallback handles all op shapes', async (t) =
     }
   ];
   await sidecarWrite(root, r.id, sidecar);
-  assert.deepEqual(await imageDimensions(root, r.id, sidecar), { width: 420, height: 300 });
+  // sharp can't apply a perspective transform — the bake had to
+  // come from the editor's canvas pipeline. Server-side recreate
+  // isn't possible; ensureBake throws so the caller can surface
+  // the corruption instead of serving a misleading image.
+  await assert.rejects(() => imageDimensions(root, r.id, sidecar), /perspective op/);
 });
