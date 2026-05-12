@@ -127,6 +127,19 @@ export const FigureNode = Node.create({
             title: 'Configure figure'
           },
           iconSpec('settings', 16)
+        ],
+        // Destructive at the bottom of the stack so an author
+        // reaching for the safe affordances above can't graze it.
+        [
+          'button',
+          {
+            type: 'button',
+            class: 'rkr-multi-delete',
+            'data-figure-delete': 'true',
+            'aria-label': 'Remove figure',
+            title: 'Remove figure'
+          },
+          iconSpec('trash2', 16)
         ]
       ],
       ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])

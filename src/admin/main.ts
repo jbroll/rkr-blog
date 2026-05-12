@@ -20,28 +20,22 @@ import { startOfflineInfrastructure } from './startup';
 import { mountToolbar } from './toolbar';
 
 function mount(): void {
-  // Mount inside the <article> child so site.css's prose typography
-  // applies to the editable region; outer #rkroll-admin-root keeps
-  // the framed-box look.
+  // Mount inside <article> so site.css prose typography applies; the
+  // outer #rkroll-admin-root keeps the framed-box look.
   const root = $('rkroll-admin-article');
   const toolbar = $('rkroll-admin-toolbar');
   const fileInput = $<HTMLInputElement>('rkr-image-input');
 
-  // Unified figure attribute panel. Two scoped sections inside it:
-  //   data-scope="figure" — figure-level controls (visible when the
-  //     figure is selected but no specific cell is active).
-  //   data-scope="cell"   — per-image controls (visible when the user
-  //     has clicked one image in the figure).
+  // Two scoped dialogs: figureDialog (figure-level) and cellDialog
+  // (per-image, opened when the author clicks one image).
   const figureDialog = $<HTMLDialogElement>('rkr-figure-dialog');
   const cellDialog = $<HTMLDialogElement>('rkr-cell-dialog');
   const attrIds = $<HTMLInputElement>('rkr-figure-ids');
   // Figure-level inputs.
   const attrCaption = $<HTMLInputElement>('rkr-figure-caption');
   const attrMatrixRoot = $<HTMLDivElement>('rkr-figure-matrix');
-  // The matrix control compiles its radio + spinbox state into the
-  // wire-format string the figure attribute carries. commitFigureAttr
-  // is hoisted (function declaration) so the forward reference is
-  // safe; the call still no-ops while `populating` is true.
+  // Matrix control: radio + spinbox → figure attribute wire string.
+  // commitFigureAttr's hoisted declaration makes the forward ref safe.
   const matrixControl = mountMatrixControl(attrMatrixRoot, (raw) =>
     commitFigureAttr('matrix', raw)
   );
@@ -97,16 +91,13 @@ function mount(): void {
   // ?e2e=1 hook exposure internally.
   void startOfflineInfrastructure(editor);
 
-  // Editor-page chrome: <h1>+document.title binding (drives the
-  // dirty marker on the tab title).
+  // <h1>+document.title binding (drives the tab-title dirty marker).
   initPageTitle(editor);
 
   wireDragOverlay($('rkroll-admin-root'));
 
-  // The hidden file input is the local-source entry point. Allow
-  // multi-select so a single +Image → Local pick can populate a whole
-  // figure. Playwright drives this directly via setInputFiles() in
-  // e2e (the source-picker dialog is bypassed entirely in tests).
+  // Multi-select so a single +Image → Local pick can populate a
+  // whole figure. Playwright bypasses the dialog via setInputFiles.
   fileInput.multiple = true;
 
   // Source-picker + insertion plumbing lives in image-insert.ts so
@@ -120,13 +111,10 @@ function mount(): void {
     insertImage: () => inserter.insertNew()
   });
 
-  // selectionUpdate fires on every panel-input commit too, so guard
-  // attribute writes against feedback loops via `populating`.
-  // activeCellIndex: which image of the figure is currently selected
-  // (null until the user clicks one — that applies to single- and
-  // multi-image figures alike, so the figure-level panel is the
-  // default on selection). lastFigurePos detects "different figure"
-  // to reset the cell pick.
+  // `populating` guards attribute writes against the feedback loop
+  // (selectionUpdate fires on every panel commit). activeCellIndex
+  // is the user's per-cell selection (null = figure-level panel).
+  // lastFigurePos detects "different figure" to reset the cell pick.
   let populating = false;
   let activeCellIndex: number | null = null;
   let lastFigurePos: number | null = null;
@@ -240,16 +228,10 @@ function mount(): void {
     editPanel.activateForId(id, () => idList[activeCellIndex ?? -1] === id);
   }
 
-  // In-figure click delegation. Two shapes:
-  //   [data-add-image] — the "+" cell that opens the source picker in
-  //                       append mode (append to this figure's ids).
-  //   [data-figure-config] — the gear button that opens the figure-
-  //                       level config dialog. Selection-update has
-  //                       already populated its inputs.
-  //   img[data-cell-index] — a thumb; click opens the per-image
-  //                       dialog scoped to that cell.
-  // ProseMirror handles click-to-select-figure on its own (atom node),
-  // so by the time this bubble handler runs the figure is active.
+  // In-figure click delegation. Branches: data-add-image (append
+  // picker), data-figure-config (gear), data-figure-delete (trash),
+  // img[data-cell-index] (per-cell dialog). ProseMirror has already
+  // set NodeSelection on the figure by the time this bubble fires.
   editor.view.dom.addEventListener('click', (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target) return;
@@ -262,6 +244,46 @@ function mount(): void {
     if (target.closest('[data-figure-config]')) {
       ev.preventDefault();
       if (!figureDialog.open) figureDialog.showModal();
+      return;
+    }
+    if (target.closest('[data-figure-delete]')) {
+      ev.preventDefault();
+      if (
+        !window.confirm(
+          'Remove this figure from the post? Image files stay on disk; this post stops referencing them.'
+        )
+      ) {
+        return;
+      }
+      // Find the figure node whose DOM is the clicked placeholder.
+      // Walking the doc + matching via view.nodeDOM is more robust
+      // than posAtDOM here: for atom nodes posAtDOM returns the
+      // position just before/after the atom (not on it), and we'd
+      // have to disambiguate which side. Direct DOM-equality match
+      // is unambiguous.
+      const placeholder = target.closest('.rkr-figure-placeholder');
+      if (!placeholder) return;
+      let figurePos: number | null = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (figurePos !== null) return false;
+        if (node.type.name === 'figure' && editor.view.nodeDOM(pos) === placeholder) {
+          figurePos = pos;
+          return false;
+        }
+        return true;
+      });
+      if (figurePos === null) return;
+      // Blur in the same chain so the editor doesn't auto-restore
+      // focus to the article (which would otherwise pop the soft
+      // keyboard on touch — same path as the per-cell close fix).
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: figurePos, to: figurePos + 1 })
+        .blur()
+        .run();
+      // selectionUpdate fires off-figure: activeCellIndex clears
+      // and any open dialogs close via the existing !isFigure branch.
       return;
     }
     if (!target.matches('img[data-cell-index]')) return;
@@ -279,30 +301,20 @@ function mount(): void {
     populateImageEditForActiveCell(idList);
   });
 
-  // Dialog teardown: any close path (✕ button, ESC, or backdrop click
-  // via the listener below) clears the active cell so the next
-  // figure-level edit doesn't keep stale per-cell state. The dialog's
-  // <form method="dialog"> submit fires `close` natively.
+  // Any close path (✕, ESC, backdrop, Save, Delete) clears the
+  // active cell so the next figure-level edit isn't stale.
   cellDialog.addEventListener('close', () => {
     if (activeCellIndex === null) return;
     const figurePos = lastFigurePos;
     activeCellIndex = null;
     clearActiveCellHighlight();
     editPanel.deactivate();
-    // Two-step cleanup so the close path doesn't leave the editor
-    // in a state that touch browsers misread as "user has an active
-    // text selection":
-    //   1. Collapse the figure's NodeSelection to a TextSelection
-    //      just past the atom. Without this, ProseMirror's selection
-    //      rectangle paints across the placeholder's bounding box
-    //      when focus returns to the contenteditable article, and
-    //      the surrounding whitespace gets picked up by the OS
-    //      action bar (cut / copy / paste pop-up).
-    //   2. Blur the editor. The native <dialog> close hands focus
-    //      back to the previously-focused element (the article);
-    //      blurring redirects it to document.body so the soft
-    //      keyboard doesn't auto-open. The author clicks back into
-    //      the prose when they want to type.
+    // On close: collapse the NodeSelection past the atom (so no
+    // selection rect paints across the placeholder's whitespace)
+    // and blur the editor (so the dialog's auto focus-return doesn't
+    // reopen the soft keyboard). Both engine-neutral; touch browsers
+    // misread either signal as "user has a selection in editable
+    // content" and pop the cut/copy/paste action bar otherwise.
     if (figurePos !== null) {
       editor
         .chain()
@@ -320,10 +332,8 @@ function mount(): void {
   cellDialog.addEventListener('click', (ev) => {
     if (ev.target === cellDialog) cellDialog.close();
   });
-  // Figure dialog uses the same backdrop-click-to-close pattern; no
-  // `close` listener needed since the dialog state doesn't shadow
-  // anything in the editor (no activeFigureIndex equivalent — the
-  // ProseMirror selection IS the source of truth for "which figure").
+  // Figure dialog: same backdrop-close, no `close` listener — its
+  // state is just the editor's NodeSelection on the figure.
   figureDialog.addEventListener('click', (ev) => {
     if (ev.target === figureDialog) figureDialog.close();
   });
@@ -382,10 +392,8 @@ function mount(): void {
     commitFigureAttr('alts', spliceCellSlot(cur, ',', activeCellIndex, attrCellAlt.value.trim()));
   });
 
-  // Remove the active cell from the figure. The image bytes + sidecar
-  // stay on disk (other posts may reference the same id); only this
-  // figure's reference is dropped. Confirm before splicing so a stray
-  // click can't blow away unsaved per-cell edits or attributes.
+  // Remove the active cell from the figure (image bytes + sidecar
+  // stay on disk; only this figure's reference is dropped).
   attrCellDeleteBtn.addEventListener('click', () => {
     if (activeCellIndex === null || !editor.isActive('figure')) return;
     if (
@@ -410,10 +418,8 @@ function mount(): void {
       alts: alts.join(','),
       captions: captions.join('|')
     };
-    // setNodeMarkup directly: walking the doc to find the figure by
-    // ids-set avoids the selection-anchor flakiness of the chain
-    // helper, which silently no-ops when ProseMirror's selection has
-    // drifted off the atom (e.g. after a focus-stealing dialog click).
+    // Walk the doc + setNodeMarkup: avoids the selection-anchor
+    // flakiness of the chain helper after a dialog focus shift.
     const preIds = attrs.ids ?? '';
     editor.commands.command(({ tr, state, dispatch }) => {
       let target: number | null = null;

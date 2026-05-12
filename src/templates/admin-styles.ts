@@ -73,10 +73,8 @@ export const ADMIN_CSS = `
     -moz-user-select: none; -ms-user-select: none;
     -webkit-touch-callout: none; touch-action: pan-y;
   }
-  /* Editor mode label ("New post" / "Edit post"). Not a content
-     header — the post's title goes in the input field below — so
-     it's deliberately small and muted, just enough to identify the
-     surface and the create-vs-edit mode at a glance. */
+  /* Editor mode label ("New post" / "Edit post") — muted heading
+     above the title input, identifies the create-vs-edit mode. */
   #rkr-page-title {
     font-size: 1rem;
     font-weight: 500;
@@ -85,16 +83,11 @@ export const ADMIN_CSS = `
     letter-spacing: 0.02em;
     text-transform: uppercase;
   }
-  /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
-     text / panel backgrounds so dark mode actually flips through. The
-     fallbacks (after the comma) cover the case where site.css fails
-     to load. */
-  /* Sticky toolbar: stays in flow under the property box at scroll-
-     top, then pins to the viewport edge once the user scrolls into
-     the article body. The author keeps Bold / Save / etc. one click
-     away wherever they are in a long post. Background must be opaque
-     so the editor prose doesn't bleed through; the shadow only
-     shows once the toolbar is actually pinned (i.e. when something
+  /* Admin chrome reuses site.css --rkr-* tokens; fallbacks after the
+     comma cover site.css failing to load. */
+  /* Sticky toolbar: pins to the viewport edge once scrolled into the
+     article body. Background opaque so prose doesn't bleed through;
+     the shadow only shows once pinned (when something
      has scrolled behind it), giving a subtle elevation cue. The
      <dialog> overlays sit in the top layer, so they always render
      above this regardless of z-index. Single-row layout: wrap was
@@ -291,7 +284,8 @@ export const ADMIN_CSS = `
     gap: .35rem; align-self: start;
   }
   #rkroll-admin-root button.rkr-multi-add,
-  #rkroll-admin-root button.rkr-multi-config {
+  #rkroll-admin-root button.rkr-multi-config,
+  #rkroll-admin-root button.rkr-multi-delete {
     display: inline-flex;
     align-items: center; justify-content: center;
     width: 1.85rem; height: 1.85rem;
@@ -309,7 +303,13 @@ export const ADMIN_CSS = `
     border-style: solid;
   }
   #rkroll-admin-root button.rkr-multi-add svg,
-  #rkroll-admin-root button.rkr-multi-config svg { display: block; }
+  #rkroll-admin-root button.rkr-multi-config svg,
+  #rkroll-admin-root button.rkr-multi-delete svg { display: block; }
+  #rkroll-admin-root button.rkr-multi-delete { color: #c00; }
+  #rkroll-admin-root button.rkr-multi-delete:hover {
+    color: #c00; border-color: #c00; border-style: solid;
+    background: color-mix(in srgb, #c00 8%, transparent);
+  }
   /* Browser-native :out-of-range styling for autoplay (input has
      min=0/max=60 attrs). Gives the author a visual cue that >60 will
      be silently clamped on save. */

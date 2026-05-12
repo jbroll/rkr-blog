@@ -547,6 +547,88 @@ test('editor: per-cell delete is a no-op when confirm is declined', async ({ pag
   expect(after).toBe(id);
 });
 
+// Figure-level delete: the trash icon in the figure's right-edge
+// action stack removes the whole figure node from the doc after a
+// confirm. Image bytes + sidecars stay on disk — only the post's
+// ::figure block is dropped.
+test('editor: figure delete removes the whole figure node from the doc', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e figure delete');
+  await setSlug(page, `e2e-figdel-${Date.now()}`);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'figdel.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded figdel\.png/, {
+    timeout: 10_000
+  });
+  // Pre-state: the doc has exactly one figure.
+  const figuresBefore = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    let count = 0;
+    ed?.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') count++;
+    });
+    return count;
+  });
+  expect(figuresBefore).toBe(1);
+
+  page.once('dialog', (d) => void d.accept());
+  await page.locator('button[data-figure-delete]').click();
+
+  // Post-state: the figure is gone. Read via __rkrEditor since the
+  // figure dialog / hidden #rkr-figure-ids mirror no longer applies.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor })
+          .__rkrEditor;
+        let count = 0;
+        ed?.state.doc.descendants((node) => {
+          if (node.type.name === 'figure') count++;
+        });
+        return count;
+      })
+    )
+    .toBe(0);
+});
+
+// Figure-level delete cancel: declining the confirm leaves the
+// figure untouched.
+test('editor: figure delete is a no-op when confirm is declined', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e figdel cancel');
+  await setSlug(page, `e2e-figdel-cancel-${Date.now()}`);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'figdel-cancel.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded figdel-cancel\.png/, {
+    timeout: 10_000
+  });
+
+  page.once('dialog', (d) => void d.dismiss());
+  await page.locator('button[data-figure-delete]').click();
+
+  const figuresAfter = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    let count = 0;
+    ed?.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') count++;
+    });
+    return count;
+  });
+  expect(figuresAfter).toBe(1);
+});
+
 // Source-picker entry points: the toolbar's +Image button and each
 // figure's "+ Add image" button both route through the same picker
 // dialog. The Local branch sets pendingInsertMode (new vs append)
