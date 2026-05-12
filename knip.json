@@ -12,6 +12,7 @@
     "src/cli/jobs.ts",
     "src/admin/posts-list.ts",
     "src/site/carousel.ts",
+    "src/site/copy-link.ts",
     "src/site/img-retry.ts",
     "src/site/sw.ts",
     "src/site/sw-register.ts",

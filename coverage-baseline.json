@@ -192,6 +192,10 @@
     "src/lib/matrix.ts": {
       "linesFound": 17,
       "linesHit": 12
+    },
+    "src/site/copy-link.ts": {
+      "linesFound": 7,
+      "linesHit": 7
     }
   }
 }

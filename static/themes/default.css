@@ -365,6 +365,39 @@ article > header h1 {
   letter-spacing: -0.02em;
   margin: 0 0 .5rem;
 }
+/* Copy-link icon sitting flush after the post title. Inherits the
+   title's font-size-down to keep it visually balanced; padding lets
+   the click target meet the WCAG 24x24 minimum. The data-state
+   attribute is set by /static/site/copy-link.js for ~1.5s after a
+   click — green for a successful copy, red for a clipboard error;
+   matches the editor's rkr-copy-link affordance so the gesture is
+   the same wherever the author lives. */
+.rkr-post-copylink {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--rkr-radius);
+  color: var(--rkr-muted);
+  padding: 0.25rem 0.4rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.rkr-post-copylink:hover,
+.rkr-post-copylink:focus-visible {
+  color: var(--rkr-link);
+  border-color: var(--rkr-rule);
+}
+.rkr-post-copylink[data-state='copied'] {
+  color: #2ea44f;
+  border-color: color-mix(in srgb, #2ea44f 30%, transparent);
+}
+.rkr-post-copylink[data-state='error'] {
+  color: #cf222e;
+  border-color: color-mix(in srgb, #cf222e 30%, transparent);
+}
+
 /* Subtitle: under the h1, muted, slightly larger than body so it
    reads as a deck head rather than a stray paragraph. */
 .rkr-post-subtitle {

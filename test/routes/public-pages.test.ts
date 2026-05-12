@@ -128,7 +128,7 @@ test('GET /:slug renders the post body to HTML', async (t) => {
   assert.equal(res.statusCode, 200);
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<title>Hello world — [^<]+<\/title>/);
-  assert.match(res.body, /<h1>Hello world<\/h1>/);
+  assert.match(res.body, /<h1>Hello world<button[^>]*class="rkr-post-copylink"/);
   assert.match(res.body, /<strong>bold<\/strong>/);
   assert.match(res.body, /<a href="https:\/\/example.com">link<\/a>/);
   assert.match(res.body, /<h2>A heading<\/h2>/);
