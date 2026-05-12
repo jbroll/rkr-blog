@@ -13,6 +13,7 @@
 // ignored. The directive should be cheap to author.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { dimensionsAfterOps } from '../lib/ops-validation.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import {
@@ -174,8 +175,11 @@ async function resolveAutoAspect(
   if (aspectCss !== null) return aspectCss;
   const firstSidecar = await loadFirstSidecar(cells, ctx);
   if (!firstSidecar) return null;
-  const w = firstSidecar.metadata.width ?? 1;
-  const h = firstSidecar.metadata.height ?? 1;
+  // Use post-ops dimensions: a 4000×3000 source cropped to 4000×1500
+  // must lay out at 8:3, not the original 4:3 stored in metadata.
+  const { width, height } = dimensionsAfterOps(firstSidecar.metadata, firstSidecar.ops);
+  const w = width || 1;
+  const h = height || 1;
   return `${w}/${h}`;
 }
 

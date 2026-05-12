@@ -6,6 +6,7 @@
 // machinery in exactly one place.
 
 import { cacheKey } from './hash.ts';
+import { dimensionsAfterOps } from './ops-validation.ts';
 import { listSidecarIds } from './posts.ts';
 import type { OutputFormat } from './render.ts';
 import type { Sidecar } from './sidecar-types.ts';
@@ -218,8 +219,13 @@ function wrapLightboxAnchor(
   });
   const lbUrl = `/img/${id}.${lbHash}.${lbFormat}`;
 
-  const srcW = sidecar.metadata.width ?? widest.w;
-  const srcH = sidecar.metadata.height ?? Math.round(widest.w / 1.5);
+  // Post-ops dimensions: PhotoSwipe's data-pswp-width/height must
+  // match the actual pixels at the lightbox URL (which renders ops +
+  // resize). A cropped or rotated image otherwise opens in the
+  // lightbox at the wrong aspect.
+  const effective = dimensionsAfterOps(sidecar.metadata, sidecar.ops);
+  const srcW = effective.width || widest.w;
+  const srcH = effective.height || Math.round(widest.w / 1.5);
   const lbW = Math.min(widest.w, srcW);
   const lbH = Math.max(1, Math.round(lbW * (srcH / srcW)));
 
@@ -230,11 +236,14 @@ function wrapLightboxAnchor(
   ].join('\n');
 }
 
-/** Aspect ratio (w/h) as a 4-decimal string from sidecar metadata.
- * Used in the `--aspect` CSS variable on gallery/carousel/diptych cells. */
+/** Aspect ratio (w/h) as a 4-decimal string from sidecar metadata
+ * adjusted by sidecar.ops — a cropped/rotated image lays out at its
+ * displayed aspect, not the raw original's. Used in the `--aspect`
+ * CSS variable on gallery/carousel/diptych cells. */
 export function pictureAspect(sidecar: Sidecar): string {
-  const w = sidecar.metadata.width ?? 1;
-  const h = sidecar.metadata.height ?? 1;
+  const { width, height } = dimensionsAfterOps(sidecar.metadata, sidecar.ops);
+  const w = width || 1;
+  const h = height || 1;
   return (w / h).toFixed(4);
 }
 
