@@ -34,6 +34,7 @@ ${ADMIN_CSS}
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: true })}
+<div class="rkr-admin-content">
 <h1 id="rkr-page-title">New post</h1>
 <div class="rkr-meta">
   <label for="rkr-title">Title</label>       <input id="rkr-title" type="text"/>
@@ -189,6 +190,7 @@ ${siteHead(data.site, { isAdmin: true })}
 </div>
 <div id="rkroll-admin-status"></div>
 <input id="rkr-image-input" type="file" accept="image/*" hidden/>
+</div>
 <script type="module" src="${data.bundleUrl}"></script>
 </body>
 </html>

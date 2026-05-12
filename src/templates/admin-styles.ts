@@ -3,15 +3,20 @@
 // scoped under #rkroll-admin-root / its sibling overlays.
 
 export const ADMIN_CSS = `
-  /* Override site.css's body reset so the admin chrome keeps its own
-     layout. The editor's prose preview lives inside <article> below,
-     where site.css's prose rules apply naturally. */
+  /* The editor body fills the viewport like the public pages so the
+     site-head strip can span edge-to-edge. The admin content sits
+     inside .rkr-admin-content (added in admin.ts) which carries the
+     56rem / 2rem-margin constraint the body used to. The editable
+     prose preview lives inside <article> below, where site.css's
+     prose rules apply naturally. */
   body {
+    background: var(--rkr-bg, #fff);
+    color: var(--rkr-text, #1a1a1a);
+  }
+  .rkr-admin-content {
     max-width: 56rem;
     margin: 2rem auto;
     padding: 0 1rem;
-    background: var(--rkr-bg, #fff);
-    color: var(--rkr-text, #1a1a1a);
   }
   /* Single font-family rule for all admin chrome (toolbar buttons,
      status, meta, panels). Site.css would otherwise impose its serif
