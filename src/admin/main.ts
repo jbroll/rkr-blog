@@ -1,11 +1,11 @@
-// Admin SPA: TipTap editor wired to /admin/upload (insert image) and
-// /admin/posts (save). proseToMarkdown converts on save before POST;
-// the server's /admin/posts persists the markdown after validation.
+// Admin SPA: TipTap editor wired to /admin/upload + /admin/posts.
 
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-// CSS side-effect import — esbuild bundles into static/admin/main.js.
+// Side-effect imports: cropperjs CSS, plus the showModal patch in
+// dialog-focus.ts (stops the mobile OS keyboard popping on close).
 import 'cropperjs/dist/cropper.css';
+import './dialog-focus';
 
 import { scheduleAttrCommit } from './attr-commit';
 import { hasWebglSupport } from './canvas-loaders';

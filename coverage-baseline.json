@@ -224,6 +224,10 @@
     "src/admin/attr-commit.ts": {
       "linesFound": 11,
       "linesHit": 10
+    },
+    "src/admin/dialog-focus.ts": {
+      "linesFound": 8,
+      "linesHit": 8
     }
   }
 }
