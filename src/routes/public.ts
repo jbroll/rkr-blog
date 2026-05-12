@@ -154,7 +154,10 @@ export default async function publicRoutes(
   fastify.get<{ Params: { slug: string } }>('/:slug', async (req, reply) => {
     const { slug } = req.params;
     const row = readIndexedPostBySlug(db, slug);
-    if (!row || row.status !== 'published') {
+    // Authed visitors see drafts (matches the index page, which links
+    // drafts straight to /:slug from the admin table). Anonymous
+    // visitors keep the published-only filter.
+    if (!row || (row.status !== 'published' && !req.user)) {
       return reply.code(404).type('text/html').send('<h1>not found</h1>');
     }
 

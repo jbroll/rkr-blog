@@ -279,6 +279,17 @@ test('GET / authed: includes drafts + admin table + no-store header', async (t) 
   // SW honours no-store on the response and skips caching so a
   // post-action redirect doesn't shadow the next load.
   assert.match(res.headers['cache-control'] as string, /no-store/);
+
+  // The admin table links drafts straight to /:slug; the detail
+  // route must honor auth and render the draft rather than 404.
+  const draftRes = await app.inject({
+    method: 'GET',
+    url: '/draft',
+    headers: { authorization: 'Bearer test-public-admin-token' }
+  });
+  assert.equal(draftRes.statusCode, 200);
+  assert.match(draftRes.body, /Drafty/);
+  assert.match(draftRes.headers['cache-control'] as string, /no-store/);
 });
 
 // Anonymous GET / must NOT carry no-store; SWR caching is the
