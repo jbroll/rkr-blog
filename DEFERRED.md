@@ -437,25 +437,6 @@ value (e.g. "scheduled").
 
 ## Local-first architecture review (rosy-tickling-meadow plan)
 
-### Cross-tab `ensureLocalState` reload race
-**Source.** Local-first correctness audit (Explore agent), Apr 2026.
-
-**What.** `src/admin/image-edit.ts:80-99` `ensureLocalState`
-prefers OPFS persist (`image-state/<id>.json`) over the server's
-`/admin/sidecar/<id>/meta`. Two tabs editing the same image: tab A
-commits + persists, tab B was already open with cached in-memory
-state. The cross-tab BroadcastChannel only carries drain status,
-not image-state. Tab B's next save can clobber tab A's commit.
-
-**Why deferred.** Limited blast radius (same-browser cross-tab,
-same image, simultaneous edits). Pre-existing — not introduced by
-local-first. A real fix wants ETag/version reconciliation on
-ensureLocalState, which is a non-trivial server contract change.
-
-**Trigger.** Any user report of "I edited an image in two tabs and
-lost a change", or when commit-image-edit grows a version field on
-the server side.
-
 ### Pre-resize coord divergence — narrowed to HEIC-on-non-Safari
 **Source.** Local-first correctness audit, Apr 2026. Mostly
 addressed by client-side ingest resize (`src/admin/ingest-resize-client.ts`,
