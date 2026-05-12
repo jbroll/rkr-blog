@@ -82,7 +82,6 @@ export const FigureNode = Node.create({
         'data-cell-index': String(i)
       }
     ]);
-    const matrixLabel = attrs.matrix ? attrs.matrix : `1x${idList.length || 1}`;
     // The "+" affordance sits BELOW the thumb grid (not as a grid
     // cell) so the figure's editable click-area is the images
     // themselves, not an empty slot at the article's geometric
@@ -96,7 +95,6 @@ export const FigureNode = Node.create({
         'data-matrix': attrs.matrix ?? '',
         'data-count': String(idList.length)
       }),
-      ['div', { class: 'rkr-multi-label' }, `figure ${matrixLabel} (${idList.length})`],
       ['div', { class: 'rkr-multi-thumbs' }, ...thumbs],
       [
         'div',

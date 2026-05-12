@@ -318,15 +318,10 @@ export const ADMIN_CSS = `
     margin: 1rem 0; padding: .5rem; border: 1px dashed var(--rkr-rule); border-radius: 4px;
     background: color-mix(in srgb, var(--rkr-text) 3%, var(--rkr-bg));
   }
-  #rkroll-admin-root .rkr-multi > .rkr-multi-label,
   #rkroll-admin-root .rkr-multi > .rkr-multi-thumbs { grid-column: 1; }
   #rkroll-admin-root .rkr-multi > .rkr-multi-actions {
     grid-column: 2;
     grid-row: 1 / -1;
-  }
-  #rkroll-admin-root .rkr-multi-label {
-    font-family: ui-monospace, monospace; font-size: .8rem; color: var(--rkr-muted); margin-bottom: .25rem;
-    text-transform: uppercase; letter-spacing: .05em;
   }
   /* 3-col grid; rows grow to fit the tallest image in the row so
      aspect ratio is preserved. align-items: start keeps shorter

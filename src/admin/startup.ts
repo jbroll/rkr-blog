@@ -89,16 +89,23 @@ async function runStart(editor: Editor): Promise<void> {
     const slugParam = params.get('slug');
     if (slugParam) {
       // pinPost downloads the post bundle (manifest + originals + side-
-      // cars). On a long post this is multi-second; show a loading
-      // status so the empty form fields read as "fetching" rather than
-      // "the editor is broken".
-      setStatus(`loading /${slugParam}…`);
+      // cars). On a long post this is multi-second; reuse the page-
+      // title h1 (the "New post" / "Edit post" mode label) to show
+      // "loading /slug…" so the author has visible feedback in the
+      // exact spot the final "Edit post" will land — no separate
+      // banner needed. seedFormFields() calls refreshPageTitle()
+      // after writing the manifest, which flips the label to the
+      // post-load state.
+      const pageTitleEl = document.getElementById('rkr-page-title');
+      if (pageTitleEl) pageTitleEl.textContent = `loading /${slugParam}…`;
       try {
         const { manifest } = await pinPost(slugParam);
         seedFormFields(manifest);
-        setStatus(`loaded /${slugParam}`);
       } catch (err) {
         setStatus(`could not load /${slugParam}: ${(err as Error).message}`);
+        // Failed load → revert the h1 to the default state so the
+        // "loading …" string doesn't get stuck.
+        if (pageTitleEl) pageTitleEl.textContent = 'New post';
       }
     }
     const draftId = await getOrCreateDraftId();
