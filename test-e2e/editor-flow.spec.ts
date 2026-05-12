@@ -306,6 +306,63 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
 
+// After a crop is applied, the editor's <img> thumb should swap from
+// /admin/preview/<id> to a blob: URL produced by the canvas pipeline
+// (canvas-loaders refreshImagePreview → setEditorImageSrc). The
+// reporter sees no visual change after crop, suggesting either the
+// pipeline isn't running or the <img> isn't being updated.
+test('editor: crop save updates the thumb src to a blob URL', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e crop preview');
+  await setSlug(page, `e2e-crop-preview-${Date.now()}`);
+
+  // Use a slightly larger image so the cropper has room to operate.
+  const PNG_4X4 = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 4;
+    c.height = 4;
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#1a4f7f';
+      ctx.fillRect(0, 0, 4, 4);
+    }
+    return c.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+  });
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'crop-preview.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_4X4, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded crop-preview/, {
+    timeout: 10_000
+  });
+
+  // Pre-state: thumb src is the /admin/preview/<id> redirect.
+  const thumb = page.locator('img[data-cell-index="0"]');
+  const beforeSrc = await thumb.getAttribute('src');
+  expect(beforeSrc).toMatch(/\/admin\/preview\//);
+
+  // Open the per-cell dialog + cropper.
+  await thumb.click();
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await page.locator('#rkr-image-crop-btn').click();
+  const dialog = page.locator('#rkr-crop-modal');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#rkr-crop-status')).toContainText(/×/, { timeout: 5_000 });
+
+  // Save the crop. cropper's autoCropArea:1 means a full-extent crop
+  // is auto-selected; the save commits whatever's there as an op.
+  await page.locator('#rkr-crop-save').click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^crop /, { timeout: 5_000 });
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
+
+  // Post-state: thumb src should now be a blob: URL.
+  await expect.poll(async () => thumb.getAttribute('src'), { timeout: 5_000 }).toMatch(/^blob:/);
+});
+
 // Per-cell editing in a multi-image figure: the image-edit panel should
 // hide on a fresh multi-image selection (no cell active), reveal when
 // the author clicks a thumb, and target that cell's id on subsequent

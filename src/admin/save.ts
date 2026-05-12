@@ -76,9 +76,11 @@ export async function handleSave(editor: Editor): Promise<void> {
       // the next save's payload includes it.
       $<HTMLInputElement>('rkr-slug').value = result.slug;
       await updateMeta(draftId, { slug: result.slug, lastSyncedAt: result.updatedAt });
-      // Status carries a permalink so the author can verify the
-      // rendered post in one click; markClean drops the dirty dot
-      // from the browser tab title.
+      // Flush the SW pages cache so the "view →" click (and any
+      // subsequent /:slug navigation in this tab or another) doesn't
+      // serve the pre-save HTML via the SWR cache. Best-effort —
+      // anonymous browsers without a controlling SW just skip.
+      navigator.serviceWorker?.controller?.postMessage({ type: 'rkr-pages-flush' });
       setStatusWithLink(`saved /${result.slug}`, `/${result.slug}`, 'view →');
       markClean();
       return;

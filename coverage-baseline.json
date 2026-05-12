@@ -7,11 +7,11 @@
     },
     "src/admin/canvas.ts": {
       "linesFound": 126,
-      "linesHit": 29
+      "linesHit": 36
     },
     "src/admin/cropper-modal.ts": {
       "linesFound": 31,
-      "linesHit": 22
+      "linesHit": 25
     },
     "src/admin/dom.ts": {
       "linesFound": 11,
@@ -83,7 +83,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 30,
-      "linesHit": 27
+      "linesHit": 26
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -103,7 +103,7 @@
     },
     "src/lib/canvas-math.ts": {
       "linesFound": 66,
-      "linesHit": 12
+      "linesHit": 15
     },
     "src/lib/content-id.ts": {
       "linesFound": 6,
@@ -111,7 +111,7 @@
     },
     "src/lib/image-edit-ops.ts": {
       "linesFound": 24,
-      "linesHit": 7
+      "linesHit": 9
     },
     "src/lib/outbox-types.ts": {
       "linesFound": 8,
