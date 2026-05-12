@@ -62,11 +62,12 @@ export const ADMIN_CSS = `
   #rkroll-admin-article img, .rkr-cell-preview, dialog img {
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
+  /* Commit any touch-drag in the editor to vertical scroll, so
+     Firefox Android stops popping the OS action bar mid-scroll with
+     an empty range. Long-press-to-select still works (not a drag). */
+  #rkroll-admin-article { touch-action: pan-y; }
   /* Figure placeholder is inside contenteditable="true"; without
-     user-select:none its grid gaps become text-selectable.
-     touch-action:pan-y commits the gesture to vertical scrolling, so
-     Firefox Android doesn't interpret a scroll's initial touch-drag
-     as a select-drag and pop the OS action bar mid-scroll. */
+     user-select:none its grid gaps become text-selectable. */
   #rkroll-admin-article .rkr-multi,
   #rkroll-admin-article .rkr-multi * {
     user-select: none; -webkit-user-select: none;
