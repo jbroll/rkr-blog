@@ -65,6 +65,13 @@ export async function importPost(post: WpPost, opts: ImportOpts): Promise<Import
         const result = await ingestStream({
           stream,
           siteRoot: opts.siteRoot,
+          // passthrough: bytes from the source WordPress blog land on
+          // disk byte-identical. The source already served compressed
+          // images (often JPEG through WP's media pipeline);
+          // re-encoding them to WebP at ingest would be a generation-2
+          // lossy step on archive content. Skip the resize + EXIF
+          // orientation bake so the import truly mirrors the source.
+          passthrough: true,
           source: {
             kind: 'wordpress',
             url: masterUrl,

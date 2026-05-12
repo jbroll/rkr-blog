@@ -12,6 +12,8 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 import { parsePost } from '../../src/lib/content.ts';
+import { originalPath } from '../../src/lib/originals.ts';
+import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { importPost } from '../../src/lib/wp-import.ts';
 import type { WpPost } from '../../src/lib/wp-import-types.ts';
 import { fetchPost, listPosts } from '../../src/lib/wp-rest.ts';
@@ -160,6 +162,44 @@ test('importPost: 3-image figure → ::figure matrix=1x3', async (t) => {
     result.markdown,
     /::figure\{ids="[0-9a-f]{64},[0-9a-f]{64},[0-9a-f]{64}" matrix=1x3/
   );
+});
+
+test('importPost: image bytes land on disk byte-identical (passthrough)', async (t) => {
+  // Mirroring an existing WP blog (e.g. roll-along.rkroll.com) must NOT
+  // re-encode the archive JPEGs into lossy WebP at ingest — those
+  // images already went through the source's compression pipeline,
+  // and a generation-2 lossy step would visibly degrade them. The WP
+  // importer threads `passthrough: true` into ingestStream, which
+  // skips both the resize/re-encode and the EXIF orientation bake.
+  const root = freshSiteRoot(t);
+  const sourceBytes = await makeJpegSized(640, 480);
+  const fetchImage = async () => Readable.from([sourceBytes]);
+
+  const result = await importPost(
+    makePost(`<figure class="wp-block-image"><img src="https://example.com/x.jpg"/></figure>`),
+    { siteRoot: root, fetchImage }
+  );
+
+  assert.equal(result.imagesIngested.length, 1);
+  const id = result.imagesIngested[0] as string;
+  // On-disk extension matches the upload (jpg), not webp.
+  const onDiskPath = originalPath(root, id, 'jpg');
+  assert.ok(fs.existsSync(onDiskPath), `expected ${onDiskPath} to exist`);
+  const onDisk = fs.readFileSync(onDiskPath);
+  assert.equal(
+    Buffer.compare(onDisk, sourceBytes),
+    0,
+    'WP-ingested bytes must reach disk byte-identical to the source'
+  );
+
+  const sidecar = await sidecarRead(root, id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.source.kind, 'wordpress');
+  assert.equal(sidecar.source.resize?.reason, 'import-passthrough');
+  assert.equal(sidecar.source.resize?.encoding, 'passthrough');
+  assert.equal(sidecar.source.resize?.applied, false);
+  // metadata.format reflects the bytes on disk → jpeg, not webp.
+  assert.equal(sidecar.metadata.format, 'jpeg');
 });
 
 test('importPost: legacy theme figure (no wp-block-image class) still ingests', async (t) => {

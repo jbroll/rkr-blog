@@ -64,6 +64,12 @@ export interface IngestArgs {
   source: IngestSource;
   /** Override timestamp for tests; default new Date().toISOString(). */
   now?: string;
+  /** Skip the ingest-time resize/re-encode AND the EXIF orientation
+   * bake — write the upload bytes to disk byte-identical. Set by the
+   * WordPress importer so archive content from an existing blog isn't
+   * generation-2 lossy-recompressed. Not exposed to interactive
+   * uploads (admin, URL import, gdrive, onedrive). */
+  passthrough?: boolean;
 }
 
 export interface IngestResult {
@@ -80,7 +86,8 @@ export async function ingestStream({
   stream,
   siteRoot,
   source,
-  now
+  now,
+  passthrough
 }: IngestArgs): Promise<IngestResult> {
   // Operator-tuned defaults from /admin/settings live in
   // <siteRoot>/config/site.json. Read it via the siteRoot arg rather
@@ -162,6 +169,24 @@ export async function ingestStream({
     ext = existingOriginal.ext;
     finalPath = existingOriginal.path;
     await safeUnlink(tmpPath);
+  } else if (passthrough) {
+    // WordPress importer path: keep upload bytes byte-identical on
+    // disk. Skip orientation bake + resize/re-encode entirely. Trades
+    // EXIF-orientation correctness for archive fidelity — the WP
+    // importer's job is to mirror an existing blog, not to "improve"
+    // images that already went through a render pipeline at the
+    // source.
+    ext = FORMAT_TO_EXT[uploadFormat] as string;
+    const finalDir = path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4));
+    finalPath = path.join(finalDir, `${id}.${ext}`);
+    await fs.promises.mkdir(finalDir, { recursive: true });
+    await fs.promises.rename(tmpPath, finalPath);
+    storedHash = id; // upload bytes == on-disk bytes, so storedHash == id
+    resizeRecord = {
+      applied: false,
+      reason: 'import-passthrough',
+      encoding: 'passthrough'
+    };
   } else {
     // Normalize EXIF Orientation so on-disk pixels match display orientation.
     // Phone portraits typically arrive as encoded landscape with orientation=6

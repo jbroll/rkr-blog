@@ -5,14 +5,18 @@
 /** Audit record of the ingest-time resize/re-encode step that ran on
  * the upload bytes (see lib/ingest-resize.ts). Present on every
  * sidecar written after that feature shipped; older sidecars lack it
- * and consumers should treat absence as "untouched original". */
+ * and consumers should treat absence as "untouched original".
+ *
+ * The maxDim/scalePct/webpQuality fields are absent when no resize
+ * pipeline ran at all — e.g. import-passthrough on the WP importer,
+ * where the upload bytes are written to disk verbatim. */
 export interface SidecarResizeRecord {
   /** True only when actual pixel shrink occurred. */
   applied: boolean;
-  reason: 'gif-animated' | 'svg' | 'no-shrink-needed' | 'resized';
-  maxDim: number;
-  scalePct: number;
-  webpQuality: number;
+  reason: 'gif-animated' | 'svg' | 'no-shrink-needed' | 'resized' | 'import-passthrough';
+  maxDim?: number;
+  scalePct?: number;
+  webpQuality?: number;
   encoding: 'lossy' | 'lossless' | 'passthrough';
 }
 
