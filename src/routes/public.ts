@@ -54,6 +54,7 @@ import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderIndexPage } from '../templates/index.ts';
+import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
 import figureWidget from '../widgets/figure.ts';
 
@@ -158,7 +159,13 @@ export default async function publicRoutes(
     // drafts straight to /:slug from the admin table). Anonymous
     // visitors keep the published-only filter.
     if (!row || (row.status !== 'published' && !req.user)) {
-      return reply.code(404).type('text/html').send('<h1>not found</h1>');
+      setPublicSecurityHeaders(reply);
+      const isAdmin = !!req.user;
+      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+      return reply
+        .code(404)
+        .type('text/html; charset=utf-8')
+        .send(renderNotFoundPage({ site, isAdmin }));
     }
 
     const fullPath = path.join(siteRoot, row.path);

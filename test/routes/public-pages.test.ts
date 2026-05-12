@@ -134,19 +134,27 @@ test('GET /:slug renders the post body to HTML', async (t) => {
   assert.match(res.body, /<h2>A heading<\/h2>/);
 });
 
-test('GET /:slug 404s for a draft post', async (t) => {
+test('GET /:slug 404s for a draft post with the themed not-found page', async (t) => {
   const { root, app } = await setup(t);
   writePost(root, 'd.md', { slug: 'd', title: 'D', status: 'draft' }, 'body');
   runReindex(root);
 
   const res = await app.inject({ method: 'GET', url: '/d' });
   assert.equal(res.statusCode, 404);
+  // Themed not-found page: site chrome + themed body + back link.
+  assert.match(res.headers['content-type'] as string, /text\/html/);
+  assert.match(res.body, /<main[^>]*class="rkr-notfound"/);
+  assert.match(res.body, /Page not found/);
+  assert.match(res.body, /href="\/"/);
+  // Stylesheet links pull the active theme so the page actually matches.
+  assert.match(res.body, /\/static\/base\.css/);
 });
 
-test('GET /:slug 404s for an unknown slug', async (t) => {
+test('GET /:slug 404s for an unknown slug with the themed not-found page', async (t) => {
   const { app } = await setup(t);
   const res = await app.inject({ method: 'GET', url: '/no-such-post' });
   assert.equal(res.statusCode, 404);
+  assert.match(res.body, /<main[^>]*class="rkr-notfound"/);
 });
 
 test('GET / paginates when published posts exceed the page size', async (t) => {

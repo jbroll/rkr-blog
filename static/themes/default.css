@@ -87,6 +87,30 @@ body {
   font-size: 0.9rem;
 }
 
+/* ---- 404 (/not-found) -------------------------------------------- */
+.rkr-notfound {
+  max-width: var(--rkr-prose);
+  margin: 4rem auto;
+  padding: 0 1.25rem;
+  text-align: center;
+}
+.rkr-notfound h1 {
+  font-family: var(--rkr-display-font);
+  font-size: 2.25rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.75rem;
+}
+.rkr-notfound p {
+  color: var(--rkr-muted);
+  margin: 0 0 1.25rem;
+}
+.rkr-notfound a {
+  color: var(--rkr-link);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+.rkr-notfound a:hover { color: var(--rkr-link-hover); }
+
 /* ---- login (/admin/login) ---------------------------------------- */
 .rkr-login {
   max-width: 24rem;
