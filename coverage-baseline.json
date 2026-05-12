@@ -38,8 +38,8 @@
       "linesHit": 0
     },
     "src/admin/main.ts": {
-      "linesFound": 110,
-      "linesHit": 95
+      "linesFound": 114,
+      "linesHit": 97
     },
     "src/admin/perspective-modal.ts": {
       "linesFound": 73,
@@ -50,8 +50,8 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 44,
-      "linesHit": 37
+      "linesFound": 45,
+      "linesHit": 38
     },
     "src/admin/toolbar.ts": {
       "linesFound": 13,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 36
+      "linesHit": 37
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -220,6 +220,10 @@
     "src/admin/ingest-resize-client.ts": {
       "linesFound": 14,
       "linesHit": 12
+    },
+    "src/admin/attr-commit.ts": {
+      "linesFound": 11,
+      "linesHit": 10
     }
   }
 }

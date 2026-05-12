@@ -1552,6 +1552,48 @@ test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async (
   expect(new Set(seqs).size).toBe(n);
 });
 
+// DEFERRED 9a: figure-caption / per-cell-caption / per-cell-alt
+// inputs used to fire one TipTap transaction per keystroke. The
+// new attr-commit module debounces them; handleSave flushes any
+// pending commit before serialising. Without the flush, a quick
+// "type caption then click save" would write markdown without the
+// last typed characters.
+test('editor: caption typed-then-saved-fast flushes pending debounce', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  const slug = `e2e-debounce-${Date.now()}`;
+  await page.locator('#rkr-title').fill('e2e debounce');
+  await setSlug(page, slug);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'debounce.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_YELLOW, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded debounce/, {
+    timeout: 10_000
+  });
+
+  await page.locator('button[data-figure-config]').click();
+  await expect(page.locator('#rkr-figure-dialog')).toBeVisible();
+  // Type the caption with `fill` (which dispatches a single input
+  // event, not per-character), then immediately save. Without the
+  // flush this can race with the 150ms debounce; with the flush the
+  // saved markdown contains the caption.
+  const caption = 'pending-debounce-caption';
+  await page.locator('#rkr-figure-caption').fill(caption);
+  await page.locator('#rkr-figure-dialog .rkr-cell-dialog-close').click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
+    timeout: 10_000
+  });
+  await publishSlug(page, slug);
+  const res = await page.request.get(`/${slug}`);
+  expect(res.status()).toBe(200);
+  expect(await res.text()).toContain(caption);
+});
+
 // Client-side ingest resize: a 4000×3000 PNG should be resized to
 // long-edge 3200 and re-encoded as WebP by the browser BEFORE
 // uploadImage hashes it. The bytes the server stores are then byte-

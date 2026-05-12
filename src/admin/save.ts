@@ -8,6 +8,7 @@
 import type { Editor } from '@tiptap/core';
 import type { SavePostPayload } from '../lib/outbox-types.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
+import { flushPendingAttrCommits } from './attr-commit';
 import { $, setStatus, setStatusWithLink } from './dom';
 import { getOrCreateDraftId, readMeta, updateMeta } from './draft.ts';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
@@ -37,6 +38,9 @@ async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
 }
 
 export async function handleSave(editor: Editor): Promise<void> {
+  // Flush any pending caption/alt commits so editor.getJSON() below
+  // serialises the latest typed values, not the pre-debounce state.
+  flushPendingAttrCommits();
   const slug = $<HTMLInputElement>('rkr-slug').value.trim();
   const title = $<HTMLInputElement>('rkr-title').value.trim();
   const subtitle = $<HTMLInputElement>('rkr-subtitle').value.trim();

@@ -7,6 +7,7 @@ import StarterKit from '@tiptap/starter-kit';
 // CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
 
+import { scheduleAttrCommit } from './attr-commit';
 import { hasWebglSupport } from './canvas-loaders';
 import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
@@ -34,7 +35,6 @@ function mount(): void {
   // Figure-level inputs.
   const attrCaption = $<HTMLInputElement>('rkr-figure-caption');
   const attrMatrixRoot = $<HTMLDivElement>('rkr-figure-matrix');
-  // Matrix control: radio + spinbox → figure attribute wire string.
   // commitFigureAttr's hoisted declaration makes the forward ref safe.
   const matrixControl = mountMatrixControl(attrMatrixRoot, (raw) =>
     commitFigureAttr('matrix', raw)
@@ -100,9 +100,7 @@ function mount(): void {
   // whole figure. Playwright bypasses the dialog via setInputFiles.
   fileInput.multiple = true;
 
-  // Source-picker + insertion plumbing lives in image-insert.ts so
-  // this file can stay focused on the per-cell attribute panel +
-  // image-edit pipeline. The closure carries pendingInsertMode.
+  // Source-picker + insertion plumbing in image-insert.ts.
   const inserter = createImageInserter({ editor, fileInput, sourceDialog });
 
   const syncToolbarActiveStates = mountToolbar({
@@ -113,8 +111,8 @@ function mount(): void {
 
   // `populating` guards attribute writes against the feedback loop
   // (selectionUpdate fires on every panel commit). activeCellIndex
-  // is the user's per-cell selection (null = figure-level panel).
-  // lastFigurePos detects "different figure" to reset the cell pick.
+  // = user's per-cell pick (null = figure-level). lastFigurePos
+  // detects "different figure" so we reset the cell pick.
   let populating = false;
   let activeCellIndex: number | null = null;
   let lastFigurePos: number | null = null;
@@ -150,9 +148,8 @@ function mount(): void {
     attrTimer.value = String(attrs.timer ?? 0);
     populating = false;
 
-    // Reset cell selection when the active figure changes (different
-    // node position). Same-figure re-selects (e.g. attribute edits
-    // re-trigger selectionUpdate) preserve the user's cell pick.
+    // Reset cell pick when the active figure changes; same-figure
+    // re-selects preserve it.
     const figurePos = editor.state.selection.from;
     if (figurePos !== lastFigurePos) {
       lastFigurePos = figurePos;
@@ -266,12 +263,9 @@ function mount(): void {
       ) {
         return;
       }
-      // Find the figure node whose DOM is the clicked placeholder.
-      // Walking the doc + matching via view.nodeDOM is more robust
-      // than posAtDOM here: for atom nodes posAtDOM returns the
-      // position just before/after the atom (not on it), and we'd
-      // have to disambiguate which side. Direct DOM-equality match
-      // is unambiguous.
+      // Match the placeholder DOM to its figure node via nodeDOM —
+      // posAtDOM is ambiguous on atoms (returns a position adjacent
+      // to the node, not on it).
       const placeholder = target.closest('.rkr-figure-placeholder');
       if (!placeholder) return;
       let figurePos: number | null = null;
@@ -371,7 +365,7 @@ function mount(): void {
     }
   };
   attrCaption.addEventListener('input', () => {
-    commitFigureAttr('caption', attrCaption.value);
+    scheduleAttrCommit('caption', () => commitFigureAttr('caption', attrCaption.value));
     warnInlineCap();
   });
   attrJustify.addEventListener('change', () => {
@@ -387,13 +381,19 @@ function mount(): void {
   // (pipe-separated) and alts (comma-separated) arrays.
   attrCellCaption.addEventListener('input', () => {
     if (populating || activeCellIndex === null || !editor.isActive('figure')) return;
-    const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).captions ?? '';
-    commitFigureAttr('captions', spliceCellSlot(cur, '|', activeCellIndex, attrCellCaption.value));
+    const idx = activeCellIndex;
+    scheduleAttrCommit('captions', () => {
+      const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).captions ?? '';
+      commitFigureAttr('captions', spliceCellSlot(cur, '|', idx, attrCellCaption.value));
+    });
   });
   attrCellAlt.addEventListener('input', () => {
     if (populating || activeCellIndex === null || !editor.isActive('figure')) return;
-    const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).alts ?? '';
-    commitFigureAttr('alts', spliceCellSlot(cur, ',', activeCellIndex, attrCellAlt.value.trim()));
+    const idx = activeCellIndex;
+    scheduleAttrCommit('alts', () => {
+      const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).alts ?? '';
+      commitFigureAttr('alts', spliceCellSlot(cur, ',', idx, attrCellAlt.value.trim()));
+    });
   });
 
   // Remove the active cell from the figure (image bytes + sidecar
