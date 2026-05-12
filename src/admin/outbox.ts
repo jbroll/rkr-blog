@@ -96,6 +96,36 @@ export async function readEntryBlob(seq: number): Promise<Blob | null> {
   return readBlob(blobPath(seq));
 }
 
+/** GC orphan blobs under `outbox-blobs/`. append() writes the blob
+ * before the JSON (intentional — a crash between blob+JSON leaves
+ * an orphan blob rather than a JSON pointing at a missing blob,
+ * the latter halts the drain). Eviction doesn't sweep this dir, so
+ * orphans accumulate over time on quota / IO failure.
+ *
+ * Match by name: outbox-blobs/<seq>.bin paired with outbox/<seq>.<op>.json.
+ * Any .bin whose <seq> doesn't appear in the JSON dir is orphan.
+ * Best-effort; failures don't block startup.
+ * @public */
+export async function gcOrphanOutboxBlobs(): Promise<number> {
+  const jsonNames = await listDir(OUTBOX_DIR).catch(() => [] as string[]);
+  const blobNames = await listDir(BLOB_DIR).catch(() => [] as string[]);
+  const liveSeqs = new Set<number>();
+  for (const name of jsonNames) {
+    const m = /^(\d+)\./.exec(name);
+    if (m) liveSeqs.add(Number(m[1]));
+  }
+  let removed = 0;
+  for (const name of blobNames) {
+    const m = /^(\d+)\.bin$/.exec(name);
+    if (!m) continue;
+    const seq = Number(m[1]);
+    if (liveSeqs.has(seq)) continue;
+    await removeFile(`${BLOB_DIR}/${name}`);
+    removed++;
+  }
+  return removed;
+}
+
 /** One-shot migration: drop outbox entries with a legacy op kind
  * ('setOps' or 'bake') that no longer has a registered drainer after
  * the /commit endpoint replaced the /ops + /bake split. Without this,

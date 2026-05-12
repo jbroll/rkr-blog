@@ -13,6 +13,7 @@ import { onChange as onOnlineChange, start as startOnline } from './online-state
 import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
+  gcOrphanOutboxBlobs,
   append as outboxAppend,
   list as outboxList,
   pendingCount
@@ -67,6 +68,11 @@ async function runStart(editor: Editor): Promise<void> {
     // op='bake' entries that have no drainer in this build. Drop them
     // up front so the drain loop doesn't halt on the first one.
     void dropLegacyOpEntries();
+    // Sweep orphan outbox blobs (writeBlob succeeded but the JSON
+    // write failed — quota, IO error). Eviction doesn't reach this
+    // dir, so without an explicit GC orphans accumulate until OPFS
+    // fills up.
+    void gcOrphanOutboxBlobs();
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.
     //   ?new=1     → discard any in-progress draftId and create a

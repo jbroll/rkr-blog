@@ -1550,6 +1550,54 @@ test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async (
   expect(new Set(seqs).size).toBe(n);
 });
 
+// Orphan outbox-blob GC: outbox.append writes the blob before the
+// JSON (intentional — blob-without-JSON is GC'd; JSON-without-blob
+// halts the drain). If the JSON write fails (quota, IO), the blob
+// orphans under outbox-blobs/. runEviction doesn't reach this dir.
+// gcOrphanOutboxBlobs runs at startup to sweep them. This test
+// plants an orphan and verifies the next page load reclaims it.
+test('outbox: gcOrphanOutboxBlobs sweeps blobs without matching JSON entries', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Plant an orphan: write outbox-blobs/9999.bin with no matching
+  // outbox/9999.<op>.json. Seq 9999 is high enough to dodge any
+  // entry that prior tests in this run might have produced.
+  await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    const dir = await opfs.getDirectoryHandle('outbox-blobs', { create: true });
+    const fh = await dir.getFileHandle('9999.bin', { create: true });
+    const w = await fh.createWritable();
+    await w.write(new Uint8Array([1, 2, 3, 4]));
+    await w.close();
+  });
+
+  // Reload — startup runs gcOrphanOutboxBlobs.
+  await page.reload();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // The orphan should be gone; any legitimate <seq>.bin paired
+  // with an outbox/<seq>.<op>.json must survive (we didn't plant
+  // any, so the assertion is "9999.bin is absent" specifically).
+  const orphanGone = await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    const dir = await opfs.getDirectoryHandle('outbox-blobs').catch(() => null);
+    if (!dir) return true;
+    try {
+      await dir.getFileHandle('9999.bin');
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  expect(orphanGone).toBe(true);
+});
+
 // Admin chrome on the public site: post-login lands on /, the admin
 // strip shows New post + Logout; on a /:slug page the strip also
 // shows Edit this post → /admin/editor?slug=<slug>; the editor
