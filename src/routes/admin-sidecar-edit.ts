@@ -19,7 +19,7 @@ import sharp from 'sharp';
 
 import { SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
 import { validateOps } from '../lib/ops-validation.ts';
-import { bakePath } from '../lib/originals.ts';
+import { bakePath, imageInfo } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 
 const BAKE_MAX_BYTES = 25 * 1024 * 1024;
@@ -88,9 +88,16 @@ export function registerSidecarEditRoutes(
         return reply.code(400).send({ error: '`ops` field must be valid JSON' });
       }
 
-      const opsV = validateOps(parsed.ops, sidecar.metadata);
+      // Crop-bounds check needs the source's actual pixel dims, which
+      // come from the file on disk. imageInfo returns null when the
+      // original is missing — validateOps handles that as the "no
+      // recorded dimensions" branch (ops=[] accepted, non-empty
+      // refused).
+      const info = await imageInfo(siteRoot, id);
+      const dims = info ? { width: info.width ?? 0, height: info.height ?? 0 } : {};
+      const opsV = validateOps(parsed.ops, dims);
       if (!opsV.ok) return reply.code(400).send({ error: opsV.error });
-      const rsV = validateOps(parsed.redoStack ?? [], sidecar.metadata);
+      const rsV = validateOps(parsed.redoStack ?? [], dims);
       if (!rsV.ok) return reply.code(400).send({ error: `redoStack: ${rsV.error}` });
 
       // ops=[] is the "clear all edits" save: no bake to upload, just

@@ -9,8 +9,7 @@ import path from 'node:path';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import { parsePost } from '../lib/content.ts';
-import { FORMAT_TO_EXT } from '../lib/image-constants.ts';
-import { originalPath } from '../lib/originals.ts';
+import { imageInfo } from '../lib/originals.ts';
 import { listSidecarIds, scanPostForImageIds } from '../lib/posts.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 
@@ -65,15 +64,14 @@ export function registerPostBundleRoutes(
         const sc = await sidecarRead(siteRoot, id);
         if (!sc) continue;
         sidecars.push({ id, json: sc });
-        // Path-traversal safety hinges on the FORMAT_TO_EXT
-        // allowlist: a malformed format falls through to undefined
-        // and we skip the original.
-        const fmt = sc.metadata.format;
-        const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
-        if (!fmt || !ext) continue;
+        // imageInfo finds the original on disk (or returns null when
+        // the sidecar references an id without bytes — sidecar-only
+        // ops-only case).
+        const info = await imageInfo(siteRoot, id);
+        if (!info) continue;
         try {
-          const ostat = await fs.promises.stat(originalPath(siteRoot, id, ext));
-          originals.push({ id, ext, bytes: ostat.size });
+          const ostat = await fs.promises.stat(info.path);
+          originals.push({ id, ext: info.ext, bytes: ostat.size });
         } catch {
           /* sidecar without original; client treats as ops-only */
         }

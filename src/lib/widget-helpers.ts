@@ -8,7 +8,7 @@
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
-import { bakePath } from './originals.ts';
+import { bakePath, imageInfo } from './originals.ts';
 import { listSidecarIds } from './posts.ts';
 import type { OutputFormat } from './render.ts';
 import type { Sidecar } from './sidecar-types.ts';
@@ -259,17 +259,17 @@ export async function imageDimensions(
 ): Promise<{ width: number; height: number }> {
   const ops = sidecar.ops ?? [];
   if (ops.length > 0) {
+    // The atomic /commit endpoint guarantees the bake is on disk
+    // whenever ops are non-empty. Render it for layout dims.
     try {
       const meta = await sharp(bakePath(siteRoot, id)).metadata();
       if (meta.width && meta.height) return { width: meta.width, height: meta.height };
     } catch {
-      /* bake missing or undecodable → fall through to metadata */
+      /* bake missing (offline edit mid-drain) → fall through to original */
     }
   }
-  return {
-    width: sidecar.metadata.width ?? 1,
-    height: sidecar.metadata.height ?? 1
-  };
+  const info = await imageInfo(siteRoot, id);
+  return { width: info?.width ?? 1, height: info?.height ?? 1 };
 }
 
 function unique<T>(arr: T[]): T[] {

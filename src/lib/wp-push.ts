@@ -19,9 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 
-import { FORMAT_TO_EXT } from './image-constants.ts';
-import { originalPath } from './originals.ts';
-import { read as sidecarRead } from './sidecar.ts';
+import { imageInfo } from './originals.ts';
 import { importPost } from './wp-import.ts';
 import type { WpPost } from './wp-import-types.ts';
 
@@ -88,15 +86,13 @@ export async function pushPost(opts: PushOpts): Promise<PushResult> {
     let failed = 0;
     for (const id of uniqueIds) {
       try {
-        const sidecar = await sidecarRead(tmp, id);
-        const format = sidecar?.metadata.format;
-        const ext = format ? FORMAT_TO_EXT[format] : undefined;
-        if (!ext) throw new Error(`no ext resolved for ${id} (format=${format ?? 'none'})`);
+        const info = await imageInfo(tmp, id);
+        if (!info) throw new Error(`no original on disk for ${id}`);
         await uploadOriginal({
           fetcher,
           targetBase,
           auth,
-          filePath: originalPath(tmp, id, ext)
+          filePath: info.path
         });
         uploaded++;
       } catch (err) {

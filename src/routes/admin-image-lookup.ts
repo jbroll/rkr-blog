@@ -15,8 +15,7 @@ import fs from 'node:fs';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import { cacheKey } from '../lib/hash.ts';
-import { FORMAT_TO_EXT } from '../lib/image-constants.ts';
-import { originalPath } from '../lib/originals.ts';
+import { imageInfo } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
@@ -104,33 +103,26 @@ export function registerImageLookupRoutes(
       const sidecar = await sidecarRead(siteRoot, id);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
 
-      const fmt = sidecar.metadata.format;
-      const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
-      if (!fmt || !ext) {
-        return reply.code(500).send({ error: 'sidecar has no recognized format' });
+      const info = await imageInfo(siteRoot, id);
+      if (!info) {
+        return reply.code(404).send({ error: 'original missing' });
+      }
+      if (!info.format) {
+        /* c8 ignore next -- imageInfo only returns null format on
+           undecodable bytes; ingested originals always decode */
+        return reply.code(500).send({ error: 'original is not decodable' });
       }
 
-      const filePath = originalPath(siteRoot, id, ext);
-      let stat: fs.Stats;
-      try {
-        stat = await fs.promises.stat(filePath);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-          return reply.code(404).send({ error: 'original missing' });
-        }
-        /* c8 ignore next -- non-ENOENT stat failures (EACCES etc.) require
-           filesystem fault injection */
-        throw err;
-      }
+      const stat = await fs.promises.stat(info.path);
 
       // Originals are immutable (content-addressable by sha256). The 1y
       // cache + immutable directive lets the browser keep the bytes
       // across edits in the same session without revalidating.
       reply
-        .header('Content-Type', formatContentType(fmt))
+        .header('Content-Type', formatContentType(info.format))
         .header('Content-Length', String(stat.size))
         .header('Cache-Control', 'private, max-age=31536000, immutable');
-      return reply.send(fs.createReadStream(filePath));
+      return reply.send(fs.createReadStream(info.path));
     }
   );
 
@@ -148,10 +140,13 @@ export function registerImageLookupRoutes(
       }
       const sidecar = await sidecarRead(siteRoot, id);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
+      // Dims + format come from the file (the source of truth); the
+      // sidecar carries only the edit intent.
+      const info = await imageInfo(siteRoot, id);
       return {
-        width: sidecar.metadata.width ?? null,
-        height: sidecar.metadata.height ?? null,
-        format: sidecar.metadata.format ?? null,
+        width: info?.width ?? null,
+        height: info?.height ?? null,
+        format: info?.format ?? null,
         ops: sidecar.ops,
         redoStack: sidecar.redoStack ?? []
       };

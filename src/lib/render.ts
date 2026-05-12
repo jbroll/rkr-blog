@@ -18,8 +18,8 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
-import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
-import { bakePath, originalPath } from './originals.ts';
+import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
+import { bakePath, imageInfo } from './originals.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
 export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';
@@ -144,12 +144,13 @@ export async function renderDerivative(
     if (!sidecar) {
       throw new Error(`renderDerivative: no sidecar for ${originalId}`);
     }
-    const fmt = sidecar.metadata.format;
-    const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
-    if (!ext) {
-      throw new Error(`renderDerivative: unsupported original format ${String(fmt)}`);
+    // The file IS the source of truth for format; imageInfo finds it
+    // by scanning candidate exts in originals/<aa>/<bb>/.
+    const info = await imageInfo(siteRoot, originalId);
+    if (!info) {
+      throw new Error(`renderDerivative: no original on disk for ${originalId}`);
     }
-    sourcePath = originalPath(siteRoot, originalId, ext);
+    sourcePath = info.path;
   }
 
   // Keep libvips threads from multiplying with job concurrency

@@ -81,7 +81,6 @@ test('runVerify validates a pre-resize sidecar against s.original (no storedHash
     version: 1,
     original: id,
     source: { kind: 'upload', originalName: 'legacy.jpg' },
-    metadata: { width: 80, height: 60, format: 'jpeg' },
     ops: [],
     outputs: [],
     variants: []

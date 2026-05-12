@@ -43,14 +43,6 @@ interface SidecarSource {
   [k: string]: unknown;
 }
 
-interface SidecarMetadata {
-  width?: number;
-  height?: number;
-  format?: string;
-  exif?: Record<string, unknown>;
-  [k: string]: unknown;
-}
-
 export interface SidecarOp {
   type: string;
   [k: string]: unknown;
@@ -73,7 +65,6 @@ export interface Sidecar {
   version: 1;
   original: string;
   source: SidecarSource;
-  metadata: SidecarMetadata;
   ops: SidecarOp[];
   /** Ops popped via undo, in pop order (i.e. the last entry is the
    * one redo would re-apply first). Persisted with the sidecar so

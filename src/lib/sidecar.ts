@@ -70,9 +70,9 @@ export function validate(data: unknown): ValidateResult {
     return { ok: false, error: 'source.kind must be a string' };
   }
 
-  if (d.metadata === null || typeof d.metadata !== 'object' || Array.isArray(d.metadata)) {
-    return { ok: false, error: 'metadata must be an object' };
-  }
+  // Legacy sidecars carry a `metadata` object (width/height/format)
+  // that we now read from the file instead. Tolerate it on read but
+  // don't require it; new sidecars don't write the field.
 
   for (const k of ['ops', 'outputs', 'variants'] as const) {
     if (!Array.isArray(d[k])) {

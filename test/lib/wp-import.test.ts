@@ -12,7 +12,7 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 import { parsePost } from '../../src/lib/content.ts';
-import { originalPath } from '../../src/lib/originals.ts';
+import { imageInfo, originalPath } from '../../src/lib/originals.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { importPost } from '../../src/lib/wp-import.ts';
 import type { WpPost } from '../../src/lib/wp-import-types.ts';
@@ -198,8 +198,10 @@ test('importPost: image bytes land on disk byte-identical (passthrough)', async 
   assert.equal(sidecar.source.resize?.reason, 'import-passthrough');
   assert.equal(sidecar.source.resize?.encoding, 'passthrough');
   assert.equal(sidecar.source.resize?.applied, false);
-  // metadata.format reflects the bytes on disk → jpeg, not webp.
-  assert.equal(sidecar.metadata.format, 'jpeg');
+  // File on disk is jpeg, not webp (passthrough skips the
+  // ingest-resize step). Verify by reading sharp.metadata directly.
+  const info = await imageInfo(root, id);
+  assert.equal(info?.format, 'jpeg');
 });
 
 test('importPost: legacy theme figure (no wp-block-image class) still ingests', async (t) => {

@@ -43,12 +43,11 @@ function writeOriginal(root: string, id: string, ext: string, bytes: number): vo
   fs.writeFileSync(path.join(dir, `${id}.${ext}`), Buffer.alloc(bytes, 0xff));
 }
 
-function makeSidecar(format: string): Sidecar {
+function makeSidecar(): Sidecar {
   return {
     version: 1,
     original: 'unused',
     source: { kind: 'upload' },
-    metadata: { format, width: 800, height: 600 },
     ops: [],
     outputs: [],
     variants: []
@@ -71,8 +70,8 @@ Body with image ::image{#${ID_A.slice(0, 8)} alt="a"}
 And gallery ::gallery{ids=[${ID_A.slice(0, 8)}, ${ID_B.slice(0, 8)}]}
 `;
   fs.writeFileSync(path.join(root, 'content', 'posts', 'pinme.md'), md);
-  writeSidecar(root, ID_A, makeSidecar('jpeg'));
-  writeSidecar(root, ID_B, makeSidecar('png'));
+  writeSidecar(root, ID_A, makeSidecar());
+  writeSidecar(root, ID_B, makeSidecar());
   writeOriginal(root, ID_A, 'jpg', 1024);
   writeOriginal(root, ID_B, 'png', 512);
 
@@ -103,9 +102,9 @@ And gallery ::gallery{ids=[${ID_A.slice(0, 8)}, ${ID_B.slice(0, 8)}]}
   assert.equal(body.originals.find((o) => o.id === ID_A)?.ext, 'jpg');
   assert.equal(body.originals.find((o) => o.id === ID_A)?.bytes, 1024);
 
-  // Sidecars: both, format preserved.
+  // Sidecars: both round-trip via JSON.
   assert.equal(body.sidecars.length, 2);
-  assert.equal(body.sidecars.find((s) => s.id === ID_A)?.json.metadata.format, 'jpeg');
+  assert.equal(body.sidecars.find((s) => s.id === ID_A)?.json.original, 'unused');
 });
 
 test('GET /admin/post-bundle/:slug?manifest=1: sidecar-only references survive (skipped from originals)', async (t) => {
@@ -123,7 +122,7 @@ status: draft
 ::image{#${ID_A.slice(0, 8)} alt="x"}
 `;
   fs.writeFileSync(path.join(root, 'content', 'posts', 'halfref.md'), md);
-  writeSidecar(root, ID_A, makeSidecar('jpeg'));
+  writeSidecar(root, ID_A, makeSidecar());
   // No original written.
 
   const res = await app.inject({ method: 'GET', url: '/admin/post-bundle/halfref?manifest=1' });

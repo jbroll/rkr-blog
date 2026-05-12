@@ -3,12 +3,9 @@
 //
 // Bit-rot detector. Read-only: no mutation of disk state.
 
-import fs from 'node:fs';
-
 import { paths } from '../lib/config.ts';
 import { sha256File } from '../lib/hash.ts';
-import { FORMAT_TO_EXT } from '../lib/image-constants.ts';
-import { originalPath } from '../lib/originals.ts';
+import { imageInfo } from '../lib/originals.ts';
 import { listSidecars } from '../lib/posts.ts';
 
 export interface VerifyMismatch {
@@ -43,28 +40,17 @@ export async function runVerify(siteRoot: string): Promise<VerifyResult> {
   let checked = 0;
 
   for (const s of sidecars) {
-    const fmt = s.metadata.format;
-    const ext = fmt ? FORMAT_TO_EXT[fmt] : undefined;
-    if (!ext) {
-      mismatches.push({
-        id: s.original,
-        reason: 'unsupported-format',
-        detail: `metadata.format=${String(fmt)}`
-      });
-      continue;
-    }
-
-    const filepath = originalPath(siteRoot, s.original, ext);
-    if (!fs.existsSync(filepath)) {
+    const info = await imageInfo(siteRoot, s.original);
+    if (!info) {
       mismatches.push({
         id: s.original,
         reason: 'missing-original',
-        detail: filepath
+        detail: `originals/${s.original.slice(0, 2)}/${s.original.slice(2, 4)}/${s.original}.*`
       });
       continue;
     }
 
-    const actual = await sha256File(filepath);
+    const actual = await sha256File(info.path);
     checked++;
     // Post-resize ingest stores the on-disk bytes' hash separately
     // (s.source.storedHash). Pre-feature sidecars lack it; for those

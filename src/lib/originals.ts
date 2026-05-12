@@ -162,7 +162,6 @@ export async function ingestStream({
   let deduplicated = false;
   let resizeRecord: SidecarResizeRecord | undefined;
   let storedHash: string | undefined;
-  let finalMeta = meta;
 
   if (existingOriginal) {
     deduplicated = true;
@@ -235,12 +234,6 @@ export async function ingestStream({
     tmpPath = resized.outPath;
     ext = resized.ext;
     storedHash = resized.storedHash;
-    finalMeta = {
-      ...meta,
-      format: resized.format,
-      width: resized.width,
-      height: resized.height
-    };
     resizeRecord = {
       applied: resized.reason === 'resized',
       reason: resized.reason,
@@ -275,11 +268,12 @@ export async function ingestStream({
       if (storedHash) sidecarSource.storedHash = storedHash;
       if (resizeRecord) sidecarSource.resize = resizeRecord;
 
+      // No metadata field: dimensions + format come from the file via
+      // imageInfo() at lookup time. The file IS the truth.
       const fresh: Sidecar = {
         version: 1,
         original: id,
         source: sidecarSource,
-        metadata: pickMetadata(finalMeta),
         ops: [],
         outputs: DEFAULT_OUTPUTS,
         variants: DEFAULT_VARIANTS
@@ -309,19 +303,47 @@ async function findExistingOriginal(
   return undefined;
 }
 
-function pickMetadata(meta: sharp.Metadata): Sidecar['metadata'] {
-  // Sharp returns exif as a Buffer; defer parsing until needed (Step 3+).
-  // Keep the sidecar JSON-safe by omitting raw buffers here. By the time
-  // ingestStream calls this, EXIF Orientation has been baked into pixels
-  // (see the orientation > 1 branch above) AND the ingest resize/re-encode
-  // has run, so width/height/format describe the bytes actually on disk
-  // post-resize — not the upload. The pre-resize values live separately
-  // in sidecar.source.{uploadFormat,uploadWidth,uploadHeight,uploadBytes}.
-  return {
-    width: meta.width,
-    height: meta.height,
-    format: meta.format
-  };
+/** Resolve the on-disk original for an id and read its sharp.metadata.
+ * The file IS the source of truth for dimensions + format; recording
+ * those on the sidecar invites synchronization bugs. Returns null
+ * when the id isn't on disk (caller decides whether that's an error).
+ *
+ * Used by:
+ *   - validateOps callers (crop-bounds check needs width/height)
+ *   - GET /admin/sidecar/:id/meta (returns dims + format to the editor)
+ *   - admin-image-lookup, admin-post-bundle (need ext for the served
+ *     filename + Content-Type)
+ *   - cli/verify (checks ext is a recognized format)
+ *
+ * @public */
+export async function imageInfo(
+  siteRoot: string,
+  id: string
+): Promise<{
+  path: string;
+  ext: string;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+} | null> {
+  const found = await findExistingOriginal(siteRoot, id);
+  if (!found) return null;
+  try {
+    const meta = await sharp(found.path).metadata();
+    return {
+      path: found.path,
+      ext: found.ext,
+      format: meta.format ?? null,
+      width: meta.width ?? null,
+      height: meta.height ?? null
+    };
+  } catch {
+    /* c8 ignore start -- undecodable file on disk shouldn't happen for
+       ingested originals; surface a partial result so callers can
+       still report "image present but unreadable" */
+    return { path: found.path, ext: found.ext, format: null, width: null, height: null };
+    /* c8 ignore stop */
+  }
 }
 
 async function exists(p: string): Promise<boolean> {

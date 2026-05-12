@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
-import { ingestStream, originalPath } from '../../src/lib/originals.ts';
+import { imageInfo, ingestStream, originalPath } from '../../src/lib/originals.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -81,10 +81,12 @@ test('ingestStream writes to sharded path and produces a valid sidecar', async (
   assert.equal(sidecar.source.kind, 'upload');
   assert.equal(sidecar.source.originalName, 'sample.jpg');
   assert.match(sidecar.source.fetched ?? '', /^\d{4}-\d{2}-\d{2}T/);
-  // metadata describes the bytes on disk (post-resize WebP).
-  assert.equal(sidecar.metadata.format, 'webp');
-  assert.equal(sidecar.metadata.width, 64);
-  assert.equal(sidecar.metadata.height, 48);
+  // Dimensions + format come from the file (the source of truth);
+  // sidecar.metadata no longer exists.
+  const info = await imageInfo(root, expectedId);
+  assert.equal(info?.format, 'webp');
+  assert.equal(info?.width, 64);
+  assert.equal(info?.height, 48);
   // Upload provenance describes the pre-resize bytes.
   assert.equal(sidecar.source.uploadFormat, 'jpeg');
   assert.equal(sidecar.source.uploadWidth, 64);
@@ -149,7 +151,7 @@ test('ingestStream re-encodes PNG inputs to lossless WebP', async (t) => {
   assert.ok(result.path.endsWith('.webp'));
   const sidecar = await sidecarRead(root, result.id);
   assert.ok(sidecar);
-  assert.equal(sidecar.metadata.format, 'webp');
+  assert.equal((await imageInfo(root, result.id))?.format, 'webp');
   assert.equal(sidecar.source.uploadFormat, 'png');
   assert.equal(sidecar.source.resize?.encoding, 'lossless');
 });
@@ -218,8 +220,9 @@ test('ingestStream stores display dimensions for EXIF Orientation=6 (portrait)',
 
   const sidecar = await sidecarRead(root, result.id);
   assert.ok(sidecar);
-  assert.equal(sidecar.metadata.width, 40, 'sidecar width should match display orientation');
-  assert.equal(sidecar.metadata.height, 100, 'sidecar height should match display orientation');
+  const info = await imageInfo(root, result.id);
+  assert.equal(info?.width, 40, 'on-disk width should match display orientation');
+  assert.equal(info?.height, 100, 'on-disk height should match display orientation');
 });
 
 test('ingestStream leaves dimensions untouched for EXIF Orientation=1 (default)', async (t) => {
@@ -239,8 +242,9 @@ test('ingestStream leaves dimensions untouched for EXIF Orientation=1 (default)'
 
   const sidecar = await sidecarRead(root, result.id);
   assert.ok(sidecar);
-  assert.equal(sidecar.metadata.width, 100);
-  assert.equal(sidecar.metadata.height, 40);
+  const info = await imageInfo(root, result.id);
+  assert.equal(info?.width, 100);
+  assert.equal(info?.height, 40);
 });
 
 test('ingestStream downsamples a large JPEG to the configured maxDim', async (t) => {
@@ -267,8 +271,9 @@ test('ingestStream downsamples a large JPEG to the configured maxDim', async (t)
   assert.equal(sidecar.source.resize?.reason, 'resized');
   assert.equal(sidecar.source.resize?.applied, true);
   assert.equal(sidecar.source.resize?.encoding, 'lossy');
-  assert.equal(sidecar.metadata.width, 3200);
-  assert.equal(sidecar.metadata.height, Math.round((2500 * 3200) / 3500));
+  const info = await imageInfo(root, result.id);
+  assert.equal(info?.width, 3200);
+  assert.equal(info?.height, Math.round((2500 * 3200) / 3500));
   // On-disk file must be smaller than the source upload.
   const onDiskSize = fs.statSync(result.path).size;
   assert.ok(onDiskSize < bytes.length, 'resized webp should beat the source jpeg on bytes');
@@ -295,8 +300,9 @@ test('ingestStream applies portrait orientation BEFORE the resize clamp', async 
   assert.ok(sidecar);
   // After orientation bake: 3000×4000 portrait. Then maxDim=3200 caps
   // the long edge (height) → final 2400×3200.
-  assert.equal(sidecar.metadata.width, 2400);
-  assert.equal(sidecar.metadata.height, 3200);
+  const info = await imageInfo(root, result.id);
+  assert.equal(info?.width, 2400);
+  assert.equal(info?.height, 3200);
 });
 
 test('ingestStream reads ingestResize knobs from site config', async (t) => {
@@ -320,8 +326,9 @@ test('ingestStream reads ingestResize knobs from site config', async (t) => {
   assert.equal(sidecar.source.resize?.webpQuality, 60);
   // scalePct wasn't set → falls back to compile-time default (100).
   assert.equal(sidecar.source.resize?.scalePct, 100);
-  assert.equal(sidecar.metadata.width, 800);
-  assert.equal(sidecar.metadata.height, 600);
+  const info = await imageInfo(root, result.id);
+  assert.equal(info?.width, 800);
+  assert.equal(info?.height, 600);
 });
 
 test('ingestStream falls back to compile-time defaults when site.json is absent', async (t) => {
