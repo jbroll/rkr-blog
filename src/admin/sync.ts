@@ -184,7 +184,10 @@ async function drainLoop(): Promise<void> {
     try {
       // bake entries carry the blob via outbox-blobs/<seq>.bin;
       // upload entries read from originals/ in their drainer.
-      const blob = head.op === 'bake' ? await readEntryBlobOrThrow(head.seq) : null;
+      // commitImageEdit entries with hasBake=true carry the WebP via
+      // outbox-blobs/<seq>.bin; upload entries read from originals/.
+      const needsBlob = head.op === 'commitImageEdit' && head.payload.hasBake;
+      const blob = needsBlob ? await readEntryBlobOrThrow(head.seq) : null;
       await drainer(head, blob);
       await outboxRemove(head);
     } catch (err) {

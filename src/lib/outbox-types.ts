@@ -4,7 +4,7 @@
 import type { SidecarOp } from './sidecar-types.ts';
 
 /** @public */
-export type OutboxOp = 'upload' | 'setOps' | 'bake' | 'savePost';
+export type OutboxOp = 'upload' | 'commitImageEdit' | 'savePost';
 
 /** @public */
 export interface SavePostPayload {
@@ -29,18 +29,14 @@ export interface SavePostPayload {
 }
 
 /** @public */
-export interface SetOpsPayload {
+export interface CommitImageEditPayload {
   id: string;
   ops: SidecarOp[];
   redoStack: SidecarOp[];
-}
-
-/** @public */
-export interface BakePayload {
-  id: string;
-  /** sha256 hex of canonicalJson(ops); X-Rkr-Bake-Ops-Hash header.
-   * Bake bytes are in opfs://outbox-blobs/<seq>.bin. */
-  opsHash: string;
+  /** True when the entry carries a bake blob in
+   * opfs://outbox-blobs/<seq>.bin. False when ops is empty (clear-
+   * edits save) — the server unlinks any existing bake instead. */
+  hasBake: boolean;
 }
 
 /** @public */
@@ -61,33 +57,31 @@ interface OutboxEntryBase {
 
 export type OutboxEntry =
   | (OutboxEntryBase & { op: 'upload'; payload: UploadPayload })
-  | (OutboxEntryBase & { op: 'setOps'; payload: SetOpsPayload })
-  | (OutboxEntryBase & { op: 'bake'; payload: BakePayload })
+  | (OutboxEntryBase & { op: 'commitImageEdit'; payload: CommitImageEditPayload })
   | (OutboxEntryBase & { op: 'savePost'; payload: SavePostPayload });
 
-/** Keep only the latest savePost per slug + setOps per id. Upload
- * and bake are NOT coalesced — uploads are idempotent server-side
- * (content-addressed); bakes carry distinct ops-hashes that the
- * server validates separately. */
+/** Keep only the latest savePost per slug + commitImageEdit per id.
+ * Upload is NOT coalesced — uploads are idempotent server-side
+ * (content-addressed) and each carries a distinct blob. */
 export function coalescePending(entries: readonly OutboxEntry[]): OutboxEntry[] {
   const latestSavePost = new Map<string, number>();
-  const latestSetOps = new Map<string, number>();
+  const latestCommit = new Map<string, number>();
   for (const e of entries) {
     if (e.op === 'savePost') {
       const prev = latestSavePost.get(e.payload.slug);
       if (prev === undefined || e.seq > prev) {
         latestSavePost.set(e.payload.slug, e.seq);
       }
-    } else if (e.op === 'setOps') {
-      const prev = latestSetOps.get(e.payload.id);
+    } else if (e.op === 'commitImageEdit') {
+      const prev = latestCommit.get(e.payload.id);
       if (prev === undefined || e.seq > prev) {
-        latestSetOps.set(e.payload.id, e.seq);
+        latestCommit.set(e.payload.id, e.seq);
       }
     }
   }
   return entries.filter((e) => {
     if (e.op === 'savePost') return latestSavePost.get(e.payload.slug) === e.seq;
-    if (e.op === 'setOps') return latestSetOps.get(e.payload.id) === e.seq;
+    if (e.op === 'commitImageEdit') return latestCommit.get(e.payload.id) === e.seq;
     return true;
   });
 }

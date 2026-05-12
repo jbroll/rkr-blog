@@ -32,39 +32,26 @@ export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   await res.json();
 };
 
-export const drainSetOps: Drainer = async (entry) => {
-  if (entry.op !== 'setOps') return;
-  const res = await fetch(`/admin/sidecar/${entry.payload.id}/ops`, {
+export const drainCommitImageEdit: Drainer = async (entry, blob) => {
+  if (entry.op !== 'commitImageEdit') return;
+  const fd = new FormData();
+  fd.append('ops', JSON.stringify({ ops: entry.payload.ops, redoStack: entry.payload.redoStack }));
+  if (entry.payload.hasBake) {
+    /* v8 ignore next 3 -- blob always present when hasBake is true */
+    if (!blob) {
+      throw new Error(`commitImageEdit entry ${entry.seq} hasBake=true but no blob`);
+    }
+    fd.append('bake', blob, `${entry.payload.id}.webp`);
+  }
+  const res = await fetch(`/admin/sidecar/${entry.payload.id}/commit`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-rkr-outbox-seq': String(entry.seq) },
-    body: JSON.stringify({ ops: entry.payload.ops, redoStack: entry.payload.redoStack })
+    headers: { 'x-rkr-outbox-seq': String(entry.seq) },
+    body: fd
   });
   /* v8 ignore next 3 -- non-2xx server response; prod-only path */
   if (!res.ok) {
-    throw new Error(`setOps drain ${entry.seq}: ${res.status}`);
+    throw new Error(`commitImageEdit drain ${entry.seq}: ${res.status}`);
   }
-};
-
-export const drainBake: Drainer = async (entry, blob) => {
-  if (entry.op !== 'bake') return;
-  /* v8 ignore next 3 -- blob always present for bake entries */
-  if (!blob) {
-    throw new Error(`bake entry ${entry.seq} has no blob`);
-  }
-  const res = await fetch(`/admin/sidecar/${entry.payload.id}/bake`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'image/webp',
-      'x-rkr-bake-ops-hash': entry.payload.opsHash,
-      'x-rkr-outbox-seq': String(entry.seq)
-    },
-    body: blob
-  });
-  /* v8 ignore start -- 409 / 5xx paths exercised in prod, not e2e */
-  if (!res.ok) {
-    throw new Error(`bake drain ${entry.seq}: ${res.status}`);
-  }
-  /* v8 ignore stop */
 };
 
 export const drainSavePost: Drainer = async (entry: OutboxEntry) => {

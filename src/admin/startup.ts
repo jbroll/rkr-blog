@@ -6,7 +6,7 @@ import type { Editor, JSONContent } from '@tiptap/core';
 
 import { setStatus } from './dom.ts';
 import { getOrCreateDraftId, loadDraft, startDraftPersistence } from './draft.ts';
-import { drainBake, drainSavePost, drainSetOps, drainUpload } from './drainers.ts';
+import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts';
 import { runEviction } from './eviction.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
@@ -55,8 +55,7 @@ async function runStart(editor: Editor): Promise<void> {
       return;
     }
     registerDrainer('upload', drainUpload);
-    registerDrainer('setOps', drainSetOps);
-    registerDrainer('bake', drainBake);
+    registerDrainer('commitImageEdit', drainCommitImageEdit);
     registerDrainer('savePost', drainSavePost);
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.

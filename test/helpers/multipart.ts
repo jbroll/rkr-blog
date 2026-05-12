@@ -1,5 +1,5 @@
-// Build a minimal multipart/form-data body with a single file part.
-// Used by upload-route tests so we don't pull in form-data as a dep.
+// Build a minimal multipart/form-data body. Used by route tests so
+// we don't pull in form-data as a dev dep.
 
 import crypto from 'node:crypto';
 
@@ -24,16 +24,46 @@ export function buildMultipart({
   contentType,
   bytes
 }: BuildMultipartArgs): MultipartPayload {
+  return buildMultipartParts([{ kind: 'file', fieldName, filename, contentType, bytes }]);
+}
+
+export type MultipartPart =
+  | { kind: 'field'; fieldName: string; value: string }
+  | {
+      kind: 'file';
+      fieldName: string;
+      filename: string;
+      contentType: string;
+      bytes: Buffer;
+    };
+
+/** Build a multipart payload with any number of field + file parts.
+ * The /admin/sidecar/:id/commit endpoint takes one of each: an `ops`
+ * text field (JSON) and an optional `bake` WebP file. */
+export function buildMultipartParts(parts: readonly MultipartPart[]): MultipartPayload {
   const boundary = `----rkrtest${crypto.randomBytes(8).toString('hex')}`;
-  const head =
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
-    `Content-Type: ${contentType}\r\n` +
-    `\r\n`;
-  const tail = `\r\n--${boundary}--\r\n`;
-
-  const payload = Buffer.concat([Buffer.from(head, 'utf8'), bytes, Buffer.from(tail, 'utf8')]);
-
+  const chunks: Buffer[] = [];
+  for (const p of parts) {
+    if (p.kind === 'field') {
+      chunks.push(
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="${p.fieldName}"\r\n\r\n${p.value}\r\n`,
+          'utf8'
+        )
+      );
+    } else {
+      chunks.push(
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="${p.fieldName}"; filename="${p.filename}"\r\nContent-Type: ${p.contentType}\r\n\r\n`,
+          'utf8'
+        )
+      );
+      chunks.push(p.bytes);
+      chunks.push(Buffer.from('\r\n', 'utf8'));
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`, 'utf8'));
+  const payload = Buffer.concat(chunks);
   return {
     payload,
     headers: {

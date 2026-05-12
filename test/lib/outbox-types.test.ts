@@ -51,14 +51,23 @@ test('coalescePending: savePost entries for different slugs both kept', () => {
   );
 });
 
-test('coalescePending: setOps coalesces by id, latest seq wins', () => {
-  const earlier = entry(2, 'setOps', { payload: { id: 'abc', ops: [], redoStack: [] } });
-  const later = entry(8, 'setOps', {
-    payload: { id: 'abc', ops: [{ type: 'rotate', degrees: 90 }], redoStack: [] }
+test('coalescePending: commitImageEdit coalesces by id, latest seq wins', () => {
+  const earlier = entry(2, 'commitImageEdit', {
+    payload: { id: 'abc', ops: [], redoStack: [], hasBake: false }
   });
-  const other = entry(5, 'setOps', { payload: { id: 'def', ops: [], redoStack: [] } });
+  const later = entry(8, 'commitImageEdit', {
+    payload: {
+      id: 'abc',
+      ops: [{ type: 'rotate', degrees: 90 }],
+      redoStack: [],
+      hasBake: true
+    }
+  });
+  const other = entry(5, 'commitImageEdit', {
+    payload: { id: 'def', ops: [], redoStack: [], hasBake: false }
+  });
   const result = coalescePending([earlier, later, other]);
-  // Both ids represented, but only the latest setOps for `abc`.
+  // Both ids represented, but only the latest commit for `abc`.
   assert.equal(result.length, 2);
   assert.deepEqual(
     result.map((e) => e.seq).sort((a, b) => a - b),
@@ -75,15 +84,6 @@ test('coalescePending: upload entries are NEVER coalesced (content-addressed)', 
   const b = entry(2, 'upload', {
     payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
   });
-  assert.equal(coalescePending([a, b]).length, 2);
-});
-
-test('coalescePending: bake entries are NEVER coalesced', () => {
-  // Two bakes for same id but DIFFERENT opsHash → both must drain
-  // (the second's ops-hash must match server's current ops; server
-  // 409s the wrong one).
-  const a = entry(1, 'bake', { payload: { id: 'abc', opsHash: 'aaaa' } });
-  const b = entry(2, 'bake', { payload: { id: 'abc', opsHash: 'bbbb' } });
   assert.equal(coalescePending([a, b]).length, 2);
 });
 

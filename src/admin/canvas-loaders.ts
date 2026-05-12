@@ -5,7 +5,6 @@
 
 import type { Editor } from '@tiptap/core';
 
-import { bakeOpsHash } from '../lib/bake-ops-hash.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
 
@@ -198,16 +197,4 @@ export async function refreshImagePreview(
  * on it. */
 export function getPreviewUrl(id: string): string | null {
   return previewBlobUrls.get(id) ?? null;
-}
-
-export async function uploadBake(id: string, blob: Blob, ops: readonly SidecarOp[]): Promise<void> {
-  const res = await fetch(`/admin/sidecar/${id}/bake`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'image/webp',
-      'x-rkr-bake-ops-hash': await bakeOpsHash(ops)
-    },
-    body: blob
-  });
-  if (!res.ok) throw new Error(`bake: ${res.status} ${await res.text()}`);
 }

@@ -1,23 +1,47 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
+import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
 
-import { canonicalJson } from '../../src/lib/canonical-json.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
 import type { SidecarOp } from '../../src/lib/sidecar-types.ts';
 import { buildApp } from '../../src/server.ts';
+import { buildMultipartParts } from '../helpers/multipart.ts';
 
-/** sha256 hex of canonicalJson(ops) — the value the server expects in
- * X-Rkr-Bake-Ops-Hash. Mirrors what the client computes; if this
- * function changes, src/admin/canvas-loaders.ts:uploadBake needs the
- * same change. */
-function bakeOpsHash(ops: readonly SidecarOp[]): string {
-  return crypto.createHash('sha256').update(canonicalJson(ops), 'utf8').digest('hex');
+/** Build + POST a /admin/sidecar/:id/commit request. Mirrors the
+ * editor client's `postCommit` (image-edit.ts): one `ops` JSON field
+ * + optional `bake` WebP file. Most validation-failure tests don't
+ * need a bake (server returns 400 before reaching the bake check);
+ * success tests with non-empty ops do. */
+async function commit(
+  app: FastifyInstance,
+  id: string,
+  body: { ops: unknown; redoStack?: unknown },
+  opts?: { bake?: Buffer }
+): Promise<Awaited<ReturnType<FastifyInstance['inject']>>> {
+  const parts: Parameters<typeof buildMultipartParts>[0][number][] = [
+    { kind: 'field', fieldName: 'ops', value: JSON.stringify(body) }
+  ];
+  if (opts?.bake) {
+    parts.push({
+      kind: 'file',
+      fieldName: 'bake',
+      filename: `${id}.webp`,
+      contentType: 'image/webp',
+      bytes: opts.bake
+    });
+  }
+  const mp = buildMultipartParts(parts);
+  return app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${id}/commit`,
+    headers: mp.headers,
+    payload: mp.payload
+  });
 }
 
 function freshSiteRoot(t: TestContext): string {
@@ -270,12 +294,22 @@ test('GET /admin/original/:id 404s when sidecar exists but original file is miss
   assert.match(res.json<{ error: string }>().error, /missing/);
 });
 
-// ---- /admin/sidecar/:id/bake -------------------------------------------
-// The editor uploads its client-baked post-ops WebP here. The server
-// stores it at bakes/<id[0:2]>/<id[2:4]>/<id>.webp and the render
-// pipeline prefers it over the original (skipping applyOp in sharp).
+// ---- /admin/sidecar/:id/commit -----------------------------------------
+// Atomic image-edit save: one multipart payload carries new ops + the
+// client-baked WebP. Server validates both, writes the bake + sidecar
+// back-to-back, drops stale per-id derivatives. Replaces the prior
+// split /ops + /bake endpoints which exposed an inconsistent
+// intermediate state and required an X-Rkr-Bake-Ops-Hash guard.
 
 import { bakePath } from '../../src/lib/originals.ts';
+
+async function makeJpegSized(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 50, g: 100, b: 200 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
 
 async function makeWebp(width: number, height: number): Promise<Buffer> {
   return sharp({
@@ -285,295 +319,13 @@ async function makeWebp(width: number, height: number): Promise<Buffer> {
     .toBuffer();
 }
 
-test('POST /admin/sidecar/:id/bake stores the WebP at bakes/<id>.webp', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
+async function ingestSized(root: string, w: number, h: number): Promise<{ id: string }> {
+  return ingestStream({
+    stream: Readable.from([await makeJpegSized(w, h)]),
     siteRoot: root,
     source: { kind: 'upload', originalName: 'sample.jpg' }
   });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const webp = await makeWebp(800, 600);
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: webp
-  });
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json<{ bytes: number }>().bytes, webp.length);
-
-  // File on disk matches what we uploaded.
-  const onDisk = await fs.promises.readFile(bakePath(root, ingest.id));
-  assert.equal(Buffer.compare(onDisk, webp), 0);
-});
-
-test('POST /admin/sidecar/:id/bake rejects non-WebP content types and bad bodies', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  // Wrong content-type → 415.
-  const wrongCt = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/png' },
-    payload: Buffer.from([0x89, 0x50, 0x4e, 0x47])
-  });
-  assert.equal(wrongCt.statusCode, 415);
-
-  // Right content-type but the body isn't a valid WebP → 400.
-  const garbage = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: Buffer.from('not a webp file at all just text bytes here')
-  });
-  assert.equal(garbage.statusCode, 400);
-  assert.match(garbage.json<{ error: string }>().error, /not a WebP/);
-
-  // Magic-byte spoof: starts with "RIFF????WEBP" but the rest is junk.
-  // The pre-sharp magic-byte check passes, then sharp.metadata() fails
-  // and we reject with the decode error rather than landing the bytes
-  // on disk.
-  const spoof = Buffer.concat([
-    Buffer.from('RIFF', 'ascii'),
-    Buffer.from([0x10, 0x00, 0x00, 0x00]), // size = 16
-    Buffer.from('WEBP', 'ascii'),
-    Buffer.from('garbage_!@#$', 'ascii')
-  ]);
-  const spoofRes = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: spoof
-  });
-  assert.equal(spoofRes.statusCode, 400);
-  assert.match(spoofRes.json<{ error: string }>().error, /not a decodable WebP/);
-});
-
-test('POST /admin/sidecar/:id/bake 400s on malformed id and 404s on unknown', async (t) => {
-  const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const bad = await app.inject({
-    method: 'POST',
-    url: '/admin/sidecar/not-a-real-id/bake',
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: await makeWebp(10, 10)
-  });
-  assert.equal(bad.statusCode, 400);
-
-  const missing = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${'a'.repeat(64)}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: await makeWebp(10, 10)
-  });
-  assert.equal(missing.statusCode, 404);
-});
-
-test('POST /admin/sidecar/:id/ops unlinks the bake (so render falls back to original until next bake upload)', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  // Plant a bake.
-  const webp = await makeWebp(800, 600);
-  const planted = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: webp
-  });
-  assert.equal(planted.statusCode, 200);
-  assert.equal(fs.existsSync(bakePath(root, ingest.id)), true);
-
-  // Mutate ops; bake must be gone afterwards.
-  const opsRes = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: 90 }] }
-  });
-  assert.equal(opsRes.statusCode, 200);
-  assert.equal(fs.existsSync(bakePath(root, ingest.id)), false);
-});
-
-test('POST /admin/sidecar/:id/bake also drops stale derivatives so cached results match the new bake', async (t) => {
-  // Re-bake at higher quality (or a redo of identical ops) → ops
-  // didn't change but the rendered output should. Stale per-id
-  // cache files would otherwise serve a render derived from the
-  // previous bake.
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const cacheImg = path.join(root, 'cache', 'img');
-  fs.mkdirSync(cacheImg, { recursive: true });
-  const stale = path.join(cacheImg, `${ingest.id}.aaaaaaaaaaaa.webp`);
-  fs.writeFileSync(stale, 'old-bytes');
-
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: await makeWebp(800, 600)
-  });
-
-  assert.equal(fs.existsSync(stale), false);
-});
-
-test('POST /admin/sidecar/:id/bake 400s when X-Rkr-Bake-Ops-Hash header is missing', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(400, 300)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp' },
-    payload: await makeWebp(400, 300)
-  });
-  assert.equal(res.statusCode, 400);
-  assert.match(res.json<{ error: string }>().error, /header required/);
-});
-
-test('POST /admin/sidecar/:id/bake 409s when X-Rkr-Bake-Ops-Hash does not match current ops', async (t) => {
-  // Two-tab race: tab A applies a rotate (sidecar.ops = [rotate]), then
-  // tab B — which still has stale local state — POSTs a bake whose
-  // ops-hash matches the empty pre-rotate ops. Server must reject; tab B
-  // can re-bake against current ops and retry.
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(400, 300)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  // Tab A applies a rotate.
-  const opsRes = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: 90 }] }
-  });
-  assert.equal(opsRes.statusCode, 200);
-
-  // Tab B POSTs a bake with the empty-ops hash (its stale view).
-  const stale = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: { 'content-type': 'image/webp', 'x-rkr-bake-ops-hash': bakeOpsHash([]) },
-    payload: await makeWebp(400, 300)
-  });
-  assert.equal(stale.statusCode, 409);
-  const body = stale.json<{ error: string; expectedHash: string }>();
-  assert.equal(body.error, 'bake-ops-mismatch');
-  // Server returns the actual current-ops hash so the client knows what
-  // to re-bake against.
-  assert.equal(body.expectedHash, bakeOpsHash([{ type: 'rotate', degrees: 90 }]));
-
-  // The bake file was NOT written.
-  assert.equal(fs.existsSync(bakePath(root, ingest.id)), false);
-
-  // Re-POST with the correct hash succeeds.
-  const fresh = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: {
-      'content-type': 'image/webp',
-      'x-rkr-bake-ops-hash': bakeOpsHash([{ type: 'rotate', degrees: 90 }])
-    },
-    payload: await makeWebp(400, 300)
-  });
-  assert.equal(fresh.statusCode, 200);
-  assert.equal(fs.existsSync(bakePath(root, ingest.id)), true);
-});
-
-test('round-trip: float-coord crop normalized by server matches client hash without 409', async (t) => {
-  // Regression: validateOps Math.floors crop x/y/w/h, but the client
-  // used to compute X-Rkr-Bake-Ops-Hash against its un-normalized
-  // in-memory ops. A canvas crop with subpixel coords would then
-  // 409 deterministically — single-tab, single-flow. Fix: POST /ops
-  // returns the normalized ops in its body, and the client adopts
-  // them as authoritative before hashing + uploading the bake.
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(400, 300)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  // Client posts a crop with float coords (typical canvas drag output).
-  const floatCrop = { type: 'crop', x: 10.7, y: 20.3, w: 200.9, h: 150.4 };
-  const opsRes = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [floatCrop] }
-  });
-  assert.equal(opsRes.statusCode, 200);
-  const normalized = opsRes.json<{ ops: SidecarOp[] }>();
-  // Server floored the coords.
-  assert.deepEqual(normalized.ops, [{ type: 'crop', x: 10, y: 20, w: 200, h: 150 }]);
-
-  // Client hashes the NORMALIZED ops (post-fix behavior) and uploads.
-  const bake = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: {
-      'content-type': 'image/webp',
-      'x-rkr-bake-ops-hash': bakeOpsHash(normalized.ops)
-    },
-    payload: await makeWebp(200, 150)
-  });
-  assert.equal(bake.statusCode, 200, `bake should succeed; got body: ${bake.body}`);
-
-  // The pre-fix behavior — hashing un-normalized client ops — would 409.
-  // Verify the same hash mismatch story still applies, so the fix is
-  // about the *client* adopting normalized ops, not the server relaxing
-  // the guard.
-  const stale = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/bake`,
-    headers: {
-      'content-type': 'image/webp',
-      'x-rkr-bake-ops-hash': bakeOpsHash([floatCrop as unknown as SidecarOp])
-    },
-    payload: await makeWebp(200, 150)
-  });
-  assert.equal(stale.statusCode, 409);
-});
-
-// ---- /admin/sidecar/:id/meta + /admin/sidecar/:id/ops -----------------
-// Backing endpoints for the crop UI: meta supplies original-pixel
-// dimensions so the cropper can scale display coords; ops replaces the
-// sidecar's ops array with a validated crop (or future resample/rotate).
+}
 
 interface MetaResponse {
   width: number | null;
@@ -588,21 +340,188 @@ interface OpsResponse {
   redoStack: Array<Record<string, unknown>>;
 }
 
-async function makeJpegSized(width: number, height: number): Promise<Buffer> {
-  return sharp({
-    create: { width, height, channels: 3, background: { r: 50, g: 100, b: 200 } }
-  })
-    .jpeg({ quality: 80 })
-    .toBuffer();
-}
+test('POST /commit writes the bake and updates ops atomically', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const webp = await makeWebp(400, 300);
+  const res = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }], redoStack: [] },
+    { bake: webp }
+  );
+  assert.equal(res.statusCode, 200, `body: ${res.body}`);
+  const body = res.json<{ ops: SidecarOp[]; redoStack: SidecarOp[] }>();
+  assert.deepEqual(body.ops, [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }]);
+  assert.deepEqual(body.redoStack, []);
+
+  // Bake landed byte-identical on disk.
+  const onDisk = await fs.promises.readFile(bakePath(root, ingest.id));
+  assert.equal(Buffer.compare(onDisk, webp), 0);
+});
+
+test('POST /commit with empty ops + no bake clears any prior bake', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }], redoStack: [] },
+    { bake: await makeWebp(400, 300) }
+  );
+  assert.equal(fs.existsSync(bakePath(root, ingest.id)), true);
+
+  const cleared = await commit(app, ingest.id, { ops: [], redoStack: [] });
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(fs.existsSync(bakePath(root, ingest.id)), false);
+});
+
+test('POST /commit rejects non-empty ops without a bake', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await commit(app, ingest.id, {
+    ops: [{ type: 'rotate', degrees: 90 }],
+    redoStack: []
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /bake required/);
+});
+
+test('POST /commit rejects empty ops with a bake', async (t) => {
+  // No bake belongs on a clear-edits save; the server unlinks any
+  // existing bake. Accepting a bake here would store pixels for ops
+  // that aren't there.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await commit(
+    app,
+    ingest.id,
+    { ops: [], redoStack: [] },
+    { bake: await makeWebp(10, 10) }
+  );
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /bake forbidden/);
+});
+
+test('POST /commit rejects malformed bake bytes', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Not a WebP at all (no RIFF/WEBP magic).
+  const garbage = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }], redoStack: [] },
+    { bake: Buffer.from('not a webp file at all') }
+  );
+  assert.equal(garbage.statusCode, 400);
+  assert.match(garbage.json<{ error: string }>().error, /not a WebP/);
+
+  // Magic-byte spoof: RIFF/WEBP header but the rest decodes nothing.
+  const spoof = Buffer.concat([
+    Buffer.from('RIFF', 'ascii'),
+    Buffer.from([0x10, 0x00, 0x00, 0x00]),
+    Buffer.from('WEBP', 'ascii'),
+    Buffer.from('garbage_!@#$', 'ascii')
+  ]);
+  const spoofRes = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }], redoStack: [] },
+    { bake: spoof }
+  );
+  assert.equal(spoofRes.statusCode, 400);
+  assert.match(spoofRes.json<{ error: string }>().error, /not a decodable WebP/);
+});
+
+test('POST /commit 400s on malformed id, 404s on unknown', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const bad = await commit(app, 'not-a-real-id', { ops: [], redoStack: [] });
+  assert.equal(bad.statusCode, 400);
+
+  const missing = await commit(app, 'a'.repeat(64), { ops: [], redoStack: [] });
+  assert.equal(missing.statusCode, 404);
+});
+
+test('POST /commit drops stale derivatives so previously-shared URLs stop serving', async (t) => {
+  // If the owner crops to redact, anyone who saw a previously-shared
+  // /img/<id>.<oldHash>.<fmt> must not still get the unredacted image.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const cacheImg = path.join(root, 'cache', 'img');
+  fs.mkdirSync(cacheImg, { recursive: true });
+  const stale1 = path.join(cacheImg, `${ingest.id}.aaaaaaaaaaaa.jpeg`);
+  const stale2 = path.join(cacheImg, `${ingest.id}.bbbbbbbbbbbb.webp`);
+  const otherId = `${'c'.repeat(64)}.aaaaaaaaaaaa.jpeg`;
+  fs.writeFileSync(stale1, 'old-jpeg');
+  fs.writeFileSync(stale2, 'old-webp');
+  fs.writeFileSync(path.join(cacheImg, otherId), 'unrelated');
+
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }], redoStack: [] },
+    { bake: await makeWebp(100, 100) }
+  );
+
+  assert.equal(fs.existsSync(stale1), false);
+  assert.equal(fs.existsSync(stale2), false);
+  assert.equal(fs.existsSync(path.join(cacheImg, otherId)), true);
+});
+
+test('POST /commit normalizes float-coord crops (formerly produced bake-ops-mismatch 409)', async (t) => {
+  // Regression of the bake-ops-mismatch class. validateOps Math.floors
+  // crop x/y/w/h; with the prior split /ops + /bake design the client
+  // would hash un-normalized coords and the server would hash floored
+  // coords → 409 + halted drain. Atomic commit eliminates the hash
+  // entirely; the server returns normalized ops, the client adopts.
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 400, 300);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const res = await commit(
+    app,
+    ingest.id,
+    {
+      ops: [{ type: 'crop', x: 10.7, y: 20.3, w: 200.9, h: 150.4 }],
+      redoStack: []
+    },
+    { bake: await makeWebp(200, 150) }
+  );
+  assert.equal(res.statusCode, 200, `body: ${res.body}`);
+  assert.deepEqual(res.json<{ ops: SidecarOp[] }>().ops, [
+    { type: 'crop', x: 10, y: 20, w: 200, h: 150 }
+  ]);
+});
+
+// ---- /admin/sidecar/:id/meta + /commit ops validation -------------------
+// These exercise validateOps via /commit. The validator is shared
+// with the client editor (src/lib/ops-validation.ts).
 
 test('GET /admin/sidecar/:id/meta returns original dimensions + ops', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
@@ -614,8 +533,6 @@ test('GET /admin/sidecar/:id/meta returns original dimensions + ops', async (t) 
   // metadata.format reflects bytes on disk, which are post-resize WebP.
   assert.equal(body.format, 'webp');
   assert.deepEqual(body.ops, []);
-  // Fresh sidecar has no redo history. Empty array (not absent) so the
-  // client doesn't have to defend against undefined.
   assert.deepEqual(body.redoStack, []);
 });
 
@@ -634,83 +551,60 @@ test('GET /admin/sidecar/:id/meta 404s on unknown id and 400s on malformed', asy
   assert.equal(bad.statusCode, 400);
 });
 
-test('POST /admin/sidecar/:id/ops persists a crop op', async (t) => {
+test('POST /commit persists a crop op (round-trips via GET /meta)', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'crop', x: 100, y: 50, w: 400, h: 300 }] }
-  });
+  const res = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 100, y: 50, w: 400, h: 300 }], redoStack: [] },
+    { bake: await makeWebp(400, 300) }
+  );
   assert.equal(res.statusCode, 200);
-  const body = res.json<OpsResponse>();
-  assert.deepEqual(body.ops, [{ type: 'crop', x: 100, y: 50, w: 400, h: 300 }]);
+  assert.deepEqual(res.json<OpsResponse>().ops, [{ type: 'crop', x: 100, y: 50, w: 400, h: 300 }]);
 
-  // Confirm the sidecar on disk reflects the new ops.
   const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
   assert.deepEqual(meta.json<MetaResponse>().ops, [
     { type: 'crop', x: 100, y: 50, w: 400, h: 300 }
   ]);
 });
 
-test('POST /admin/sidecar/:id/ops rejects out-of-bounds crops', async (t) => {
+test('POST /commit rejects out-of-bounds crops', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // Crop extends past the right edge.
-  const overflow = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'crop', x: 500, y: 0, w: 400, h: 100 }] }
+  const overflow = await commit(app, ingest.id, {
+    ops: [{ type: 'crop', x: 500, y: 0, w: 400, h: 100 }],
+    redoStack: []
   });
   assert.equal(overflow.statusCode, 400);
   assert.match(overflow.json<{ error: string }>().error, /exceeds source/);
 
-  // Negative coordinate.
-  const neg = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'crop', x: -1, y: 0, w: 100, h: 100 }] }
+  const neg = await commit(app, ingest.id, {
+    ops: [{ type: 'crop', x: -1, y: 0, w: 100, h: 100 }],
+    redoStack: []
   });
   assert.equal(neg.statusCode, 400);
 
-  // Zero width.
-  const zero = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 0, h: 100 }] }
+  const zero = await commit(app, ingest.id, {
+    ops: [{ type: 'crop', x: 0, y: 0, w: 0, h: 100 }],
+    redoStack: []
   });
   assert.equal(zero.statusCode, 400);
 });
 
-test('POST /admin/sidecar/:id/ops rejects unknown op types', async (t) => {
+test('POST /commit rejects unknown op types', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'invert' }] }
-  });
+  const res = await commit(app, ingest.id, { ops: [{ type: 'invert' }], redoStack: [] });
   assert.equal(res.statusCode, 400);
   assert.match(
     res.json<{ error: string }>().error,
@@ -718,129 +612,38 @@ test('POST /admin/sidecar/:id/ops rejects unknown op types', async (t) => {
   );
 });
 
-test('POST /admin/sidecar/:id/ops rejects too-many ops', async (t) => {
+test('POST /commit rejects too-many ops', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
   const ops = Array.from({ length: 20 }, () => ({ type: 'crop', x: 0, y: 0, w: 100, h: 100 }));
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops }
-  });
+  const res = await commit(app, ingest.id, { ops, redoStack: [] });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /at most/);
 });
 
-test('POST /admin/sidecar/:id/ops with empty ops clears the array', async (t) => {
+test('POST /commit accepts rotate / flip / resample shapes', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // Install a crop, then clear it.
-  await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }] }
-  });
-  const cleared = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [] }
-  });
-  assert.equal(cleared.statusCode, 200);
-  assert.deepEqual(cleared.json<OpsResponse>().ops, []);
-});
-
-test('POST /admin/sidecar/:id/ops 400s when body.ops is missing', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {}
-  });
-  assert.equal(res.statusCode, 400);
-  assert.match(res.json<{ error: string }>().error, /must be an array/);
-});
-
-test('POST /admin/sidecar/:id/ops unlinks stale derivatives so previously-shared URLs stop serving', async (t) => {
-  // If the owner crops to redact, anyone who saw a previously-shared
-  // /img/<id>.<oldHash>.<fmt> URL must not still get the unredacted
-  // image. Re-audit LOW finding: invalidate the cache on ops change.
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  // Plant some stale derivative files keyed by id.
-  const cacheImg = path.join(root, 'cache', 'img');
-  fs.mkdirSync(cacheImg, { recursive: true });
-  const stale1 = path.join(cacheImg, `${ingest.id}.aaaaaaaaaaaa.jpeg`);
-  const stale2 = path.join(cacheImg, `${ingest.id}.bbbbbbbbbbbb.webp`);
-  const otherId = `${'c'.repeat(64)}.aaaaaaaaaaaa.jpeg`;
-  fs.writeFileSync(stale1, 'old-jpeg');
-  fs.writeFileSync(stale2, 'old-webp');
-  fs.writeFileSync(path.join(cacheImg, otherId), 'unrelated');
-
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }] }
-  });
-  assert.equal(res.statusCode, 200);
-
-  // Stale derivatives for THIS id are gone…
-  assert.equal(fs.existsSync(stale1), false);
-  assert.equal(fs.existsSync(stale2), false);
-  // …but a derivative for a DIFFERENT id is untouched.
-  assert.equal(fs.existsSync(path.join(cacheImg, otherId)), true);
-});
-
-test('POST /admin/sidecar/:id/ops accepts rotate / flip / resample shapes', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
+  const res = await commit(
+    app,
+    ingest.id,
+    {
       ops: [
         { type: 'crop', x: 0, y: 0, w: 400, h: 400 },
         { type: 'rotate', degrees: 90 },
         { type: 'flip', axis: 'horizontal' },
         { type: 'resample', w: 200, fit: 'inside' }
-      ]
-    }
-  });
+      ],
+      redoStack: []
+    },
+    { bake: await makeWebp(200, 200) }
+  );
   assert.equal(res.statusCode, 200);
   const ops = res.json<OpsResponse>().ops;
   assert.equal(ops.length, 4);
@@ -849,109 +652,89 @@ test('POST /admin/sidecar/:id/ops accepts rotate / flip / resample shapes', asyn
   assert.equal(ops[3]?.type, 'resample');
 });
 
-test('POST /admin/sidecar/:id/ops normalizes rotate degrees mod 360 and drops zero-angle', async (t) => {
+test('POST /commit normalizes rotate degrees mod 360 and drops zero-angle', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // 450° → 90° after mod 360. -90 → 270.
-  const big = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: 450 }] }
-  });
+  // 450 → 90; -90 → 270; 360 → dropped (no-op rotation).
+  const big = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'rotate', degrees: 450 }], redoStack: [] },
+    { bake: await makeWebp(600, 800) }
+  );
   assert.equal(big.json<OpsResponse>().ops[0]?.degrees, 90);
 
-  const neg = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: -90 }] }
-  });
+  const neg = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'rotate', degrees: -90 }], redoStack: [] },
+    { bake: await makeWebp(600, 800) }
+  );
   assert.equal(neg.json<OpsResponse>().ops[0]?.degrees, 270);
 
-  // 360° normalizes to 0 → silently dropped.
-  const zero = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: 360 }] }
+  // 360 mod 360 = 0 → dropped → empty ops → no bake needed.
+  const zero = await commit(app, ingest.id, {
+    ops: [{ type: 'rotate', degrees: 360 }],
+    redoStack: []
   });
   assert.deepEqual(zero.json<OpsResponse>().ops, []);
 });
 
-test('POST /admin/sidecar/:id/ops rejects rotate degrees that are not multiples of 90', async (t) => {
+test('POST /commit rejects rotate degrees that are not multiples of 90', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: 45 }] }
+  const res = await commit(app, ingest.id, {
+    ops: [{ type: 'rotate', degrees: 45 }],
+    redoStack: []
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /multiple of 90/);
 });
 
-test('POST /admin/sidecar/:id/ops rejects flip with bad axis', async (t) => {
+test('POST /commit rejects flip with bad axis', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'flip', axis: 'diagonal' }] }
+  const res = await commit(app, ingest.id, {
+    ops: [{ type: 'flip', axis: 'diagonal' }],
+    redoStack: []
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /horizontal.*vertical/);
 });
 
-test('POST /admin/sidecar/:id/ops rejects resample with no dimension or out-of-range dimension', async (t) => {
+test('POST /commit rejects resample with no dimension or out-of-range dimension', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const empty = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'resample' }] }
+  const empty = await commit(app, ingest.id, {
+    ops: [{ type: 'resample' }],
+    redoStack: []
   });
   assert.equal(empty.statusCode, 400);
   assert.match(empty.json<{ error: string }>().error, /needs at least w or h/);
 
-  const huge = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'resample', w: 99999 }] }
+  const huge = await commit(app, ingest.id, {
+    ops: [{ type: 'resample', w: 99999 }],
+    redoStack: []
   });
   assert.equal(huge.statusCode, 400);
   assert.match(huge.json<{ error: string }>().error, /<= 8000/);
 });
 
-test('POST /admin/sidecar/:id/ops refuses non-empty ops when source has no recorded dimensions', async (t) => {
-  // Direct-write a sidecar without metadata.width/height — simulating
-  // an unusual format or future version where dims aren't known. Any
-  // crop op would produce an unrenderable sidecar.
+test('POST /commit refuses non-empty ops when source has no recorded dimensions', async (t) => {
+  // Hand-built sidecar without metadata.width/height — bounds-checking
+  // crop ops is impossible. ops=[] (clear) still works.
   const root = freshSiteRoot(t);
   const id = 'd'.repeat(64);
   fs.writeFileSync(
@@ -969,55 +752,36 @@ test('POST /admin/sidecar/:id/ops refuses non-empty ops when source has no recor
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${id}/ops`,
-    payload: { ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }] }
+  const res = await commit(app, id, {
+    ops: [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }],
+    redoStack: []
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /no recorded dimensions/);
 
-  // But clearing ops with [] still works (no bounds to check against).
-  const cleared = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${id}/ops`,
-    payload: { ops: [] }
-  });
+  const cleared = await commit(app, id, { ops: [], redoStack: [] });
   assert.equal(cleared.statusCode, 200);
 });
 
-// ---- Click-order + redoStack -----------------------------------------
-// The pipeline preserves the user's click order — no canonicalization.
-// `redoStack` is persisted alongside ops so undo/redo survives reload.
-// Adding a new op invalidates redoStack (standard linear-undo invariant);
-// the *client* enforces that by sending [] for redoStack on every
-// op-mutating action. The server passes redoStack through verbatim.
-
-test('POST /admin/sidecar/:id/ops preserves click order (no canonicalization)', async (t) => {
+test('POST /commit preserves click order (no canonicalization)', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // A flip BEFORE rotate should stay before rotate. An older
-  // canonicalizer enforced a fixed order (crop → rotate → flip →
-  // resample); we removed it so authors can chain ops in whatever
-  // order they actually want.
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
+  const res = await commit(
+    app,
+    ingest.id,
+    {
       ops: [
         { type: 'flip', axis: 'horizontal' },
         { type: 'rotate', degrees: 90 },
         { type: 'flip', axis: 'vertical' }
-      ]
-    }
-  });
+      ],
+      redoStack: []
+    },
+    { bake: await makeWebp(600, 800) }
+  );
   assert.equal(res.statusCode, 200);
   const ops = res.json<OpsResponse>().ops;
   assert.equal(ops[0]?.type, 'flip');
@@ -1027,67 +791,55 @@ test('POST /admin/sidecar/:id/ops preserves click order (no canonicalization)', 
   assert.equal(ops[2]?.axis, 'vertical');
 });
 
-test('POST /admin/sidecar/:id/ops persists and round-trips redoStack', async (t) => {
+test('POST /commit persists and round-trips redoStack', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // Simulate a client undo: ops shrinks by one, redoStack grows by one.
-  const saved = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
+  const saved = await commit(
+    app,
+    ingest.id,
+    {
       ops: [{ type: 'rotate', degrees: 90 }],
       redoStack: [{ type: 'flip', axis: 'horizontal' }]
-    }
-  });
+    },
+    { bake: await makeWebp(600, 800) }
+  );
   assert.equal(saved.statusCode, 200);
   const body = saved.json<OpsResponse>();
   assert.deepEqual(body.ops, [{ type: 'rotate', degrees: 90 }]);
   assert.deepEqual(body.redoStack, [{ type: 'flip', axis: 'horizontal' }]);
 
-  // Reload via GET /meta and confirm both arrays survive.
   const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
   const m = meta.json<MetaResponse>();
   assert.deepEqual(m.ops, [{ type: 'rotate', degrees: 90 }]);
   assert.deepEqual(m.redoStack, [{ type: 'flip', axis: 'horizontal' }]);
 });
 
-test('POST /admin/sidecar/:id/ops with empty redoStack clears any prior redo history', async (t) => {
+test('POST /commit with empty redoStack clears any prior redo history', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // Stash some redo history first.
-  await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [],
-      redoStack: [{ type: 'rotate', degrees: 90 }]
-    }
+  // Stash redo history first.
+  await commit(app, ingest.id, {
+    ops: [],
+    redoStack: [{ type: 'rotate', degrees: 90 }]
   });
 
-  // Then push a new op with redoStack:[] — the standard linear-undo
+  // Push a new op with redoStack:[] — the standard linear-undo
   // invariant. The redoStack should be cleared on disk.
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
+  const res = await commit(
+    app,
+    ingest.id,
+    {
       ops: [{ type: 'flip', axis: 'horizontal' }],
       redoStack: []
-    }
-  });
+    },
+    { bake: await makeWebp(800, 600) }
+  );
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.json<OpsResponse>().redoStack, []);
 
@@ -1095,81 +847,25 @@ test('POST /admin/sidecar/:id/ops with empty redoStack clears any prior redo his
   assert.deepEqual(meta.json<MetaResponse>().redoStack, []);
 });
 
-test('POST /admin/sidecar/:id/ops omitting body.redoStack preserves on-disk redoStack', async (t) => {
-  // Backward compat: clients that don't know about redoStack (or simple
-  // tools posting just an ops array) shouldn't accidentally wipe redo
-  // history. Only an explicit body.redoStack mutates it.
+test('POST /commit validates redoStack op shapes the same as ops', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // Stash a redo entry.
-  await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [{ type: 'rotate', degrees: 90 }],
-      redoStack: [{ type: 'flip', axis: 'vertical' }]
-    }
-  });
-
-  // Now POST with ops only (no redoStack key). Should preserve the
-  // existing redoStack entry.
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [{ type: 'rotate', degrees: 180 }] }
-  });
-  assert.equal(res.statusCode, 200);
-
-  const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
-  assert.deepEqual(meta.json<MetaResponse>().ops, [{ type: 'rotate', degrees: 180 }]);
-  assert.deepEqual(meta.json<MetaResponse>().redoStack, [{ type: 'flip', axis: 'vertical' }]);
-});
-
-test('POST /admin/sidecar/:id/ops validates redoStack op shapes the same as ops', async (t) => {
-  const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [],
-      redoStack: [{ type: 'invert' }]
-    }
+  const res = await commit(app, ingest.id, {
+    ops: [],
+    redoStack: [{ type: 'invert' }]
   });
   assert.equal(res.statusCode, 400);
-  // Error is prefixed with `redoStack:` so the caller can locate which
-  // array was at fault.
   assert.match(res.json<{ error: string }>().error, /redoStack:/);
 });
 
-// ---- perspective op validation ----------------------------------------
-// Perspective is the only op that doesn't run server-side: sharp can't
-// apply a homography, so the client bakes the result and uploads it.
-// The server validates op shape so a sidecar that round-trips through
-// /sidecar/:id/ops carries an authentic perspective op the client
-// (and any future server-side fallback) can execute.
+// ---- perspective op validation ------------------------------------------
 
-test('POST /admin/sidecar/:id/ops accepts a valid perspective op', async (t) => {
+test('POST /commit accepts a valid perspective op', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
@@ -1182,16 +878,16 @@ test('POST /admin/sidecar/:id/ops accepts a valid perspective op', async (t) => 
       [50, 580]
     ]
   };
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [op] }
-  });
+  const res = await commit(
+    app,
+    ingest.id,
+    { ops: [op], redoStack: [] },
+    { bake: await makeWebp(770, 570) }
+  );
   assert.equal(res.statusCode, 200);
   const ops = res.json<OpsResponse>().ops;
   assert.equal(ops.length, 1);
   assert.equal(ops[0]?.type, 'perspective');
-  // Coords are rounded to integers on store.
   assert.deepEqual(ops[0]?.corners, [
     [10, 20],
     [700, 5],
@@ -1200,137 +896,134 @@ test('POST /admin/sidecar/:id/ops accepts a valid perspective op', async (t) => 
   ]);
 });
 
-test('POST /admin/sidecar/:id/ops rejects perspective with wrong corner count', async (t) => {
+test('POST /commit rejects perspective with wrong corner count', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [
-        {
-          type: 'perspective',
-          corners: [
-            [0, 0],
-            [100, 0],
-            [100, 100]
-          ]
-        }
-      ]
-    }
+  const res = await commit(app, ingest.id, {
+    ops: [
+      {
+        type: 'perspective',
+        corners: [
+          [0, 0],
+          [100, 0],
+          [100, 100]
+        ]
+      }
+    ],
+    redoStack: []
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /4 points/);
 });
 
-test('POST /admin/sidecar/:id/ops rejects perspective with non-numeric / malformed corners', async (t) => {
+test('POST /commit rejects perspective with non-numeric / out-of-range corners', async (t) => {
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  // Wrong inner shape (single number not a pair).
-  const wrongPair = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [{ type: 'perspective', corners: [[0, 0], [100, 0], [100, 100], 5] }]
-    }
+  const wrongPair = await commit(app, ingest.id, {
+    ops: [{ type: 'perspective', corners: [[0, 0], [100, 0], [100, 100], 5] }],
+    redoStack: []
   });
   assert.equal(wrongPair.statusCode, 400);
   assert.match(wrongPair.json<{ error: string }>().error, /\[x, y\] pair/);
 
-  // Non-numeric coord (a string that can't be coerced).
-  const nonNumeric = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [
-        {
-          type: 'perspective',
-          corners: [
-            [0, 0],
-            ['oops', 0],
-            [100, 100],
-            [0, 100]
-          ]
-        }
-      ]
-    }
+  const nonNumeric = await commit(app, ingest.id, {
+    ops: [
+      {
+        type: 'perspective',
+        corners: [
+          [0, 0],
+          ['oops', 0],
+          [100, 100],
+          [0, 100]
+        ]
+      }
+    ],
+    redoStack: []
   });
   assert.equal(nonNumeric.statusCode, 400);
   assert.match(nonNumeric.json<{ error: string }>().error, /finite/);
 
-  // Negative coord.
-  const neg = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [
-        {
-          type: 'perspective',
-          corners: [
-            [-1, 0],
-            [100, 0],
-            [100, 100],
-            [0, 100]
-          ]
-        }
-      ]
-    }
+  const neg = await commit(app, ingest.id, {
+    ops: [
+      {
+        type: 'perspective',
+        corners: [
+          [-1, 0],
+          [100, 0],
+          [100, 100],
+          [0, 100]
+        ]
+      }
+    ],
+    redoStack: []
   });
   assert.equal(neg.statusCode, 400);
   assert.match(neg.json<{ error: string }>().error, /non-negative/);
 
-  // Way-too-large coord: refuse runaway values up front instead of
-  // letting them flow into the sidecar and downstream renderer.
-  const huge = await app.inject({
-    method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: {
-      ops: [
-        {
-          type: 'perspective',
-          corners: [
-            [0, 0],
-            [200_000, 0],
-            [100, 100],
-            [0, 100]
-          ]
-        }
-      ]
-    }
+  const huge = await commit(app, ingest.id, {
+    ops: [
+      {
+        type: 'perspective',
+        corners: [
+          [0, 0],
+          [200_000, 0],
+          [100, 100],
+          [0, 100]
+        ]
+      }
+    ],
+    redoStack: []
   });
   assert.equal(huge.statusCode, 400);
   assert.match(huge.json<{ error: string }>().error, /<= 100000/);
 });
 
-test('POST /admin/sidecar/:id/ops 400s when body.redoStack is not an array', async (t) => {
+test('POST /commit 400s when `ops` field is missing from the multipart', async (t) => {
+  // Multipart with only a bake part — the route requires the `ops`
+  // text field.
   const root = freshSiteRoot(t);
-  const ingest = await ingestStream({
-    stream: Readable.from([await makeJpegSized(800, 600)]),
-    siteRoot: root,
-    source: { kind: 'upload', originalName: 'sample.jpg' }
-  });
+  const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
+  const mp = buildMultipartParts([
+    {
+      kind: 'file',
+      fieldName: 'bake',
+      filename: 'x.webp',
+      contentType: 'image/webp',
+      bytes: await makeWebp(10, 10)
+    }
+  ]);
   const res = await app.inject({
     method: 'POST',
-    url: `/admin/sidecar/${ingest.id}/ops`,
-    payload: { ops: [], redoStack: 'not-an-array' }
+    url: `/admin/sidecar/${ingest.id}/commit`,
+    headers: mp.headers,
+    payload: mp.payload
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.json<{ error: string }>().error, /redoStack/);
+  assert.match(res.json<{ error: string }>().error, /`ops` field required/);
+});
+
+test('POST /commit 400s on malformed JSON in the `ops` field', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 800, 600);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const mp = buildMultipartParts([{ kind: 'field', fieldName: 'ops', value: 'not-json' }]);
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${ingest.id}/commit`,
+    headers: mp.headers,
+    payload: mp.payload
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<{ error: string }>().error, /valid JSON/);
 });
