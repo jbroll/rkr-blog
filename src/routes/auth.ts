@@ -398,18 +398,50 @@ function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Sign in — ${escapeText(site.title)}</title>
 <style>
-/* Pre-paint body chrome so the brief window between HTML head
-   parsing and external CSS loading doesn't flash a white canvas.
-   /admin/login is bypassed by the public service worker, so its
-   HTML is always fetched from the network — without this inline
-   guard, dark-mode visitors see a frame of white while base.css /
-   themes/default.css are in flight. Values match default.css's
-   :root tokens; the external stylesheet still wins at paint time
-   if a non-default theme defines other colors. */
+/* The login page has form widgets (inputs, the submit button,
+   the Google sign-in link styled as a box) whose default browser
+   rendering is wildly different from the themed look — wide
+   instead of a 24rem column, native widget chrome instead of
+   bordered/padded boxes. Render-blocking link tags usually mask
+   the transition, but with inline styles in the same head the
+   browser can paint an intermediate frame using inline-only
+   rules before the external sheet settles, producing a brief
+   "page reformats" flash that other public pages don't show
+   because their default rendering is close to themed.
+
+   Inline the full login layout here so the first paint already
+   matches the final layout. Hardcoded colors target the default
+   theme; non-default themes still override via the external
+   sheet that loads next. Values match themes/default.css. */
 :root { color-scheme: light dark; }
-body { margin: 0; background: #fdfdfb; color: #1a1a1a; }
+body { margin: 0; background: #fdfdfb; color: #1a1a1a;
+       font-family: ui-serif, Georgia, "Times New Roman", Times, serif; }
+.rkr-login { max-width: 24rem; margin: 2rem auto; padding: 0 1rem; }
+.rkr-login h1 { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                Roboto, "Helvetica Neue", Arial, sans-serif;
+                font-size: 1.5rem; margin: 0 0 1.5rem; }
+.rkr-login hr { border: 0; border-top: 1px solid #e5e5e2; margin: 2rem 0; }
+.rkr-login-google { display: inline-block; padding: 0.5rem 1rem;
+                    border: 1px solid #e5e5e2; border-radius: 4px;
+                    text-decoration: none; color: #1a1a1a; }
+.rkr-login-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.rkr-login-form label { display: flex; flex-direction: column;
+                        gap: 0.25rem; font-size: 0.9rem; }
+.rkr-login-form input { padding: 0.5rem; font: inherit;
+                        border: 1px solid #e5e5e2; border-radius: 4px;
+                        background: #fdfdfb; color: #1a1a1a; }
+.rkr-login-submit { padding: 0.5rem 1rem; font: inherit;
+                    background: #1a4f7f; color: #fdfdfb;
+                    border: 1px solid #1a4f7f; border-radius: 4px;
+                    cursor: pointer; }
 @media (prefers-color-scheme: dark) {
   body { background: #14140e; color: #ebeae4; }
+  .rkr-login hr { border-top-color: #2a2a25; }
+  .rkr-login-google { border-color: #2a2a25; color: #ebeae4; }
+  .rkr-login-form input { background: #14140e; color: #ebeae4;
+                          border-color: #2a2a25; }
+  .rkr-login-submit { background: #8fb3da; color: #14140e;
+                      border-color: #8fb3da; }
 }
 </style>
 ${stylesheetLinks()}
