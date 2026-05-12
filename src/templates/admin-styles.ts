@@ -40,6 +40,11 @@ export const ADMIN_CSS = `
     box-shadow: 0 4px 6px -4px var(--rkr-shadow, rgba(0, 0, 0, 0.08));
   }
   #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
+  /* Icon-style toolbar buttons (Link, +Image): show the SVG glyph
+     centered; padding matches the text buttons so the row stays
+     aligned. The SVG inherits currentColor so the active-state
+     invert keeps working. */
+  #rkroll-admin-toolbar button svg { display: block; }
   #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
   /* Primary toolbar action (Save). Visually distinct from the icon
      cluster around it: the doc publishes when you click this one.
