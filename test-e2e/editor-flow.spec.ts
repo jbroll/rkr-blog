@@ -7,6 +7,8 @@
 // browser glue (TipTap insertContent, panel re-population on selection,
 // JSON-to-markdown serialization on save) that only runs in a real DOM.
 
+import sharp from 'sharp';
+
 import { expect, test } from './coverage-fixtures.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
@@ -1548,6 +1550,62 @@ test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async (
 
   expect(seqs).toHaveLength(n);
   expect(new Set(seqs).size).toBe(n);
+});
+
+// Client-side ingest resize: a 4000×3000 PNG should be resized to
+// long-edge 3200 and re-encoded as WebP by the browser BEFORE
+// uploadImage hashes it. The bytes the server stores are then byte-
+// identical to what the client has in OPFS — no coord divergence
+// between editor canvas and server-applied ops.
+test('editor: client-side ingest resize clamps to 3200 long-edge and re-encodes as WebP', async ({
+  page
+}) => {
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e resize');
+  await setSlug(page, `e2e-resize-${Date.now()}`);
+
+  // 4000×3000 PNG. The full encoded buffer is a few hundred KB so
+  // this stays test-fast while sitting comfortably above the 3200
+  // clamp on both axes.
+  const big = await sharp({
+    create: { width: 4000, height: 3000, channels: 3, background: { r: 20, g: 80, b: 160 } }
+  })
+    .png()
+    .toBuffer();
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'big.png',
+    mimeType: 'image/png',
+    buffer: big
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded big/, {
+    timeout: 15_000
+  });
+
+  // The OPFS-stored blob must be the resized WebP. Read it back via
+  // page.evaluate, decode dimensions via createImageBitmap.
+  const dims = await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    const dir = await opfs.getDirectoryHandle('originals');
+    for await (const [name, handle] of (
+      dir as FileSystemDirectoryHandle & {
+        entries: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+      }
+    ).entries()) {
+      if (!name.endsWith('.webp') || handle.kind !== 'file') continue;
+      const file = await (handle as FileSystemFileHandle).getFile();
+      const bmp = await createImageBitmap(file);
+      const out = { width: bmp.width, height: bmp.height, ext: 'webp' };
+      bmp.close();
+      return out;
+    }
+    return null;
+  });
+  expect(dims).not.toBeNull();
+  // Long edge clamped to 3200; aspect ratio preserved (4000:3000 = 4:3
+  // → 3200×2400). Rounding tolerance ±1 px on the short edge.
+  expect(dims).toEqual({ width: 3200, height: 2400, ext: 'webp' });
 });
 
 // Orphan outbox-blob GC: outbox.append writes the blob before the

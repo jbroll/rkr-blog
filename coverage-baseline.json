@@ -58,8 +58,8 @@
       "linesHit": 11
     },
     "src/admin/upload.ts": {
-      "linesFound": 3,
-      "linesHit": 3
+      "linesFound": 6,
+      "linesHit": 6
     },
     "src/admin/opfs-schema.ts": {
       "linesFound": 16,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 34
+      "linesHit": 36
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -211,11 +211,15 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 20,
-      "linesHit": 19
+      "linesHit": 20
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
       "linesHit": 1
+    },
+    "src/admin/ingest-resize-client.ts": {
+      "linesFound": 14,
+      "linesHit": 12
     }
   }
 }

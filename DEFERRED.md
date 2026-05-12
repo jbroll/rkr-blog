@@ -456,28 +456,35 @@ ensureLocalState, which is a non-trivial server contract change.
 lost a change", or when commit-image-edit grows a version field on
 the server side.
 
-### Pre-resize coord divergence in offline editor
-**Source.** Local-first correctness audit, Apr 2026.
+### Pre-resize coord divergence — narrowed to HEIC-on-non-Safari
+**Source.** Local-first correctness audit, Apr 2026. Mostly
+addressed by client-side ingest resize (`src/admin/ingest-resize-client.ts`,
+landed alongside this entry's revision).
 
-**What.** Server's `ingestStream`
-(`src/lib/originals.ts:218-241`) resizes large originals at upload
-time. The client's OPFS copy keeps the raw upload bytes. If the
-editor opens the image-edit modal **offline** (canvas-loaders'
-new OPFS fallback at `src/admin/canvas-loaders.ts:111-119`) on a
-24MP camera shot, canvas coords are in 24MP space. After drain
-plus reload, the editor fetches the server's resized version (say
-8MP); ops applied in the editor's 24MP coord space don't translate.
+**What.** The original bug: server's `ingestStream` resizes large
+originals at ingest; client's OPFS holds the raw upload bytes; an
+offline editor canvas in raw-upload coord space emits ops the
+server's resized base can't apply. Now that the client resizes
+before uploading, the bytes the client edits with and the bytes
+the server stores are the same — coord-divergence is closed for
+every format the browser can decode (JPEG, PNG, WebP, AVIF, GIF
+first-frame).
 
-**Why deferred.** Requires either sending pre-resize dims with
-each commit so the server can scale ops, or refetching the
-server's resized original after drain and rebuilding the canvas.
-Either is a coordinate-system contract change that needs spec
-work. Pre-existing — happens on online edits too, but masked by
-re-fetching the server original when going online.
+**Remaining gap:** `createImageBitmap` can't decode HEIC outside
+Safari. A user on Chrome/Firefox uploading an iPhone HEIC falls
+through to the raw-upload path; the server resizes; if the user
+then edits offline (canvas-loaders' OPFS fallback decodes via
+`<img>` which CAN decode HEIC in some non-Safari builds), coords
+diverge.
 
-**Trigger.** Reporter saying their crop / rotate ops applied
-wrong after offline editing. Or when we add lazy server-side
-resize (which would also remove the divergence).
+**Why deferred.** Narrow trigger window (HEIC + non-Safari + edit
+before drain). Real fix needs either HEIC transcode to WebP
+client-side (libheif WASM) or a server endpoint that returns the
+resized version's dimensions so the client can scale ops at
+commit time. Both are non-trivial.
+
+**Trigger.** A user reports edits applied wrong after editing a
+HEIC photo offline in Chrome / Firefox.
 
 ### Drainer boilerplate refactor
 **Source.** Local-first simplification audit, Apr 2026.
