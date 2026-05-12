@@ -52,7 +52,16 @@ import {
 import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
+import { imageDimensions } from '../lib/widget-helpers.ts';
 import { WidgetRegistry } from '../lib/widgets.ts';
+
+// Smallest source dimension the derivative pipeline will accept.
+// Sharp + the encoders (mozjpeg, libwebp, libavif) refuse or produce
+// unusable output below a handful of pixels; we reject up front with
+// 422 so an absurd input ("synthetic 1×1 PNG smoke fixture", corrupt
+// EXIF that lies the image is 0×0) doesn't become a 500.
+const MIN_RENDER_DIM = 16;
+
 import { renderIndexPage } from '../templates/index.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
@@ -220,6 +229,20 @@ export default async function publicRoutes(
 
       const match = findVariantOutput(sidecar, ophash);
       if (!match) return reply.code(404).send({ error: 'no matching variant' });
+
+      // Reject inputs too small to derive a useful variant from.
+      // Cheaper than letting sharp throw mid-pipeline and serving 500
+      // — and gives clients a deterministic 422 they can suppress
+      // rather than spamming retries against.
+      const dims = await imageDimensions(siteRoot, originalId, sidecar);
+      if (dims.width < MIN_RENDER_DIM || dims.height < MIN_RENDER_DIM) {
+        return reply.code(422).send({
+          error: 'input too small to derive a variant',
+          width: dims.width,
+          height: dims.height,
+          min: MIN_RENDER_DIM
+        });
+      }
 
       const args: DerivativeArgs & { siteRoot: string } = {
         originalId,

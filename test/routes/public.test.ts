@@ -153,6 +153,49 @@ test('GET /img/<filename> 404s when the ophash does not match any variant×outpu
   assert.match(res.json<ErrorBody>().error, /no matching variant/);
 });
 
+test('GET /img/<filename> 422s when the source is too small to derive a variant', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(':memory:');
+  migrate(db);
+  t.after(() => db.close());
+
+  // Ingest a 4×4 PNG — below the MIN_RENDER_DIM=16 guard. Without
+  // the guard, sharp throws mid-pipeline and the route returns 500;
+  // with it we get a structured 422 the client can suppress.
+  const tiny = await sharp({
+    create: { width: 4, height: 4, channels: 3, background: { r: 1, g: 2, b: 3 } }
+  })
+    .png()
+    .toBuffer();
+  const ingested = await ingestStream({
+    stream: Readable.from([tiny]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'tiny.png' }
+  });
+
+  const { buildApp } = await import('../../src/server.ts');
+  const app = await buildApp({ siteRoot: root, db, startWorker: false });
+  t.after(async () => {
+    await app.close();
+    events.removeAllListeners('enqueued');
+  });
+
+  const variant = ingested.sidecar.variants[0] as Variant;
+  const output = ingested.sidecar.outputs[0] as Output;
+  const filename = derivativeFilename({
+    originalId: ingested.sidecar.original,
+    ops: ingested.sidecar.ops as DerivativeArgs['ops'],
+    variant,
+    output
+  });
+  const res = await app.inject({ method: 'GET', url: `/img/${filename}` });
+  assert.equal(res.statusCode, 422);
+  const body = res.json<{ error: string; width: number; height: number; min: number }>();
+  assert.match(body.error, /too small/);
+  assert.equal(body.width, 4);
+  assert.equal(body.height, 4);
+});
+
 test('GET /img/<filename> on budget-exceeded enqueues + returns 202', async (t) => {
   const { root, db, sidecar } = await setup(t);
 
