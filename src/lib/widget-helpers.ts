@@ -13,6 +13,7 @@ import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
 import { bakePath, imageInfo } from './originals.ts';
+import { resamplePerspective } from './perspective-resample.ts';
 import { listSidecarIds } from './posts.ts';
 import { applyOp, type Op, type OutputFormat } from './render.ts';
 import type { Sidecar } from './sidecar-types.ts';
@@ -275,15 +276,15 @@ export async function imageDimensions(
 }
 
 /** Return the bake's on-disk dimensions, recreating the file from
- * the original + ops when missing. Server-applicable ops (crop /
- * rotate / flip / resample) are recreated via sharp. Perspective
- * can only be baked by the canvas pipeline — if a sidecar with a
- * perspective op has no bake, we can't recover; throw and let the
- * caller decide whether to surface the error.
+ * the original + ops when missing. All op kinds — including
+ * perspective — are recreatable: sharp handles crop/rotate/flip/
+ * resample directly; perspective uses a pure-JS resampler (see
+ * src/lib/perspective-resample.ts) that mirrors the editor's WebGL
+ * pipeline pixel-for-pixel.
  *
- * Net effect: callers always get dims that match the served pixels,
- * and any pre-/commit-migration sidecars (ops set, bake missing)
- * self-heal on first request. */
+ * Net effect: any sidecar with ops + no bake self-heals on first
+ * request, and the served pixels match what the editor would have
+ * baked. File-as-truth holds. */
 async function ensureBake(
   siteRoot: string,
   id: string,
@@ -297,17 +298,11 @@ async function ensureBake(
     /* missing or unreadable; recreate below */
   }
   const ops = (sidecar.ops ?? []) as Op[];
-  if (ops.some((o) => o.type === 'perspective')) {
-    throw new Error(
-      `widget-helpers: bake missing for ${id.slice(0, 8)}… with a perspective op; can't recreate server-side (re-save in the editor)`
-    );
-  }
   const info = await imageInfo(siteRoot, id);
   if (!info) {
     throw new Error(`widget-helpers: original missing for ${id.slice(0, 8)}…`);
   }
-  let pipeline = sharp(info.path, { failOn: 'error' });
-  for (const op of ops) pipeline = applyOp(pipeline, op);
+  const pipeline = await applyOpsWithPerspective(info.path, ops);
   await fs.promises.mkdir(path.dirname(bp), { recursive: true });
   const tmp = `${bp}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   try {
@@ -321,6 +316,34 @@ async function ensureBake(
   console.warn(`widget-helpers: recreated missing bake for ${id.slice(0, 8)}…`);
   const meta = await sharp(bp).metadata();
   return { width: meta.width ?? 1, height: meta.height ?? 1 };
+}
+
+/** Chain ops through sharp, handling perspective with a pure-JS
+ * detour. Non-perspective ops compose via the standard sharp chain
+ * (applyOp); a perspective op materializes the current pipeline to
+ * raw RGBA, runs the JS resampler, then restarts the chain from the
+ * resampled buffer. Multiple perspective ops in a row work fine,
+ * just with one materialization per op. */
+async function applyOpsWithPerspective(srcPath: string, ops: readonly Op[]): Promise<sharp.Sharp> {
+  let pipeline: sharp.Sharp = sharp(srcPath, { failOn: 'error' });
+  for (const op of ops) {
+    if (op.type === 'perspective') {
+      const { data, info } = await pipeline
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const result = resamplePerspective(data, info.width, info.height, op);
+      if (!result) {
+        throw new Error(`widget-helpers: malformed perspective op (corners or homography)`);
+      }
+      pipeline = sharp(result.buffer, {
+        raw: { width: result.width, height: result.height, channels: 4 }
+      });
+    } else {
+      pipeline = applyOp(pipeline, op);
+    }
+  }
+  return pipeline;
 }
 
 function unique<T>(arr: T[]): T[] {

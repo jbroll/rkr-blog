@@ -210,7 +210,12 @@ test('imageDimensions: bake-missing self-heals (creates the bake on disk)', asyn
   assert.equal(meta.height, 200);
 });
 
-test('imageDimensions: throws when a perspective op has no bake (unrecoverable)', async (t) => {
+test('imageDimensions: perspective op with no bake → pure-JS resampler recreates it', async (t) => {
+  // sharp/libvips has no homography operator, so the recreate path
+  // detours through src/lib/perspective-resample.ts (raw RGBA →
+  // inverse-homography sample per pixel → bilinear). The output
+  // dims match perspectiveOutputSize on the corner quad — average
+  // of top/bottom edges for width, average of left/right for height.
   const root = freshSiteRoot(t);
   const r = await ingestStream({
     stream: Readable.from([await makeJpeg(800, 600)]),
@@ -223,17 +228,34 @@ test('imageDimensions: throws when a perspective op has no bake (unrecoverable)'
     {
       type: 'perspective',
       corners: [
-        [10, 20],
-        [410, 30],
-        [420, 320],
-        [0, 310]
+        [10, 20], // tl
+        [410, 30], // tr — top edge ≈ 400
+        [420, 320], // br — bottom edge ≈ 412
+        [0, 310] // bl — left ≈ 290, right ≈ 290
       ]
     }
   ];
   await sidecarWrite(root, r.id, sidecar);
-  // sharp can't apply a perspective transform — the bake had to
-  // come from the editor's canvas pipeline. Server-side recreate
-  // isn't possible; ensureBake throws so the caller can surface
-  // the corruption instead of serving a misleading image.
-  await assert.rejects(() => imageDimensions(root, r.id, sidecar), /perspective op/);
+  const dims = await imageDimensions(root, r.id, sidecar);
+  // perspectiveOutputSize: width = avg(top, bottom edge lengths),
+  // height = avg(left, right edge lengths). With these corners the
+  // sqrt distances round to width=410, height=290.
+  assert.equal(dims.width, 410);
+  assert.equal(dims.height, 290);
+  // And the bake exists, so a subsequent call reads from it directly.
+  assert.equal(fs.existsSync(bakePath(root, r.id)), true);
+});
+
+test('imageDimensions: throws when a perspective op has malformed corners', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload' }
+  });
+  const sidecar = await sidecarRead(root, r.id);
+  assert.ok(sidecar);
+  sidecar.ops = [{ type: 'perspective', corners: 'not-an-array' }];
+  await sidecarWrite(root, r.id, sidecar);
+  await assert.rejects(() => imageDimensions(root, r.id, sidecar), /malformed perspective/);
 });
