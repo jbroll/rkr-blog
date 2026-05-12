@@ -169,11 +169,8 @@ function mount(): void {
     populateImageEditForActiveCell(idList);
   });
 
-  /** Show/hide the per-cell modal dialog. Open when a cell is
-   * selected (showModal native-stacks above the side panel + traps
-   * focus); close clears activeCellIndex via the dialog's own close
-   * listener so the figure-level state is consistent. Also seeds the
-   * caption + alt inputs from the active cell's pipe-separated entry. */
+  /** Show/hide the per-cell modal dialog and seed caption + alt
+   * inputs from the active cell's pipe-separated slot. */
   function syncScopeVisibility(idList: string[]): void {
     const cellMode = activeCellIndex !== null;
     if (!cellMode) {
@@ -211,9 +208,8 @@ function mount(): void {
     }
   }
 
-  /** Reset the image-edit section, then activate it for the active
-   * cell's id (if any). Delegates to image-edit-panel which owns the
-   * ensureLocalState fetch + button wiring. */
+  /** Activate the image-edit section for the active cell's id, or
+   * deactivate if no cell. Async work lives in image-edit-panel. */
   function populateImageEditForActiveCell(idList: string[]): void {
     if (activeCellIndex === null || idList.length === 0) {
       editPanel.deactivate();
@@ -228,10 +224,25 @@ function mount(): void {
     editPanel.activateForId(id, () => idList[activeCellIndex ?? -1] === id);
   }
 
-  // In-figure click delegation. Branches: data-add-image (append
-  // picker), data-figure-config (gear), data-figure-delete (trash),
-  // img[data-cell-index] (per-cell dialog). ProseMirror has already
-  // set NodeSelection on the figure by the time this bubble fires.
+  // Android Firefox pops the OS action bar for DOM Ranges that span
+  // only non-text content (paragraph breaks, atom nodes, CSS gaps) —
+  // Copy yields nothing. Clear those ranges; real text selections
+  // (non-empty range.toString) pass through.
+  document.addEventListener('selectionchange', () => {
+    const sel = document.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    // Scope to the editor — don't touch selections in form inputs,
+    // sidebars, dialogs, or the public page chrome.
+    if (!editor.view.dom.contains(range.commonAncestorContainer)) return;
+    if (range.toString().trim() === '') {
+      sel.removeAllRanges();
+    }
+  });
+
+  // In-figure click delegation: data-add-image, data-figure-config,
+  // data-figure-delete, img[data-cell-index]. ProseMirror has already
+  // set NodeSelection on the figure before this bubble fires.
   editor.view.dom.addEventListener('click', (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target) return;
@@ -309,12 +320,9 @@ function mount(): void {
     activeCellIndex = null;
     clearActiveCellHighlight();
     editPanel.deactivate();
-    // On close: collapse the NodeSelection past the atom (so no
-    // selection rect paints across the placeholder's whitespace)
-    // and blur the editor (so the dialog's auto focus-return doesn't
-    // reopen the soft keyboard). Both engine-neutral; touch browsers
-    // misread either signal as "user has a selection in editable
-    // content" and pop the cut/copy/paste action bar otherwise.
+    // Collapse the NodeSelection past the atom + blur, so the
+    // dialog's focus-return doesn't pop the keyboard or paint a
+    // selection rect that touch browsers misread as a real range.
     if (figurePos !== null) {
       editor
         .chain()
@@ -325,10 +333,8 @@ function mount(): void {
       editor.commands.blur();
     }
   });
-  // Backdrop click → close. Native <dialog>::backdrop intercepts the
-  // click and bubbles it on the dialog element itself; comparing
-  // event.target to the dialog distinguishes that from a click on a
-  // child input/button.
+  // Backdrop click → close. The native <dialog>::backdrop bubbles
+  // on the dialog element itself; ev.target === cellDialog disambiguates.
   cellDialog.addEventListener('click', (ev) => {
     if (ev.target === cellDialog) cellDialog.close();
   });
@@ -349,9 +355,7 @@ function mount(): void {
     editor.chain().focus().updateAttributes('figure', patch).run();
   }
 
-  /** Replace the active cell's slot in a pipe- or comma-separated
-   * parallel array, padding earlier slots with empty strings if the
-   * array was shorter than the cell index. */
+  /** Replace one slot of a parallel array (pads with empties). */
   function spliceCellSlot(current: string, sep: '|' | ',', idx: number, value: string): string {
     const list = current.split(sep);
     while (list.length <= idx) list.push('');
@@ -443,10 +447,8 @@ function mount(): void {
     clearActiveCellHighlight();
   });
 
-  /** Resolve the currently-active image id (the id of the cell the
-   * author clicked). Returns null when no figure is selected or no
-   * cell is active. Passed to wireImageEditPanel so its button
-   * handlers can read the live selection at click time. */
+  /** Active cell's image id (null when no figure / no cell active).
+   * wireImageEditPanel uses this to read live selection at click time. */
   function activeImageId(): string | null {
     if (!editor.isActive('figure')) return null;
     const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
