@@ -16,6 +16,7 @@
     "src/site/img-retry.ts",
     "src/site/sw.ts",
     "src/site/sw-register.ts",
+    "scripts/check-bundle-size.ts",
     "scripts/check-duplicate-types.ts",
     "scripts/check-no-reexports.ts",
     "scripts/check-e2e-coverage.ts",

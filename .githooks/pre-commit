@@ -120,6 +120,12 @@ if [ -n "$admin_site_staged" ]; then
   echo "==> build admin+site bundles for e2e"
   npm run --silent build:admin > /dev/null
   npm run --silent build:site > /dev/null
+  echo "==> bundle-size ratchet"
+  # check-bundle-size.ts fails on >10% growth vs baseline, re-stages
+  # bundle-size-baseline.json on pass so the floor travels with the
+  # commit. Runs before e2e so a runaway bundle fails fast.
+  node --no-warnings=ExperimentalWarning --experimental-strip-types \
+    scripts/check-bundle-size.ts
   echo "==> e2e + V8 coverage"
   npm run --silent test:e2e -- --reporter=line > /dev/null
   echo "==> e2e coverage ratchet"
