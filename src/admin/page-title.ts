@@ -10,7 +10,7 @@
 
 import type { Editor } from '@tiptap/core';
 
-import { $, setStatus } from './dom.ts';
+import { $ } from './dom.ts';
 
 const BASE_TITLE_SUFFIX = ' — rkroll editor';
 let dirty = false;
@@ -59,41 +59,4 @@ export function markClean(): void {
   const titleInput = $<HTMLInputElement>('rkr-title');
   const t = titleInput.value.trim() || 'New post';
   document.title = `${t}${BASE_TITLE_SUFFIX}`;
-}
-
-/** Wire the top-right "Copy link" button. The button is disabled
- * until the hidden slug input is populated (after the first save
- * or a pin-load); save.ts + startup.ts dispatch `rkr-slug-changed`
- * once the slug is known so we can flip the disabled state without
- * polling. */
-export function initCopyLink(): void {
-  const btn = $<HTMLButtonElement>('rkr-copy-link');
-  const slugInput = $<HTMLInputElement>('rkr-slug');
-  const refresh = (): void => {
-    btn.disabled = !slugInput.value.trim();
-  };
-  btn.addEventListener('click', () => void copyPostLink());
-  window.addEventListener('rkr-slug-changed', refresh);
-  refresh();
-}
-
-async function copyPostLink(): Promise<void> {
-  const slug = $<HTMLInputElement>('rkr-slug').value.trim();
-  /* c8 ignore next 4 -- defensive; the button is disabled when there
-     is no slug, so this branch is unreachable from the UI but kept
-     so a script-driven click still degrades gracefully. */
-  if (!slug) {
-    setStatus('save the post first — no URL yet');
-    return;
-  }
-  const url = `${location.origin}/${slug}`;
-  try {
-    await navigator.clipboard.writeText(url);
-    setStatus(`copied ${url}`);
-  } catch (err) {
-    /* c8 ignore next 3 -- production failure path (clipboard
-       permission denied in some browsers); show the URL in the
-       status line so the author can copy by hand. */
-    setStatus(`copy failed: ${(err as Error).message}; URL is ${url}`);
-  }
 }

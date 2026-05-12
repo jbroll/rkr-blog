@@ -15,7 +15,7 @@ import { dirtyImageStates } from './image-edit';
 import { wireImageEditPanel } from './image-edit-panel';
 import { createImageInserter } from './image-insert';
 import { mountMatrixControl } from './matrix-control';
-import { initCopyLink, initPageTitle } from './page-title.ts';
+import { initPageTitle } from './page-title.ts';
 import { startOfflineInfrastructure } from './startup';
 import { mountToolbar } from './toolbar';
 
@@ -97,9 +97,8 @@ function mount(): void {
   void startOfflineInfrastructure(editor);
 
   // Editor-page chrome: <h1>+document.title binding (drives the
-  // dirty marker) and the top-right Copy-link button.
+  // dirty marker on the tab title).
   initPageTitle(editor);
-  initCopyLink();
 
   wireDragOverlay($('rkroll-admin-root'));
 

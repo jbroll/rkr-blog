@@ -73,9 +73,8 @@ export async function handleSave(editor: Editor): Promise<void> {
     try {
       const result = await postSavePost(payload);
       // Echo the server-resolved slug back into the hidden input so
-      // the Copy-link button + next save's payload pick it up.
+      // the next save's payload includes it.
       $<HTMLInputElement>('rkr-slug').value = result.slug;
-      window.dispatchEvent(new CustomEvent('rkr-slug-changed'));
       await updateMeta(draftId, { slug: result.slug, lastSyncedAt: result.updatedAt });
       // Status carries a permalink so the author can verify the
       // rendered post in one click; markClean drops the dirty dot

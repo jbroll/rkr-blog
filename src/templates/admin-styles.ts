@@ -18,26 +18,6 @@ export const ADMIN_CSS = `
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
-  /* Copy-link button pinned to the top-right of the viewport so it
-     so it's reachable for every post without consuming layout. Icon-
-     only with a native tooltip via the title attribute; stays
-     disabled until the slug is known (after save or pin). The
-     handler in src/admin/page-title.ts writes the URL to the
-     clipboard and reports via setStatus. */
-  .rkr-admin-copylink {
-    position: fixed; top: .5rem; right: .75rem;
-    margin: 0; padding: 0;
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.9rem; height: 1.9rem;
-    background: var(--rkr-bg); color: var(--rkr-muted);
-    border: 1px solid var(--rkr-rule); border-radius: 50%;
-    cursor: pointer; z-index: 10;
-  }
-  .rkr-admin-copylink:hover:not(:disabled) {
-    color: var(--rkr-link); border-color: var(--rkr-link);
-  }
-  .rkr-admin-copylink:disabled { opacity: .5; cursor: not-allowed; }
-  .rkr-admin-copylink svg { display: block; }
   /* Admin chrome inherits site.css's --rkr-* tokens for borders / muted
      text / panel backgrounds so dark mode actually flips through. The
      fallbacks (after the comma) cover the case where site.css fails

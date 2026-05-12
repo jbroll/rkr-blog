@@ -34,12 +34,6 @@ ${ADMIN_CSS}
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: true })}
-<button type="button" id="rkr-copy-link" class="rkr-admin-copylink" title="Copy link" aria-label="Copy link" disabled>
-  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-    <rect x="5" y="5" width="9" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-    <path d="M3 11.5V3.5A1.5 1.5 0 0 1 4.5 2H11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-</button>
 <h1 id="rkr-page-title">New post</h1>
 <div class="rkr-meta">
   <label for="rkr-title">Title</label>       <input id="rkr-title" type="text"/>

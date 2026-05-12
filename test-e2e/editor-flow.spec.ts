@@ -43,9 +43,7 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 // The slug input is `type="hidden"` (the admin doesn't need to see or
 // edit it — the server slugifies the title). Playwright's .fill()
 // requires a visible element, so tests that need to pin a specific
-// slug write the value via evaluate(). Also dispatches the same
-// rkr-slug-changed event the save flow uses so the Copy-link button's
-// disabled state updates if the test checks it.
+// slug write the value via evaluate().
 /** Flip a saved post's status to 'published' via the new
  * /admin/posts/:slug/status endpoint (the editor no longer carries a
  * status select). The route 303-redirects to /admin/posts on success;
@@ -62,7 +60,6 @@ async function publishSlug(page: import('@playwright/test').Page, slug: string):
 async function setSlug(page: import('@playwright/test').Page, slug: string): Promise<void> {
   await page.locator('#rkr-slug').evaluate((el, v) => {
     (el as HTMLInputElement).value = v as string;
-    window.dispatchEvent(new CustomEvent('rkr-slug-changed'));
   }, slug);
 }
 
@@ -118,12 +115,6 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   // would surface a "already exists" save error.
   const slug = `e2e-flow-${Date.now()}`;
   await setSlug(page, slug);
-  // Page-header Copy-link button: pinned top-right; the syncing
-  // listener enabled it as soon as setSlug() above dispatched the
-  // rkr-slug-changed event.
-  await expect(page.locator('#rkr-copy-link')).toBeVisible();
-  await expect(page.locator('#rkr-copy-link')).toBeEnabled();
-
   // ---- 1. insert image -------------------------------------------------
 
   await page.locator('#rkr-image-input').setInputFiles({
