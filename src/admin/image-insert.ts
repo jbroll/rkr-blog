@@ -10,6 +10,7 @@ import { setStatus } from './dom';
 import type { FigureAttrs } from './figure-node';
 import { pickFromDrive } from './integrations/gdrive';
 import { pickFromOneDrive } from './integrations/onedrive';
+import { hydrateLocalThumb } from './local-thumb';
 import { uploadMany } from './pick';
 import { uploadImage } from './upload';
 
@@ -103,6 +104,11 @@ export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
         attrs: { ids: ids.join(','), matrix: ids.length > 1 ? 'justified' : '' }
       })
       .run();
+    // uploadImage is now local-first: it returns once the blob is in
+    // OPFS, but the server's /admin/preview/<id> 404s until the
+    // background drain completes. Swap the thumb's src to a blob:
+    // URL pointing at the OPFS bytes so the figure shows immediately.
+    for (const id of ids) void hydrateLocalThumb(editor, id);
     // No status emit on insert-new: the upload status ("uploaded X" /
     // "uploading X (N/M)") is the better signal and e2e asserts on it.
   }

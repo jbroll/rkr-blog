@@ -2,8 +2,8 @@
   "version": 1,
   "files": {
     "src/admin/canvas-loaders.ts": {
-      "linesFound": 50,
-      "linesHit": 44
+      "linesFound": 55,
+      "linesHit": 46
     },
     "src/admin/canvas.ts": {
       "linesFound": 126,
@@ -50,16 +50,16 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 27,
-      "linesHit": 20
+      "linesFound": 44,
+      "linesHit": 37
     },
     "src/admin/toolbar.ts": {
       "linesFound": 13,
       "linesHit": 11
     },
     "src/admin/upload.ts": {
-      "linesFound": 14,
-      "linesHit": 14
+      "linesFound": 3,
+      "linesHit": 3
     },
     "src/admin/opfs-schema.ts": {
       "linesFound": 16,
@@ -78,7 +78,7 @@
       "linesHit": 7
     },
     "src/admin/sync.ts": {
-      "linesFound": 27,
+      "linesFound": 29,
       "linesHit": 23
     },
     "src/admin/startup.ts": {
@@ -91,7 +91,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 20,
-      "linesHit": 19
+      "linesHit": 20
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -131,7 +131,7 @@
     },
     "src/admin/status-badge.ts": {
       "linesFound": 19,
-      "linesHit": 18
+      "linesHit": 16
     },
     "src/admin/pin.ts": {
       "linesFound": 34,
@@ -174,8 +174,8 @@
       "linesHit": 41
     },
     "src/admin/image-insert.ts": {
-      "linesFound": 45,
-      "linesHit": 37
+      "linesFound": 46,
+      "linesHit": 38
     },
     "127.0.0.1-3789/static/admin/outbox-XMT7YGXK.js": {
       "linesFound": 1,
@@ -208,6 +208,10 @@
     "127.0.0.1-3789/static/admin/outbox-NCY57AV6.js": {
       "linesFound": 1,
       "linesHit": 1
+    },
+    "src/admin/local-thumb.ts": {
+      "linesFound": 17,
+      "linesHit": 17
     }
   }
 }

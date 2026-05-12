@@ -161,8 +161,39 @@ export function tryDrain(): Promise<void> {
     .then(() => {});
 }
 
+/** Wait for the drain queue to settle (idle / halted / conflict).
+ * Unlike tryDrain — which is fire-and-forget and skips if the leader
+ * is busy — this serializes on the leader lock so the caller's
+ * Promise doesn't resolve until the in-flight drain (if any) AND a
+ * fresh drain pass have completed. handleSave uses this to defer the
+ * direct POST until prerequisite uploads have drained. */
+export function awaitDrainSettled(): Promise<DrainStatus> {
+  /* v8 ignore next 3 -- Web Locks is universal where OPFS is */
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    return Promise.resolve(currentStatus);
+  }
+  return navigator.locks.request(LOCK_NAME, async () => {
+    await drainLoop();
+    return currentStatus;
+  });
+}
+
 /* v8 ignore start -- requires queued entries; covered by the
    offline-flow e2e specs */
+
+// Per-entry retry budget for transient drainer failures (5xx,
+// network blips). Resets per session — a tab reload is treated as
+// a fresh start. Conflict errors (savePost mtime mismatch) and
+// no-drainer-registered are NOT retried.
+const MAX_DRAIN_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000] as const;
+
+/** Sleep for `ms`. Hoisted so the retry loop reads cleanly and
+ * tests can stub setTimeout via fake timers if needed. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function drainLoop(): Promise<void> {
   // coalescePending partitions seqs into kept/dropped (never both),
   // so the dropped set is safe to remove in parallel.
@@ -181,23 +212,22 @@ async function drainLoop(): Promise<void> {
       publish({ kind: 'halted', reason: `no drainer for op=${head.op}`, lastSeq: head.seq });
       return;
     }
-    try {
-      // bake entries carry the blob via outbox-blobs/<seq>.bin;
-      // upload entries read from originals/ in their drainer.
-      // commitImageEdit entries with hasBake=true carry the WebP via
-      // outbox-blobs/<seq>.bin; upload entries read from originals/.
-      const needsBlob = head.op === 'commitImageEdit' && head.payload.hasBake;
-      const blob = needsBlob ? await readEntryBlobOrThrow(head.seq) : null;
-      await drainer(head, blob);
-      await outboxRemove(head);
-    } catch (err) {
-      if (err instanceof SavePostConflictError) {
-        publish({ kind: 'conflict', ...err.info });
-        return;
-      }
-      publish({ kind: 'halted', reason: (err as Error).message, lastSeq: head.seq });
+    // bake entries carry the blob via outbox-blobs/<seq>.bin;
+    // upload entries read from originals/ in their drainer.
+    // commitImageEdit entries with hasBake=true carry the WebP via
+    // outbox-blobs/<seq>.bin; upload entries read from originals/.
+    const needsBlob = head.op === 'commitImageEdit' && head.payload.hasBake;
+    const blob = needsBlob ? await readEntryBlobOrThrow(head.seq) : null;
+    const status = await drainEntryWithRetry(head, blob, drainer);
+    if (status.kind === 'conflict') {
+      publish({ kind: 'conflict', ...status.info });
       return;
     }
+    if (status.kind === 'failed') {
+      publish({ kind: 'halted', reason: status.reason, lastSeq: head.seq });
+      return;
+    }
+    await outboxRemove(head);
     remaining = (await outboxList()).length;
     publish({ kind: 'draining', remaining });
   }
@@ -211,6 +241,38 @@ async function drainLoop(): Promise<void> {
       /* swallow */
     }
   }
+}
+
+type DrainEntryResult =
+  | { kind: 'ok' }
+  | { kind: 'conflict'; info: SavePostConflictError['info'] }
+  | { kind: 'failed'; reason: string };
+
+/** Retry a drainer with exponential backoff. SavePostConflictError
+ * bubbles up immediately (user must resolve via discard/force).
+ * Other errors retry up to MAX_DRAIN_ATTEMPTS; on exhaustion the
+ * caller halts the loop. */
+async function drainEntryWithRetry(
+  entry: import('../lib/outbox-types.ts').OutboxEntry,
+  blob: Blob | null,
+  drainer: Drainer
+): Promise<DrainEntryResult> {
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < MAX_DRAIN_ATTEMPTS; attempt++) {
+    try {
+      await drainer(entry, blob);
+      return { kind: 'ok' };
+    } catch (err) {
+      if (err instanceof SavePostConflictError) {
+        return { kind: 'conflict', info: err.info };
+      }
+      lastErr = err as Error;
+      if (attempt < MAX_DRAIN_ATTEMPTS - 1) {
+        await delay(RETRY_DELAYS_MS[attempt] ?? 30000);
+      }
+    }
+  }
+  return { kind: 'failed', reason: lastErr?.message ?? 'unknown drain failure' };
 }
 
 async function readEntryBlobOrThrow(seq: number): Promise<Blob> {

@@ -8,6 +8,7 @@ import { setStatus } from './dom.ts';
 import { getOrCreateDraftId, loadDraft, startDraftPersistence } from './draft.ts';
 import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts';
 import { runEviction } from './eviction.ts';
+import { hydrateAllLocalThumbs } from './local-thumb.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
 import {
@@ -120,6 +121,11 @@ async function runStart(editor: Editor): Promise<void> {
     const restored = (await loadDraft(draftId)) as JSONContent | null;
     if (restored) {
       editor.commands.setContent(restored, { emitUpdate: false });
+      // Restored figures reference image ids by `/admin/preview/<id>`;
+      // ids whose uploads haven't drained 404 on that path. Swap each
+      // <img> to a blob: URL backed by OPFS originals so the editor
+      // doesn't show broken thumbs after reload-before-drain.
+      void hydrateAllLocalThumbs(editor);
     }
     startDraftPersistence(editor, draftId);
     mountStatusBadge();

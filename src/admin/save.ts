@@ -8,9 +8,9 @@ import { $, setStatus, setStatusWithLink } from './dom';
 import { getOrCreateDraftId, readMeta, updateMeta } from './draft.ts';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
 import { getState } from './online-state.ts';
-import { append as outboxAppend } from './outbox.ts';
+import { append as outboxAppend, list as outboxList } from './outbox.ts';
 import { markClean } from './page-title.ts';
-import { tryDrain } from './sync.ts';
+import { awaitDrainSettled, tryDrain } from './sync.ts';
 
 interface SaveResponse {
   slug: string;
@@ -69,7 +69,20 @@ export async function handleSave(editor: Editor): Promise<void> {
     lastSyncedAt: meta?.lastSyncedAt
   };
   setStatus('saving…');
-  if (getState() !== 'offline') {
+  // If any referenced image still has an `upload` entry queued in
+  // the outbox, wait for that upload to drain first. Without this,
+  // a direct POST here would write a post that references ids the
+  // server can't resolve yet — the public render falls back to the
+  // original dims and looks subtly wrong until the upload lands.
+  // awaitDrainSettled queues on the leader lock so any in-flight
+  // drain finishes before our pass starts.
+  const referencedIds = extractFigureIds(markdown);
+  if (getState() !== 'offline' && (await hasPendingUploadsFor(referencedIds))) {
+    setStatus(`syncing ${referencedIds.length} image(s)…`);
+    await awaitDrainSettled();
+  }
+  const uploadsStillPending = await hasPendingUploadsFor(referencedIds);
+  if (getState() !== 'offline' && !uploadsStillPending) {
     try {
       const result = await postSavePost(payload);
       // Echo the server-resolved slug back into the hidden input so
@@ -97,4 +110,28 @@ async function queueSavePost(payload: SavePostPayload): Promise<void> {
   await outboxAppend({ op: 'savePost', payload });
   setStatus(`queued /${payload.slug} for sync`);
   void tryDrain();
+}
+
+/** Pull the comma-separated id list out of every `::figure{…ids=…}`
+ * directive in the saved markdown. Returns deduped ids; empty when
+ * the post has no figures. */
+function extractFigureIds(markdown: string): string[] {
+  const ids = new Set<string>();
+  const re = /::figure\{[^}]*\bids=([^\s,}]+(?:,[^\s,}]+)*)/g;
+  for (const match of markdown.matchAll(re)) {
+    const list = match[1];
+    if (!list) continue;
+    for (const raw of list.split(',')) {
+      const id = raw.trim();
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids];
+}
+
+async function hasPendingUploadsFor(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return false;
+  const entries = await outboxList();
+  const idSet = new Set(ids);
+  return entries.some((e) => e.op === 'upload' && idSet.has(e.payload.id));
 }

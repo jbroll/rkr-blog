@@ -1,10 +1,16 @@
-// Image upload: POST /admin/upload online, queue to the outbox
-// offline. Content-addressed: client + server compute the same
-// sha256, so a savePost can reference the id before the upload
-// drains.
+// Image upload: local-first. Compute the content-addressed id +
+// write the blob to OPFS originals/ + queue a `upload` outbox entry,
+// then return immediately. tryDrain kicks the drain loop so the
+// server POST happens in the background — online users see the
+// figure insert instantly (no spinner-on-network wait); offline
+// users get the same flow with the drain queued until reconnect.
+//
+// The id is sha256 of the bytes, computed identically on client
+// and server, so a savePost can reference the id before the
+// upload's POST completes — the server's content-addressed dedup
+// path makes a later double-upload a no-op.
 
 import { computeContentId, extForMime } from '../lib/content-id.ts';
-import { getState } from './online-state.ts';
 import { writeBlob } from './opfs.ts';
 import { append as outboxAppend } from './outbox.ts';
 import { tryDrain } from './sync.ts';
@@ -17,25 +23,6 @@ export interface UploadResponse {
 }
 
 export async function uploadImage(file: File): Promise<UploadResponse> {
-  if (getState() !== 'offline') {
-    try {
-      return await postUpload(file);
-    } catch {
-      /* fall through to outbox queue */
-    }
-  }
-  return queueUpload(file);
-}
-
-async function postUpload(file: File): Promise<UploadResponse> {
-  const fd = new FormData();
-  fd.append('file', file);
-  const res = await fetch('/admin/upload', { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(`upload failed: ${res.status}`);
-  return (await res.json()) as UploadResponse;
-}
-
-async function queueUpload(file: File): Promise<UploadResponse> {
   const id = await computeContentId(file);
   const ext = extForMime(file.type);
   await writeBlob(`originals/${id}.${ext}`, file);

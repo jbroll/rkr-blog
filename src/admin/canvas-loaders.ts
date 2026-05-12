@@ -8,6 +8,7 @@ import type { Editor } from '@tiptap/core';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
 import { setStatus } from './dom';
+import { readLocalOriginal } from './local-thumb';
 
 /** Per-image cache cap. A 24-MP decoded HTMLImageElement is ~100 MB;
  * a PipelineCache canvas is similarly heavy. Cap session-resident
@@ -66,6 +67,18 @@ export function getPipelineCache(id: string): PipelineCache {
   return c;
 }
 
+async function fetchOriginalBlob(id: string): Promise<Blob> {
+  try {
+    const res = await fetch(`/admin/original/${id}`);
+    if (res.ok) return await res.blob();
+  } catch {
+    // Network failure → fall through to OPFS.
+  }
+  const local = await readLocalOriginal(id);
+  if (local) return local;
+  throw new Error(`original ${id}: not on server and not in OPFS`);
+}
+
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -77,14 +90,18 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
 
 /** Fetch + decode the original master image. Cached per session per
  * id; cache is keyed on the Promise so concurrent callers share the
- * single in-flight fetch. */
+ * single in-flight fetch.
+ *
+ * OPFS fallback: a fresh local-first upload writes the bytes to
+ * `originals/<id>.<ext>` and returns immediately — the server's
+ * /admin/original/<id> 404s until the background drain completes.
+ * If the server fetch fails for any reason, try OPFS before throwing
+ * so the image-edit canvas opens on freshly-inserted images. */
 export function loadOriginal(id: string): Promise<HTMLImageElement> {
   const cached = lruGet(originalCache, id);
   if (cached) return cached;
   const p = (async (): Promise<HTMLImageElement> => {
-    const res = await fetch(`/admin/original/${id}`);
-    if (!res.ok) throw new Error(`original: ${res.status}`);
-    const blob = await res.blob();
+    const blob = await fetchOriginalBlob(id);
     const url = URL.createObjectURL(blob);
     try {
       return await loadImageElement(url);

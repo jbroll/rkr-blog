@@ -339,10 +339,14 @@ test('editor: crop save updates the thumb src to a blob URL', async ({ page }) =
     timeout: 10_000
   });
 
-  // Pre-state: thumb src is the /admin/preview/<id> redirect.
+  // Pre-state: uploadImage is local-first, so hydrateLocalThumb has
+  // already swapped the thumb to a blob: URL backed by the OPFS
+  // original. After crop, the canvas pipeline produces a NEW blob
+  // URL (the rectified bytes), so the assertion is "different blob
+  // URL", not "blob URL replaces /admin/preview".
   const thumb = page.locator('img[data-cell-index="0"]');
   const beforeSrc = await thumb.getAttribute('src');
-  expect(beforeSrc).toMatch(/\/admin\/preview\//);
+  expect(beforeSrc).toMatch(/^blob:/);
 
   // Open the per-cell dialog + cropper.
   await thumb.click();
@@ -359,8 +363,11 @@ test('editor: crop save updates the thumb src to a blob URL', async ({ page }) =
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^crop /, { timeout: 5_000 });
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
 
-  // Post-state: thumb src should now be a blob: URL.
-  await expect.poll(async () => thumb.getAttribute('src'), { timeout: 5_000 }).toMatch(/^blob:/);
+  // Post-state: thumb src is a *different* blob: URL — the canvas
+  // pipeline produced a new bake for the cropped bytes.
+  await expect.poll(async () => thumb.getAttribute('src'), { timeout: 5_000 }).not.toBe(beforeSrc);
+  const afterSrc = await thumb.getAttribute('src');
+  expect(afterSrc).toMatch(/^blob:/);
 });
 
 // Per-cell editing in a multi-image figure: the image-edit panel should
