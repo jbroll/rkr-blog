@@ -16,10 +16,10 @@ import sharp from 'sharp';
 
 import { canonicalJson } from '../lib/canonical-json.ts';
 import { SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
+import { validateOps } from '../lib/ops-validation.ts';
 import { bakePath } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
-import { validateOps } from './admin-ops-validation.ts';
 
 const BAKE_MAX_BYTES = 25 * 1024 * 1024;
 
