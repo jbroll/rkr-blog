@@ -237,43 +237,58 @@ export default async function authRoutes(
     return reply.type('text/html; charset=utf-8').send(renderLoginPage({ adminTokenAvailable }));
   });
 
-  fastify.post<{ Body: { token?: string } }>(
-    '/admin/auth/token-login',
-    {
-      // Aggressive rate limit — auth endpoint with brute-force exposure.
-      // ADMIN_TOKEN is long-random so brute force is infeasible, but the
-      // limit keeps attempt logs sparse and observable. The e2e runner
-      // raises the cap (one IP makes many logins per spec run) without
-      // disabling the gate so the route still has SOME ceiling.
-      config: { rateLimit: { max: opts.tokenLoginRateMax ?? 5, timeWindow: '5 minutes' } }
-    },
-    async (req, reply) => {
-      const provided = typeof req.body?.token === 'string' ? req.body.token : '';
-      if (!provided) {
-        req.log.warn({ ip: req.ip, ua: req.headers['user-agent'] }, 'token-login: empty token');
-        return reply.code(400).send({ error: 'token required' });
-      }
-      if (!process.env.ADMIN_TOKEN) {
-        req.log.warn({ ip: req.ip }, 'token-login: ADMIN_TOKEN not configured');
-        return reply.code(503).send({ error: 'token login not configured' });
-      }
-      if (!adminTokenMatchesEnv(provided)) {
-        req.log.warn({ ip: req.ip, ua: req.headers['user-agent'] }, 'token-login: token mismatch');
-        return reply.code(401).send({ error: 'invalid token' });
-      }
+  // Failed-attempts ceiling — `@fastify/rate-limit` would count
+  // every POST including correct ones, so an operator who logs
+  // in / out a couple of times burns through their budget for
+  // legitimate use. The threshold here only ticks on wrong-token
+  // submissions (the brute-force signal) and resets on a clean
+  // success. State lives on the fastify instance so each test
+  // app gets its own tally (the previous plugin-based limiter
+  // also had per-instance state, so we keep that property).
+  const tokenLoginMax = opts.tokenLoginRateMax ?? 5;
+  const tokenLoginWindowMs = 5 * 60 * 1000;
+  const loginFailures = new Map<string, FailureWindow>();
 
-      const user = findOrCreateTokenAdmin(db);
-      const ip = req.ip ?? null;
-      const userAgent = req.headers['user-agent'] ?? null;
-      const session = createSession(db, { userId: user.id, ip, userAgent });
-      setCookie(reply, SESSION_COOKIE, session.id, {
-        maxAge: Math.floor((Date.parse(session.expires_at) - Date.now()) / 1000),
-        secure: secureCookies
-      });
-      req.log.info({ userId: user.id, ip }, 'token-login: success');
-      return reply.redirect(authBust(postLoginPath, 'login'), 302);
+  fastify.post<{ Body: { token?: string } }>('/admin/auth/token-login', async (req, reply) => {
+    const ip = req.ip ?? '';
+    const limit = checkLoginRate(loginFailures, ip, tokenLoginMax);
+    if (!limit.allowed) {
+      req.log.warn({ ip, retryAfter: limit.retryAfterSec }, 'token-login: rate-limited');
+      return reply
+        .code(429)
+        .header('retry-after', String(limit.retryAfterSec))
+        .send({ error: 'too many failed login attempts' });
     }
-  );
+
+    const provided = typeof req.body?.token === 'string' ? req.body.token : '';
+    if (!provided) {
+      req.log.warn({ ip, ua: req.headers['user-agent'] }, 'token-login: empty token');
+      return reply.code(400).send({ error: 'token required' });
+    }
+    if (!process.env.ADMIN_TOKEN) {
+      req.log.warn({ ip }, 'token-login: ADMIN_TOKEN not configured');
+      return reply.code(503).send({ error: 'token login not configured' });
+    }
+    if (!adminTokenMatchesEnv(provided)) {
+      recordLoginFailure(loginFailures, ip, tokenLoginWindowMs);
+      req.log.warn({ ip, ua: req.headers['user-agent'] }, 'token-login: token mismatch');
+      return reply.code(401).send({ error: 'invalid token' });
+    }
+
+    // Clean success — drop any prior failure tally for this IP
+    // so they don't carry over into the next session.
+    loginFailures.delete(ip);
+
+    const user = findOrCreateTokenAdmin(db);
+    const userAgent = req.headers['user-agent'] ?? null;
+    const session = createSession(db, { userId: user.id, ip, userAgent });
+    setCookie(reply, SESSION_COOKIE, session.id, {
+      maxAge: Math.floor((Date.parse(session.expires_at) - Date.now()) / 1000),
+      secure: secureCookies
+    });
+    req.log.info({ userId: user.id, ip }, 'token-login: success');
+    return reply.redirect(authBust(postLoginPath, 'login'), 302);
+  });
 
   fastify.post('/admin/logout', async (req, reply) => {
     const sid = readCookie(req, SESSION_COOKIE);
@@ -281,6 +296,48 @@ export default async function authRoutes(
     clearCookie(reply, SESSION_COOKIE, { secure: secureCookies });
     return reply.redirect(authBust('/', 'logout'), 302);
   });
+}
+
+// Per-IP failure tally for token-login. The brute-force concern is
+// "an attacker guesses ADMIN_TOKEN", and only WRONG tokens give them
+// a guess — correct submissions, empty bodies, and 503-the-server-
+// isn't-configured responses don't shrink the search space and
+// shouldn't burn the budget. The map is per-fastify-instance so
+// tests (which spin a fresh app per case) don't bleed state into
+// each other; the previous plugin-based limiter had the same
+// property.
+interface FailureWindow {
+  count: number;
+  resetAt: number;
+}
+
+function checkLoginRate(
+  store: Map<string, FailureWindow>,
+  ip: string,
+  max: number
+): { allowed: boolean; retryAfterSec: number } {
+  const now = Date.now();
+  const window = store.get(ip);
+  if (!window || window.resetAt <= now) {
+    if (window) store.delete(ip);
+    return { allowed: true, retryAfterSec: 0 };
+  }
+  if (window.count < max) return { allowed: true, retryAfterSec: 0 };
+  return { allowed: false, retryAfterSec: Math.ceil((window.resetAt - now) / 1000) };
+}
+
+function recordLoginFailure(store: Map<string, FailureWindow>, ip: string, windowMs: number): void {
+  const now = Date.now();
+  let window = store.get(ip);
+  if (window && window.resetAt <= now) {
+    store.delete(ip);
+    window = undefined;
+  }
+  if (!window) {
+    window = { count: 0, resetAt: now + windowMs };
+    store.set(ip, window);
+  }
+  window.count += 1;
 }
 
 /** Append a `_rkr=login|logout` query param to an auth redirect

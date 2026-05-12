@@ -550,6 +550,61 @@ test('POST /admin/auth/token-login: ADMIN_TOKEN unset → 503', async (t) => {
   assert.equal((res.json() as ErrorBody).error, 'token login not configured');
 });
 
+// Successful logins shouldn't burn the brute-force budget — an
+// operator who logs in/out a couple of times is not an attacker
+// guessing ADMIN_TOKEN. Verify by interleaving a SUCCESS into a
+// stream of WRONGs and confirming the wrong-token counter resets.
+test('POST /admin/auth/token-login: success resets the failure counter; only wrong tokens count', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+
+  // Burn 4 of the 5 failure slots.
+  for (let i = 0; i < 4; i++) {
+    const r = await postTokenLogin(app, 'wrong-token');
+    assert.equal(r.statusCode, 401);
+  }
+  // A successful login here must clear the tally — without that,
+  // the next wrong token would be the 5th miss and the one after
+  // would 429.
+  assert.equal((await postTokenLogin(app, 'right-token')).statusCode, 302);
+
+  // After the success, the counter is back at 0; we get a full
+  // five wrong-token attempts before the limiter kicks in.
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await postTokenLogin(app, 'wrong-token')).statusCode, 401);
+  }
+  // The sixth wrong is over the cap.
+  const blocked = await postTokenLogin(app, 'wrong-token');
+  assert.equal(blocked.statusCode, 429);
+  assert.match((blocked.json() as ErrorBody).error, /too many/);
+});
+
+test('POST /admin/auth/token-login: 400/503 paths don’t consume the failure budget', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+
+  // Empty bodies are client bugs, not brute-force probes. Send
+  // many; we must still have a full failure budget afterwards.
+  for (let i = 0; i < 20; i++) {
+    assert.equal((await postTokenLogin(app, '')).statusCode, 400);
+  }
+  // Five wrong-token attempts now do their full work.
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await postTokenLogin(app, 'wrong-token')).statusCode, 401);
+  }
+  assert.equal((await postTokenLogin(app, 'wrong-token')).statusCode, 429);
+});
+
 test('POST /admin/auth/token-login: second login is idempotent (one synthetic admin row)', async (t) => {
   const orig = process.env.ADMIN_TOKEN;
   process.env.ADMIN_TOKEN = 'right-token';
