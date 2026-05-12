@@ -7,6 +7,7 @@ import type { Editor } from '@tiptap/core';
 
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
+import { setStatus } from './dom';
 
 /** Per-image cache cap. A 24-MP decoded HTMLImageElement is ~100 MB;
  * a PipelineCache canvas is similarly heavy. Cap session-resident
@@ -179,11 +180,15 @@ export async function refreshImagePreview(
     lruSet(previewBlobUrls, id, url, IMAGE_CACHE_CAP, (_k, v) => URL.revokeObjectURL(v));
     setEditorImageSrc(editor, id, url);
     return blob;
-  } catch {
-    // Fallback: ask the server. The cache-buster query forces a 302
-    // re-resolve so a stale derivative URL isn't reused. The new ops
-    // are already on the sidecar, so the server's /admin/preview will
-    // resolve to a fresh derivative.
+  } catch (err) {
+    // Surface the failure: BEFORE save, /admin/preview redirects to a
+    // derivative computed from the *previous* sidecar.ops, so a silent
+    // fallback would show the pre-edit image and make the canvas-
+    // pipeline failure invisible — exactly the misleading "my edits
+    // don't show" symptom we want to diagnose on Android Firefox.
+    const msg = (err as Error).message ?? String(err);
+    console.error(`refreshImagePreview ${id.slice(0, 8)}…:`, err);
+    setStatus(`preview failed (${id.slice(0, 8)}…): ${msg}`);
     setEditorImageSrc(editor, id, `/admin/preview/${id}?v=${Date.now()}`);
     return null;
   }

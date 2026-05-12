@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "src/admin/canvas-loaders.ts": {
-      "linesFound": 49,
+      "linesFound": 50,
       "linesHit": 44
     },
     "src/admin/canvas.ts": {
@@ -83,7 +83,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 30,
-      "linesHit": 26
+      "linesHit": 27
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
