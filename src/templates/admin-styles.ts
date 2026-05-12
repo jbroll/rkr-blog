@@ -30,10 +30,15 @@ export const ADMIN_CSS = `
      shows once the toolbar is actually pinned (i.e. when something
      has scrolled behind it), giving a subtle elevation cue. The
      <dialog> overlays sit in the top layer, so they always render
-     above this regardless of z-index. */
+     above this regardless of z-index. Single-row layout: wrap was
+     in here for the wider text labels, but the icon-only buttons
+     fit on every viewport we care about (>= 320px) so we use
+     overflow-x: auto as a fallback rather than dropping Save to
+     its own row via the margin-left:auto interaction with wrap. */
   #rkroll-admin-toolbar {
     position: sticky; top: 0; z-index: 5;
-    display: flex; gap: .25rem; flex-wrap: wrap;
+    display: flex; gap: .25rem; flex-wrap: nowrap;
+    overflow-x: auto;
     margin-bottom: 1rem; padding: .5rem;
     background: var(--rkr-bg);
     border: 1px solid var(--rkr-rule); border-radius: 4px;
