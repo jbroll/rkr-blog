@@ -34,6 +34,11 @@ export interface AdminSettingsPageData extends SiteChrome {
   /** Optional flash message after a successful save / a validation
    * failure. Rendered above the form. */
   flash?: { kind: 'ok' | 'error'; text: string };
+  /** Full git commit sha of the running build. Surfaced at the bottom
+   * of the page so the operator can confirm which deploy is live
+   * (matches /health's gitHash field). 'unknown' when neither a
+   * GIT_COMMIT env var nor a build-time /app/git-hash file is set. */
+  gitHash: string;
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
@@ -85,6 +90,9 @@ ${flash}
 
   <button type="submit" class="rkr-admin-settings-submit">Save settings</button>
 </form>
+<p class="rkr-admin-settings-build">
+  Build: <code title="${escapeAttr(data.gitHash)}">${escapeText(shortHash(data.gitHash))}</code>
+</p>
 </main>
 ${siteFoot(data.site, { isAdmin: true })}
 </body>
@@ -94,6 +102,12 @@ ${siteFoot(data.site, { isAdmin: true })}
 
 function renderFlash(flash: { kind: 'ok' | 'error'; text: string }): string {
   return `<p class="rkr-admin-settings-flash is-${flash.kind}" role="status">${escapeText(flash.text)}</p>`;
+}
+
+/** Short-form display (first 12 chars) for the bottom-of-page chip;
+ * full hash is in the title attribute for hover/copy. */
+function shortHash(hash: string): string {
+  return hash === 'unknown' ? hash : hash.slice(0, 12);
 }
 
 function renderThemeOptions(themes: string[], selected: string | undefined): string {

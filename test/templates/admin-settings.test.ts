@@ -7,7 +7,8 @@ test('renderAdminSettingsPage: form pre-fills persisted values', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
     persisted: { title: 'My Blog', tagline: 'A subtitle', theme: 'papermod' },
-    themes: ['default', 'papermod', 'terminal']
+    themes: ['default', 'papermod', 'terminal'],
+    gitHash: 'unknown'
   });
   // Title + tagline are <input value="…">.
   assert.match(html, /<input id="rkr-settings-title"[^>]*value="My Blog"/);
@@ -30,7 +31,8 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
     persisted: {},
-    themes: ['default']
+    themes: ['default'],
+    gitHash: 'unknown'
   });
   assert.match(html, /<input id="rkr-settings-title"[^>]*value=""/);
   assert.match(html, /placeholder="rkroll"/);
@@ -40,7 +42,8 @@ test('renderAdminSettingsPage: title + tagline escape HTML', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
     persisted: { title: '<script>x</script>', tagline: '" autofocus="' },
-    themes: ['default']
+    themes: ['default'],
+    gitHash: 'unknown'
   });
   assert.ok(!html.includes('<script>x</script>'), 'title must be escaped');
   // The quote in the tagline must be entity-escaped so it doesn't
@@ -53,6 +56,7 @@ test('renderAdminSettingsPage: flash message renders with the right kind class',
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
+    gitHash: 'unknown',
     flash: { kind: 'ok', text: 'Settings saved.' }
   });
   assert.match(ok, /class="rkr-admin-settings-flash is-ok"[^>]*>Settings saved\./);
@@ -61,7 +65,32 @@ test('renderAdminSettingsPage: flash message renders with the right kind class',
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
+    gitHash: 'unknown',
     flash: { kind: 'error', text: 'title too long' }
   });
   assert.match(err, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
+});
+
+test('renderAdminSettingsPage: build chip shows the short git hash with full sha in title', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    persisted: {},
+    themes: ['default'],
+    gitHash: 'abc123def456789ffeed0011223344556677889a'
+  });
+  // Short form (12 chars) is the visible text; full sha is in the
+  // title attr so a hover reveals the exact commit.
+  assert.match(html, /<p class="rkr-admin-settings-build">/);
+  assert.match(html, /title="abc123def456789ffeed0011223344556677889a"/);
+  assert.match(html, /<code[^>]*>abc123def456<\/code>/);
+});
+
+test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    persisted: {},
+    themes: ['default'],
+    gitHash: 'unknown'
+  });
+  assert.match(html, /<code[^>]*>unknown<\/code>/);
 });

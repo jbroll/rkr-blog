@@ -321,6 +321,20 @@ body {
   padding: 0.4rem 0.9rem;
   cursor: pointer;
 }
+/* Build chip at the bottom of /admin/settings — muted footer hint
+   so the operator can confirm which deploy is live. The short
+   hash (12 chars) is the click-friendly form; the full sha lives
+   in the <code title=…> tooltip for copy/paste verification. */
+.rkr-admin-settings-build {
+  margin: 2rem 0 0;
+  color: var(--rkr-muted);
+  font-size: 0.85rem;
+}
+.rkr-admin-settings-build code {
+  background: color-mix(in srgb, var(--rkr-text) 6%, transparent);
+  padding: 0 0.25rem;
+  border-radius: 3px;
+}
 .rkr-admin-settings-flash {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--rkr-rule);

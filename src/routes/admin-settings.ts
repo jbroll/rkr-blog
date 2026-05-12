@@ -11,7 +11,7 @@
 // SPA from the operator's perspective.
 
 import type { FastifyInstance } from 'fastify';
-
+import { resolveGitHash } from '../lib/build-info.ts';
 import {
   listAvailableThemes,
   type PersistedIngestResize,
@@ -47,9 +47,10 @@ export function registerAdminSettingsRoutes(
       const themes = listAvailableThemes();
       const site = siteConfig();
       const flash = decodeFlash(req.query);
+      const gitHash = resolveGitHash();
       return reply
         .type('text/html; charset=utf-8')
-        .send(renderAdminSettingsPage({ site, persisted, themes, flash }));
+        .send(renderAdminSettingsPage({ site, persisted, themes, flash, gitHash }));
     }
   );
 
