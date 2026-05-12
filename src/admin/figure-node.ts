@@ -12,6 +12,8 @@
 
 import { mergeAttributes, Node } from '@tiptap/core';
 
+import { iconSpec } from '../templates/icons.ts';
+
 export interface FigureAttrs {
   ids: string;
   /** Comma-separated parallel array of alts. */
@@ -108,7 +110,7 @@ export const FigureNode = Node.create({
             'aria-label': 'Add image to figure',
             title: 'Add image'
           },
-          '+ Add image'
+          iconSpec('imagePlus', 16)
         ],
         [
           'button',
@@ -119,7 +121,7 @@ export const FigureNode = Node.create({
             'aria-label': 'Configure figure',
             title: 'Configure figure'
           },
-          '⚙ Configure'
+          iconSpec('settings', 16)
         ]
       ],
       ...(attrs.caption ? [['div', { class: 'rkr-multi-caption' }, attrs.caption]] : [])

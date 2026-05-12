@@ -42,7 +42,7 @@ export function looksLikeFrontmatterDelimiter(s: string): boolean {
   const trimmed = s.replace(/^[﻿\s]+/, '');
   if (!trimmed.startsWith('---')) return false;
   const afterDashes = trimmed.slice(3);
-  const eolMatch = /^[\t  ]*(\r\n|\r|\n)/.exec(afterDashes);
+  const eolMatch = /^[\t {2}]*(\r\n|\r|\n)/.exec(afterDashes);
   if (!eolMatch) return false;
   const rest = afterDashes.slice(eolMatch[0].length);
   for (const line of rest.split(/\r\n|\r|\n/)) {

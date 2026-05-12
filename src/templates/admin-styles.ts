@@ -262,36 +262,35 @@ export const ADMIN_CSS = `
   #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
   #rkr-source-picker button { padding: .4rem .75rem; cursor: pointer; text-align: left; }
   #rkr-source-picker button[data-source=""] { margin-top: .5rem; color: var(--rkr-muted); }
-  /* In-figure "+ Add image" affordance: a small button rendered
-     BELOW the thumb grid (not as a grid cell) so the figure's
-     primary editable area is the images, not an empty slot at the
-     article's geometric centre. Author-clickable when the figure is
-     selected; main.ts's delegated handler opens the source picker
-     in append mode. */
-  /* Per-figure action row: the "+ Add image" and "⚙ Configure"
-     buttons share the same dashed pill style and sit below the
-     thumb grid. main.ts's delegated handler routes each via its
-     data attribute. */
+  /* Per-figure action stack: the "Add image" and "Configure" icon
+     buttons sit in a narrow column to the right of the thumbs grid
+     (NOT below it) so the figure's vertical real estate keeps belonging
+     to the images themselves. Wired via data attributes that main.ts's
+     delegated handler routes (data-add-image, data-figure-config). */
   .rkr-multi-actions {
-    display: flex; gap: .5rem; align-items: center;
-    margin-top: .35rem;
+    display: flex; flex-direction: column;
+    gap: .35rem; align-self: start;
   }
   #rkroll-admin-root button.rkr-multi-add,
   #rkroll-admin-root button.rkr-multi-config {
-    display: inline-block;
-    padding: .15rem .6rem;
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 1.85rem; height: 1.85rem;
+    padding: 0;
     background: transparent;
     border: 1px dashed var(--rkr-rule);
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--rkr-muted);
-    font: inherit; font-size: .85rem;
     cursor: pointer;
   }
   #rkroll-admin-root button.rkr-multi-add:hover,
   #rkroll-admin-root button.rkr-multi-config:hover {
     color: var(--rkr-text);
     border-color: var(--rkr-text);
+    border-style: solid;
   }
+  #rkroll-admin-root button.rkr-multi-add svg,
+  #rkroll-admin-root button.rkr-multi-config svg { display: block; }
   /* Browser-native :out-of-range styling for autoplay (input has
      min=0/max=60 attrs). Gives the author a visual cue that >60 will
      be silently clamped on save. */
@@ -308,9 +307,22 @@ export const ADMIN_CSS = `
      the first column); multi-image figures wrap across three columns
      into N rows. The grid is for *editor browsing only* — the public
      site honours the figure's declared matrix/justify/etc. */
+  /* Two-column layout: label + thumbs grow in column 1; the action
+     buttons (Add image / Configure) live in a narrow column 2 that
+     spans every row so they stack vertically alongside the thumbs
+     rather than below them. */
   #rkroll-admin-root .rkr-multi {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: .5rem;
     margin: 1rem 0; padding: .5rem; border: 1px dashed var(--rkr-rule); border-radius: 4px;
     background: color-mix(in srgb, var(--rkr-text) 3%, var(--rkr-bg));
+  }
+  #rkroll-admin-root .rkr-multi > .rkr-multi-label,
+  #rkroll-admin-root .rkr-multi > .rkr-multi-thumbs { grid-column: 1; }
+  #rkroll-admin-root .rkr-multi > .rkr-multi-actions {
+    grid-column: 2;
+    grid-row: 1 / -1;
   }
   #rkroll-admin-root .rkr-multi-label {
     font-family: ui-monospace, monospace; font-size: .8rem; color: var(--rkr-muted); margin-bottom: .25rem;
