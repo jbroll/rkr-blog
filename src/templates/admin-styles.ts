@@ -23,6 +23,39 @@ export const ADMIN_CSS = `
      prose font on form controls, which is jarring for UI elements.
      The editable region inside <article> still gets the prose font. */
   body, button, input, select { font-family: system-ui, sans-serif; }
+  /* Suppress the OS / browser cut-copy-paste overlay on every admin
+     surface that isn't prose-editable. The author is editing one
+     specific area (the contenteditable article + the form inputs);
+     long-pressing a toolbar button or the page-mode label was popping
+     the native menu and getting in the way of the click. Re-enables
+     selection inside form fields and the contenteditable region so
+     text editing still works. Images inside the article and the
+     in-dialog preview <img> also need -webkit-touch-callout: none —
+     without it iOS pops the "Save image" / "Copy image" menu on
+     long-press, which interrupts the figure-config flow. */
+  .rkr-admin-content,
+  .rkr-admin-content button,
+  #rkr-page-title,
+  #rkroll-admin-toolbar,
+  #rkroll-admin-status,
+  #rkr-sync-badge,
+  #rkroll-admin-article .rkr-figure-actions,
+  .rkr-cell-dialog-head,
+  .rkr-cell-dialog-body > label {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .rkr-admin-content :is(input, textarea, [contenteditable='true']),
+  .rkr-admin-content :is(input, textarea, [contenteditable='true']) * {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  #rkroll-admin-article img,
+  .rkr-cell-preview {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
   /* Editor mode label ("New post" / "Edit post"). Not a content
      header — the post's title goes in the input field below — so
      it's deliberately small and muted, just enough to identify the
