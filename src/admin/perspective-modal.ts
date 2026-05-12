@@ -9,6 +9,7 @@ import { computeHomography, type Point, perspectiveOutputSize } from '../lib/can
 import { type LocalEditState, localMutate } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
+import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 
 interface PerspSession {
@@ -219,7 +220,7 @@ export async function openPerspective(
     },
     { once: true }
   );
-  dialog.showModal();
+  openModal(dialog);
 }
 
 function closePerspective(): void {

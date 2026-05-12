@@ -8,6 +8,7 @@ import Cropper from 'cropperjs';
 import { type LocalEditState, localMutate } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
+import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 
 let activeCropper: Cropper | null = null;
@@ -98,7 +99,7 @@ export async function openCropper(
     },
     { once: true }
   );
-  dialog.showModal();
+  openModal(dialog);
 }
 
 function closeCropper(): void {

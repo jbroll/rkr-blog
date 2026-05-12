@@ -1,6 +1,7 @@
 // Storage panel (spec-offline §8). Opened by the status badge.
 
 import { LOCK_GRACE_MS } from '../lib/eviction-pure.ts';
+import { openModal } from './dialog-focus.ts';
 import { setStatus } from './dom.ts';
 import { runEviction } from './eviction.ts';
 import { listDir, readJson, writeJson } from './opfs.ts';
@@ -26,8 +27,7 @@ export async function openStoragePanel(): Promise<void> {
     document.body.appendChild(dialog);
   }
   await renderPanel(dialog);
-  /* v8 ignore next -- showModal fallback for non-Chromium envs */
-  if (!dialog.open) dialog.showModal();
+  openModal(dialog);
 }
 
 async function renderPanel(d: HTMLDialogElement): Promise<void> {

@@ -6,6 +6,7 @@
 
 import type { Editor } from '@tiptap/core';
 
+import { openModal } from './dialog-focus';
 import { setStatus } from './dom';
 import type { FigureAttrs } from './figure-node';
 import { pickFromDrive } from './integrations/gdrive';
@@ -53,7 +54,7 @@ function openSourcePicker(
       else resolve(null);
     };
     dialog.addEventListener('click', onClick);
-    dialog.showModal();
+    openModal(dialog);
   });
 }
 

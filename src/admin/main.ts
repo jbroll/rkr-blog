@@ -2,13 +2,12 @@
 
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-// Side-effect imports: cropperjs CSS, plus the showModal patch in
-// dialog-focus.ts (stops the mobile OS keyboard popping on close).
+// CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
-import './dialog-focus';
 
 import { scheduleAttrCommit } from './attr-commit';
 import { hasWebglSupport } from './canvas-loaders';
+import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
 import { type FigureAttrs, FigureNode } from './figure-node';
@@ -182,7 +181,7 @@ function mount(): void {
     attrCellCaption.value = captionsList[idx] ?? '';
     attrCellAlt.value = altsList[idx] ?? '';
     populating = false;
-    if (!cellDialog.open) cellDialog.showModal();
+    openModal(cellDialog);
     // idList is the source of truth; we only read it here to keep the
     // signature parallel with populateImageEditForActiveCell.
     void idList;
@@ -251,7 +250,7 @@ function mount(): void {
     }
     if (target.closest('[data-figure-config]')) {
       ev.preventDefault();
-      if (!figureDialog.open) figureDialog.showModal();
+      openModal(figureDialog);
       return;
     }
     if (target.closest('[data-figure-delete]')) {

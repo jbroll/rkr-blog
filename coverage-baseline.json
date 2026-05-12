@@ -91,7 +91,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 20,
-      "linesHit": 19
+      "linesHit": 20
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 37
+      "linesHit": 36
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -226,8 +226,8 @@
       "linesHit": 10
     },
     "src/admin/dialog-focus.ts": {
-      "linesFound": 8,
-      "linesHit": 8
+      "linesFound": 4,
+      "linesHit": 4
     }
   }
 }
