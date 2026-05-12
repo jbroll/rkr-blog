@@ -8,7 +8,7 @@ import { test } from 'node:test';
 
 import { type IconName, icon } from '../../src/templates/icons.ts';
 
-const NAMES: IconName[] = ['link', 'imagePlus', 'copy', 'settings', 'pencil', 'plus'];
+const NAMES: IconName[] = ['link', 'imagePlus', 'copy', 'settings', 'pencil', 'plus', 'save'];
 
 test('icons: every name returns a non-empty <svg> with the Lucide attribute set', () => {
   for (const name of NAMES) {

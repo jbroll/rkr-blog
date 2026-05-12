@@ -82,7 +82,8 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
     }),
     makeButton('Save', () => void handleSave(editor), {
       cmd: 'save',
-      className: 'rkr-toolbar-primary'
+      className: 'rkr-toolbar-primary',
+      iconSvg: icon('save', 16)
     })
   );
 

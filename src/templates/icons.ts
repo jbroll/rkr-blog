@@ -35,7 +35,9 @@ const PATHS = {
   pencil:
     '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
   // <https://lucide.dev/icons/plus>
-  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>'
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  // <https://lucide.dev/icons/save>
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>'
 } as const;
 
 export type IconName = keyof typeof PATHS;
