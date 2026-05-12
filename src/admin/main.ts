@@ -224,17 +224,17 @@ function mount(): void {
     editPanel.activateForId(id, () => idList[activeCellIndex ?? -1] === id);
   }
 
-  // Android Firefox pops the OS action bar for DOM Ranges that span
-  // only non-text content (paragraph breaks, atom nodes, CSS gaps) —
-  // Copy yields nothing. Clear those ranges; real text selections
-  // (non-empty range.toString) pass through.
+  // Clear DOM Ranges that span only non-text content (atoms, breaks,
+  // CSS gaps) — Android Firefox pops the OS action bar for those
+  // even though Copy yields nothing.
   document.addEventListener('selectionchange', () => {
     const sel = document.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
-    // Scope to the editor — don't touch selections in form inputs,
-    // sidebars, dialogs, or the public page chrome.
-    if (!editor.view.dom.contains(range.commonAncestorContainer)) return;
+    // Scope to the article — view.dom is a child of it, so phantom
+    // ranges anchored at the article level escape view.dom.contains.
+    const anc = range.commonAncestorContainer;
+    if (anc !== root && !root.contains(anc)) return;
     if (range.toString().trim() === '') {
       sel.removeAllRanges();
     }

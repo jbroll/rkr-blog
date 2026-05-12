@@ -1577,6 +1577,100 @@ test('admin posts: per-row status flip + pin/unpin', async ({ page }) => {
   await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
 });
 
+// Phantom-selection guard: Android Firefox creates DOM Ranges that
+// span only non-text content (paragraph breaks, atomic figure, CSS
+// gaps) during scroll-intended touches. range.toString() is empty,
+// but the OS action bar still pops. main.ts has a selectionchange
+// listener that clears such ranges; this test exercises that path.
+//
+// Playwright runs desktop Chromium, not Android Firefox, so the OS
+// action bar isn't directly observable here — but the DOM mechanism
+// (the empty-content Range) is W3C-standard and reproduces in any
+// browser. If the guard fires and clears, we know the JS code is
+// correct; the remaining variable is whether Android Firefox honors
+// the selection clear by dismissing its native toolbar.
+test('editor: selectionchange guard clears empty-content ranges', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  // Insert a figure so the doc has a non-text node to span.
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'phantom.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLUE, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded phantom\.png/, {
+    timeout: 10_000
+  });
+
+  // Synthesize the phantom-Range Firefox would create. Range start
+  // at the article root, end just past the figure node. No text
+  // content captured → range.toString() === ''.
+  const observed = await page.evaluate(() => {
+    const article = document.querySelector('#rkroll-admin-article');
+    if (!article) throw new Error('article missing');
+    const range = document.createRange();
+    range.setStart(article, 0);
+    range.setEnd(article, Math.max(1, article.childNodes.length));
+    const sel = window.getSelection();
+    if (!sel) throw new Error('no Selection api');
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return {
+      rangeBeforeTick: sel.rangeCount,
+      textBeforeTick: sel.toString()
+    };
+  });
+  expect(observed.textBeforeTick).toBe('');
+  expect(observed.rangeBeforeTick).toBe(1);
+  // selectionchange dispatches as a microtask; wait one tick.
+  await page.waitForTimeout(50);
+  const rangeAfterTick = await page.evaluate(() => window.getSelection()?.rangeCount ?? 0);
+  expect(rangeAfterTick).toBe(0);
+});
+
+// Counter-test: a real text selection (non-empty range.toString)
+// must NOT be cleared by the guard.
+test('editor: selectionchange guard leaves real text selections alone', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  // Type some prose into the editor so there's text to select.
+  await page.locator('#rkroll-admin-article').click();
+  await page.keyboard.type('hello world');
+
+  const text = await page.evaluate(() => {
+    const article = document.querySelector('#rkroll-admin-article');
+    if (!article) throw new Error('article missing');
+    // Find a text node containing "hello world".
+    let textNode: Text | null = null;
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      if (node.data.includes('hello')) {
+        textNode = node;
+        break;
+      }
+    }
+    if (!textNode) throw new Error('text node missing');
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 5); // "hello"
+    const sel = window.getSelection();
+    if (!sel) throw new Error('no Selection api');
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return sel.toString();
+  });
+  expect(text).toBe('hello');
+
+  // Real selection survives — guard does NOT clear it.
+  const surviving = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(surviving).toBe('hello');
+});
+
 // Anonymous visitor sees no admin chrome.
 test('admin chrome: hidden for anonymous visitors', async ({ browser }) => {
   // Fresh context = no session cookie.
