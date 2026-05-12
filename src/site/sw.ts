@@ -86,14 +86,11 @@ sw.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   // Admin + API + auth: never cache. The OPFS layer is the offline
-  // path for admin; intercepting here would shadow it. /admin/login
-  // is the one carve-out — it's the GET form that anonymous visitors
-  // hit, the response body is identical for every visitor, and
-  // letting the SW SWR-cache it makes reloads instant (otherwise the
-  // network round-trip exposes a brief unstyled-content frame
-  // between the inline pre-paint and external CSS arriving).
+  // path for admin; intercepting here would shadow it. The login
+  // page lives at /login (not /admin/login) precisely so it falls
+  // under the normal SWR cache below with no carve-out.
   if (
-    (url.pathname.startsWith('/admin/') && url.pathname !== '/admin/login') ||
+    url.pathname.startsWith('/admin/') ||
     url.pathname === '/admin' ||
     url.pathname.startsWith('/_debug/')
   ) {

@@ -54,7 +54,7 @@ test('siteHead: renders site title + tagline; no admin strip in either mode', ()
 
 test('siteFoot: anonymous visitor sees the Login link', () => {
   const html = siteFoot({ title: 'My site' });
-  assert.match(html, /href="\/admin\/login"/);
+  assert.match(html, /href="\/login"/);
   assert.match(html, />Login</);
   assert.ok(!html.includes('Logout'), 'no Logout for anonymous visitors');
   assert.match(html, /My site/);
@@ -67,7 +67,7 @@ test('siteFoot: authed visitor sees a POST-form Logout button', () => {
   assert.match(html, /<form [^>]*method="post" [^>]*action="\/admin\/logout"/);
   assert.match(html, /<button[^>]*>Logout</);
   // No anonymous Login link when authed.
-  assert.ok(!html.includes('/admin/login'), 'no Login link when authed');
+  assert.ok(!html.includes('href="/login"'), 'no Login link when authed');
 });
 
 test('indexAdminFabs: renders + (New post) and ⚙ (Settings) as anchors', () => {

@@ -36,7 +36,7 @@ export function bundleVersion(): string {
  * scheme. The CSS-side `color-scheme` declaration only takes effect
  * after the linked stylesheet loads — fine for SW-served navigations
  * (the HTML + CSS arrive together from cache) but not for routes the
- * SW bypasses (e.g. /admin/login), where the network gap between the
+ * SW bypasses (e.g. anything under /admin/), where the network gap between the
  * HTML and CSS lets dark-mode visitors see a brief white canvas. The
  * meta tag is parsed as the head streams in, before any external
  * stylesheet, and applies immediately.
@@ -79,7 +79,7 @@ export function siteHead(site: SiteChrome['site'], _opts: HeadOpts = {}): string
 
 export interface FootOpts {
   /** When true the discreet footer link is "Logout" (POST form); when
-   * false (or omitted) it's "Login" pointing at /admin/login. */
+   * false (or omitted) it's "Login" pointing at /login. */
   isAdmin?: boolean;
 }
 
@@ -95,7 +95,7 @@ export function siteFoot(site: SiteChrome['site'], opts: FootOpts = {}): string 
     <button type="submit" class="rkr-site-foot-admin">Logout</button>
   </form>`
     : `<span class="rkr-site-foot-sep" aria-hidden="true">·</span>
-  <a class="rkr-site-foot-admin" href="/admin/login" rel="nofollow">Login</a>`;
+  <a class="rkr-site-foot-admin" href="/login" rel="nofollow">Login</a>`;
   return `<footer class="rkr-site-foot">
   &copy; ${year} ${escapeAttr(site.title)}
   ${adminLink}

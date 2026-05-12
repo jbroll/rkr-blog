@@ -25,7 +25,6 @@ import {
   NotInvitedError,
   type User
 } from '../lib/users.ts';
-import { siteFoot, siteHead, stylesheetLinks } from '../templates/layout.ts';
 
 const SESSION_COOKIE = 'rkr_session';
 const OAUTH_STATE_COOKIE = 'rkr_oauth_state';
@@ -232,7 +231,12 @@ export default async function authRoutes(
     }
   );
 
-  fastify.get('/admin/login', async (_req, reply) => {
+  // Login page sits at /login (NOT /admin/login) so it falls under
+  // the public SW handler like every other anonymous page — no
+  // /admin/* carve-out needed. The form still POSTs to
+  // /admin/auth/token-login, which is correctly bypassed by the SW
+  // (POSTs aren't intercepted anyway).
+  fastify.get('/login', async (_req, reply) => {
     const adminTokenAvailable = !!process.env.ADMIN_TOKEN;
     return reply.type('text/html; charset=utf-8').send(renderLoginPage({ adminTokenAvailable }));
   });
@@ -383,14 +387,21 @@ function readCookie(req: FastifyRequest, name: string): string | undefined {
   return (req.cookies as Record<string, string | undefined> | undefined)?.[name];
 }
 
+// The login page is the simplest possible standalone HTML: one
+// inline <style> in the head, one <main> with the form, no site
+// chrome (header/footer), no external stylesheet. No external CSS
+// means there's no second-pass paint when the theme sheet arrives,
+// which is what was causing the "page reformats" flash on reload.
+// The page lives at /login (not /admin/login) so the public SW
+// caches it like any other anonymous route, no carve-out needed.
 function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
   const site = siteConfig();
   const tokenForm = opts.adminTokenAvailable
-    ? `<form method="post" action="/admin/auth/token-login" class="rkr-login-form">
+    ? `<form method="post" action="/admin/auth/token-login">
   <label>Admin token<input type="password" name="token" autocomplete="current-password" required/></label>
-  <button type="submit" class="rkr-login-submit">Sign in with token</button>
+  <button type="submit">Sign in with token</button>
 </form>`
-    : '<p class="rkr-login-hint">Token login disabled (ADMIN_TOKEN not set).</p>';
+    : '<p class="hint">Token login disabled (ADMIN_TOKEN not set).</p>';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -398,65 +409,43 @@ function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Sign in — ${escapeText(site.title)}</title>
 <style>
-/* The login page has form widgets (inputs, the submit button,
-   the Google sign-in link styled as a box) whose default browser
-   rendering is wildly different from the themed look — wide
-   instead of a 24rem column, native widget chrome instead of
-   bordered/padded boxes. Render-blocking link tags usually mask
-   the transition, but with inline styles in the same head the
-   browser can paint an intermediate frame using inline-only
-   rules before the external sheet settles, producing a brief
-   "page reformats" flash that other public pages don't show
-   because their default rendering is close to themed.
-
-   Inline the full login layout here so the first paint already
-   matches the final layout. Hardcoded colors target the default
-   theme; non-default themes still override via the external
-   sheet that loads next. Values match themes/default.css. */
 :root { color-scheme: light dark; }
+* { box-sizing: border-box; }
 body { margin: 0; background: #fdfdfb; color: #1a1a1a;
-       font-family: ui-serif, Georgia, "Times New Roman", Times, serif; }
-.rkr-login { max-width: 24rem; margin: 2rem auto; padding: 0 1rem; }
-.rkr-login h1 { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                Roboto, "Helvetica Neue", Arial, sans-serif;
-                font-size: 1.5rem; margin: 0 0 1.5rem; }
-.rkr-login hr { border: 0; border-top: 1px solid #e5e5e2; margin: 2rem 0; }
-.rkr-login-google { display: inline-block; padding: 0.5rem 1rem;
-                    border: 1px solid #e5e5e2; border-radius: 4px;
-                    text-decoration: none; color: #1a1a1a; }
-.rkr-login-form { display: flex; flex-direction: column; gap: 0.75rem; }
-.rkr-login-form label { display: flex; flex-direction: column;
-                        gap: 0.25rem; font-size: 0.9rem; }
-.rkr-login-form input { padding: 0.5rem; font: inherit;
-                        border: 1px solid #e5e5e2; border-radius: 4px;
-                        background: #fdfdfb; color: #1a1a1a; }
-.rkr-login-submit { padding: 0.5rem 1rem; font: inherit;
-                    background: #1a4f7f; color: #fdfdfb;
-                    border: 1px solid #1a4f7f; border-radius: 4px;
-                    cursor: pointer; }
+       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, "Helvetica Neue", Arial, sans-serif; }
+main { max-width: 24rem; margin: 4rem auto; padding: 0 1rem; }
+h1 { font-size: 1.5rem; margin: 0 0 1.5rem; }
+a.google { display: inline-block; padding: 0.5rem 1rem;
+           border: 1px solid #e5e5e2; border-radius: 4px;
+           text-decoration: none; color: inherit; }
+hr { border: 0; border-top: 1px solid #e5e5e2; margin: 2rem 0; }
+form { display: flex; flex-direction: column; gap: 0.75rem; }
+form label { display: flex; flex-direction: column;
+             gap: 0.25rem; font-size: 0.9rem; }
+form input { padding: 0.5rem; font: inherit;
+             border: 1px solid #e5e5e2; border-radius: 4px;
+             background: #fdfdfb; color: inherit; }
+form button { padding: 0.5rem 1rem; font: inherit;
+              background: #1a4f7f; color: #fdfdfb;
+              border: 1px solid #1a4f7f; border-radius: 4px;
+              cursor: pointer; }
+.hint { color: #707070; font-size: 0.9rem; }
 @media (prefers-color-scheme: dark) {
   body { background: #14140e; color: #ebeae4; }
-  .rkr-login hr { border-top-color: #2a2a25; }
-  .rkr-login-google { border-color: #2a2a25; color: #ebeae4; }
-  .rkr-login-form input { background: #14140e; color: #ebeae4;
-                          border-color: #2a2a25; }
-  .rkr-login-submit { background: #8fb3da; color: #14140e;
-                      border-color: #8fb3da; }
+  hr, a.google, form input { border-color: #2a2a25; }
+  form input { background: #14140e; }
+  form button { background: #8fb3da; color: #14140e; border-color: #8fb3da; }
 }
 </style>
-${stylesheetLinks()}
 </head>
 <body>
-${siteHead(site)}
-<main id="main" tabindex="-1">
-<section class="rkr-login">
-<h1>Sign in</h1>
-<a class="rkr-login-google" href="/admin/auth/google/start">Sign in with Google</a>
+<main>
+<h1>Sign in to ${escapeText(site.title)}</h1>
+<a class="google" href="/admin/auth/google/start">Sign in with Google</a>
 <hr/>
 ${tokenForm}
-</section>
 </main>
-${siteFoot(site)}
 </body>
 </html>`;
 }

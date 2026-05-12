@@ -30,7 +30,7 @@ const PNG_1X1_YELLOW =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4/58BAAT/Af9dfQKHAAAAAElFTkSuQmCC';
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/admin/login');
+  await page.goto('/login');
   await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
   // Post-login redirects to the public index; callers that need the
   // editor mount follow up with their own page.goto('/admin/editor').

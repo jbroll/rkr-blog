@@ -447,7 +447,7 @@ async function postTokenLogin(
   });
 }
 
-test('GET /admin/login renders the form when ADMIN_TOKEN is set', async (t) => {
+test('GET /login renders the form when ADMIN_TOKEN is set', async (t) => {
   const orig = process.env.ADMIN_TOKEN;
   process.env.ADMIN_TOKEN = 'secret-token-value';
   t.after(() => {
@@ -455,21 +455,21 @@ test('GET /admin/login renders the form when ADMIN_TOKEN is set', async (t) => {
     else process.env.ADMIN_TOKEN = orig;
   });
   const { app } = await setup(t, { idTokenPayload: {} });
-  const res = await app.inject({ method: 'GET', url: '/admin/login' });
+  const res = await app.inject({ method: 'GET', url: '/login' });
   assert.equal(res.statusCode, 200);
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<form method="post" action="\/admin\/auth\/token-login"/);
   assert.match(res.body, /Sign in with Google/);
 });
 
-test('GET /admin/login hides the form when ADMIN_TOKEN is unset', async (t) => {
+test('GET /login hides the form when ADMIN_TOKEN is unset', async (t) => {
   const orig = process.env.ADMIN_TOKEN;
   delete process.env.ADMIN_TOKEN;
   t.after(() => {
     if (orig !== undefined) process.env.ADMIN_TOKEN = orig;
   });
   const { app } = await setup(t, { idTokenPayload: {} });
-  const res = await app.inject({ method: 'GET', url: '/admin/login' });
+  const res = await app.inject({ method: 'GET', url: '/login' });
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Token login disabled/);
   assert.doesNotMatch(res.body, /<form/);

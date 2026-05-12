@@ -31,7 +31,7 @@ async function makeJpeg(seed: number): Promise<Buffer> {
 }
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/admin/login');
+  await page.goto('/login');
   await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
   // Post-login lands on the public index; this spec drives admin
   // routes via page.request afterwards so we just need the cookie.
