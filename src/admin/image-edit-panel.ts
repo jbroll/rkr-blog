@@ -16,7 +16,7 @@ import {
   localUndo
 } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
-import { refreshImagePreview } from './canvas-loaders';
+import { getPreviewUrl, refreshImagePreview } from './canvas-loaders';
 import { openCropper } from './cropper-modal';
 import { setStatus } from './dom';
 import {
@@ -95,12 +95,31 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
 
   /** Re-render the edits list + Save button state, persist to OPFS
    * (reload restores unsaved edits), and repaint the editor's <img>
-   * via the canvas pipeline. The bake goes up only on Save. */
+   * via the canvas pipeline. The bake goes up only on Save. After
+   * the pipeline resolves the dialog's in-modal preview is repointed
+   * at the same blob URL so the author sees the result of each edit
+   * without dismissing the dialog. */
   function refreshAfterEdit(id: string, s: LocalEditState, label: string): void {
     setStatus(`${label} ${id.slice(0, 8)}…`);
     renderEditsPanel(id, s);
     persistImageState(id, s);
-    void refreshImagePreview(editor, id, s.ops);
+    void refreshImagePreview(editor, id, s.ops).then(() => updateDialogPreview(id));
+  }
+
+  /** Sync the in-dialog <img> to the latest pipeline output for `id`.
+   * The blob URL is owned by canvas-loaders' LRU, so we just point
+   * src at it — no revoke responsibility here. */
+  function updateDialogPreview(id: string): void {
+    const img = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
+    if (!img) return;
+    const url = getPreviewUrl(id);
+    if (url) {
+      img.src = url;
+      img.hidden = false;
+    } else {
+      img.removeAttribute('src');
+      img.hidden = true;
+    }
   }
 
   /** Mutate the active image's local state. Refuses if no image is
@@ -205,6 +224,13 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     buttons.redo.disabled = true;
     buttons.save.disabled = true;
     editsList.replaceChildren();
+    // Drop the dialog preview's src — otherwise reopening the dialog
+    // for a different image would flash the previous image first.
+    const preview = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
+    if (preview) {
+      preview.hidden = true;
+      preview.removeAttribute('src');
+    }
     section.hidden = true;
     section.dataset.ready = 'false';
   }
@@ -233,8 +259,10 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
         }
         renderEditsPanel(id, s);
         // Repaint the cell preview from local ops — there might be
-        // unsaved edits from a prior selection of this image.
-        void refreshImagePreview(editor, id, s.ops);
+        // unsaved edits from a prior selection of this image. Show
+        // the result in the dialog too once the canvas pipeline
+        // resolves.
+        void refreshImagePreview(editor, id, s.ops).then(() => updateDialogPreview(id));
         section.dataset.ready = 'true';
       },
       () => {

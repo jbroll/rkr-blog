@@ -2,8 +2,8 @@
   "version": 1,
   "files": {
     "src/admin/canvas-loaders.ts": {
-      "linesFound": 50,
-      "linesHit": 45
+      "linesFound": 52,
+      "linesHit": 47
     },
     "src/admin/canvas.ts": {
       "linesFound": 126,
@@ -170,8 +170,8 @@
       "linesHit": 16
     },
     "src/admin/image-edit-panel.ts": {
-      "linesFound": 45,
-      "linesHit": 34
+      "linesFound": 52,
+      "linesHit": 41
     },
     "src/admin/image-insert.ts": {
       "linesFound": 45,

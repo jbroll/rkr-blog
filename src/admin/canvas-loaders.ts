@@ -190,6 +190,16 @@ export async function refreshImagePreview(
   }
 }
 
+/** Latest blob URL produced by refreshImagePreview for `id`, or
+ * `null` if the pipeline hasn't run yet. The cell-edit dialog reads
+ * this to render an in-dialog preview that mirrors what the editor
+ * <img> shows — visual feedback for each crop / rotate / flip / etc.
+ * The URL is owned by the LRU above; callers must NOT revokeObjectURL
+ * on it. */
+export function getPreviewUrl(id: string): string | null {
+  return previewBlobUrls.get(id) ?? null;
+}
+
 export async function uploadBake(id: string, blob: Blob, ops: readonly SidecarOp[]): Promise<void> {
   const res = await fetch(`/admin/sidecar/${id}/bake`, {
     method: 'POST',

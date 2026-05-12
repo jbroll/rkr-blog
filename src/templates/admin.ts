@@ -146,6 +146,13 @@ ${siteHead(data.site, { isAdmin: true })}
       </span>
       <span id="rkr-image-edits-label">Edits</span>
       <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
+      <!-- Live preview of the image with the current edits applied,
+           kept in sync with the editor's <img> by the canvas pipeline
+           (canvas-loaders → refreshImagePreview). Gives the author
+           visual feedback inside the dialog so each rotate / crop /
+           flip click shows up here without having to peek behind
+           the modal. -->
+      <img id="rkr-cell-preview" class="rkr-cell-preview" alt="" hidden/>
     </div>
   </div>
 </dialog>

@@ -207,6 +207,22 @@ export const ADMIN_CSS = `
     align-items: center; padding: .75rem;
   }
   .rkr-cell-dialog-body #rkr-image-edit { grid-column: 1 / -1; display: contents; }
+  /* Live image preview inside the cell dialog. Spans the full grid
+     width below the edits list; max-height keeps the modal from
+     pushing past the viewport on a tall portrait crop. The checker
+     fallback background shows when the image has transparency so
+     the author can see alpha effects of an edit. */
+  .rkr-cell-preview {
+    grid-column: 1 / -1;
+    display: block;
+    max-width: 100%;
+    max-height: 45vh;
+    margin: .5rem auto 0;
+    object-fit: contain;
+    background: color-mix(in srgb, var(--rkr-muted) 12%, transparent);
+    border: 1px solid var(--rkr-rule);
+    border-radius: 4px;
+  }
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
   #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }
   #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
