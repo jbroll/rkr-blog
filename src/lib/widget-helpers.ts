@@ -11,7 +11,7 @@ import { cacheKey } from './hash.ts';
 import { bakePath, imageInfo } from './originals.ts';
 import { listSidecarIds } from './posts.ts';
 import type { OutputFormat } from './render.ts';
-import type { Sidecar } from './sidecar-types.ts';
+import type { Sidecar, SidecarOp } from './sidecar-types.ts';
 import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
@@ -265,11 +265,99 @@ export async function imageDimensions(
       const meta = await sharp(bakePath(siteRoot, id)).metadata();
       if (meta.width && meta.height) return { width: meta.width, height: meta.height };
     } catch {
-      /* bake missing (offline edit mid-drain) → fall through to original */
+      /* bake missing (offline edit mid-drain, pre-/commit-migration
+         leftovers) → fall through to original + apply ops. NOT
+         falling back to raw original dims: render.ts applies ops
+         live when the bake is missing, so the served image's aspect
+         is post-ops, and using the original's aspect for the
+         lightbox stretches the displayed image. */
     }
   }
   const info = await imageInfo(siteRoot, id);
-  return { width: info?.width ?? 1, height: info?.height ?? 1 };
+  const baseW = info?.width ?? 1;
+  const baseH = info?.height ?? 1;
+  if (ops.length === 0) return { width: baseW, height: baseH };
+  return dimensionsAfterOps(baseW, baseH, ops);
+}
+
+/** Compute the dimensions the render pipeline produces when applying
+ * `ops` to a source of (w, h). Mirrors render.ts:applyOp semantics
+ * for crop / rotate / flip / resample. Perspective uses the corner
+ * bounding box as an estimate (sharp can't apply perspective; the
+ * server returns 500 for perspective+no-bake, so we'd only hit this
+ * branch in error paths).
+ *
+ * Used as the bake-missing fallback in imageDimensions. The render
+ * pipeline applies the same ops to the same source, so the layout
+ * dims match the served pixels. */
+function dimensionsAfterOps(
+  w: number,
+  h: number,
+  ops: readonly SidecarOp[]
+): { width: number; height: number } {
+  let width = w;
+  let height = h;
+  for (const raw of ops) {
+    const op = raw as Record<string, unknown>;
+    switch (op.type) {
+      case 'crop':
+        width = Number(op.w) || width;
+        height = Number(op.h) || height;
+        break;
+      case 'rotate': {
+        const norm = ((Number(op.degrees ?? 0) % 360) + 360) % 360;
+        if (norm === 90 || norm === 270) [width, height] = [height, width];
+        break;
+      }
+      case 'flip':
+        break;
+      case 'resample': {
+        const tW = op.w !== undefined ? Number(op.w) : undefined;
+        const tH = op.h !== undefined ? Number(op.h) : undefined;
+        const fit = typeof op.fit === 'string' ? op.fit : 'inside';
+        if (fit === 'fill') {
+          if (tW !== undefined) width = tW;
+          if (tH !== undefined) height = tH;
+          break;
+        }
+        // inside / contain / cover / outside: fit-with-aspect.
+        // render.ts uses sharp.resize({ fit, withoutEnlargement:true }).
+        const sW = tW !== undefined ? tW / width : Number.POSITIVE_INFINITY;
+        const sH = tH !== undefined ? tH / height : Number.POSITIVE_INFINITY;
+        const inside = fit === 'inside' || fit === 'contain';
+        let scale = inside
+          ? Math.min(sW, sH)
+          : Math.max(
+              sW === Number.POSITIVE_INFINITY ? 0 : sW,
+              sH === Number.POSITIVE_INFINITY ? 0 : sH
+            );
+        if (!Number.isFinite(scale) || scale > 1) scale = 1;
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+        break;
+      }
+      case 'perspective': {
+        const corners = op.corners as ReadonlyArray<readonly [number, number]> | undefined;
+        if (!Array.isArray(corners) || corners.length !== 4) break;
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (const c of corners) {
+          const cx = Number(c[0]);
+          const cy = Number(c[1]);
+          if (cx < minX) minX = cx;
+          if (cy < minY) minY = cy;
+          if (cx > maxX) maxX = cx;
+          if (cy > maxY) maxY = cy;
+        }
+        width = Math.max(1, Math.round(maxX - minX));
+        height = Math.max(1, Math.round(maxY - minY));
+        break;
+      }
+    }
+  }
+  return { width, height };
 }
 
 function unique<T>(arr: T[]): T[] {
