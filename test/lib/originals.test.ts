@@ -52,18 +52,16 @@ test('ingestStream writes to sharded path and produces a valid sidecar', async (
   assert.equal(result.id, expectedId);
   assert.equal(result.bytes, bytes.length);
   assert.equal(result.deduplicated, false);
-  assert.equal(result.ext, 'jpg');
+  // Ingest re-encodes every raster master to WebP (see ingest-resize.ts).
+  assert.equal(result.ext, 'webp');
 
-  // Sharded layout: originals/<2>/<2>/<id>.jpg
-  const expectedPath = originalPath(root, expectedId, 'jpg');
+  // Sharded layout: originals/<2>/<2>/<id>.webp (id stays = upload hash;
+  // only the on-disk bytes change).
+  const expectedPath = originalPath(root, expectedId, 'webp');
   assert.equal(result.path, expectedPath);
   assert.ok(fs.existsSync(expectedPath));
 
-  // Bytes on disk match what was streamed in.
-  const onDisk = fs.readFileSync(expectedPath);
-  assert.deepEqual(onDisk, bytes);
-
-  // Sidecar populated with metadata + provenance.
+  // Sidecar populated with post-resize metadata + upload provenance.
   const sidecar = await sidecarRead(root, expectedId);
   assert.ok(sidecar);
   assert.equal(sidecar.version, 1);
@@ -71,9 +69,18 @@ test('ingestStream writes to sharded path and produces a valid sidecar', async (
   assert.equal(sidecar.source.kind, 'upload');
   assert.equal(sidecar.source.originalName, 'sample.jpg');
   assert.match(sidecar.source.fetched ?? '', /^\d{4}-\d{2}-\d{2}T/);
-  assert.equal(sidecar.metadata.format, 'jpeg');
+  // metadata describes the bytes on disk (post-resize WebP).
+  assert.equal(sidecar.metadata.format, 'webp');
   assert.equal(sidecar.metadata.width, 64);
   assert.equal(sidecar.metadata.height, 48);
+  // Upload provenance describes the pre-resize bytes.
+  assert.equal(sidecar.source.uploadFormat, 'jpeg');
+  assert.equal(sidecar.source.uploadWidth, 64);
+  assert.equal(sidecar.source.uploadHeight, 48);
+  assert.equal(sidecar.source.uploadBytes, bytes.length);
+  // 64×48 is under maxDim=3200, so no shrink happened — just re-encode.
+  assert.equal(sidecar.source.resize?.reason, 'no-shrink-needed');
+  assert.equal(sidecar.source.resize?.encoding, 'lossy');
   assert.deepEqual(sidecar.ops, []);
   assert.ok(Array.isArray(sidecar.outputs) && sidecar.outputs.length > 0);
   assert.ok(Array.isArray(sidecar.variants) && sidecar.variants.length > 0);
@@ -115,7 +122,7 @@ test('ingestStream dedupes byte-identical re-uploads without rewriting', async (
   assert.equal(sidecar.source.originalName, 'a.jpg');
 });
 
-test('ingestStream handles PNG (alpha channel) with the right extension', async (t) => {
+test('ingestStream re-encodes PNG inputs to lossless WebP', async (t) => {
   const root = freshSiteRoot(t);
   const bytes = await makePng();
 
@@ -125,11 +132,14 @@ test('ingestStream handles PNG (alpha channel) with the right extension', async 
     source: { kind: 'upload', originalName: 'red.png' }
   });
 
-  assert.equal(result.ext, 'png');
-  assert.ok(result.path.endsWith('.png'));
+  // PNG → lossless WebP. The .png ext is no longer produced by ingest.
+  assert.equal(result.ext, 'webp');
+  assert.ok(result.path.endsWith('.webp'));
   const sidecar = await sidecarRead(root, result.id);
   assert.ok(sidecar);
-  assert.equal(sidecar.metadata.format, 'png');
+  assert.equal(sidecar.metadata.format, 'webp');
+  assert.equal(sidecar.source.uploadFormat, 'png');
+  assert.equal(sidecar.source.resize?.encoding, 'lossless');
 });
 
 test('ingestStream rejects non-image bytes', async (t) => {
@@ -153,10 +163,12 @@ test('ingestStream rejects non-image bytes', async (t) => {
 
 test('ingestStream rejects oversized images (decompression-bomb defense)', async (t) => {
   const root = freshSiteRoot(t);
-  // 8000 x 8000 = 64 Mpx > 50 Mpx cap. Sharp's limitInputPixels throws
-  // when the metadata pipeline tries to decode pixel-count guards.
+  // 15000 × 15000 = 225 Mpx > SHARP_INGEST_PIXEL_LIMIT (200 Mpx).
+  // The pre-feature 50 Mpx cap accepted these now (ingest accepts up
+  // to 200 Mpx and resizes down), so the fixture has to clear the new
+  // ceiling to exercise the rejection path.
   const big = await sharp({
-    create: { width: 8000, height: 8000, channels: 3, background: { r: 0, g: 0, b: 0 } }
+    create: { width: 15000, height: 15000, channels: 3, background: { r: 0, g: 0, b: 0 } }
   })
     .jpeg({ quality: 50 })
     .toBuffer();
@@ -217,4 +229,133 @@ test('ingestStream leaves dimensions untouched for EXIF Orientation=1 (default)'
   assert.ok(sidecar);
   assert.equal(sidecar.metadata.width, 100);
   assert.equal(sidecar.metadata.height, 40);
+});
+
+test('ingestStream downsamples a large JPEG to the configured maxDim', async (t) => {
+  const root = freshSiteRoot(t);
+  // 3500×2500 long edge exceeds default maxDim 3200.
+  const bytes = await sharp({
+    create: { width: 3500, height: 2500, channels: 3, background: { r: 40, g: 100, b: 160 } }
+  })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+
+  const result = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'large.jpg' }
+  });
+
+  assert.equal(result.ext, 'webp');
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.source.uploadFormat, 'jpeg');
+  assert.equal(sidecar.source.uploadWidth, 3500);
+  assert.equal(sidecar.source.uploadHeight, 2500);
+  assert.equal(sidecar.source.resize?.reason, 'resized');
+  assert.equal(sidecar.source.resize?.applied, true);
+  assert.equal(sidecar.source.resize?.encoding, 'lossy');
+  assert.equal(sidecar.metadata.width, 3200);
+  assert.equal(sidecar.metadata.height, Math.round((2500 * 3200) / 3500));
+  // On-disk file must be smaller than the source upload.
+  const onDiskSize = fs.statSync(result.path).size;
+  assert.ok(onDiskSize < bytes.length, 'resized webp should beat the source jpeg on bytes');
+});
+
+test('ingestStream applies portrait orientation BEFORE the resize clamp', async (t) => {
+  const root = freshSiteRoot(t);
+  // 4000×3000 encoded as landscape, orientation=6 → displayed portrait
+  // (3000×4000). Default maxDim 3200 caps the long edge (now height).
+  const bytes = await sharp({
+    create: { width: 4000, height: 3000, channels: 3, background: { r: 30, g: 60, b: 120 } }
+  })
+    .withMetadata({ orientation: 6 })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const result = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'phone-portrait.jpg' }
+  });
+
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  // After orientation bake: 3000×4000 portrait. Then maxDim=3200 caps
+  // the long edge (height) → final 2400×3200.
+  assert.equal(sidecar.metadata.width, 2400);
+  assert.equal(sidecar.metadata.height, 3200);
+});
+
+test('ingestStream honors per-call resize overrides', async (t) => {
+  const root = freshSiteRoot(t);
+  const bytes = await sharp({
+    create: { width: 2000, height: 1500, channels: 3, background: { r: 60, g: 60, b: 60 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const result = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'override.jpg' },
+    resize: { maxDim: 800, webpQuality: 60 }
+  });
+
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.source.resize?.maxDim, 800);
+  assert.equal(sidecar.source.resize?.webpQuality, 60);
+  assert.equal(sidecar.metadata.width, 800);
+  assert.equal(sidecar.metadata.height, 600);
+});
+
+test('ingestStream passes animated GIFs through unchanged', async (t) => {
+  const root = freshSiteRoot(t);
+  // Hand-crafted 2-frame 1×1 animated GIF; sharp metadata sees pages=2.
+  const gif = Buffer.from(
+    'R0lGODlhAQABAPAAAAAAAP///yH/C05FVFNDQVBFMi4wAwEAAAAh' +
+      '+QQEMgAAACwAAAAAAQABAAACAkQBACH5BAQyAAAALAAAAAABAAEAAAICTAEAOw==',
+    'base64'
+  );
+
+  const result = await ingestStream({
+    stream: Readable.from([gif]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'anim.gif' }
+  });
+
+  assert.equal(result.ext, 'gif');
+  const onDisk = fs.readFileSync(result.path);
+  assert.equal(Buffer.compare(onDisk, gif), 0, 'animated GIF must reach disk unchanged');
+  const sidecar = await sidecarRead(root, result.id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.source.resize?.reason, 'gif-animated');
+  assert.equal(sidecar.source.resize?.encoding, 'passthrough');
+});
+
+test('ingestStream preserves the first sidecar on dedup even if knobs differ', async (t) => {
+  const root = freshSiteRoot(t);
+  const bytes = await makeJpeg();
+
+  const first = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'a.jpg' },
+    resize: { webpQuality: 90 }
+  });
+  const second = await ingestStream({
+    stream: Readable.from([bytes]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'b.jpg' },
+    resize: { webpQuality: 30 }
+  });
+
+  assert.equal(second.deduplicated, true);
+  assert.equal(second.id, first.id);
+  // Second call's distinct knobs must not overwrite the first sidecar.
+  const sidecar = await sidecarRead(root, first.id);
+  assert.ok(sidecar);
+  assert.equal(sidecar.source.originalName, 'a.jpg');
+  assert.equal(sidecar.source.resize?.webpQuality, 90);
 });

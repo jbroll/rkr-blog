@@ -63,25 +63,27 @@ test('POST /admin/upload writes original + sidecar', async (t) => {
   assert.equal(body.id, expectedId);
   assert.equal(body.bytes, bytes.length);
   assert.equal(body.deduplicated, false);
-  assert.equal(body.ext, 'jpg');
+  // Ingest re-encodes every raster master to WebP (see ingest-resize.ts).
+  assert.equal(body.ext, 'webp');
 
-  // Original on disk matches input bytes.
-  const onDisk = fs.readFileSync(
-    path.join(
-      root,
-      'originals',
-      expectedId.slice(0, 2),
-      expectedId.slice(2, 4),
-      `${expectedId}.jpg`
-    )
+  // Original on disk exists at the new ext (bytes differ from input
+  // because they're the post-resize WebP — verify presence + non-empty).
+  const onDiskPath = path.join(
+    root,
+    'originals',
+    expectedId.slice(0, 2),
+    expectedId.slice(2, 4),
+    `${expectedId}.webp`
   );
-  assert.deepEqual(onDisk, bytes);
+  assert.ok(fs.existsSync(onDiskPath));
+  assert.ok(fs.statSync(onDiskPath).size > 0);
 
-  // Sidecar present with kind=upload.
+  // Sidecar present with kind=upload. Upload provenance preserved.
   const sidecar = await sidecarRead(root, expectedId);
   assert.ok(sidecar);
   assert.equal(sidecar.source.kind, 'upload');
   assert.equal(sidecar.source.originalName, 'photo.jpg');
+  assert.equal(sidecar.source.uploadFormat, 'jpeg');
 });
 
 test('POST /admin/upload dedupes a byte-identical re-upload', async (t) => {

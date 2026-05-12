@@ -25,6 +25,7 @@ import { generateCodeVerifier, generateState, MicrosoftEntraId, type OAuth2Token
 import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
 import type { Db } from '../lib/db.ts';
+import { parseResizeOverrides } from '../lib/ingest-resize.ts';
 import { fetchOneDriveFile } from '../lib/microsoft-graph.ts';
 import {
   deleteToken,
@@ -244,6 +245,8 @@ export default async function integrationsOnedriveRoutes(
         }
       });
 
+      const resize = parseResizeOverrides(req.body?.resize);
+
       try {
         const result = await ingestStream({
           stream: drive.body.pipe(limiter),
@@ -252,7 +255,8 @@ export default async function integrationsOnedriveRoutes(
             kind: 'onedrive',
             originalName: drive.file.name,
             fileId: drive.file.id
-          }
+          },
+          ...(resize ? { resize } : {})
         });
         return {
           id: result.id,

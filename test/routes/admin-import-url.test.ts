@@ -86,17 +86,23 @@ test('POST /admin/import/url fetches an image and writes original + sidecar', as
 
   const body = res.json<ImportResponse>();
   assert.equal(body.bytes, jpeg.length);
-  assert.equal(body.ext, 'jpg');
+  // Ingest re-encodes raster masters to WebP (see ingest-resize.ts).
+  assert.equal(body.ext, 'webp');
 
   const sidecar = await sidecarRead(root, body.id);
   assert.ok(sidecar);
   assert.equal(sidecar?.source.kind, 'url');
   assert.equal(sidecar?.source.originalName, 'photo.jpg');
 
-  const onDisk = fs.readFileSync(
-    path.join(root, 'originals', body.id.slice(0, 2), body.id.slice(2, 4), `${body.id}.jpg`)
+  const onDiskPath = path.join(
+    root,
+    'originals',
+    body.id.slice(0, 2),
+    body.id.slice(2, 4),
+    `${body.id}.webp`
   );
-  assert.deepEqual(onDisk, jpeg);
+  assert.ok(fs.existsSync(onDiskPath));
+  assert.ok(fs.statSync(onDiskPath).size > 0);
 });
 
 test('POST /admin/import/url 400s on a non-http URL', async (t) => {

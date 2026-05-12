@@ -405,7 +405,8 @@ test('POST /admin/import/onedrive fetches via Graph and ingests', async (t) => {
   assert.equal(res.statusCode, 200, res.body);
   const body = res.json<ImportResponseBody>();
   assert.equal(body.bytes, jpeg.length);
-  assert.equal(body.ext, 'jpg');
+  // Ingest re-encodes raster masters to WebP (see ingest-resize.ts).
+  assert.equal(body.ext, 'webp');
 
   const sidecar = await sidecarRead(root, body.id);
   assert.equal(sidecar?.source.kind, 'onedrive');

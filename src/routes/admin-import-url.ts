@@ -9,6 +9,7 @@ import { Readable, Transform } from 'node:stream';
 
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
+import { parseResizeOverrides } from '../lib/ingest-resize.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { type SafeFetchOptions, UnsafeUrlError } from '../lib/url-safety.ts';
 
@@ -31,14 +32,15 @@ export interface UrlImportRouteOpts {
 export function registerUrlImportRoute(fastify: FastifyInstance, opts: UrlImportRouteOpts): void {
   const { siteRoot, guard, urlFetcher, invalidateSidecarListCache } = opts;
 
-  fastify.post<{ Body: { url?: unknown } }>(
+  fastify.post<{ Body: { url?: unknown; resize?: unknown } }>(
     '/admin/import/url',
     { ...guard },
     async (request, reply) => {
-      const { url } = request.body ?? {};
+      const { url, resize: resizeBody } = request.body ?? {};
       if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
         return reply.code(400).send({ error: 'url must be an http(s) URL' });
       }
+      const resize = parseResizeOverrides(resizeBody);
 
       // safeFetch: SSRF defense — rejects private/loopback/link-local IPs,
       // non-default ports, and re-validates each redirect hop. Replaces
@@ -108,7 +110,8 @@ export function registerUrlImportRoute(fastify: FastifyInstance, opts: UrlImport
         const result = await ingestStream({
           stream: Readable.fromWeb(res.body).pipe(limiter),
           siteRoot,
-          source: { kind: 'url', originalName: deriveName(url, ct) }
+          source: { kind: 'url', originalName: deriveName(url, ct) },
+          ...(resize ? { resize } : {})
         });
         invalidateSidecarListCache();
         return {

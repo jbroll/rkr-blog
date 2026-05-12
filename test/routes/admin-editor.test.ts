@@ -219,14 +219,16 @@ test('GET /admin/original/:id streams the original bytes with the right Content-
 
   const res = await app.inject({ method: 'GET', url: `/admin/original/${ingest.id}` });
   assert.equal(res.statusCode, 200);
-  assert.equal(res.headers['content-type'], 'image/jpeg');
+  // Ingest re-encodes raster masters to WebP, so the on-disk master is
+  // WebP regardless of the upload format (see ingest-resize.ts).
+  assert.equal(res.headers['content-type'], 'image/webp');
   // Content-addressable bytes; immutable so the browser can keep the
   // decoded buffer alive across the editing session without
   // revalidating.
   assert.match(res.headers['cache-control'] as string, /immutable/);
-  // The body matches what we ingested.
-  assert.equal(res.rawPayload.length, bytes.length);
-  assert.equal(Buffer.compare(res.rawPayload, bytes), 0);
+  // Body is the post-resize WebP (different bytes from the upload, but
+  // present and non-empty).
+  assert.ok(res.rawPayload.length > 0);
 });
 
 test('GET /admin/original/:id 400s on malformed id and 404s on unknown id', async (t) => {
@@ -553,7 +555,8 @@ test('GET /admin/sidecar/:id/meta returns original dimensions + ops', async (t) 
   const body = res.json<MetaResponse>();
   assert.equal(body.width, 800);
   assert.equal(body.height, 600);
-  assert.equal(body.format, 'jpeg');
+  // metadata.format reflects bytes on disk, which are post-resize WebP.
+  assert.equal(body.format, 'webp');
   assert.deepEqual(body.ops, []);
   // Fresh sidecar has no redo history. Empty array (not absent) so the
   // client doesn't have to defend against undefined.

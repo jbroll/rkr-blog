@@ -20,6 +20,7 @@ import { requireUser } from '../lib/auth-middleware.ts';
 import { paths, siteConfig } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
+import { parseResizeOverrides } from '../lib/ingest-resize.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
@@ -267,11 +268,24 @@ export default async function adminRoutes(
     const part = await request.file();
     if (!part) return reply.code(400).send({ error: 'no file part' });
 
+    // Per-upload resize overrides (maxDim/scalePct/webpQuality) ride
+    // along as text fields in the multipart body. @fastify/multipart
+    // exposes those as MultipartValue records on part.fields; each
+    // .value is a string. Clients must send the text fields BEFORE
+    // the file part, which is the default browser ordering.
+    const fields = part.fields as Record<string, { value?: unknown } | undefined> | undefined;
+    const resize = parseResizeOverrides({
+      maxDim: fields?.maxDim?.value,
+      scalePct: fields?.scalePct?.value,
+      webpQuality: fields?.webpQuality?.value
+    });
+
     try {
       const result = await ingestStream({
         stream: part.file,
         siteRoot,
-        source: { kind: 'upload', originalName: part.filename ?? null }
+        source: { kind: 'upload', originalName: part.filename ?? null },
+        ...(resize ? { resize } : {})
       });
 
       // @fastify/multipart sets file.truncated when the size limit was

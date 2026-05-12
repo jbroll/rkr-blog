@@ -66,7 +66,12 @@ export async function runVerify(siteRoot: string): Promise<VerifyResult> {
 
     const actual = await sha256File(filepath);
     checked++;
-    if (actual !== s.original) {
+    // Post-resize ingest stores the on-disk bytes' hash separately
+    // (s.source.storedHash). Pre-feature sidecars lack it; for those
+    // the on-disk bytes equal the upload bytes, so s.original is the
+    // right comparand.
+    const expected = (s.source.storedHash as string | undefined) ?? s.original;
+    if (actual !== expected) {
       mismatches.push({
         id: s.original,
         reason: 'hash-mismatch',

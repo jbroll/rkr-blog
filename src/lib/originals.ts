@@ -15,9 +15,11 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 
-import { FORMAT_TO_EXT, SHARP_PIXEL_LIMIT } from './image-constants.ts';
+import { FORMAT_TO_EXT, SHARP_INGEST_PIXEL_LIMIT } from './image-constants.ts';
+import type { ResizeOptions, ResizeResult } from './ingest-resize.ts';
+import { resizeAndEncode } from './ingest-resize.ts';
 import { read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
-import type { Sidecar } from './sidecar-types.ts';
+import type { Sidecar, SidecarResizeRecord } from './sidecar-types.ts';
 
 // Default derivative set on first ingest. Matches the image widget
 // defaults (spec.md §5 sidecar schema). Caller can rewrite via POST
@@ -61,6 +63,10 @@ export interface IngestArgs {
   source: IngestSource;
   /** Override timestamp for tests; default new Date().toISOString(). */
   now?: string;
+  /** Per-upload overrides for the ingest-time downsample. Absent →
+   * defaults from DEFAULT_INGEST_RESIZE. The values landing in the
+   * sidecar are the clamped/effective ones, not these raw inputs. */
+  resize?: ResizeOptions;
 }
 
 export interface IngestResult {
@@ -77,12 +83,13 @@ export async function ingestStream({
   stream,
   siteRoot,
   source,
-  now
+  now,
+  resize
 }: IngestArgs): Promise<IngestResult> {
   const tmpDir = path.join(siteRoot, 'originals', '.tmp');
   await fs.promises.mkdir(tmpDir, { recursive: true });
 
-  const tmpPath = path.join(tmpDir, `ingest-${crypto.randomBytes(8).toString('hex')}.bin`);
+  let tmpPath = path.join(tmpDir, `ingest-${crypto.randomBytes(8).toString('hex')}.bin`);
   const hasher = crypto.createHash('sha256');
   let bytes = 0;
 
@@ -105,34 +112,49 @@ export async function ingestStream({
 
   let meta: sharp.Metadata;
   try {
-    meta = await sharp(tmpPath, { limitInputPixels: SHARP_PIXEL_LIMIT }).metadata();
+    meta = await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT }).metadata();
   } catch (err) {
     await safeUnlink(tmpPath);
     throw new Error(`ingestStream: not a recognized image: ${(err as Error).message}`);
   }
 
-  // Reject decompression-bomb inputs early. Sharp's limitInputPixels
-  // throws on actual decode but metadata() may return dimensions without
-  // decoding; cross-check.
-  const w = meta.width ?? 0;
-  const h = meta.height ?? 0;
-  if (w * h > SHARP_PIXEL_LIMIT) {
+  // Decompression-bomb guard for ingest uploads. Sharp's
+  // limitInputPixels throws on actual decode; metadata() may return
+  // dimensions without decoding, so cross-check explicitly. We use
+  // the ingest ceiling (200 Mpx) here rather than SHARP_PIXEL_LIMIT
+  // because the whole point of ingest-resize is to accept large
+  // camera/HEIC uploads and shrink them — anything above the ingest
+  // ceiling is presumed pathological.
+  const uploadW = meta.width ?? 0;
+  const uploadH = meta.height ?? 0;
+  // SVG has no intrinsic pixel count; skip the dimension guard.
+  if (meta.format !== 'svg' && uploadW * uploadH > SHARP_INGEST_PIXEL_LIMIT) {
     await safeUnlink(tmpPath);
-    throw new Error(`ingestStream: image too large (${w}x${h} pixels exceeds limit)`);
+    throw new Error(`ingestStream: image too large (${uploadW}x${uploadH} pixels exceeds limit)`);
   }
 
-  const ext = meta.format ? FORMAT_TO_EXT[meta.format] : undefined;
-  if (!ext) {
+  const uploadFormat = meta.format;
+  if (!uploadFormat || !FORMAT_TO_EXT[uploadFormat]) {
     await safeUnlink(tmpPath);
-    throw new Error(`ingestStream: unsupported image format ${String(meta.format)}`);
+    throw new Error(`ingestStream: unsupported image format ${String(uploadFormat)}`);
   }
 
-  const finalDir = path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4));
-  const finalPath = path.join(finalDir, `${id}.${ext}`);
+  // Dedup: probe every ext the resize step could plausibly land on.
+  // Pre-feature originals (.jpg, .png, .heif, etc.) are honored too —
+  // we don't re-process bytes that already live on disk.
+  const existingOriginal = await findExistingOriginal(siteRoot, id);
 
+  let ext: string;
+  let finalPath: string;
   let deduplicated = false;
-  if (await exists(finalPath)) {
+  let resizeRecord: SidecarResizeRecord | undefined;
+  let storedHash: string | undefined;
+  let finalMeta = meta;
+
+  if (existingOriginal) {
     deduplicated = true;
+    ext = existingOriginal.ext;
+    finalPath = existingOriginal.path;
     await safeUnlink(tmpPath);
   } else {
     // Normalize EXIF Orientation so on-disk pixels match display orientation.
@@ -142,12 +164,15 @@ export async function ingestStream({
     // ignore EXIF entirely. Sharp 0.33 has a "one rotate per pipeline"
     // constraint that prevents chaining auto-orient with editor rotate ops,
     // so baking on ingest is the only composable place for this work.
-    // Re-encoding is lossy but only runs on the write path — dedup hits
-    // skip it.
+    // Must run BEFORE resize: resize otherwise clamps the wrong axis on
+    // portrait phone JPEGs (encoded landscape + orientation=6).
     if (meta.orientation && meta.orientation > 1) {
-      const normTmp = `${tmpPath}.norm.${ext}`;
+      const uploadExt = FORMAT_TO_EXT[uploadFormat] ?? 'bin';
+      const normTmp = `${tmpPath}.norm.${uploadExt}`;
       try {
-        await sharp(tmpPath, { limitInputPixels: SHARP_PIXEL_LIMIT }).rotate().toFile(normTmp);
+        await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT })
+          .rotate()
+          .toFile(normTmp);
       } catch (err) {
         await safeUnlink(tmpPath);
         await safeUnlink(normTmp);
@@ -157,8 +182,45 @@ export async function ingestStream({
       }
       await safeUnlink(tmpPath);
       await fs.promises.rename(normTmp, tmpPath);
-      meta = await sharp(tmpPath, { limitInputPixels: SHARP_PIXEL_LIMIT }).metadata();
+      meta = await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT }).metadata();
     }
+
+    let resized: ResizeResult;
+    try {
+      resized = await resizeAndEncode({
+        inputPath: tmpPath,
+        meta,
+        tmpDir,
+        options: resize
+      });
+    } catch (err) {
+      await safeUnlink(tmpPath);
+      throw new Error(`ingestStream: resize failed: ${(err as Error).message}`);
+    }
+
+    // Resize wrote to a fresh tmp file; drop the orientation-normalized
+    // upload and adopt the resized bytes as the staged tmp.
+    await safeUnlink(tmpPath);
+    tmpPath = resized.outPath;
+    ext = resized.ext;
+    storedHash = resized.storedHash;
+    finalMeta = {
+      ...meta,
+      format: resized.format,
+      width: resized.width,
+      height: resized.height
+    };
+    resizeRecord = {
+      applied: resized.reason === 'resized',
+      reason: resized.reason,
+      maxDim: resized.applied.maxDim,
+      scalePct: resized.applied.scalePct,
+      webpQuality: resized.applied.webpQuality,
+      encoding: resized.encoding
+    };
+
+    const finalDir = path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4));
+    finalPath = path.join(finalDir, `${id}.${ext}`);
     await fs.promises.mkdir(finalDir, { recursive: true });
     await fs.promises.rename(tmpPath, finalPath);
   }
@@ -171,11 +233,22 @@ export async function ingestStream({
   const sidecar: Sidecar =
     existing ??
     (await (async (): Promise<Sidecar> => {
+      const sidecarSource: Sidecar['source'] = {
+        ...source,
+        fetched,
+        uploadFormat,
+        uploadWidth: uploadW,
+        uploadHeight: uploadH,
+        uploadBytes: bytes
+      };
+      if (storedHash) sidecarSource.storedHash = storedHash;
+      if (resizeRecord) sidecarSource.resize = resizeRecord;
+
       const fresh: Sidecar = {
         version: 1,
         original: id,
-        source: { ...source, fetched },
-        metadata: pickMetadata(meta),
+        source: sidecarSource,
+        metadata: pickMetadata(finalMeta),
         ops: [],
         outputs: DEFAULT_OUTPUTS,
         variants: DEFAULT_VARIANTS
@@ -187,12 +260,32 @@ export async function ingestStream({
   return { id, path: finalPath, ext, bytes, deduplicated, sidecar };
 }
 
+/** Probe the originals shard for any extension a prior ingest could
+ * have produced. Returns the first hit, or undefined if the id is
+ * fresh. Probed exts cover both the post-feature outputs (webp / gif
+ * passthrough / svg passthrough) and pre-feature uploads (jpg / png /
+ * heif / tiff / avif) so dedup honors legacy files too. */
+async function findExistingOriginal(
+  siteRoot: string,
+  id: string
+): Promise<{ path: string; ext: string } | undefined> {
+  const dir = path.join(siteRoot, 'originals', id.slice(0, 2), id.slice(2, 4));
+  const candidates = ['webp', 'gif', 'svg', 'jpg', 'png', 'heif', 'tiff', 'avif'];
+  for (const ext of candidates) {
+    const p = path.join(dir, `${id}.${ext}`);
+    if (await exists(p)) return { path: p, ext };
+  }
+  return undefined;
+}
+
 function pickMetadata(meta: sharp.Metadata): Sidecar['metadata'] {
   // Sharp returns exif as a Buffer; defer parsing until needed (Step 3+).
   // Keep the sidecar JSON-safe by omitting raw buffers here. By the time
   // ingestStream calls this, EXIF Orientation has been baked into pixels
-  // (see the orientation > 1 branch above), so width/height already match
-  // display orientation.
+  // (see the orientation > 1 branch above) AND the ingest resize/re-encode
+  // has run, so width/height/format describe the bytes actually on disk
+  // post-resize — not the upload. The pre-resize values live separately
+  // in sidecar.source.{uploadFormat,uploadWidth,uploadHeight,uploadBytes}.
   return {
     width: meta.width,
     height: meta.height,

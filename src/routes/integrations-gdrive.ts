@@ -18,6 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
 import type { Db } from '../lib/db.ts';
 import { fetchDriveFile } from '../lib/google-drive.ts';
+import { parseResizeOverrides } from '../lib/ingest-resize.ts';
 import {
   deleteToken,
   isExpired,
@@ -224,6 +225,8 @@ export default async function integrationsGdriveRoutes(
         }
       });
 
+      const resize = parseResizeOverrides(req.body?.resize);
+
       try {
         const result = await ingestStream({
           stream: drive.body.pipe(limiter),
@@ -232,7 +235,8 @@ export default async function integrationsGdriveRoutes(
             kind: 'gdrive',
             originalName: drive.file.name,
             fileId: drive.file.id
-          }
+          },
+          ...(resize ? { resize } : {})
         });
         return {
           id: result.id,
