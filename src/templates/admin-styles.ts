@@ -22,7 +22,23 @@ export const ADMIN_CSS = `
      text / panel backgrounds so dark mode actually flips through. The
      fallbacks (after the comma) cover the case where site.css fails
      to load. */
-  #rkroll-admin-toolbar { display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .5rem; border: 1px solid var(--rkr-rule); border-radius: 4px; }
+  /* Sticky toolbar: stays in flow under the property box at scroll-
+     top, then pins to the viewport edge once the user scrolls into
+     the article body. The author keeps Bold / Save / etc. one click
+     away wherever they are in a long post. Background must be opaque
+     so the editor prose doesn't bleed through; the shadow only
+     shows once the toolbar is actually pinned (i.e. when something
+     has scrolled behind it), giving a subtle elevation cue. The
+     <dialog> overlays sit in the top layer, so they always render
+     above this regardless of z-index. */
+  #rkroll-admin-toolbar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; gap: .25rem; flex-wrap: wrap;
+    margin-bottom: 1rem; padding: .5rem;
+    background: var(--rkr-bg);
+    border: 1px solid var(--rkr-rule); border-radius: 4px;
+    box-shadow: 0 4px 6px -4px var(--rkr-shadow, rgba(0, 0, 0, 0.08));
+  }
   #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
   #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
   /* Primary toolbar action (Save). Visually distinct from the icon
