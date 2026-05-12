@@ -64,9 +64,6 @@ ${flash}
   </select>
 
   <h2 class="rkr-admin-settings-section">Image uploads</h2>
-  <p class="rkr-admin-settings-hint">
-    Master files in <code>originals/</code> are downsampled + re-encoded to WebP on ingest (PNG uses lossless WebP). These knobs tune that step; blank fields fall back to the built-in defaults.
-  </p>
 
   <label for="rkr-settings-ingest-max-dim">Max long edge (px)</label>
   <input id="rkr-settings-ingest-max-dim" name="ingestMaxDim" type="number"

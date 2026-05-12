@@ -286,7 +286,17 @@ body {
 }
 .rkr-admin-settings label { color: var(--rkr-muted); }
 .rkr-admin-settings input,
-.rkr-admin-settings select { padding: 0.35rem 0.5rem; font: inherit; }
+.rkr-admin-settings select {
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  min-width: 0; /* let inputs shrink inside the 1fr column on narrow viewports */
+}
+/* Number knobs hold 1–4 digits; let them sit as a narrow chip on the
+   left of the column instead of stretching to fill the 1fr track. */
+.rkr-admin-settings input[type="number"] {
+  width: 7rem;
+  justify-self: start;
+}
 .rkr-admin-settings-hint {
   grid-column: 1 / -1;
   margin: 0.25rem 0;
