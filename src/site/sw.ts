@@ -5,8 +5,16 @@
 // Three caches per spec-offline §9:
 //   • rkr-shell-vN  shell assets (CSS, JS, manifest, icons) — stale-
 //                   while-revalidate
-//   • rkr-pages-vN  /<slug> HTML pages, runtime-populated, SWR with an
-//                   LRU cap so we don't hoard the visitor's storage
+//   • rkr-pages-vN  /<slug> HTML pages, runtime-populated, *network-
+//                   first* with an LRU cap. The cache exists for the
+//                   offline case; online navigations always wait for
+//                   the network. SWR was tempting (faster TTFB), but
+//                   the page markup depends on session state (admin
+//                   FABs, footer Login/Logout), so serving stale
+//                   anonymous HTML to a freshly logged-in visitor
+//                   meant "I logged in but have to refresh to see
+//                   the controls". Network-first keeps the offline
+//                   benefit and gets auth transitions right.
 //   • rkr-images-vN /img/<id>.<ophash>.<fmt> derivatives — cache-first
 //                   (content-addressed by the ophash; once cached, it
 //                   matches forever or is evicted)
@@ -19,7 +27,10 @@
 // + skipWaiting + clients all type-check.
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
-const VERSION = 'v1';
+// Bump when cache semantics change so the activate handler nukes
+// the old cache name. v2: pages cache switched SWR → network-first
+// to make login/logout transitions instant.
+const VERSION = 'v2';
 const SHELL = `rkr-shell-${VERSION}`;
 const PAGES = `rkr-pages-${VERSION}`;
 const IMAGES = `rkr-images-${VERSION}`;
@@ -95,15 +106,15 @@ sw.addEventListener('fetch', (event) => {
     return;
   }
 
-  // / and /:slug — rendered pages. SWR with cap so a long browse
-  // history doesn't eat the visitor's storage. The server marks
-  // authed responses with `Cache-Control: private, no-store`; the
-  // SWR helper honours it and skips caching so an authed view
-  // doesn't shadow the next anonymous load (and vice versa).
-  // Chromium hides the Cookie header from SW fetch events for
-  // navigations, so we can't key on session up here — the server's
-  // Cache-Control is the only signal the SW can see.
-  event.respondWith(staleWhileRevalidate(req, PAGES, PAGES_CAP));
+  // / and /:slug — rendered pages. Network-first with cap so a
+  // long browse history doesn't eat the visitor's storage, and the
+  // cache is purely an offline fallback. Auth state changes (login
+  // / logout) take effect on the very next navigation because we
+  // always wait for the network. Authed responses still carry
+  // `Cache-Control: private, no-store`; the helper honours that
+  // and won't write them into the cache, so anonymous browsers
+  // recovering from offline still get the correct view.
+  event.respondWith(networkFirst(req, PAGES, PAGES_CAP));
 });
 
 /** Cache-first: serve from cache if present, else fetch + cache.
@@ -124,12 +135,10 @@ async function cacheFirst(req: Request, cacheName: string, cap: number): Promise
  * fetch in the background and update the cache for the next visit.
  * If nothing's cached yet, fall through to network. Skips caching
  * when the response carries `Cache-Control: …no-store…` — that's
- * the server's signal that the body is session-private (authed
- * homepage / post page) and must not survive into the next
- * navigation. Authed pages still get the SWR delivery on the hit
- * side (immediate serve from cache if anything was cached before
- * the no-store reached us); the background fetch tears down the
- * cache instead of replacing it. */
+ * the server's signal that the body is session-private and must
+ * not survive into the next navigation. Used for /static/* where
+ * the URL is versioned (so freshness isn't a concern) and the
+ * speedup from cached delivery is meaningful. */
 async function staleWhileRevalidate(
   req: Request,
   cacheName: string,
@@ -154,6 +163,35 @@ async function staleWhileRevalidate(
       return hit;
     });
   return hit ?? network;
+}
+
+/** Network-first: try the network, fall back to cache only on
+ * network failure. The response is also written into the cache (so
+ * the next offline navigation works), unless the server marked it
+ * `no-store` — in which case any prior cached entry is dropped
+ * because it's now known to be a session-mismatched view (e.g. an
+ * anonymous render after the visitor has logged in).
+ *
+ * Used for /<slug> + / where the markup depends on session state
+ * and serving stale would mean "you logged in but the page still
+ * shows the anonymous chrome". */
+async function networkFirst(req: Request, cacheName: string, cap: number): Promise<Response> {
+  const cache = await caches.open(cacheName);
+  try {
+    const res = await fetch(req);
+    if (res.ok && res.status === 200) {
+      if (isNoStore(res)) {
+        void cache.delete(req);
+      } else {
+        void cacheWithCap(cache, req, res.clone(), cap);
+      }
+    }
+    return res;
+  } catch (err) {
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    throw err;
+  }
 }
 
 /** Does the response opt out of caching via Cache-Control? Matches
