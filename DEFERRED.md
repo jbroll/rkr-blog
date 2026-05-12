@@ -434,3 +434,84 @@ considering when the editor's top form gets a broader visual pass.
 
 **Trigger.** Top-form layout pass, or when status grows a third
 value (e.g. "scheduled").
+
+## Local-first architecture review (rosy-tickling-meadow plan)
+
+### Cross-tab `ensureLocalState` reload race
+**Source.** Local-first correctness audit (Explore agent), Apr 2026.
+
+**What.** `src/admin/image-edit.ts:80-99` `ensureLocalState`
+prefers OPFS persist (`image-state/<id>.json`) over the server's
+`/admin/sidecar/<id>/meta`. Two tabs editing the same image: tab A
+commits + persists, tab B was already open with cached in-memory
+state. The cross-tab BroadcastChannel only carries drain status,
+not image-state. Tab B's next save can clobber tab A's commit.
+
+**Why deferred.** Limited blast radius (same-browser cross-tab,
+same image, simultaneous edits). Pre-existing — not introduced by
+local-first. A real fix wants ETag/version reconciliation on
+ensureLocalState, which is a non-trivial server contract change.
+
+**Trigger.** Any user report of "I edited an image in two tabs and
+lost a change", or when commit-image-edit grows a version field on
+the server side.
+
+### Pre-resize coord divergence in offline editor
+**Source.** Local-first correctness audit, Apr 2026.
+
+**What.** Server's `ingestStream`
+(`src/lib/originals.ts:218-241`) resizes large originals at upload
+time. The client's OPFS copy keeps the raw upload bytes. If the
+editor opens the image-edit modal **offline** (canvas-loaders'
+new OPFS fallback at `src/admin/canvas-loaders.ts:111-119`) on a
+24MP camera shot, canvas coords are in 24MP space. After drain
+plus reload, the editor fetches the server's resized version (say
+8MP); ops applied in the editor's 24MP coord space don't translate.
+
+**Why deferred.** Requires either sending pre-resize dims with
+each commit so the server can scale ops, or refetching the
+server's resized original after drain and rebuilding the canvas.
+Either is a coordinate-system contract change that needs spec
+work. Pre-existing — happens on online edits too, but masked by
+re-fetching the server original when going online.
+
+**Trigger.** Reporter saying their crop / rotate ops applied
+wrong after offline editing. Or when we add lazy server-side
+resize (which would also remove the divergence).
+
+### Drainer boilerplate refactor
+**Source.** Local-first simplification audit, Apr 2026.
+
+**What.** `src/admin/drainers.ts:8-88` is three handlers that each
+guard `entry.op !== 'X'`, build `FormData`, fetch with the same
+headers, and wrap errors with the same shape. A small registry
+that calls each drainer with a narrowed payload + standardised
+error envelope would drop ~35 LOC and unlock per-op retry policy
+(separate from the per-entry retry that just landed).
+
+**Why deferred.** No correctness payoff. Three handlers is still
+tractable; the boilerplate is honest about each endpoint's
+contract. Defer until a fourth outbox op lands or until per-op
+retry policy becomes a real need.
+
+**Trigger.** A new op type (e.g. `deletePost`, `deleteImage`,
+`migrateLegacy`), or any need to vary retry behaviour per op.
+
+### Persisted retry budget across reload
+**Source.** Local-first correctness audit, Apr 2026.
+
+**What.** `src/admin/sync.ts` keeps the per-entry `attempts`
+counter in memory. A tab reload resets it. A persistently failing
+entry burns the in-memory budget, halts the drain, then on reload
+gets 5 fresh attempts — effectively infinite total attempts spread
+across sessions.
+
+**Why deferred.** Reload-resets-budget matches user mental model
+("refresh the page to retry"). Persisting attempts would require
+a schema migration on `OutboxEntry`. The halt status badge already
+surfaces persistent failures via the status panel.
+
+**Trigger.** A user reports a stuck drain that they can't shake by
+reloading (which would mean the entry is genuinely poisoned and
+the retry budget should ratchet).
+

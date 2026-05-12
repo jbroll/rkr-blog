@@ -193,6 +193,65 @@ test('editor: insert image, set matrix, save publishes to /:slug', async ({ page
   expect(html).toMatch(/class="rkr-post-subtitle"/);
 });
 
+// Regression: after a local-first upload, drainUpload completes
+// quickly and onAfterDrainEmpty triggers runEviction. Without the
+// live-refs guard in src/admin/eviction.ts, the planner sees the
+// new id as an orphan (the 500ms draft-persist debounce hasn't
+// fired yet so meta/<draft>.json refIds is stale) and deletes the
+// OPFS original. The figure's <img> blob: URL then dangles.
+test('editor: just-inserted original survives the post-drain eviction pass', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.locator('#rkr-title').fill('e2e eviction race');
+  await setSlug(page, `e2e-eviction-${Date.now()}`);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'evict.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_BLACK, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded evict\.png/, {
+    timeout: 10_000
+  });
+
+  // Capture the id before drain runs — the hash is content-derived
+  // (PNG_1X1_BLACK) but reading off the live <img data-id> avoids
+  // pinning the test to a hash literal that would drift with bytes.
+  const thumb = page.locator('img[data-cell-index="0"]');
+  const id = await thumb.getAttribute('data-id');
+  expect(id).toBeTruthy();
+
+  // Generous wait so drain + onAfterDrainEmpty + runEviction can
+  // all complete. Drain on localhost is sub-100ms; the 500ms
+  // draft-persist debounce on top is what makes the race observable.
+  // Wait 1.5s so the post-drain eviction has definitely fired.
+  await page.waitForTimeout(1500);
+
+  // The OPFS original for this id must still exist; eviction would
+  // have deleted it without the live-refs guard.
+  const originalSurvives = await page.evaluate(async (lookupId) => {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('originals').catch(() => null);
+    if (!dir) return false;
+    const iter = (
+      dir as FileSystemDirectoryHandle & {
+        entries: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+      }
+    ).entries();
+    for await (const [name] of iter) {
+      if (name.startsWith(`${lookupId}.`)) return true;
+    }
+    return false;
+  }, id);
+  expect(originalSurvives).toBe(true);
+
+  // And the figure's thumb is still a blob: URL — not a /admin/preview/
+  // (which would mean we fell back to the server, masking the bug).
+  await expect(thumb).toHaveAttribute('src', /^blob:/);
+});
+
 // Image-edit pipeline coverage: rotate (a runEdit path) writes through
 // the canvas pipeline + setStatus, then Save commits ops + bake to
 // /admin/sidecar/:id. Targets image-edit.ts (saveImageEdits) and the

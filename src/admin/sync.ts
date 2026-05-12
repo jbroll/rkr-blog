@@ -4,6 +4,7 @@
 // `SavePostConflictError` (value) from here. One-way arrow — no
 // cycle. Enforced by the circular-import gauntlet check.
 
+import { getState as getOnlineState } from './online-state.ts';
 import { listSuperseded, list as outboxList, remove as outboxRemove } from './outbox.ts';
 
 const LOCK_NAME = 'rkr-sync-leader';
@@ -251,7 +252,10 @@ type DrainEntryResult =
 /** Retry a drainer with exponential backoff. SavePostConflictError
  * bubbles up immediately (user must resolve via discard/force).
  * Other errors retry up to MAX_DRAIN_ATTEMPTS; on exhaustion the
- * caller halts the loop. */
+ * caller halts the loop. Retries are SKIPPED when the browser is
+ * offline — the online-state listener triggers a fresh `tryDrain`
+ * on reconnect, so burning the budget mid-disconnect would just
+ * hold the leader lock for 31s and starve a manual "Sync now". */
 async function drainEntryWithRetry(
   entry: import('../lib/outbox-types.ts').OutboxEntry,
   blob: Blob | null,
@@ -267,6 +271,10 @@ async function drainEntryWithRetry(
         return { kind: 'conflict', info: err.info };
       }
       lastErr = err as Error;
+      // Offline-aware halt: no point spinning through 5×backoff
+      // when the radio is off. The online-state listener fires a
+      // fresh tryDrain on reconnect.
+      if (getOnlineState() === 'offline') break;
       if (attempt < MAX_DRAIN_ATTEMPTS - 1) {
         await delay(RETRY_DELAYS_MS[attempt] ?? 30000);
       }

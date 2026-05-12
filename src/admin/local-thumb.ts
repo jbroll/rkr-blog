@@ -31,29 +31,37 @@ export async function readLocalOriginal(id: string): Promise<Blob | null> {
   return null;
 }
 
-/** Swap the `src` of every `img.rkr-image[data-id="<id>"]` in the
- * editor to a blob: URL backed by the OPFS original — or leave the
- * imgs alone if no local copy exists. Safe to call repeatedly. */
-export async function hydrateLocalThumb(editor: Editor, id: string): Promise<void> {
-  const blob = await readLocalOriginal(id);
-  if (!blob) return;
-  const url = URL.createObjectURL(blob);
-  const matches = editor.view.dom.querySelectorAll<HTMLImageElement>(
-    `img.rkr-image[data-id="${id}"]`
-  );
-  for (const img of matches) img.src = url;
-}
-
-/** Walk the editor DOM, collect every unique data-id, and run
- * hydrateLocalThumb for each. Cheap when no local originals exist
- * (readLocalOriginal returns null for every probe). Call once after
- * the draft is restored so figures referencing not-yet-drained
- * uploads display their local bytes instead of broken thumbs. */
-export async function hydrateAllLocalThumbs(editor: Editor): Promise<void> {
-  const ids = new Set<string>();
-  for (const img of editor.view.dom.querySelectorAll<HTMLImageElement>('img.rkr-image[data-id]')) {
-    const id = img.dataset.id;
-    if (id) ids.add(id);
+/** Swap `<img.rkr-image[data-id="<id>"]>` srcs in the editor to a
+ * blob: URL backed by the OPFS original. When `ids` is omitted, scan
+ * the editor's DOM and hydrate every figure thumb — used at mount
+ * after draft-restore so figures referencing not-yet-drained uploads
+ * display local bytes instead of broken thumbs. When `ids` is
+ * passed, target just those ids — used right after a fresh insert.
+ * Safe to call repeatedly; imgs with no local copy in OPFS are
+ * left alone. */
+export async function hydrateLocalThumbs(editor: Editor, ids?: readonly string[]): Promise<void> {
+  let targets: string[];
+  if (ids) {
+    targets = [...new Set(ids)];
+  } else {
+    const seen = new Set<string>();
+    for (const img of editor.view.dom.querySelectorAll<HTMLImageElement>(
+      'img.rkr-image[data-id]'
+    )) {
+      const id = img.dataset.id;
+      if (id) seen.add(id);
+    }
+    targets = [...seen];
   }
-  await Promise.all([...ids].map((id) => hydrateLocalThumb(editor, id)));
+  await Promise.all(
+    targets.map(async (id) => {
+      const blob = await readLocalOriginal(id);
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const matches = editor.view.dom.querySelectorAll<HTMLImageElement>(
+        `img.rkr-image[data-id="${id}"]`
+      );
+      for (const img of matches) img.src = url;
+    })
+  );
 }

@@ -131,15 +131,15 @@
     },
     "src/admin/status-badge.ts": {
       "linesFound": 19,
-      "linesHit": 16
+      "linesHit": 18
     },
     "src/admin/pin.ts": {
       "linesFound": 34,
       "linesHit": 31
     },
     "src/admin/eviction.ts": {
-      "linesFound": 30,
-      "linesHit": 29
+      "linesFound": 39,
+      "linesHit": 37
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -174,8 +174,8 @@
       "linesHit": 41
     },
     "src/admin/image-insert.ts": {
-      "linesFound": 46,
-      "linesHit": 38
+      "linesFound": 45,
+      "linesHit": 37
     },
     "127.0.0.1-3789/static/admin/outbox-XMT7YGXK.js": {
       "linesFound": 1,
@@ -210,8 +210,8 @@
       "linesHit": 1
     },
     "src/admin/local-thumb.ts": {
-      "linesFound": 17,
-      "linesHit": 17
+      "linesFound": 20,
+      "linesHit": 20
     }
   }
 }

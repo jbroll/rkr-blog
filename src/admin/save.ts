@@ -1,5 +1,9 @@
-// Save flow: editor JSON → markdown → POST /admin/posts (online) or
-// queue a `savePost` outbox entry (offline / network error).
+// Save flow: editor JSON → markdown → server. Three branches:
+//   1. Referenced uploads still queued → await drain so the post
+//      lands referencing ids the server can resolve.
+//   2. Online + queue empty → direct POST; on failure, queue.
+//   3. Offline (or direct POST failed) → queue a `savePost` entry;
+//      drain handles it later.
 
 import type { Editor } from '@tiptap/core';
 import type { SavePostPayload } from '../lib/outbox-types.ts';

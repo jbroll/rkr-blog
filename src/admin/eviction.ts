@@ -2,6 +2,7 @@
 
 import { type EvictionPlan, type MetaSnapshot, planEviction } from '../lib/eviction-pure.ts';
 import { listDir, readJson, removeFile } from './opfs.ts';
+import { list as outboxList } from './outbox.ts';
 
 const DRAFTS_DIR = 'drafts';
 const META_DIR = 'meta';
@@ -19,6 +20,35 @@ interface PersistedMeta {
   refIds?: string[];
 }
 
+/** Ids that the planner sees as orphans (no surviving meta lists
+ * them) but are actually still in active use this instant — either
+ * because the upload hasn't drained yet (debounce on draft-meta
+ * persist hasn't fired) or the editor's DOM still holds an `<img>`
+ * referencing them. Without this guard, runEviction fires on
+ * `onAfterDrainEmpty` and can delete originals/<id> before the
+ * 500 ms refIds-persist debounce updates the draft meta —
+ * regression introduced by local-first uploads (drain triggers
+ * eviction; pre-local-first uploads never queued so eviction never
+ * ran for fresh inserts). */
+async function collectLiveRefIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  // 1. Outbox-pending uploads: drain might be in-flight; the file
+  //    is still load-bearing for the figure thumb.
+  for (const entry of await outboxList()) {
+    if (entry.op === 'upload') ids.add(entry.payload.id);
+  }
+  // 2. Live editor DOM: the persist debounce may not have written
+  //    a fresh refIds yet, but every <img data-id> on the page is
+  //    by definition in use right now.
+  if (typeof document !== 'undefined') {
+    for (const img of document.querySelectorAll<HTMLImageElement>('img.rkr-image[data-id]')) {
+      const id = img.dataset.id;
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
+}
+
 /** @public */
 export async function runEviction(now: number = Date.now()): Promise<EvictionPlan> {
   const metas = await collectMetas();
@@ -26,13 +56,21 @@ export async function runEviction(now: number = Date.now()): Promise<EvictionPla
   const imageStateIds = await collectImageStateIds();
 
   const plan = planEviction({ metas, originalsIds, imageStateIds, now });
+  const liveRefs = await collectLiveRefIds();
+  // Filter the planner's evict lists through live refs so a fresh
+  // upload (drain just finished; draft-persist debounce not yet
+  // fired) survives. evictDrafts is left alone — drafts are keyed
+  // on their own ids, not image ids, and the lock-grace already
+  // protects live drafts.
+  const evictOriginals = plan.evictOriginals.filter((id) => !liveRefs.has(id));
+  const evictImageStates = plan.evictImageStates.filter((id) => !liveRefs.has(id));
 
   for (const draftId of plan.evictDrafts) {
     await removeFile(`${DRAFTS_DIR}/${draftId}.json`).catch(() => {});
     await removeFile(`${DRAFTS_DIR}/${draftId}.lock`).catch(() => {});
     await removeFile(`${META_DIR}/${draftId}.json`).catch(() => {});
   }
-  for (const id of plan.evictOriginals) {
+  for (const id of evictOriginals) {
     // Plan carries ids; originals/<id>.<ext> needs prefix-walking.
     for (const fname of await listDir(ORIGINALS_DIR)) {
       if (fname.startsWith(`${id}.`)) {
@@ -42,10 +80,10 @@ export async function runEviction(now: number = Date.now()): Promise<EvictionPla
     await removeFile(`${SIDECARS_DIR}/${id}.json`).catch(() => {});
     await removeFile(`${BAKES_DIR}/${id}.webp`).catch(() => {});
   }
-  for (const id of plan.evictImageStates) {
+  for (const id of evictImageStates) {
     await removeFile(`${IMAGE_STATE_DIR}/${id}.json`).catch(() => {});
   }
-  return plan;
+  return { evictDrafts: plan.evictDrafts, evictOriginals, evictImageStates };
 }
 
 async function collectMetas(): Promise<MetaSnapshot[]> {
