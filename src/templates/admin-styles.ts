@@ -51,7 +51,8 @@ export const ADMIN_CSS = `
     -webkit-user-select: text;
   }
   #rkroll-admin-article img,
-  .rkr-cell-preview {
+  .rkr-cell-preview,
+  dialog img {
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
