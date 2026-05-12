@@ -18,10 +18,8 @@ export const ADMIN_CSS = `
     margin: 2rem auto;
     padding: 0 1rem;
   }
-  /* Single font-family rule for all admin chrome (toolbar buttons,
-     status, meta, panels). Site.css would otherwise impose its serif
-     prose font on form controls, which is jarring for UI elements.
-     The editable region inside <article> still gets the prose font. */
+  /* Admin chrome uses system-ui; site.css's serif still applies to
+     the editable article. */
   body, button, input, select { font-family: system-ui, sans-serif; }
   /* When any editor dialog is open the document behind it must stop
      scrolling — native <dialog> renders in the top layer but doesn't
@@ -64,12 +62,16 @@ export const ADMIN_CSS = `
   #rkroll-admin-article img, .rkr-cell-preview, dialog img {
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
-  /* The figure placeholder sits inside contenteditable="true" so the
-     earlier re-enable made its padding / grid gaps text-selectable.
-     The placeholder isn't prose — re-disable on it and its descendants. */
+  /* Figure placeholder is inside contenteditable="true"; without
+     user-select:none its grid gaps become text-selectable.
+     touch-action:pan-y commits the gesture to vertical scrolling, so
+     Firefox Android doesn't interpret a scroll's initial touch-drag
+     as a select-drag and pop the OS action bar mid-scroll. */
   #rkroll-admin-article .rkr-multi,
   #rkroll-admin-article .rkr-multi * {
-    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    user-select: none; -webkit-user-select: none;
+    -moz-user-select: none; -ms-user-select: none;
+    -webkit-touch-callout: none; touch-action: pan-y;
   }
   /* Editor mode label ("New post" / "Edit post"). Not a content
      header — the post's title goes in the input field below — so
