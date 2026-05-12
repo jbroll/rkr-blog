@@ -340,6 +340,21 @@ function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Sign in — ${escapeText(site.title)}</title>
+<style>
+/* Pre-paint body chrome so the brief window between HTML head
+   parsing and external CSS loading doesn't flash a white canvas.
+   /admin/login is bypassed by the public service worker, so its
+   HTML is always fetched from the network — without this inline
+   guard, dark-mode visitors see a frame of white while base.css /
+   themes/default.css are in flight. Values match default.css's
+   :root tokens; the external stylesheet still wins at paint time
+   if a non-default theme defines other colors. */
+:root { color-scheme: light dark; }
+body { margin: 0; background: #fdfdfb; color: #1a1a1a; }
+@media (prefers-color-scheme: dark) {
+  body { background: #14140e; color: #ebeae4; }
+}
+</style>
 ${stylesheetLinks()}
 </head>
 <body>
