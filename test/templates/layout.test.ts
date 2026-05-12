@@ -85,7 +85,7 @@ test('postAdminFab: pencil FAB carries the URL-encoded slug', () => {
   assert.match(html, /href="\/admin\/editor\?slug=hello%20world"/);
 });
 
-test('stylesheetLinks: default theme loads base + default only', () => {
+test('stylesheetLinks: default theme loads base + default only, prefixed by color-scheme meta', () => {
   const prev = process.env.SITE_THEME;
   delete process.env.SITE_THEME;
   try {
@@ -94,6 +94,11 @@ test('stylesheetLinks: default theme loads base + default only', () => {
     assert.match(html, /\/static\/themes\/default\.css/);
     // Default theme is already in the default.css path; no extra layer.
     assert.equal(html.match(/\/static\/themes\//g)?.length, 1);
+    // color-scheme meta sits ahead of the link tags so dark-mode
+    // visitors don't see a white canvas during the brief window
+    // before the external stylesheets parse — see stylesheetLinks's
+    // doc comment for the SW-bypass story this defends against.
+    assert.match(html, /<meta name="color-scheme" content="light dark"[^>]*>[\s\S]*<link/);
   } finally {
     if (prev !== undefined) process.env.SITE_THEME = prev;
   }

@@ -30,11 +30,22 @@ export function bundleVersion(): string {
  *      themes can layer on top without re-implementing the framework.
  *   3. themes/<name>.css — the active theme's overrides. Skipped when
  *      the active theme IS default. See docs/theming.md.
+ *
+ * Prefixed by a `<meta name="color-scheme" content="light dark">` so
+ * the browser paints the pre-CSS canvas in the user's preferred
+ * scheme. The CSS-side `color-scheme` declaration only takes effect
+ * after the linked stylesheet loads — fine for SW-served navigations
+ * (the HTML + CSS arrive together from cache) but not for routes the
+ * SW bypasses (e.g. /admin/login), where the network gap between the
+ * HTML and CSS lets dark-mode visitors see a brief white canvas. The
+ * meta tag is parsed as the head streams in, before any external
+ * stylesheet, and applies immediately.
  */
 export function stylesheetLinks(): string {
   const v = bundleVersion();
   const theme = themeName();
-  const base = `<link rel="stylesheet" href="/static/base.css${v}"/>
+  const base = `<meta name="color-scheme" content="light dark"/>
+<link rel="stylesheet" href="/static/base.css${v}"/>
 <link rel="stylesheet" href="/static/themes/default.css${v}"/>`;
   if (theme === 'default') return base;
   return `${base}
