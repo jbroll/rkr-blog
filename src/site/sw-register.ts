@@ -12,3 +12,21 @@ if ('serviceWorker' in navigator) {
     console.warn('rkroll sw register failed:', err);
   });
 }
+
+// Post-auth landing arrives with ?_rkr=login|logout — a cache-
+// busting query param the auth routes append so the immediate
+// navigation can't be served by an SWR hit. Once we're here, the
+// session has flipped; drop the busy-buster from the URL so it
+// doesn't get bookmarked, and ask the SW to flush its PAGES cache
+// so the *next* in-app navigation also bypasses the stale-from-
+// the-other-side entries. Best-effort: no SW controller (first
+// load, SW not yet activated) → just strip the param.
+{
+  const url = new URL(location.href);
+  if (url.searchParams.has('_rkr')) {
+    url.searchParams.delete('_rkr');
+    const clean = url.pathname + (url.search ? url.search : '') + url.hash;
+    history.replaceState(null, '', clean);
+    navigator.serviceWorker?.controller?.postMessage({ type: 'rkr-pages-flush' });
+  }
+}

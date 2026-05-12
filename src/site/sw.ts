@@ -5,16 +5,19 @@
 // Three caches per spec-offline §9:
 //   • rkr-shell-vN  shell assets (CSS, JS, manifest, icons) — stale-
 //                   while-revalidate
-//   • rkr-pages-vN  /<slug> HTML pages, runtime-populated, *network-
-//                   first* with an LRU cap. The cache exists for the
-//                   offline case; online navigations always wait for
-//                   the network. SWR was tempting (faster TTFB), but
-//                   the page markup depends on session state (admin
-//                   FABs, footer Login/Logout), so serving stale
-//                   anonymous HTML to a freshly logged-in visitor
-//                   meant "I logged in but have to refresh to see
-//                   the controls". Network-first keeps the offline
-//                   benefit and gets auth transitions right.
+//   • rkr-pages-vN  /<slug> HTML pages, runtime-populated, stale-
+//                   while-revalidate with an LRU cap so a long
+//                   browse history doesn't hoard storage. Because
+//                   the markup depends on session state (FABs,
+//                   footer Login/Logout link), the auth routes
+//                   redirect through ?_rkr=login|logout — a cache-
+//                   busting param the SW has never cached against
+//                   so the navigation always reaches the network.
+//                   sw-register.js spots that param on load, strips
+//                   it via history.replaceState, and posts a
+//                   {type:'rkr-pages-flush'} message to the SW so
+//                   the older stale-anonymous / + /:slug entries
+//                   get dropped before the next in-app navigation.
 //   • rkr-images-vN /img/<id>.<ophash>.<fmt> derivatives — cache-first
 //                   (content-addressed by the ophash; once cached, it
 //                   matches forever or is evicted)
@@ -28,9 +31,12 @@
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
 // Bump when cache semantics change so the activate handler nukes
-// the old cache name. v2: pages cache switched SWR → network-first
-// to make login/logout transitions instant.
-const VERSION = 'v2';
+// the old cache name. v3: SWR for navigations is back, but the
+// auth flow now invalidates the PAGES cache through a postMessage
+// hook (see the 'message' listener below) so v1-era stale anon
+// renders that survived a login don't keep shadowing the authed
+// chrome.
+const VERSION = 'v3';
 const SHELL = `rkr-shell-${VERSION}`;
 const PAGES = `rkr-pages-${VERSION}`;
 const IMAGES = `rkr-images-${VERSION}`;
@@ -106,15 +112,26 @@ sw.addEventListener('fetch', (event) => {
     return;
   }
 
-  // / and /:slug — rendered pages. Network-first with cap so a
-  // long browse history doesn't eat the visitor's storage, and the
-  // cache is purely an offline fallback. Auth state changes (login
-  // / logout) take effect on the very next navigation because we
-  // always wait for the network. Authed responses still carry
-  // `Cache-Control: private, no-store`; the helper honours that
-  // and won't write them into the cache, so anonymous browsers
-  // recovering from offline still get the correct view.
-  event.respondWith(networkFirst(req, PAGES, PAGES_CAP));
+  // / and /:slug — rendered pages. SWR with cap so a long browse
+  // history doesn't eat the visitor's storage. The server marks
+  // authed responses with `Cache-Control: private, no-store`; the
+  // SWR helper honours it and skips caching so an authed view
+  // doesn't shadow the next anonymous load (and vice versa). On
+  // login/logout the page-side hook (sw-register.ts) posts
+  // {type:'rkr-pages-flush'} so any stale-from-the-other-side
+  // entries are dropped before the visitor's next click.
+  event.respondWith(staleWhileRevalidate(req, PAGES, PAGES_CAP));
+});
+
+// Page-side hook: sw-register.ts posts this on every load that
+// arrives with ?_rkr=login|logout (i.e. the redirect target after
+// an auth state change). Drop the entire PAGES cache so the next
+// navigation to / or /:slug re-fetches from the network instead
+// of serving the stale-from-the-other-side SWR hit.
+sw.addEventListener('message', (event) => {
+  const data = event.data as { type?: string } | null;
+  if (data?.type !== 'rkr-pages-flush') return;
+  event.waitUntil(caches.delete(PAGES));
 });
 
 /** Cache-first: serve from cache if present, else fetch + cache.
@@ -163,35 +180,6 @@ async function staleWhileRevalidate(
       return hit;
     });
   return hit ?? network;
-}
-
-/** Network-first: try the network, fall back to cache only on
- * network failure. The response is also written into the cache (so
- * the next offline navigation works), unless the server marked it
- * `no-store` — in which case any prior cached entry is dropped
- * because it's now known to be a session-mismatched view (e.g. an
- * anonymous render after the visitor has logged in).
- *
- * Used for /<slug> + / where the markup depends on session state
- * and serving stale would mean "you logged in but the page still
- * shows the anonymous chrome". */
-async function networkFirst(req: Request, cacheName: string, cap: number): Promise<Response> {
-  const cache = await caches.open(cacheName);
-  try {
-    const res = await fetch(req);
-    if (res.ok && res.status === 200) {
-      if (isNoStore(res)) {
-        void cache.delete(req);
-      } else {
-        void cacheWithCap(cache, req, res.clone(), cap);
-      }
-    }
-    return res;
-  } catch (err) {
-    const hit = await cache.match(req);
-    if (hit) return hit;
-    throw err;
-  }
 }
 
 /** Does the response opt out of caching via Cache-Control? Matches

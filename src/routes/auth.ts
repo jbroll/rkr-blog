@@ -205,7 +205,7 @@ export default async function authRoutes(
         secure: secureCookies
       });
 
-      return reply.redirect(postLoginPath, 302);
+      return reply.redirect(authBust(postLoginPath, 'login'), 302);
     }
   );
 
@@ -271,7 +271,7 @@ export default async function authRoutes(
         secure: secureCookies
       });
       req.log.info({ userId: user.id, ip }, 'token-login: success');
-      return reply.redirect(postLoginPath, 302);
+      return reply.redirect(authBust(postLoginPath, 'login'), 302);
     }
   );
 
@@ -279,8 +279,21 @@ export default async function authRoutes(
     const sid = readCookie(req, SESSION_COOKIE);
     if (sid) deleteSession(db, sid);
     clearCookie(reply, SESSION_COOKIE, { secure: secureCookies });
-    return reply.redirect('/', 302);
+    return reply.redirect(authBust('/', 'logout'), 302);
   });
+}
+
+/** Append a `_rkr=login|logout` query param to an auth redirect
+ * target. The SW has never cached the busted URL, so the immediate
+ * navigation must reach the network and render the right chrome
+ * for the new session. sw-register.ts then strips the param from
+ * the URL bar (history.replaceState) and posts a flush message so
+ * the *next* navigation also bypasses the now-stale SWR entries
+ * for the canonical URLs. Defensive: if `target` already has a
+ * query string, append with & instead of ?. */
+function authBust(target: string, kind: 'login' | 'logout'): string {
+  const sep = target.includes('?') ? '&' : '?';
+  return `${target}${sep}_rkr=${kind}`;
 }
 
 // ---- helpers -----------------------------------------------------------

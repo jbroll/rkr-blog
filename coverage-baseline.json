@@ -83,7 +83,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 29,
-      "linesHit": 25
+      "linesHit": 26
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -162,8 +162,8 @@
       "linesHit": 5
     },
     "src/site/sw-register.ts": {
-      "linesFound": 2,
-      "linesHit": 1
+      "linesFound": 7,
+      "linesHit": 6
     },
     "src/admin/page-title.ts": {
       "linesFound": 22,

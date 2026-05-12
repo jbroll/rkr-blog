@@ -185,7 +185,11 @@ test('callback: invited owner email is bootstrapped as owner', async (t) => {
     headers: { cookie }
   });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/');
+  // Auth redirects append ?_rkr=login so the SW's SWR pages cache
+  // can't serve a stale anonymous render for the new session — see
+  // src/site/sw-register.ts for the page-side counterpart that
+  // flushes the cache and strips the param.
+  assert.equal(res.headers.location, '/?_rkr=login');
 
   const user = findUserByEmail(db, 'owner@example.com');
   assert.ok(user);
@@ -345,6 +349,7 @@ test('POST /admin/logout clears the session cookie', async (t) => {
     headers: { cookie: 'rkr_session=anything' }
   });
   assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/?_rkr=logout');
   const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as string | string[]);
   assert.ok(setCookie.some((c) => c.startsWith('rkr_session=') && /Max-Age=0|Expires=/.test(c)));
 });
@@ -480,7 +485,7 @@ test('POST /admin/auth/token-login: correct token → session cookie + 302', asy
   const { db, app } = await setup(t, { idTokenPayload: {} });
   const res = await postTokenLogin(app, 'right-token');
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/');
+  assert.equal(res.headers.location, '/?_rkr=login');
 
   const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as string | string[]);
   const sessionCookie = setCookie.find((c) => c.startsWith('rkr_session='));
