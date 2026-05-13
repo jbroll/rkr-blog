@@ -23,15 +23,14 @@ if [ -n "$staged" ]; then
   npx --no-install biome check --staged --no-errors-on-unmatched
 fi
 
-# tsc step is wired in when the first .ts file lands; until then it errors
-# with TS18003 "No inputs were found". The migration commit re-enables it.
-#
-# Both tsconfigs run: server (tsconfig.json — covers src/{lib,routes,
-# templates,widgets,cli,site}, test/, scripts/) AND browser (tsconfig.
-# browser.json — covers src/admin/**). The browser config used to be
-# checked only by `npm run typecheck`; not having it in the hook let an
-# editor-only type bug slip through (commit d8a9d89). DEFERRED.md ⇒
-# "Pre-commit hook only runs server tsc" tracks the history.
+# tsc runs both tsconfigs: server (tsconfig.json — covers src/{lib,
+# routes,templates,widgets,cli,site}, test/, scripts/) AND browser
+# (tsconfig.browser.json — covers src/admin/**). Running the browser
+# config in the hook caught a class of editor-only type bugs that
+# the server-only check used to miss; both are required now.
+# The `compgen` guard exists because tsc errors with TS18003
+# "No inputs were found" against an empty set of .ts files (e.g.
+# during a fresh-clone pre-first-commit state).
 if compgen -G "src/**/*.ts" > /dev/null || compgen -G "test/**/*.ts" > /dev/null; then
   echo "==> tsc --noEmit (server)"
   npx --no-install tsc --noEmit
@@ -127,7 +126,18 @@ if [ -n "$admin_site_staged" ]; then
   node --no-warnings=ExperimentalWarning --experimental-strip-types \
     scripts/check-bundle-size.ts
   echo "==> e2e + V8 coverage"
-  npm run --silent test:e2e -- --reporter=line > /dev/null
+  # Capture the full e2e log so a failure shows the failing
+  # spec(s) + stack instead of just "==> e2e + V8 coverage" with
+  # no follow-up. Discard on success to keep the gauntlet output
+  # tight; tail the last 60 lines on failure (covers the playwright
+  # summary + the offending stack).
+  e2e_log=$(mktemp -t rkr-e2e-XXXXXX.log)
+  if ! npm run --silent test:e2e -- --reporter=line > "$e2e_log" 2>&1; then
+    echo "  -- e2e failed; last 60 lines of $e2e_log --"
+    tail -60 "$e2e_log"
+    exit 1
+  fi
+  rm -f "$e2e_log"
   echo "==> e2e coverage ratchet"
   # check-e2e-coverage.ts re-stages coverage-baseline.json on pass so
   # the ratchet's new floor travels with this commit.
