@@ -32,6 +32,7 @@ import {
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
+import { isValidSlug } from './admin-post-consts.ts';
 import { registerAdminPostsRoutes } from './admin-posts.ts';
 import { prewarmVariants } from './admin-prewarm.ts';
 import { registerAdminSettingsRoutes } from './admin-settings.ts';
@@ -146,9 +147,7 @@ export default async function adminRoutes(
     // input after each save). Non-empty values still must pass the
     // kebab-case regex + length cap.
     const slugProvided = typeof slugRaw === 'string' && slugRaw.length > 0;
-    const slugValid =
-      !slugProvided || (slugRaw.length <= MAX_SLUG_LENGTH && /^[a-z0-9][a-z0-9-]*$/i.test(slugRaw));
-    if (!slugValid) {
+    if (slugProvided && !isValidSlug(slugRaw)) {
       return reply.code(400).send({ error: 'slug must be a kebab-case identifier (max 100)' });
     }
     const slug = slugProvided ? slugRaw : slugify(title);
@@ -299,8 +298,20 @@ export default async function adminRoutes(
         ext: result.ext
       };
     } catch (err) {
+      // ingestStream throws Error("ingestStream: <reason>") for both
+      // user-input failures (unrecognized format, oversize source,
+      // unsupported encoding) and server-side sharp glitches (resize
+      // crash, orientation normalize failure). The first set
+      // surfaces as 400 so the editor's status line says "bad file";
+      // anything else falls through to 500 so operator logs flag it
+      // as a real issue instead of looking like another bad upload.
+      const msg = (err as Error).message;
+      const isInput =
+        msg.startsWith('ingestStream: not a recognized image') ||
+        msg.startsWith('ingestStream: image too large') ||
+        msg.startsWith('ingestStream: unsupported image format');
       request.log.error({ err }, 'upload failed');
-      return reply.code(400).send({ error: (err as Error).message });
+      return reply.code(isInput ? 400 : 500).send({ error: msg });
     }
   });
 
@@ -438,10 +449,6 @@ async function wipeRuntimeData(siteRoot: string): Promise<ResetCounts> {
   }
   return { posts, originals, sidecars, cacheFiles, postsTableRows };
 }
-
-/** Cap slug length so a 50KB attacker slug can't be written to disk and
- * indexed. The kebab-case regex permits a-z/0-9/-; this just bounds it. */
-const MAX_SLUG_LENGTH = 100;
 
 /**
  * CSP for /admin/editor. TipTap is bundled by esbuild so the editor

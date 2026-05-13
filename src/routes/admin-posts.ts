@@ -11,9 +11,7 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { runReindex } from '../cli/reindex.ts';
-
-const MAX_SLUG_LENGTH = 100;
-const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
+import { isValidSlug } from './admin-post-consts.ts';
 
 export interface AdminPostsRoutesOpts {
   siteRoot: string;
@@ -67,7 +65,7 @@ export function registerAdminPostsRoutes(
     { ...guard },
     async (request: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
       const { slug } = request.params;
-      if (typeof slug !== 'string' || slug.length > MAX_SLUG_LENGTH || !SLUG_RE.test(slug)) {
+      if (!isValidSlug(slug)) {
         return reply.code(400).send({ error: 'invalid slug' });
       }
       const filePath = path.join(siteRoot, 'content', 'posts', `${slug}.md`);
@@ -89,7 +87,7 @@ export function registerAdminPostsRoutes(
     { ...guard },
     async (request, reply) => {
       const { slug } = request.params;
-      if (typeof slug !== 'string' || slug.length > MAX_SLUG_LENGTH || !SLUG_RE.test(slug)) {
+      if (!isValidSlug(slug)) {
         return reply.code(400).send({ error: 'invalid slug' });
       }
       const status = request.body?.status;

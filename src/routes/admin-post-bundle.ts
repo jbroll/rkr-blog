@@ -12,9 +12,7 @@ import { parsePost } from '../lib/content.ts';
 import { imageInfo } from '../lib/originals.ts';
 import { listSidecarIds, scanPostForImageIds } from '../lib/posts.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
-
-const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
-const MAX_SLUG_LENGTH = 100;
+import { isValidSlug } from './admin-post-consts.ts';
 
 export interface PostBundleRouteOpts {
   siteRoot: string;
@@ -31,7 +29,7 @@ export function registerPostBundleRoutes(
     { ...guard },
     async (request, reply) => {
       const slug = request.params.slug;
-      if (!SLUG_RE.test(slug) || slug.length > MAX_SLUG_LENGTH) {
+      if (!isValidSlug(slug)) {
         return reply.code(400).send({ error: 'invalid slug' });
       }
       // Reject anything other than ?manifest=1 so a typo doesn't
