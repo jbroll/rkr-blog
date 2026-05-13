@@ -356,15 +356,11 @@ export const ADMIN_CSS = `
   /* Higher specificity than the generic img.rkr-image rule below so
      grid sizing wins. width:100% fills the 1fr cell; height:auto +
      no object-fit clamp keeps the natural aspect ratio. */
-  #rkroll-admin-root img.rkr-multi-thumb {
-    width: 100%;
-    height: auto;
-    max-width: 100%;
-    display: block;
-    border-radius: 2px;
-    cursor: pointer;
-    margin: 0;
-  }
+  /* min-height keeps the thumb clickable while async refreshImagePreview
+     hasn't yet painted the local canvas blob URL — for tiny sources
+     /admin/preview can return 422 (MIN_RENDER_DIM) and leave the img
+     at 0px tall otherwise. */
+  #rkroll-admin-root img.rkr-multi-thumb { width: 100%; height: auto; max-width: 100%; min-height: 8px; display: block; border-radius: 2px; cursor: pointer; margin: 0; }
   #rkroll-admin-root .rkr-multi-thumb.is-active-cell {
     outline: 2px solid var(--rkr-link, #1a4f7f);
     outline-offset: 2px;

@@ -284,7 +284,9 @@ test('editor: rotate single image then save edits', async ({ page }) => {
   // Wait for ensureLocalState() to land before any rotate/crop click
   // — getLocalEditState (sync) returns null until the meta fetch
   // resolves, and silent no-ops here turn into flaky e2e timeouts.
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
 
   // Wait for ensureLocalState() to settle — the Save button starts
   // disabled and the rotate handler reads getLocalEditState which
@@ -339,7 +341,9 @@ test('editor: rotate + flip + resample chain saves three ops', async ({ page }) 
   });
 
   await page.locator('img[data-cell-index="0"]').click();
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
 
   // 1. Rotate right (existing).
   await page.locator('#rkr-image-rotate-r-btn').click();
@@ -398,7 +402,9 @@ test('editor: cropper modal opens and cancels cleanly', async ({ page }) => {
   // Wait for ensureLocalState() to land before any rotate/crop click
   // — getLocalEditState (sync) returns null until the meta fetch
   // resolves, and silent no-ops here turn into flaky e2e timeouts.
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
 
   // Modal starts closed (no `open` attribute → not visible).
   const dialog = page.locator('#rkr-crop-modal');
@@ -472,7 +478,9 @@ test('editor: crop save updates the thumb src to a blob URL', async ({ page }) =
 
   // Open the per-cell dialog + cropper.
   await thumb.click();
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
   await page.locator('#rkr-image-crop-btn').click();
   const dialog = page.locator('#rkr-crop-modal');
   await expect(dialog).toBeVisible({ timeout: 10_000 });
@@ -905,6 +913,12 @@ test('editor: offline upload queues + drains on reconnect', async ({ page, conte
   await login(page);
   await page.goto('/admin/editor?e2e=1');
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  // Block on the offline-infrastructure bootstrap so the upload below
+  // sees the queued path (state=online but outbox ready), not a race
+  // with the HEAD probe.
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
 
   await page.locator('#rkr-title').fill('e2e offline');
   await setSlug(page, `e2e-offline-${Date.now()}`);
@@ -950,7 +964,9 @@ test('editor: offline upload queues + drains on reconnect', async ({ page, conte
         const res = await page.request.get(`/admin/preview/${id}`, { maxRedirects: 0 });
         return res.status();
       },
-      { timeout: 15_000 }
+      // 30s budget covers drain's [1,2,4,8,16]s backoff if the first
+      // attempt races with the still-settling online-state probe.
+      { timeout: 30_000 }
     )
     .toBe(302);
 });
@@ -992,7 +1008,9 @@ test('editor: offline rotate+save queues setOps+bake, drains on reconnect', asyn
   // Wait for ensureLocalState() to land before any rotate/crop click
   // — getLocalEditState (sync) returns null until the meta fetch
   // resolves, and silent no-ops here turn into flaky e2e timeouts.
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 
   // ---- 1. go offline + rotate + save -------------------------------
@@ -1179,7 +1197,9 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
   // Wait for ensureLocalState() to land before any rotate/crop click
   // — getLocalEditState (sync) returns null until the meta fetch
   // resolves, and silent no-ops here turn into flaky e2e timeouts.
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 
   await page.locator('#rkr-image-rotate-r-btn').click();
@@ -1234,7 +1254,9 @@ test('editor: unsaved image edits survive reload via OPFS image-state', async ({
   // Wait for ensureLocalState() to land before any rotate/crop click
   // — getLocalEditState (sync) returns null until the meta fetch
   // resolves, and silent no-ops here turn into flaky e2e timeouts.
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
   // Restored state has the rotate op still pending.
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(1, { timeout: 5_000 });
   await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
@@ -1636,8 +1658,11 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
   });
 
   await login(page);
-  await page.goto('/admin/editor');
+  await page.goto('/admin/editor?e2e=1');
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
   await page.locator('#rkr-title').fill('e2e crop persists');
   await setSlug(page, `e2e-crop-persist-${Date.now()}`);
 
@@ -1663,7 +1688,9 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
   // with a fresh ophash — enough for /admin/preview/<id> to redirect
   // to a different URL than the no-ops case.
   await page.locator('img[data-cell-index="0"]').click();
-  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
   await page.locator('#rkr-image-crop-btn').click();
   await expect(page.locator('#rkr-crop-modal')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#rkr-crop-status')).toContainText(/×/, { timeout: 5_000 });
@@ -1701,8 +1728,11 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
 // last typed characters.
 test('editor: caption typed-then-saved-fast flushes pending debounce', async ({ page }) => {
   await login(page);
-  await page.goto('/admin/editor');
+  await page.goto('/admin/editor?e2e=1');
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
   const slug = `e2e-debounce-${Date.now()}`;
   await page.locator('#rkr-title').fill('e2e debounce');
   await setSlug(page, slug);
@@ -1726,8 +1756,12 @@ test('editor: caption typed-then-saved-fast flushes pending debounce', async ({ 
   await page.locator('#rkr-figure-caption').fill(caption);
   await page.locator('#rkr-figure-dialog .rkr-cell-dialog-close').click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
+  // 20s budget covers the save-waits-for-uploads guard if the
+  // in-flight upload is mid-drain (image bytes haven't reached the
+  // server yet → savePost would create a draft pointing at a sidecar
+  // that doesn't exist).
   await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
-    timeout: 10_000
+    timeout: 20_000
   });
   await publishSlug(page, slug);
   const res = await page.request.get(`/${slug}`);
