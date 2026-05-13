@@ -5,6 +5,29 @@ import type { OutboxEntry } from '../lib/outbox-types.ts';
 import { readBlob } from './opfs.ts';
 import { type Drainer, SavePostConflictError } from './sync.ts';
 
+/** Shared POST + outbox-seq header + non-2xx → throw with a
+ * standard "<op> drain <seq>: <status>" message. Used by the
+ * FormData-bodied drainers (upload, commitImageEdit). savePost
+ * stays specialized because its 409 path branches before the
+ * non-ok check. */
+async function postFormDrain(
+  op: string,
+  url: string,
+  body: FormData,
+  seq: number
+): Promise<Response> {
+  const res = await fetch(url, {
+    method: 'POST',
+    body,
+    headers: { 'x-rkr-outbox-seq': String(seq) }
+  });
+  /* v8 ignore next 3 -- non-2xx server response; prod-only path */
+  if (!res.ok) {
+    throw new Error(`${op} drain ${seq}: ${res.status}`);
+  }
+  return res;
+}
+
 export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   if (entry.op !== 'upload') return;
   // queueUpload writes the canonical local copy to originals/ for
@@ -20,15 +43,7 @@ export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   }
   const fd = new FormData();
   fd.append('file', blob, entry.payload.filename);
-  const res = await fetch('/admin/upload', {
-    method: 'POST',
-    body: fd,
-    headers: { 'x-rkr-outbox-seq': String(entry.seq) }
-  });
-  /* v8 ignore next 3 -- non-2xx server response; prod-only path */
-  if (!res.ok) {
-    throw new Error(`upload drain ${entry.seq}: ${res.status}`);
-  }
+  const res = await postFormDrain('upload', '/admin/upload', fd, entry.seq);
   await res.json();
 };
 
@@ -43,15 +58,12 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
     }
     fd.append('bake', blob, `${entry.payload.id}.webp`);
   }
-  const res = await fetch(`/admin/sidecar/${entry.payload.id}/commit`, {
-    method: 'POST',
-    headers: { 'x-rkr-outbox-seq': String(entry.seq) },
-    body: fd
-  });
-  /* v8 ignore next 3 -- non-2xx server response; prod-only path */
-  if (!res.ok) {
-    throw new Error(`commitImageEdit drain ${entry.seq}: ${res.status}`);
-  }
+  await postFormDrain(
+    'commitImageEdit',
+    `/admin/sidecar/${entry.payload.id}/commit`,
+    fd,
+    entry.seq
+  );
 };
 
 export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
