@@ -177,6 +177,16 @@ test('jobs default export: unknown subcommand throws usage', async (t) => {
   await assert.rejects(jobsCmd(['bogus']), /usage: site-admin jobs failed/);
 });
 
+test('jobs default export: missing jobs table surfaces a SQLite error', async (t) => {
+  // No migrate → no schema. `jobs failed` opens the DB lazily and
+  // hits a SQLITE error on the first query. We don't promise a
+  // pretty message here, just that the failure surfaces as a thrown
+  // Error rather than a silent zero-exit.
+  withSiteRoot(t);
+  const jobsCmd = (await import('../../src/cli/jobs.ts')).default;
+  await assert.rejects(jobsCmd(['failed']));
+});
+
 test('jobs default export: empty queue reports "no failed jobs"', async (t) => {
   const { root } = withSiteRoot(t);
   // jobs CLI needs the schema; run migrate first.
@@ -235,6 +245,58 @@ test('reset default export: rejects missing --token (and no ADMIN_TOKEN env)', a
   });
   const resetCmd = (await import('../../src/cli/reset.ts')).default;
   await assert.rejects(resetCmd(['--to', 'http://x']), /bearer token required/);
+});
+
+test('reset runReset: posts to /admin/reset with bearer header', async (t) => {
+  withSiteRoot(t);
+  const { runReset } = await import('../../src/cli/reset.ts');
+  // Stub fetcher captures the request shape; returns a fake success
+  // body so runReset's happy path completes.
+  let capturedUrl = '';
+  let capturedInit: RequestInit | undefined;
+  const stub: typeof fetch = async (input, init) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        posts: 3,
+        originals: 5,
+        sidecars: 5,
+        cacheFiles: 12,
+        postsTableRows: 3
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+  const result = await runReset({
+    toUrl: 'https://example.test',
+    token: 'secret-token-123',
+    force: true,
+    fetcher: stub
+  });
+  assert.equal(capturedUrl, 'https://example.test/admin/reset');
+  assert.equal(capturedInit?.method, 'POST');
+  const headers = capturedInit?.headers as Record<string, string> | undefined;
+  assert.equal(headers?.authorization, 'Bearer secret-token-123');
+  assert.equal(result.posts, 3);
+  assert.equal(result.originals, 5);
+});
+
+test('reset runReset: non-2xx response surfaces as error', async (t) => {
+  withSiteRoot(t);
+  const { runReset } = await import('../../src/cli/reset.ts');
+  const stub: typeof fetch = async () => new Response('invalid token', { status: 401 });
+  await assert.rejects(
+    () =>
+      runReset({
+        toUrl: 'https://example.test',
+        token: 'wrong-token',
+        force: true,
+        fetcher: stub
+      }),
+    /reset failed: 401/
+  );
 });
 
 // ---- import-wp ----------------------------------------------------
