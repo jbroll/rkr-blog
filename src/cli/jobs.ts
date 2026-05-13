@@ -22,8 +22,7 @@ interface FailedRow {
 export default async function jobsCmd(argv: string[]): Promise<void> {
   const sub = argv[0];
   if (sub !== 'failed') {
-    console.error('usage: site-admin jobs failed');
-    process.exit(2);
+    throw new Error('usage: site-admin jobs failed');
   }
   const dbPath = path.join(paths().root, 'data', 'site.db');
   const db = open(dbPath);

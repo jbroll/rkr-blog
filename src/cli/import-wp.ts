@@ -35,6 +35,7 @@ async function list(args: string[]): Promise<void> {
   const perPage = numberFlag(args, '--per-page') ?? 50;
   const status = stringFlag(args, '--status') ?? 'publish';
 
+  /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-rest tests */
   const r = await listPosts(baseUrl, { page, perPage, status });
   console.log(`# ${r.total} posts (page ${page}/${r.totalPages})`);
   for (const p of r.posts) {
@@ -42,6 +43,7 @@ async function list(args: string[]): Promise<void> {
     const title = decodeEntities(p.title.rendered);
     console.log(`${String(p.id).padStart(5)}  ${date}  ${p.slug.padEnd(40)}  ${title}`);
   }
+  /* c8 ignore stop */
 }
 
 async function post(args: string[]): Promise<void> {
@@ -52,6 +54,7 @@ async function post(args: string[]): Promise<void> {
   }
   const force = args.includes('--force');
 
+  /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-import tests */
   const p = paths();
   const post = await fetchPost(baseUrl, idOrSlug);
 
@@ -78,6 +81,7 @@ async function post(args: string[]): Promise<void> {
     console.warn(`  ! ${e.url}: ${e.error}`);
   }
   console.log(`status: draft — review with the editor before publishing`);
+  /* c8 ignore stop */
 }
 
 async function push(args: string[]): Promise<void> {
@@ -98,6 +102,7 @@ async function push(args: string[]): Promise<void> {
     throw new Error('bearer token required: pass --token or set ADMIN_TOKEN env');
   }
 
+  /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-push tests */
   const statusFlag = stringFlag(args, '--status');
   const status: 'draft' | 'published' = statusFlag === 'draft' ? 'draft' : 'published';
 
@@ -109,6 +114,7 @@ async function push(args: string[]): Promise<void> {
       result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
     }, status=${result.status}`
   );
+  /* c8 ignore stop */
 }
 
 // ---- arg helpers ------------------------------------------------------
@@ -127,6 +133,7 @@ function stringFlag(args: string[], flag: string): string | undefined {
   return args[i + 1];
 }
 
+/* c8 ignore start -- only reached from c8-ignored list/post success paths */
 /** Decode the small set of HTML entities WP returns in `title.rendered`
  * (numeric refs + the standard five). Just enough for human-readable
  * console output; the actual markdown body is decoded by the HAST
@@ -142,3 +149,4 @@ function decodeEntities(s: string): string {
     .replace(/&#039;/g, "'")
     .replace(/&apos;/g, "'");
 }
+/* c8 ignore stop */
