@@ -14,6 +14,7 @@
   --rkr-rule: #e5e5e2;
   --rkr-link: #1a4f7f;
   --rkr-link-hover: #0d2c4d;
+  --rkr-danger: #cf222e;
   --rkr-shadow: rgba(0, 0, 0, 0.08);
 
   /* layout tokens */
@@ -256,12 +257,19 @@ body {
   color: var(--rkr-muted); display: inline-flex; align-items: center;
   vertical-align: middle; line-height: 1;
 }
-.rkr-admin-posts-del-btn:hover { color: #cf222e; }
+/* Destructive: muted at rest, red on hover/focus. Same pattern
+   used for every trash button in the admin (figure delete, cell
+   delete, posts-list delete) — see --rkr-danger token + the
+   admin-styles.ts rules. */
+.rkr-admin-posts-del-btn:hover,
+.rkr-admin-posts-del-btn:focus-visible { color: var(--rkr-danger); }
 .rkr-admin-posts-pin:hover:not(:disabled) { color: var(--rkr-link); }
 .rkr-admin-posts-pin:disabled { cursor: progress; opacity: 0.6; }
-.rkr-admin-posts-pin[aria-pressed="true"] {
-  color: var(--rkr-link);
-}
+/* Pin icon shows CURRENT STATE, not the click action: when pinned,
+   the pin is the active accent colour; when not, it's muted (same
+   default as the rest button). The icon swap (pin vs pin-off) in
+   posts-list.ts reinforces it visually. */
+.rkr-admin-posts-pin[aria-pressed="true"] { color: var(--rkr-link); }
 .rkr-admin-posts-empty {
   color: var(--rkr-muted);
   text-align: center;

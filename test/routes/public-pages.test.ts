@@ -280,8 +280,9 @@ test('GET / authed: includes drafts + admin table + no-store header', async (t) 
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Drafty/);
   assert.match(res.body, /Pub/);
-  // Admin-table markers from the renderIndexPage admin branch.
-  assert.match(res.body, /<th class="rkr-admin-posts-action">Status<\/th>/);
+  // Admin-table markers from the renderIndexPage admin branch
+  // (no <thead> — controls' aria-labels carry their accessible names).
+  assert.match(res.body, /<table class="rkr-admin-posts">/);
   assert.match(res.body, /action="\/admin\/posts\/draft\/status"/);
   assert.match(res.body, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
   // SW honours no-store on the response and skips caching so a

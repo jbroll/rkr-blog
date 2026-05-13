@@ -39,11 +39,17 @@ function wireStatusForms(): void {
 
 function setRowPinState(button: HTMLButtonElement, pinned: boolean): void {
   button.disabled = false;
-  // pinOff icon ("unpin") for the currently-pinned state since the
-  // click action would unpin; pin icon for the unpinned state.
-  button.innerHTML = pinned ? PIN_OFF_ICON : PIN_ICON;
+  // Icon shows CURRENT STATE, not the action. Pinned posts get the
+  // active pin glyph + link colour (via aria-pressed CSS); unpinned
+  // get pin-off in muted colour so the visual + the aria state
+  // agree. Click action verb lives in the aria-label.
+  button.innerHTML = pinned ? PIN_ICON : PIN_OFF_ICON;
   button.setAttribute('aria-pressed', String(pinned));
   button.dataset.pinned = String(pinned);
+  button.setAttribute(
+    'aria-label',
+    pinned ? 'Unpin (post is pinned for offline)' : 'Pin for offline editing'
+  );
 }
 
 async function refreshPinnedStates(buttons: HTMLButtonElement[]): Promise<void> {

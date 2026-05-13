@@ -13,6 +13,7 @@
   --rkr-rule: #44475a;           /* "current line" */
   --rkr-link: #8be9fd;           /* cyan */
   --rkr-link-hover: #50fa7b;     /* green */
+  --rkr-danger: #ff5555;         /* Dracula's red */
   --rkr-shadow: rgba(0, 0, 0, 0.5);
 
   --rkr-content: 56rem;

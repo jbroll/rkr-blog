@@ -106,11 +106,9 @@ export const ADMIN_CSS = `
     box-shadow: 0 4px 6px -4px var(--rkr-shadow, rgba(0, 0, 0, 0.08));
   }
   #rkroll-admin-toolbar button { padding: .25rem .75rem; cursor: pointer; }
-  /* Icon-style toolbar buttons (Link, +Image). SVG inherits
-     currentColor so the active-state invert keeps working. */
+  /* Icon-style toolbar buttons (Link, +Image). */
   #rkroll-admin-toolbar button svg { display: block; }
   #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
-  /* Primary toolbar action (Save). Hover lifts via --rkr-link-hover. */
   #rkroll-admin-toolbar button.rkr-toolbar-primary {
     background: var(--rkr-link);
     color: var(--rkr-bg);
@@ -255,21 +253,20 @@ export const ADMIN_CSS = `
     background: color-mix(in srgb, var(--rkr-muted) 12%, transparent);
     border: 1px solid var(--rkr-rule); border-radius: 4px;
   }
-  /* Destructive: removes the active cell from the figure. Separated
-     from the edit-ops row by a top rule so a stray click on Save
-     doesn't land here. */
-  .rkr-cell-delete-row {
-    grid-column: 1 / -1; display: flex; justify-content: flex-end;
-    margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--rkr-rule);
-  }
+  /* Cell delete sits in the dialog head beside close. h2 takes
+     auto margin-right; extra margin-left on close gives a
+     finger-friendly gap so a stray tap doesn't fire delete. */
+  .rkr-cell-dialog-head h2 { margin-right: auto; }
   #rkroll-admin-root button.rkr-cell-delete {
-    background: transparent; color: #c00; padding: .35rem .75rem;
-    border: 1px solid color-mix(in srgb, #c00 50%, var(--rkr-rule));
-    border-radius: 4px; cursor: pointer;
+    background: none; border: 0; padding: .25rem; cursor: pointer;
+    color: var(--rkr-muted); display: inline-flex; align-items: center;
+    line-height: 1;
   }
-  #rkroll-admin-root button.rkr-cell-delete:hover {
-    background: color-mix(in srgb, #c00 10%, var(--rkr-bg)); border-color: #c00;
+  #rkroll-admin-root button.rkr-cell-delete:hover,
+  #rkroll-admin-root button.rkr-cell-delete:focus-visible {
+    color: var(--rkr-danger);
   }
+  .rkr-cell-dialog-head .rkr-cell-dialog-close { margin-left: 1.25rem; }
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
   #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }
   #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
@@ -306,10 +303,13 @@ export const ADMIN_CSS = `
   #rkroll-admin-root button.rkr-multi-add svg,
   #rkroll-admin-root button.rkr-multi-config svg,
   #rkroll-admin-root button.rkr-multi-delete svg { display: block; }
-  #rkroll-admin-root button.rkr-multi-delete { color: #c00; }
-  #rkroll-admin-root button.rkr-multi-delete:hover {
-    color: #c00; border-color: #c00; border-style: solid;
-    background: color-mix(in srgb, #c00 8%, transparent);
+  /* Destructive — muted at rest like its neighbours; red only on
+     hover/focus. Matches the admin posts-list and the cell-dialog
+     delete (uniform trash treatment, --rkr-danger token). */
+  #rkroll-admin-root button.rkr-multi-delete:hover,
+  #rkroll-admin-root button.rkr-multi-delete:focus-visible {
+    color: var(--rkr-danger); border-color: var(--rkr-danger); border-style: solid;
+    background: color-mix(in srgb, var(--rkr-danger) 8%, transparent);
   }
   /* Browser-native :out-of-range styling for autoplay (input has
      min=0/max=60 attrs). Gives the author a visual cue that >60 will

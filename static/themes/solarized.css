@@ -13,6 +13,7 @@
   --rkr-rule: #eee8d5;           /* base2 */
   --rkr-link: #268bd2;           /* blue */
   --rkr-link-hover: #2aa198;     /* cyan */
+  --rkr-danger: #dc322f;         /* Solarized red */
   --rkr-shadow: rgba(101, 123, 131, 0.12);
 
   --rkr-content: 60rem;

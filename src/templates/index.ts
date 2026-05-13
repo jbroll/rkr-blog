@@ -132,23 +132,17 @@ function renderAdminTable(posts: IndexEntry[]): string {
   // screen. Keeping the body viewport-width keeps the FABs visible.
   if (posts.length === 0) {
     return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
-  <thead><tr><th>Title</th><th>Updated</th><th class="rkr-admin-posts-action">Status</th><th class="rkr-admin-posts-action">Pin</th><th class="rkr-admin-posts-action">Delete</th></tr></thead>
   <tbody>
     <tr><td colspan="5" class="rkr-admin-posts-empty">No posts yet. <a href="/admin/editor">Create one</a>.</td></tr>
   </tbody>
 </table></div>`;
   }
   const dayCounts = countByDay(posts, (p) => p.updatedAt ?? p.date);
+  // No <thead>: title + date + icon controls speak for themselves;
+  // a header row of "Title / Updated / Status / Pin / Delete" is
+  // visual noise. Each control's aria-label carries the equivalent
+  // accessible name for screen readers.
   return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
-  <thead>
-    <tr>
-      <th>Title</th>
-      <th>Updated</th>
-      <th class="rkr-admin-posts-action">Status</th>
-      <th class="rkr-admin-posts-action">Pin</th>
-      <th class="rkr-admin-posts-action">Delete</th>
-    </tr>
-  </thead>
   <tbody>
 ${posts.map((p) => renderAdminRow(p, dayCounts)).join('\n')}
   </tbody>
@@ -174,7 +168,7 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
       </form>
     </td>
     <td class="rkr-admin-posts-action">
-      <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>${icon('pin', 18)}</button>
+      <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>${icon('pinOff', 18)}</button>
     </td>
     <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/delete" class="rkr-admin-posts-del" data-title="${escapeAttr(p.title)}">

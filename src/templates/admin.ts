@@ -7,6 +7,7 @@
 
 import { escapeText } from '../lib/content.ts';
 import { ADMIN_CSS } from './admin-styles.ts';
+import { icon } from './icons.ts';
 import { type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface AdminPageData extends SiteChrome {
@@ -118,6 +119,11 @@ ${siteHead(data.site, { isAdmin: true })}
 <dialog id="rkr-cell-dialog" aria-labelledby="rkr-cell-dialog-title">
   <form method="dialog" class="rkr-cell-dialog-head">
     <h2 id="rkr-cell-dialog-title">Image</h2>
+    <!-- Delete sits in the header beside the close X. The
+         margin-left:auto + extra gap rule in admin-styles keeps it
+         away from the X so a stray tap doesn't fire delete instead
+         of close. Confirm + splice live in main.ts. -->
+    <button type="button" id="rkr-cell-delete-btn" class="rkr-cell-delete" aria-label="Remove image from figure" title="Remove image from figure">${icon('trash2', 18)}</button>
     <button type="submit" class="rkr-cell-dialog-close" aria-label="Close">✕</button>
   </form>
   <div id="rkr-figure-attrs-cell" class="rkr-cell-dialog-body" data-scope="cell">
@@ -153,15 +159,6 @@ ${siteHead(data.site, { isAdmin: true })}
            flip click shows up here without having to peek behind
            the modal. -->
       <img id="rkr-cell-preview" class="rkr-cell-preview" alt="" hidden/>
-    </div>
-    <!-- Remove this image from the figure. Destructive but
-         recoverable: the image bytes + sidecar stay on disk, only the
-         figure's reference is dropped. Confirm prompt fires before
-         the splice so a stray click can't blow away unsaved edits. -->
-    <div class="rkr-cell-delete-row">
-      <button type="button" id="rkr-cell-delete-btn" class="rkr-cell-delete">
-        Remove image from figure
-      </button>
     </div>
   </div>
 </dialog>

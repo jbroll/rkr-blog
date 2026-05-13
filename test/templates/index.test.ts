@@ -53,13 +53,9 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   // wide admin layout doesn't push the body past viewport width
   // (which on iOS Safari sends the fixed-position FABs off-screen).
   assert.match(html, /<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">/);
-  // Table headers match the standalone admin-posts page that this
-  // replaces.
-  assert.match(html, /<th>Title<\/th>/);
-  assert.match(html, /<th>Updated<\/th>/);
-  assert.match(html, /<th class="rkr-admin-posts-action">Status<\/th>/);
-  assert.match(html, /<th class="rkr-admin-posts-action">Pin<\/th>/);
-  assert.match(html, /<th class="rkr-admin-posts-action">Delete<\/th>/);
+  // No <thead>: title + date + icon-buttons are self-explanatory;
+  // each control carries its accessible name via aria-label.
+  assert.doesNotMatch(html, /<thead>/);
 
   // Each post row carries the per-row controls.
   assert.match(html, /<a href="\/hello">Hello<\/a>/);
