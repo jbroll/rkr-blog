@@ -473,3 +473,48 @@ CI runs.
 headless WebGL path, or when we ship a Canvas2D fallback
 implementation.
 
+## Residual e2e flakes (2026-05-13 flake-investigation pass)
+
+**Source.** Full-suite reruns during the drain-timing flake fix
+(commit 5fa42e2). Three flake families were stabilized — thumb
+visibility race, online-state probe race, drain-poll timeouts.
+Two pre-existing flakes remain at low rates.
+
+### `editor-flow.spec.ts:442` — crop save → blob URL falls back to /admin/preview
+
+**What.** Test expects the thumb's src to be a `blob:` URL after a
+crop save. Under suite load the assertion occasionally sees
+`/admin/preview/<id>` instead, which is the catch-branch fallback
+in `refreshImagePreview` (`src/admin/canvas-loaders.ts:200-211`).
+The canvas pipeline threw somewhere between `loadOriginal` and
+`setEditorImageSrc` and the error was swallowed into `setStatus`.
+
+**Why deferred.** Passes 100% in isolation; only reproduces under
+sequential e2e load. The fallback IS correct user-visible behavior
+(the preview URL still resolves to a working derivative). The flake
+is a real but rare bug in the canvas pipeline's error handling that
+needs reproduction — likely a transient `loadOriginal` fetch
+failure or an `originalCache` LRU eviction race.
+
+**Trigger.** When a user reports "my crops disappear after save" or
+when adding an instrumented run that captures `console.error` from
+the canvas pipeline across a full suite.
+
+### `public-figures.spec.ts:134` — carousel autoplay doesn't start
+
+**What.** Test expects `aria-pressed="true"` on the carousel play
+button after `page.goto` — autoplay should auto-start when
+`prefers-reduced-motion: no-preference`. Headless Chromium
+occasionally reports the play button as `aria-pressed="false"`,
+suggesting `start()` was either never called or `stop()` fired
+immediately afterwards (mouseenter / focusin / visibilitychange).
+
+**Why deferred.** Passes 100% in isolation. Carousel start logic
+in `src/site/carousel.ts:135` runs on mount; no obvious race in
+the code. The flake is environmental (headless tab-visibility
+quirks) rather than a code bug.
+
+**Trigger.** If the failure rate climbs above ~1/6 runs, or when
+adding a real user-facing reduced-motion preference toggle would
+benefit from clearer test coverage anyway.
+
