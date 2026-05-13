@@ -102,15 +102,14 @@ export function startDraftPersistence(editor: Editor, draftId: string): () => vo
   };
   editor.on('update', onUpdate);
 
-  // Heartbeat bumps lastAccessedAt as well as the lock file: OPFS
-  // readJson can't distinguish ENOENT from parse error, so a torn
-  // lock read could otherwise treat a live draft as unlocked.
-  // Errors are swallowed with .catch — a transient OPFS error (quota,
-  // I/O glitch) should not surface as an unhandled-rejection from
-  // the interval timer.
+  // Heartbeat writes only the lock file. The lock is the "tab
+  // alive" signal; eviction respects it within the 60s grace.
+  // lastAccessedAt is the "recent user activity" signal and gets
+  // bumped on every keystroke debounce flush above — the two answer
+  // different questions and shouldn't be coupled. Errors swallowed
+  // because a transient OPFS glitch shouldn't surface from a timer.
   const beat = async (): Promise<void> => {
     await writeJson(`${DRAFT_DIR}/${draftId}.lock`, { ts: Date.now() });
-    await updateMeta(draftId, { lastAccessedAt: new Date().toISOString() });
   };
   void beat().catch(() => {});
   const heartbeat = setInterval(() => {
