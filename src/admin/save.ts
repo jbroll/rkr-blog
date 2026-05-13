@@ -17,6 +17,7 @@ import { append as outboxAppend } from './outbox.ts';
 import { markClean } from './page-title.ts';
 import { hasPendingMarker } from './pending-uploads.ts';
 import { awaitDrainSettled, tryDrain } from './sync.ts';
+import { showToast } from './toast.ts';
 
 interface SaveResponse {
   slug: string;
@@ -110,6 +111,15 @@ export async function handleSave(editor: Editor): Promise<void> {
       // anonymous browsers without a controlling SW just skip.
       navigator.serviceWorker?.controller?.postMessage({ type: 'rkr-pages-flush' });
       setStatusWithLink(`saved /${result.slug}`, `/${result.slug}`, 'view →');
+      // Transient bottom-right toast — the status line is small and
+      // muted; the toast is the "you can stop holding your breath"
+      // signal. Keep the status line update too for screen readers
+      // and the existing e2e assertions.
+      showToast({
+        kind: 'success',
+        text: `Saved /${result.slug}`,
+        action: { href: `/${result.slug}`, label: 'View →' }
+      });
       markClean();
       return;
     } catch {
@@ -129,9 +139,13 @@ async function queueSavePost(payload: SavePostPayload, pendingImages: number): P
   // the user should know about so they don't expect the post to
   // appear at /:slug yet.
   if (pendingImages > 0) {
-    setStatus(`queued /${payload.slug} — ${pendingImages} image(s) still syncing`);
+    const msg = `queued /${payload.slug} — ${pendingImages} image(s) still syncing`;
+    setStatus(msg);
+    showToast({ kind: 'info', text: msg });
   } else {
-    setStatus(`queued /${payload.slug} for sync`);
+    const msg = `queued /${payload.slug} for sync`;
+    setStatus(msg);
+    showToast({ kind: 'info', text: msg });
   }
   void tryDrain();
 }

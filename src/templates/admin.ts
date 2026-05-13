@@ -150,7 +150,7 @@ ${siteHead(data.site, { isAdmin: true })}
         <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
         <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
         <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
-        <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>Save edits</button>
+        <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>${icon('save', 18)}</button>
       </span>
       <label for="rkr-image-resample">Max width (px)</label>
       <span class="rkr-image-actions">
@@ -186,7 +186,7 @@ ${siteHead(data.site, { isAdmin: true })}
   <div class="rkr-crop-actions">
     <span id="rkr-crop-status"></span>
     <button type="button" id="rkr-crop-cancel">Cancel</button>
-    <button type="button" id="rkr-crop-save">Save crop</button>
+    <button type="button" id="rkr-crop-save" aria-label="Save crop" title="Save crop">${icon('save', 18)}</button>
   </div>
 </dialog>
 <dialog id="rkr-persp-modal" aria-labelledby="rkr-persp-modal-title">
@@ -198,7 +198,7 @@ ${siteHead(data.site, { isAdmin: true })}
   <div class="rkr-persp-actions">
     <span id="rkr-persp-status">Drag the four handles to the corners of the region to straighten</span>
     <button type="button" id="rkr-persp-cancel">Cancel</button>
-    <button type="button" id="rkr-persp-save">Save perspective</button>
+    <button type="button" id="rkr-persp-save" aria-label="Save perspective" title="Save perspective">${icon('save', 18)}</button>
   </div>
 </dialog>
 <div id="rkroll-admin-root">

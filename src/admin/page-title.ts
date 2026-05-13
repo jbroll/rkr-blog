@@ -32,6 +32,13 @@ function render(): void {
   h1.textContent = label;
   const tabTitle = titleInput.value.trim() || label;
   document.title = `${dirty ? '● ' : ''}${tabTitle}${BASE_TITLE_SUFFIX}`;
+  // Mirror the dirty state on the toolbar Save button — CSS in
+  // admin-styles.ts uses `.is-dirty` to flip the button from
+  // outline-only (calm) to filled (needs action). The tab-title
+  // dot was already there for findability, but it's offscreen
+  // when the user is focused on the editor.
+  const saveBtn = document.querySelector('#rkroll-admin-toolbar button[data-cmd="save"]');
+  if (saveBtn) saveBtn.classList.toggle('is-dirty', dirty);
   // View link goes to /<slug>. Hidden until the post is saved so a
   // brand-new draft doesn't show a dead "View" affordance.
   const view = $<HTMLAnchorElement>('rkr-page-view');

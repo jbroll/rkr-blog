@@ -111,16 +111,19 @@ export const ADMIN_CSS = `
   /* Icon-style toolbar buttons (Link, +Image). */
   #rkroll-admin-toolbar button svg { display: block; }
   #rkroll-admin-toolbar button.is-active { background: var(--rkr-text); color: var(--rkr-bg); }
+  /* Save button: outline-only when clean, filled when .is-dirty
+     (toggled by page-title.ts on editor changes). */
   #rkroll-admin-toolbar button.rkr-toolbar-primary {
-    background: var(--rkr-link);
-    color: var(--rkr-bg);
-    border: 1px solid var(--rkr-link);
-    padding: .25rem .85rem;
-    font-weight: 500;
-    margin-left: auto;
+    background: transparent; color: var(--rkr-link);
+    border: 1px solid var(--rkr-link); padding: .25rem .85rem;
+    font-weight: 500; margin-left: auto;
+    transition: background-color .15s ease-out, color .15s ease-out;
+  }
+  #rkroll-admin-toolbar button.rkr-toolbar-primary.is-dirty {
+    background: var(--rkr-link); color: var(--rkr-bg);
   }
   #rkroll-admin-toolbar button.rkr-toolbar-primary:hover {
-    background: var(--rkr-link-hover);
+    background: var(--rkr-link-hover); color: var(--rkr-bg);
     border-color: var(--rkr-link-hover);
   }
   /* Editor preview frame: the ProseMirror editable lives inside an
