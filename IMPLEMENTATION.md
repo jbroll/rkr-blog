@@ -1,5 +1,13 @@
 # rkroll-cms — Offline implementation plan
 
+> **Status as of 2026-05-13: shipped.** Phases 0–3 have all landed
+> on `main`. This file is preserved as the historical plan that
+> guided the work; the as-built feature list lives in
+> `implementation.md` §11 Steps 13–15 (PWA shell + SW, OPFS outbox
+> + drain, pin existing posts + eviction). Specific checkboxes
+> below remain accurate as a per-task ledger. New offline work
+> should extend implementation.md, not this file.
+
 Execution order for `spec-offline.md` plus the spec.md §7 bake-ops-hash
 guard. Each phase ends at a commit-able, e2e-green checkpoint. Land
 the phase; pause for sign-off; move on.
