@@ -7,7 +7,7 @@
     },
     "src/admin/canvas.ts": {
       "linesFound": 126,
-      "linesHit": 36
+      "linesHit": 56
     },
     "src/admin/cropper-modal.ts": {
       "linesFound": 31,
@@ -19,7 +19,7 @@
     },
     "src/admin/drag-drop.ts": {
       "linesFound": 37,
-      "linesHit": 5
+      "linesHit": 29
     },
     "src/admin/figure-node.ts": {
       "linesFound": 4,
@@ -103,7 +103,7 @@
     },
     "src/lib/canvas-math.ts": {
       "linesFound": 66,
-      "linesHit": 15
+      "linesHit": 24
     },
     "src/lib/content-id.ts": {
       "linesFound": 6,
@@ -111,7 +111,7 @@
     },
     "src/lib/image-edit-ops.ts": {
       "linesFound": 24,
-      "linesHit": 9
+      "linesHit": 11
     },
     "src/lib/outbox-types.ts": {
       "linesFound": 8,
@@ -119,11 +119,11 @@
     },
     "src/lib/prose-markdown.ts": {
       "linesFound": 102,
-      "linesHit": 60
+      "linesHit": 65
     },
     "src/lib/safe-url.ts": {
       "linesFound": 12,
-      "linesHit": 1
+      "linesHit": 12
     },
     "src/admin/draft.ts": {
       "linesFound": 42,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 34
+      "linesHit": 37
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -151,15 +151,15 @@
     },
     "src/site/carousel.ts": {
       "linesFound": 43,
-      "linesHit": 4
+      "linesHit": 42
     },
     "src/site/img-retry.ts": {
       "linesFound": 33,
-      "linesHit": 9
+      "linesHit": 25
     },
     "src/site/lightbox.ts": {
       "linesFound": 11,
-      "linesHit": 5
+      "linesHit": 11
     },
     "src/site/sw-register.ts": {
       "linesFound": 7,
@@ -171,7 +171,7 @@
     },
     "src/admin/image-edit-panel.ts": {
       "linesFound": 52,
-      "linesHit": 41
+      "linesHit": 44
     },
     "src/admin/image-insert.ts": {
       "linesFound": 45,
@@ -199,7 +199,7 @@
     },
     "src/lib/ops-validation.ts": {
       "linesFound": 65,
-      "linesHit": 23
+      "linesHit": 36
     },
     "127.0.0.1-3789/static/admin/outbox-6VWBYZMC.js": {
       "linesFound": 1,
@@ -211,7 +211,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 25,
-      "linesHit": 23
+      "linesHit": 24
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,

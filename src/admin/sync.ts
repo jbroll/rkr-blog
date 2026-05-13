@@ -5,7 +5,12 @@
 // cycle. Enforced by the circular-import gauntlet check.
 
 import { getState as getOnlineState } from './online-state.ts';
-import { listSuperseded, list as outboxList, remove as outboxRemove } from './outbox.ts';
+import {
+  listSuperseded,
+  list as outboxList,
+  remove as outboxRemove,
+  readEntryBlob
+} from './outbox.ts';
 
 const LOCK_NAME = 'rkr-sync-leader';
 const CHANNEL_NAME = 'rkr-sync';
@@ -343,7 +348,12 @@ async function drainEntryWithRetry(
 }
 
 async function readEntryBlobOrThrow(seq: number): Promise<Blob> {
-  const { readEntryBlob } = await import('./outbox.ts');
+  // Static import (was dynamic before commit ec94f24+). Dynamic
+  // `import('./outbox.ts')` produced a separate chunk that could
+  // fail to fetch when the editor was offline mid-drain, freezing
+  // the queue even after reconnect because the ES module loader
+  // caches the rejected import. Inlining keeps the helper available
+  // at all times.
   const blob = await readEntryBlob(seq);
   if (!blob) throw new Error(`outbox entry ${seq} has no blob`);
   return blob;
