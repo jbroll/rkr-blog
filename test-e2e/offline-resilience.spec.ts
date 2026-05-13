@@ -138,3 +138,72 @@ test('offline: commit + savePost queued together drain in seq order on reconnect
   expect(html).toContain('multi-op drain');
   expect(html).toMatch(/\/img\/[0-9a-f]{64}\.[0-9a-f]{12}\./);
 });
+
+test('drain: per-entry retry with backoff recovers from transient 5xx', async ({
+  page,
+  context
+}) => {
+  test.setTimeout(60_000);
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Compose offline so we have a savePost in the queue without
+  // accidentally hitting the online direct-POST path.
+  const slug = `e2e-retry-drain-${Date.now()}`;
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await page.locator('#rkr-title').fill('retry test');
+  await setSlug(page, slug);
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>retry body</p>');
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`queued /${slug} for sync`, {
+    timeout: 10_000
+  });
+
+  // Route /admin/posts to fail twice with 500 before passing through.
+  // drainEntryWithRetry's backoff is 1s/2s/4s/8s/16s; the 2nd retry
+  // arrives ~3s after the first failure, well within the wait below.
+  // The 3rd attempt continues to the real server which inserts the
+  // post.
+  let attempts = 0;
+  await context.route('**/admin/posts', async (route) => {
+    attempts++;
+    if (attempts <= 2) {
+      await route.fulfill({ status: 500, body: 'transient' });
+      return;
+    }
+    await route.continue();
+  });
+
+  // Reconnect: tryDrain fires, hits 500, backoff, retries.
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+
+  await expect
+    .poll(
+      async () => {
+        return page.evaluate(async () => {
+          type Entry = { seq: number; op: string };
+          const list = (window as unknown as { __rkrOutboxList: () => Promise<Entry[]> })
+            .__rkrOutboxList;
+          return (await list()).length;
+        });
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(0);
+
+  // The drain hit 500 twice then succeeded; attempts reflects the
+  // per-entry retry loop (>= 3, possibly more if intermediate
+  // retries were also intercepted).
+  expect(attempts).toBeGreaterThanOrEqual(3);
+});
