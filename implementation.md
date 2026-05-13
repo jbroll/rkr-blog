@@ -84,9 +84,34 @@ rkroll-cms/
 │   │   ├── carousel.ts
 │   │   └── diptych.ts        # diptych + triptych
 │   ├── admin/                # browser bundle (esbuild → static/admin/)
-│   │   ├── main.ts           # editor SPA entry
-│   │   ├── canvas.ts         # canvas pipeline + WebGL perspective
-│   │   └── canvas-math.ts    # pure math (DOM-free, server-testable)
+│   │   │                     # ~35 files; bucketed by feature here.
+│   │   ├── main.ts           # editor SPA entry (500-line cap)
+│   │   ├── startup.ts, toolbar.ts, dom.ts, dialog-focus.ts
+│   │   │                     # editor scaffolding + cross-module glue
+│   │   ├── save.ts, draft.ts, page-title.ts, attr-commit.ts
+│   │   │                     # post save + draft persistence + status bar
+│   │   ├── posts-list.ts, pin.ts
+│   │   │                     # /admin posts table + pin-to-home toggle
+│   │   ├── image-insert.ts, drag-drop.ts, pick.ts, upload.ts
+│   │   │                     # insert paths: dialog, drag-drop, picker, file
+│   │   ├── local-thumb.ts, ingest-resize-client.ts
+│   │   │                     # client-side ingest resize before upload
+│   │   ├── image-edit.ts, image-edit-panel.ts, figure-node.ts
+│   │   │                     # per-image ops + figure attribute panel
+│   │   ├── matrix-control.ts, cropper-modal.ts, perspective-modal.ts
+│   │   │                     # grid picker, cropper, perspective rectify
+│   │   ├── canvas.ts, canvas-loaders.ts
+│   │   │                     # WebGL pipeline + image loader cache
+│   │   ├── opfs.ts, opfs-schema.ts
+│   │   │                     # OPFS abstraction + versioned schema
+│   │   ├── outbox.ts, sync.ts, drainers.ts
+│   │   │                     # offline queue + leader-elected drain
+│   │   ├── eviction.ts, storage-panel.ts
+│   │   │                     # LRU + 7-day TTL + storage UI
+│   │   ├── online-state.ts, status-badge.ts
+│   │   │                     # navigator.onLine + HEAD probe state machine
+│   │   └── integrations/{gdrive,onedrive}.ts
+│   │                         # cloud-picker shims (server endpoints in routes/)
 │   ├── site/                 # browser bundle (esbuild → static/site/)
 │   │   ├── lightbox.ts
 │   │   ├── carousel.ts
@@ -644,6 +669,51 @@ step N's signal is green.
 - [x] 4-corner drag modal (Pointer Events + SVG quad overlay).
 - [x] Math helpers: `computeHomography`, `invertMatrix3`, `perspectiveOutputSize`.
 - [x] Server-side coord cap (≤100k); degenerate-quad UI feedback; WebGL-availability gate on the perspective button.
+
+### Step 13 — PWA shell + service worker
+
+- [x] `static/manifest.webmanifest` + 192/512 icons.
+- [x] `<link rel="manifest">` in public templates (`layout.ts`,
+      `post.ts`, `index.ts`).
+- [x] `src/site/sw.ts` event-listener glue + `src/site/sw-core.ts`
+      pure cache/route logic. Three caches:
+      `rkr-shell-v<hash>`, `rkr-pages-v<hash>`, `rkr-images-v<hash>`.
+- [x] Cache-first for `/img/*`, SWR for `/static/*` + page navs;
+      `Cache-Control: no-store` opt-out for session-private bodies.
+- [x] `src/site/sw-register.ts` registers + listens for the
+      `rkr-pages-flush` postMessage from login/logout.
+- [x] Bake-ops-hash server guard (`X-Rkr-Bake-Ops-Hash`); 409 on
+      mismatch; client re-bakes + retries.
+- [x] Content-hashed bundles via esbuild; bundle-size ratchet
+      via `coverage-baseline.json` sibling `bundle-size-baseline.json`.
+
+### Step 14 — Offline outbox + drain (admin SPA)
+
+- [x] OPFS abstraction (`opfs.ts`) with versioned schema
+      (`opfs-schema.ts`).
+- [x] Outbox model (`outbox.ts`): `upload` / `commitImageEdit` /
+      `savePost` ops with coalesce-on-append.
+- [x] Leader-elected drain (`sync.ts`) via `navigator.locks`;
+      BroadcastChannel('rkr-sync') for status; per-entry retry
+      with jitter backoff (`drainers.ts`).
+- [x] `online-state.ts` state machine: online / verifying / offline
+      via `navigator.onLine` + 5s `/health` HEAD probe.
+- [x] `status-badge.ts` bottom-right indicator.
+- [x] Save-waits-for-uploads guard: `extractFigureIds` blocks
+      `savePost` until referenced uploads drain.
+- [x] e2e: `test-e2e/offline-resilience.spec.ts` covers multi-op
+      queue, retry-with-backoff, intermittent drain recovery,
+      persistent-5xx halt, save-waits-for-uploads.
+
+### Step 15 — Pin existing posts + eviction
+
+- [x] `GET /admin/post-bundle/:slug` returns the full post JSON
+      (markdown + frontmatter + sidecar refs) for offline load.
+- [x] `pin.ts` toggles pinned vs cached state in OPFS.
+- [x] `eviction.ts` 7-day TTL + reference-counted original
+      reclamation; runs on editor mount + after drain-empty.
+- [x] `storage-panel.ts` shows usage, pinned/cached lists, pending
+      sync queue, manual controls.
 
 ## 12. Open decisions
 
