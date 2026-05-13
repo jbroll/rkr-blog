@@ -250,20 +250,17 @@ body {
   clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 .rkr-admin-posts-del { display: inline; margin: 0; }
-.rkr-admin-posts-del-btn {
-  background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--rkr-muted); font: inherit; text-decoration: underline;
+.rkr-admin-posts-del-btn,
+.rkr-admin-posts-pin {
+  background: none; border: 0; padding: .2rem; cursor: pointer;
+  color: var(--rkr-muted); display: inline-flex; align-items: center;
+  vertical-align: middle; line-height: 1;
 }
 .rkr-admin-posts-del-btn:hover { color: #cf222e; }
-.rkr-admin-posts-pin {
-  background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--rkr-muted); font: inherit; text-decoration: underline;
-}
 .rkr-admin-posts-pin:hover:not(:disabled) { color: var(--rkr-link); }
 .rkr-admin-posts-pin:disabled { cursor: progress; opacity: 0.6; }
 .rkr-admin-posts-pin[aria-pressed="true"] {
   color: var(--rkr-link);
-  font-weight: 600;
 }
 .rkr-admin-posts-empty {
   color: var(--rkr-muted);

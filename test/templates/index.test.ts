@@ -69,7 +69,11 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-draft"/);
   assert.match(html, /<option value="published" selected>published<\/option>/);
   assert.match(html, /<option value="draft" selected>draft<\/option>/);
-  assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled>pin<\/button>/);
+  // Pin / delete buttons render the Lucide icons (no text label) —
+  // accessible name lives on aria-label.
+  assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled><svg [^>]*>/);
+  assert.match(html, /aria-label="Pin Hello for offline editing"/);
+  assert.match(html, /class="rkr-admin-posts-del-btn"[^>]*aria-label="Delete Hello"><svg /);
   assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
   assert.match(html, />2026-05-01</);
 

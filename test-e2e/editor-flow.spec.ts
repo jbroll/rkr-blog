@@ -1849,9 +1849,11 @@ test('admin posts: lists drafts + published, delete removes the row', async ({ p
   await expect(page.getByRole('cell', { name: 'e2e published', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toBeVisible();
 
-  // Delete the draft via the row's submit form. The form 303-
-  // redirects back to /admin/posts; that route 301s to / so the
-  // browser ends up on the homepage with the draft row gone.
+  // Delete the draft via the row's submit form. posts-list.ts wires
+  // a window.confirm() guard on submit; accept it. The form 303-
+  // redirects back to /admin/posts → 301 → / so the browser ends
+  // up on the homepage with the draft row gone.
+  page.once('dialog', (d) => void d.accept());
   await page.locator(`form[action="/admin/posts/${draftSlug}/delete"] button`).click();
   await expect(page).toHaveURL((url) => new URL(url).pathname === '/');
   await expect(page.getByRole('cell', { name: 'e2e draft', exact: true })).toHaveCount(0);
@@ -1916,16 +1918,16 @@ test('admin posts: per-row status flip + pin/unpin', async ({ page }) => {
   //         button flips to "unpin" with aria-pressed=true.
   const pinBtn = row.locator('button[data-pin-toggle]');
   await expect(pinBtn).toBeEnabled({ timeout: 10_000 });
-  await expect(pinBtn).toHaveText('pin');
+  // Pin/unpin renders as a Lucide icon, no text — assert state via
+  // aria-pressed (drives accessible name + the toggle visual).
+  await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
   await pinBtn.click();
-  await expect(pinBtn).toHaveText('unpin', { timeout: 15_000 });
-  await expect(pinBtn).toHaveAttribute('aria-pressed', 'true');
+  await expect(pinBtn).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
 
   // ---- 3. unpin: flips meta.mode back to 'cached' (data stays in
   //         OPFS so a re-pin doesn't have to refetch).
   await pinBtn.click();
-  await expect(pinBtn).toHaveText('pin', { timeout: 5_000 });
-  await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
+  await expect(pinBtn).toHaveAttribute('aria-pressed', 'false', { timeout: 5_000 });
 });
 
 // Phantom-selection guard: Android Firefox creates DOM Ranges that

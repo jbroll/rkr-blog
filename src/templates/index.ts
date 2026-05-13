@@ -8,6 +8,7 @@
 // IS the dashboard.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { icon } from './icons.ts';
 import {
   bundleVersion,
   indexAdminFabs,
@@ -173,11 +174,11 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
       </form>
     </td>
     <td class="rkr-admin-posts-action">
-      <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>pin</button>
+      <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>${icon('pin', 18)}</button>
     </td>
     <td class="rkr-admin-posts-action">
-      <form method="post" action="/admin/posts/${slugUri}/delete" class="rkr-admin-posts-del">
-        <button type="submit" class="rkr-admin-posts-del-btn" aria-label="Delete ${escapeAttr(p.title)}">delete</button>
+      <form method="post" action="/admin/posts/${slugUri}/delete" class="rkr-admin-posts-del" data-title="${escapeAttr(p.title)}">
+        <button type="submit" class="rkr-admin-posts-del-btn" aria-label="Delete ${escapeAttr(p.title)}">${icon('trash2', 18)}</button>
       </form>
     </td>
   </tr>`;

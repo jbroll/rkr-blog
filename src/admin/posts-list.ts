@@ -13,8 +13,12 @@
 //      offline; unpin flips meta.mode back to 'cached' (eviction
 //      reclaims on the next sweep).
 
+import { icon } from '../templates/icons.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { type PinProgress, pinnedSlugs, pinPost, unpinSlug } from './pin.ts';
+
+const PIN_ICON = icon('pin', 18);
+const PIN_OFF_ICON = icon('pinOff', 18);
 
 function wireStatusForms(): void {
   for (const form of document.querySelectorAll<HTMLFormElement>(
@@ -35,7 +39,9 @@ function wireStatusForms(): void {
 
 function setRowPinState(button: HTMLButtonElement, pinned: boolean): void {
   button.disabled = false;
-  button.textContent = pinned ? 'unpin' : 'pin';
+  // pinOff icon ("unpin") for the currently-pinned state since the
+  // click action would unpin; pin icon for the unpinned state.
+  button.innerHTML = pinned ? PIN_OFF_ICON : PIN_ICON;
   button.setAttribute('aria-pressed', String(pinned));
   button.dataset.pinned = String(pinned);
 }
@@ -62,7 +68,9 @@ async function handlePinClick(button: HTMLButtonElement): Promise<void> {
   if (!slug) return;
   const wasPinned = button.dataset.pinned === 'true';
   button.disabled = true;
-  button.textContent = wasPinned ? 'unpinning…' : 'pinning…';
+  // Progress messages go to title= so the icon doesn't flicker
+  // through partial-state text. Screen readers + hover surface it.
+  statusFor(button, wasPinned ? 'unpinning…' : 'pinning…');
   try {
     if (wasPinned) {
       await unpinSlug(slug);
@@ -70,7 +78,7 @@ async function handlePinClick(button: HTMLButtonElement): Promise<void> {
       statusFor(button, `unpinned /${slug}`);
     } else {
       const result = await pinPost(slug, (p: PinProgress) => {
-        button.textContent = `pinning ${p.fetched + p.skipped}/${p.total}…`;
+        statusFor(button, `pinning ${p.fetched + p.skipped}/${p.total}…`);
       });
       setRowPinState(button, true);
       const note =
@@ -85,8 +93,23 @@ async function handlePinClick(button: HTMLButtonElement): Promise<void> {
   }
 }
 
+function wireDeleteConfirms(): void {
+  // Guard the delete form submit with confirm(). Bare server-form
+  // posts go straight to /admin/posts/<slug>/delete; without the
+  // confirm an accidental icon tap removes the post + bundle.
+  for (const form of document.querySelectorAll<HTMLFormElement>('form.rkr-admin-posts-del')) {
+    const title = form.dataset.title ?? form.closest('tr')?.querySelector('a')?.textContent ?? '';
+    form.addEventListener('submit', (ev) => {
+      if (!window.confirm(`Delete "${title}"? This can't be undone.`)) {
+        ev.preventDefault();
+      }
+    });
+  }
+}
+
 async function init(): Promise<void> {
   wireStatusForms();
+  wireDeleteConfirms();
   const pinButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>('button[data-pin-toggle]')
   );
