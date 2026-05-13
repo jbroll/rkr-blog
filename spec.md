@@ -16,7 +16,7 @@ For local development setup, see [developer-quickstart.md](./developer-quickstar
 - The editor never exposes markdown syntax to the author.
 - Image pipeline retains the unmodified master forever, records edits
   declaratively, and serves cached derivatives.
-- Imports from local upload, plain URL, Google Drive, OneDrive, Dropbox.
+- Imports from local upload, plain URL, Google Drive, OneDrive.
 - Lazy derivative rendering by default; full pre-render available as an
   explicit operator action.
 - Single author. No multi-user features in v1.
@@ -70,7 +70,7 @@ save mutates the sidecar but never the original.
   "version": 1,
   "original": "abcd1234ef56...",          // sha256 hex of master bytes
   "source": {
-    "kind": "gdrive",                     // upload | url | dropbox | onedrive | gdrive
+    "kind": "gdrive",                     // upload | url | gdrive | onedrive | wordpress
     "fileId": "1XyZ...",                  // provider-specific
     "fetched": "2026-05-06T14:22:11Z",
     "originalName": "DSC_0142.NEF.jpg"
