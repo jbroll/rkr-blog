@@ -116,7 +116,15 @@ export default async function integrationsOnedriveRoutes(
 
       let parsed: { state: string; codeVerifier: string };
       try {
-        parsed = JSON.parse(cookieRaw);
+        const raw = JSON.parse(cookieRaw) as Partial<{ state: unknown; codeVerifier: unknown }>;
+        // JSON.parse succeeds on `{}` and arrays; a malformed cookie
+        // would then leave parsed.state === undefined which matches
+        // incomingState === undefined — silently bypassing the CSRF
+        // check. Require both fields to be non-empty strings.
+        if (typeof raw.state !== 'string' || typeof raw.codeVerifier !== 'string') {
+          return reply.code(400).send({ error: 'malformed state cookie' });
+        }
+        parsed = { state: raw.state, codeVerifier: raw.codeVerifier };
       } catch {
         return reply.code(400).send({ error: 'malformed state cookie' });
       }
