@@ -301,3 +301,48 @@ test('drain: survives intermittent connection (online → offline mid-drain → 
     expect(body).toContain(slug);
   }
 });
+
+test('drain: persistent 5xx exhausts retries and surfaces halted in the badge', async ({
+  page,
+  context
+}) => {
+  test.setTimeout(60_000);
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Queue a savePost offline so the drain has something to retry.
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  const slug = `e2e-halt-${Date.now()}`;
+  await page.evaluate(async (s) => {
+    type AppendFn = (entry: {
+      op: 'savePost';
+      payload: { slug: string; title: string; markdown: string };
+    }) => Promise<number>;
+    const append = (window as unknown as { __rkrOutboxAppend: AppendFn }).__rkrOutboxAppend;
+    await append({ op: 'savePost', payload: { slug: s, title: 'halt', markdown: 'x\n' } });
+  }, slug);
+
+  // Route POST /admin/posts to ALWAYS 500 — drainEntryWithRetry's
+  // 5×backoff (1s+2s+4s+8s+16s ≈ 31s total worst case) all fail,
+  // status flips to 'halted'.
+  await context.route('**/admin/posts', async (route) => {
+    await route.fulfill({ status: 500, body: 'persistent failure' });
+  });
+
+  // Reconnect kicks off the drain; retries cycle through then halt.
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+
+  // status-badge.ts renders `halted: <reason>` text on the
+  // .rkr-sync-text span when DrainStatus.kind === 'halted'.
+  await expect(page.locator('#rkr-sync-badge .rkr-sync-text')).toContainText(/^halted:/, {
+    timeout: 45_000
+  });
+  // is-conflict class applies to both halted + conflict kinds.
+  await expect(page.locator('#rkr-sync-badge .rkr-sync-dot')).toHaveClass(/is-conflict/);
+});
