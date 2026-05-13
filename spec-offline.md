@@ -382,8 +382,9 @@ Same image used in two posts is stored once.
 - Touched (mtime updated) every 30 seconds while the editor is
   visible (not on hidden tabs).
 - Deleted on `unload`.
-- A lock with mtime older than 5 minutes is considered stale and
-  ignored by eviction.
+- A lock newer than now - 60s is considered live; older locks are
+  treated as stale and ignored by eviction. (`LOCK_GRACE_MS` in
+  `src/lib/eviction-pure.ts`; must stay ≥ 2 × `HEARTBEAT_MS`.)
 
 This prevents an "evict cached post that's been sitting open in the
 editor for 8 days" data-loss path.
@@ -646,7 +647,8 @@ diagnosing a sync problem.
 | Sync-drain 5xx backoff | 1s / 2s / 4s / 8s / 16s | build-time constant in `src/admin/sync.ts` |
 | Public /img cache-miss backoff | 0.5s / 1.5s / 3s / 6s / 10s ±20%, capped at 10s | build-time constant in `src/site/img-retry.ts` |
 | Draft-write debounce | 500ms | build-time constant |
-| Lock heartbeat / stale threshold | 30s / 5min | build-time constant |
+| Draft in-use heartbeat / stale | 30s / 60s | `HEARTBEAT_MS` in `src/admin/draft.ts`, `LOCK_GRACE_MS` in `src/lib/eviction-pure.ts` |
+| Drain leader election | `navigator.locks.request('rkr-sync-leader', …)` | browser-managed (no heartbeat — held for the callback's lifetime, released on tab close) |
 
 ## 17. Out of scope (v2)
 
