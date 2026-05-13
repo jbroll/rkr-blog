@@ -1,5 +1,12 @@
 # rkroll-cms — Offline operation specification
 
+> **Status as of 2026-05-13: shipped.** Phase 0 (PWA shell + SW),
+> Phase 1 (OPFS + outbox + drain), Phase 2 (pin existing posts),
+> and Phase 3 (eviction + storage panel) have all landed. This
+> document is the behavioral spec; for the as-built code map see
+> `implementation.md §11 Steps 13–15`. The `IMPLEMENTATION.md`
+> sibling is the per-task ledger of how each phase was delivered.
+
 What the application does when the network is gone, and how it recovers
 when the network returns. Implementation-agnostic — an alternate stack
 should be able to reproduce the application from this document.
@@ -230,7 +237,7 @@ Single source of truth for what happens on each response class:
 | 2xx | delete entry, advance to next |
 | 409 (conflict) | halt drain; surface conflict to user; do not advance until resolved |
 | 4xx (other, e.g. 413, 422) | halt drain; surface "this request was rejected: \<message\>"; offer discard or fix-and-retry |
-| 5xx | retry with backoff (0.5s / 2s / 8s, ±20% jitter — mirrors `src/site/img-retry.ts`); after 3 retries halt and surface |
+| 5xx | retry with backoff (1s / 2s / 4s / 8s / 16s; `src/admin/sync.ts:RETRY_DELAYS_MS`); after the schedule is exhausted halt and surface |
 | network error | same as 5xx |
 | 401 | halt; surface "log in to continue sync"; outbox preserved across login |
 
@@ -636,7 +643,8 @@ diagnosing a sync problem.
 | `rkr-pages-v<n>` LRU cap | 50 | build-time constant |
 | `rkr-images-v<n>` LRU cap | 200 | build-time constant |
 | Online-probe interval (offline state) | 5s | build-time constant |
-| Backoff schedule on 5xx | 0.5s / 2s / 8s ±20% | build-time constant (mirrors `src/site/img-retry.ts`) |
+| Sync-drain 5xx backoff | 1s / 2s / 4s / 8s / 16s | build-time constant in `src/admin/sync.ts` |
+| Public /img cache-miss backoff | 0.5s / 1.5s / 3s / 6s / 10s ±20%, capped at 10s | build-time constant in `src/site/img-retry.ts` |
 | Draft-write debounce | 500ms | build-time constant |
 | Lock heartbeat / stale threshold | 30s / 5min | build-time constant |
 
