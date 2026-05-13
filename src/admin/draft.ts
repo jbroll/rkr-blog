@@ -6,10 +6,10 @@ import type { Editor } from '@tiptap/core';
 
 import { LOCK_GRACE_MS } from '../lib/eviction-pure.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
-import { readRoot, writeRoot } from './opfs-schema.ts';
+import { OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
 
-const DRAFT_DIR = 'drafts';
-const META_DIR = 'meta';
+const DRAFT_DIR = OPFS_DIRS.DRAFTS;
+const META_DIR = OPFS_DIRS.META;
 // Eviction's lock-grace must accommodate at least one missed beat
 // or a live draft with a stale lock would be reclaimed.
 const HEARTBEAT_MS = 30_000;

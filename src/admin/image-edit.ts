@@ -8,10 +8,11 @@ import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
 import { setStatus } from './dom.ts';
 import { getState } from './online-state.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
+import { OPFS_DIRS } from './opfs-schema.ts';
 import { append as outboxAppend } from './outbox.ts';
 import { onImageStateInvalidated, publishImageStateInvalidation, tryDrain } from './sync.ts';
 
-const IMAGE_STATE_DIR = 'image-state';
+const IMAGE_STATE_DIR = OPFS_DIRS.IMAGE_STATE;
 
 interface PersistedImageState {
   schemaVersion: 1;

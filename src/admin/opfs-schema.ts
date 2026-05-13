@@ -9,6 +9,19 @@ const OPFS_SCHEMA_CURRENT = 1 as const;
 
 const ROOT_PATH = 'meta/_root.json';
 
+/** Canonical OPFS layout. Owned by this module so a future schema
+ * migration that renames a directory has one place to change. */
+export const OPFS_DIRS = {
+  DRAFTS: 'drafts',
+  META: 'meta',
+  ORIGINALS: 'originals',
+  SIDECARS: 'sidecars',
+  IMAGE_STATE: 'image-state',
+  BAKES: 'bakes',
+  OUTBOX: 'outbox',
+  OUTBOX_BLOBS: 'outbox-blobs'
+} as const;
+
 /** @public */
 export interface OpfsRoot {
   schemaVersion: number;

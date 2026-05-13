@@ -4,9 +4,9 @@ import { markdownToProse } from '../lib/prose-markdown.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import { readMeta, updateMeta } from './draft.ts';
 import { listDir, readBlob, writeBlob, writeJson } from './opfs.ts';
-import { readRoot, writeRoot } from './opfs-schema.ts';
+import { OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
 
-const META_DIR = 'meta';
+const META_DIR = OPFS_DIRS.META;
 
 /** @public */
 export interface PinManifest {

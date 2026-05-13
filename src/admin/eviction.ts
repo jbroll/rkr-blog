@@ -2,14 +2,15 @@
 
 import { type EvictionPlan, type MetaSnapshot, planEviction } from '../lib/eviction-pure.ts';
 import { listDir, readJson, removeFile } from './opfs.ts';
+import { OPFS_DIRS } from './opfs-schema.ts';
 import { list as outboxList } from './outbox.ts';
 
-const DRAFTS_DIR = 'drafts';
-const META_DIR = 'meta';
-const ORIGINALS_DIR = 'originals';
-const SIDECARS_DIR = 'sidecars';
-const IMAGE_STATE_DIR = 'image-state';
-const BAKES_DIR = 'bakes';
+const DRAFTS_DIR = OPFS_DIRS.DRAFTS;
+const META_DIR = OPFS_DIRS.META;
+const ORIGINALS_DIR = OPFS_DIRS.ORIGINALS;
+const SIDECARS_DIR = OPFS_DIRS.SIDECARS;
+const IMAGE_STATE_DIR = OPFS_DIRS.IMAGE_STATE;
+const BAKES_DIR = OPFS_DIRS.BAKES;
 
 interface PersistedMeta {
   schemaVersion: number;

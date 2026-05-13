@@ -11,10 +11,10 @@
 
 import { coalescePending, type OutboxEntry } from '../lib/outbox-types.ts';
 import { listDir, readBlob, readJson, removeFile, writeBlob, writeJson } from './opfs.ts';
-import { type OpfsRoot, readRoot, writeRoot } from './opfs-schema.ts';
+import { OPFS_DIRS, type OpfsRoot, readRoot, writeRoot } from './opfs-schema.ts';
 
-const OUTBOX_DIR = 'outbox';
-const BLOB_DIR = 'outbox-blobs';
+const OUTBOX_DIR = OPFS_DIRS.OUTBOX;
+const BLOB_DIR = OPFS_DIRS.OUTBOX_BLOBS;
 const APPEND_LOCK = 'rkr-outbox-append';
 
 /** @public */
