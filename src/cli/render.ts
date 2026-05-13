@@ -29,16 +29,23 @@ function parseArgs(argv: string[]): RenderFlags {
     force: false,
     concurrency: Math.max(1, os.cpus().length - 1)
   };
+  const takeValue = (i: number, flag: string): string => {
+    if (i + 1 >= argv.length) throw new Error(`${flag} requires a value`);
+    return argv[i + 1] as string;
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--post') {
-      flags.post = argv[++i];
+      flags.post = takeValue(i, '--post');
+      i++;
     } else if (arg === '--since') {
-      flags.since = argv[++i];
+      flags.since = takeValue(i, '--since');
+      i++;
     } else if (arg === '--force') {
       flags.force = true;
     } else if (arg === '--concurrency') {
-      const n = Number(argv[++i]);
+      const n = Number(takeValue(i, '--concurrency'));
+      i++;
       if (!Number.isFinite(n) || n < 1) {
         throw new Error('--concurrency must be a positive integer');
       }

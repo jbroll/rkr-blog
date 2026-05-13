@@ -45,6 +45,7 @@ function parseArgs(argv: string[]): CliOpts {
 function stringFlag(args: string[], flag: string): string | undefined {
   const i = args.indexOf(flag);
   if (i < 0) return undefined;
+  if (i + 1 >= args.length) throw new Error(`${flag} requires a value`);
   return args[i + 1];
 }
 

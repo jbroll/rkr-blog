@@ -122,6 +122,7 @@ async function push(args: string[]): Promise<void> {
 function numberFlag(args: string[], flag: string): number | undefined {
   const i = args.indexOf(flag);
   if (i < 0) return undefined;
+  if (i + 1 >= args.length) throw new Error(`${flag} requires a numeric value`);
   const v = Number(args[i + 1]);
   if (!Number.isFinite(v)) throw new Error(`${flag} requires a numeric value`);
   return v;
@@ -130,6 +131,7 @@ function numberFlag(args: string[], flag: string): number | undefined {
 function stringFlag(args: string[], flag: string): string | undefined {
   const i = args.indexOf(flag);
   if (i < 0) return undefined;
+  if (i + 1 >= args.length) throw new Error(`${flag} requires a value`);
   return args[i + 1];
 }
 

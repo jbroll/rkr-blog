@@ -50,6 +50,9 @@ function invite(db: ReturnType<typeof open>, rest: string[]): void {
   const email = rest[0];
   if (!email) throw new Error('usage: site-admin user invite <email> [--role owner|editor]');
   const roleIdx = rest.indexOf('--role');
+  if (roleIdx >= 0 && roleIdx + 1 >= rest.length) {
+    throw new Error('--role requires a value (owner|editor)');
+  }
   const role = parseRole(roleIdx >= 0 ? rest[roleIdx + 1] : undefined);
   inviteEmail(db, email, role);
   console.log(`invited ${email.toLowerCase()} as ${role}`);
