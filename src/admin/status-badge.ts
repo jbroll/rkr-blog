@@ -7,7 +7,7 @@ import { openStoragePanel } from './storage-panel.ts';
 import type { DrainStatus } from './sync.ts';
 import { getStatus as getDrainStatus, onStatus as onDrainStatus } from './sync.ts';
 
-let onlineState: OnlineState = 'verifying';
+let onlineState: OnlineState = 'online';
 let drainStatus: DrainStatus = { kind: 'idle' };
 
 /** @public */

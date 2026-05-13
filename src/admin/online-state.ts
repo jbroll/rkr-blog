@@ -1,14 +1,18 @@
-// Connectivity state machine: online / verifying / offline.
-// Combines window 'online'/'offline' events, navigator.onLine, and
-// a HEAD probe to /health (the truth source — navigator.onLine
-// returns true on "wifi without internet").
+// Connectivity state machine: online / offline. Combines window
+// 'online'/'offline' events, navigator.onLine, and a HEAD probe to
+// /health (the truth source — navigator.onLine returns true on
+// "wifi without internet"). The probe runs internally; the
+// in-between "checking" moment is NOT published, because every
+// caller short-circuits it to "treat as online" anyway. Drain
+// progress lives on a separate channel (sync.ts DrainStatus) and
+// is the actionable signal users care about.
 
 const CHANNEL_NAME = 'rkr-online';
 const PROBE_URL = '/health';
 const PROBE_INTERVAL_MS = 5_000;
 
 /** @public */
-export type OnlineState = 'online' | 'verifying' | 'offline';
+export type OnlineState = 'online' | 'offline';
 
 interface OnlineEvent {
   type: 'state';
@@ -18,7 +22,10 @@ interface OnlineEvent {
 const channel: BroadcastChannel | null =
   typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null;
 
-let current: OnlineState = 'verifying';
+// Start optimistically. The first probe (kicked by `start()`) flips
+// to 'offline' if /health is unreachable; until then no caller has
+// any reason to queue.
+let current: OnlineState = 'online';
 let probeTimer: ReturnType<typeof setTimeout> | null = null;
 // BroadcastChannel doesn't deliver to its own posters; same-tab
 // subscribers need a separate fan-out.
@@ -75,7 +82,6 @@ function scheduleNextProbe(): void {
 
 async function runProbe(): Promise<void> {
   const wasOnline = current === 'online';
-  publish('verifying');
   const ok = await probe();
   publish(ok ? 'online' : 'offline');
   // Re-probe on a cadence only when not currently online. Once

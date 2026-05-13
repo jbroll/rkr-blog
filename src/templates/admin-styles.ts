@@ -168,7 +168,6 @@ export const ADMIN_CSS = `
   }
   .rkr-sync-dot.is-online { background: #2ea44f; }
   .rkr-sync-dot.is-offline { background: #cf222e; }
-  .rkr-sync-dot.is-verifying { background: #d4a72c; }
   .rkr-sync-dot.is-conflict { background: #cf222e; box-shadow: 0 0 0 2px color-mix(in srgb, #cf222e 30%, transparent); }
   /* Storage panel dialog (spec-offline §8). Opens from the badge
      click; renders pinned/cached/pending lists + sync-now + evict-

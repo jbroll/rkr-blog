@@ -205,7 +205,7 @@ ${siteHead(data.site, { isAdmin: true })}
   <article id="rkroll-admin-article"></article>
   <button type="button" id="rkr-sync-badge" aria-label="Sync status (click for storage panel)">
     <span class="rkr-sync-dot" aria-hidden="true"></span>
-    <span class="rkr-sync-text">verifying</span>
+    <span class="rkr-sync-text">online</span>
   </button>
 </div>
 <div id="rkroll-admin-status"></div>
