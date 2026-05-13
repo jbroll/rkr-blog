@@ -122,12 +122,17 @@ async function queueSavePost(payload: SavePostPayload): Promise<void> {
 
 /** Pull the comma-separated id list out of every `::figure{…ids=…}`
  * directive in the saved markdown. Returns deduped ids; empty when
- * the post has no figures. */
+ * the post has no figures. proseToMarkdown emits the ids
+ * double-quoted (`ids="aaa,bbb"`); the capture strips surrounding
+ * quotes before splitting. */
 function extractFigureIds(markdown: string): string[] {
   const ids = new Set<string>();
-  const re = /::figure\{[^}]*\bids=([^\s,}]+(?:,[^\s,}]+)*)/g;
+  // Capture everything after `ids=` up to the next whitespace or
+  // `}`; the value may be bare or `"…"`-quoted. Strip a leading +
+  // trailing `"` before splitting on `,`.
+  const re = /::figure\{[^}]*\bids=("[^"]*"|[^\s}]+)/g;
   for (const match of markdown.matchAll(re)) {
-    const list = match[1];
+    const list = match[1]?.replace(/^"|"$/g, '');
     if (!list) continue;
     for (const raw of list.split(',')) {
       const id = raw.trim();

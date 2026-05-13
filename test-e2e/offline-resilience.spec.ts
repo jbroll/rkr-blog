@@ -346,3 +346,64 @@ test('drain: persistent 5xx exhausts retries and surfaces halted in the badge', 
   // is-conflict class applies to both halted + conflict kinds.
   await expect(page.locator('#rkr-sync-badge .rkr-sync-dot')).toHaveClass(/is-conflict/);
 });
+
+test('save: handleSave waits for pending uploads to drain before POSTing', async ({
+  page,
+  context
+}) => {
+  test.setTimeout(60_000);
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  const slug = `e2e-save-waits-${Date.now()}`;
+  await page.locator('#rkr-title').fill('save-waits test');
+  await setSlug(page, slug);
+
+  // Throttle /admin/upload so the drain stretches across ~1.2s,
+  // giving the Save click time to fire while the upload entry is
+  // still queued. Without the throttle, drain completes in <100ms
+  // and handleSave never enters the syncing branch.
+  await context.route('**/admin/upload', async (route) => {
+    await new Promise((r) => setTimeout(r, 1_200));
+    await route.continue();
+  });
+
+  // Upload an image. uploadImage queues an `upload` outbox entry +
+  // void tryDrain(). The drain is now throttled, so the entry stays
+  // queued for ~1.2s.
+  const buf = await makePng(11);
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'wait.png',
+    mimeType: 'image/png',
+    buffer: buf
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded wait/, {
+    timeout: 10_000
+  });
+
+  // Confirm an upload entry exists right after the upload returns
+  // (drain hasn't drained it yet thanks to the throttle).
+  const queuedRightAfter = await page.evaluate(async () => {
+    type Entry = { op: string };
+    const list = (window as unknown as { __rkrOutboxList: () => Promise<Entry[]> }).__rkrOutboxList;
+    const entries = await list();
+    return entries.filter((e) => e.op === 'upload').length;
+  });
+  expect(queuedRightAfter).toBeGreaterThanOrEqual(1);
+
+  // Click Save. handleSave sees an upload entry referencing the
+  // markdown's id → setStatus 'syncing 1 image(s)…' →
+  // awaitDrainSettled → direct POST. We catch the 'syncing' beat
+  // mid-flight, then the final 'saved /…' completion.
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^syncing 1 image/, {
+    timeout: 3_000
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
+    timeout: 10_000
+  });
+});
