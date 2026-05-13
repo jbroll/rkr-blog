@@ -98,6 +98,62 @@ test('renderIndexPage: admin view, empty state', () => {
   assert.match(html, /colspan="5"/);
 });
 
+test('renderIndexPage: dates show date-only when one post per day, date+time when collision', () => {
+  // Two distinct days → both render as YYYY-MM-DD only. A third
+  // post on 2026-05-01 collides with `hello` → both 2026-05-01
+  // entries gain a HH:MM disambiguator; the lone 2026-04-01 entry
+  // stays date-only.
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [
+      { slug: 'hello', title: 'Hello', date: '2026-05-01T09:15:00Z' },
+      { slug: 'hello-pm', title: 'Hello Afternoon', date: '2026-05-01T14:30:00Z' },
+      { slug: 'older', title: 'Older', date: '2026-04-01T00:00:00Z' }
+    ]
+  });
+  // Lone day stays clean.
+  assert.match(html, /<time datetime="2026-04-01T00:00:00Z">2026-04-01<\/time>/);
+  // Colliding day pulls HH:MM in.
+  assert.match(html, /<time datetime="2026-05-01T09:15:00Z">2026-05-01 09:15<\/time>/);
+  assert.match(html, /<time datetime="2026-05-01T14:30:00Z">2026-05-01 14:30<\/time>/);
+  // No raw ISO strings leak into the rendered label.
+  assert.doesNotMatch(html, />2026-05-01T09:15:00Z</);
+});
+
+test('renderIndexPage: admin Updated column also disambiguates same-day rows', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    isAdmin: true,
+    posts: [
+      {
+        slug: 'a',
+        title: 'A',
+        status: 'published',
+        updatedAt: '2026-05-13T08:00:00Z'
+      },
+      {
+        slug: 'b',
+        title: 'B',
+        status: 'published',
+        updatedAt: '2026-05-13T16:45:00Z'
+      },
+      {
+        slug: 'c',
+        title: 'C',
+        status: 'draft',
+        updatedAt: '2026-05-14T10:00:00Z'
+      }
+    ]
+  });
+  assert.match(html, /<time datetime="2026-05-13T08:00:00Z">2026-05-13 08:00<\/time>/);
+  assert.match(html, /<time datetime="2026-05-13T16:45:00Z">2026-05-13 16:45<\/time>/);
+  assert.match(html, /<time datetime="2026-05-14T10:00:00Z">2026-05-14<\/time>/);
+});
+
 test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },

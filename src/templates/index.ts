@@ -80,10 +80,11 @@ ${postsListScript}
 }
 
 function renderAnonymousList(posts: IndexEntry[]): string {
+  const dayCounts = countByDay(posts, (p) => p.date);
   const items = posts
     .map((p) => {
       const dateBlock = p.date
-        ? `<time datetime="${escapeAttr(p.date)}">${escapeText(p.date)}</time>`
+        ? `<time datetime="${escapeAttr(p.date)}">${escapeText(formatListDate(p.date, dayCounts.get(p.date.slice(0, 10)) ?? 0))}</time>`
         : /* c8 ignore next -- runReindex always supplies published_at on listed posts */ '';
       return `  <li>${dateBlock}<a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></li>`;
     })
@@ -91,6 +92,34 @@ function renderAnonymousList(posts: IndexEntry[]): string {
   return `<ul class="post-list">
 ${items}
 </ul>`;
+}
+
+/** Group an ISO-string field across the list, returning per-day
+ * counts keyed on YYYY-MM-DD. Used to decide whether to append a
+ * HH:MM disambiguator to a post's date label. */
+function countByDay(
+  posts: IndexEntry[],
+  pick: (p: IndexEntry) => string | undefined
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const p of posts) {
+    const iso = pick(p);
+    if (!iso) continue;
+    const day = iso.slice(0, 10);
+    out.set(day, (out.get(day) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** "YYYY-MM-DD" when this is the only post on the day; "YYYY-MM-DD
+ * HH:MM" when another post shares the day (UTC, 24h). The time
+ * is only present to disambiguate — wall-clock dates without
+ * minutes are the common case and read cleanly. */
+function formatListDate(iso: string, sameDayCount: number): string {
+  const day = iso.slice(0, 10);
+  if (sameDayCount <= 1) return day;
+  const time = iso.slice(11, 16);
+  return time ? `${day} ${time}` : day;
 }
 
 function renderAdminTable(posts: IndexEntry[]): string {
@@ -108,6 +137,7 @@ function renderAdminTable(posts: IndexEntry[]): string {
   </tbody>
 </table></div>`;
   }
+  const dayCounts = countByDay(posts, (p) => p.updatedAt ?? p.date);
   return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
   <thead>
     <tr>
@@ -119,19 +149,19 @@ function renderAdminTable(posts: IndexEntry[]): string {
     </tr>
   </thead>
   <tbody>
-${posts.map(renderAdminRow).join('\n')}
+${posts.map((p) => renderAdminRow(p, dayCounts)).join('\n')}
   </tbody>
 </table></div>`;
 }
 
-function renderAdminRow(p: IndexEntry): string {
-  const date = (p.updatedAt ?? p.date ?? '').slice(0, 10);
-  const datetime = p.updatedAt ?? p.date ?? '';
+function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
+  const iso = p.updatedAt ?? p.date ?? '';
+  const label = iso ? formatListDate(iso, dayCounts.get(iso.slice(0, 10)) ?? 0) : '';
   const slugUri = encodeURIComponent(p.slug);
   const status = p.status ?? 'draft';
   return `  <tr data-slug="${escapeAttr(p.slug)}">
     <td><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></td>
-    <td>${datetime ? `<time datetime="${escapeAttr(datetime)}">${escapeText(date)}</time>` : ''}</td>
+    <td>${iso ? `<time datetime="${escapeAttr(iso)}">${escapeText(label)}</time>` : ''}</td>
     <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
         <label class="rkr-vh" for="rkr-status-${escapeAttr(p.slug)}">Status for ${escapeAttr(p.title)}</label>
