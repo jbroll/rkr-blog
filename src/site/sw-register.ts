@@ -27,6 +27,12 @@ if ('serviceWorker' in navigator) {
     url.searchParams.delete('_rkr');
     const clean = url.pathname + (url.search ? url.search : '') + url.hash;
     history.replaceState(null, '', clean);
+    // postMessage to the controlling SW is same-origin by construction
+    // (a SW is registered against its own origin's scope and only
+    // controls navigations rooted there). sw-core.ts:runMessage only
+    // acts on `type === 'rkr-pages-flush'` and ignores all else, so
+    // even a hypothetical message from another tab same-origin sender
+    // is harmless. No origin check needed here.
     navigator.serviceWorker?.controller?.postMessage({ type: 'rkr-pages-flush' });
   }
 }

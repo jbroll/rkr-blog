@@ -50,6 +50,11 @@ function lruSet<K, V>(
   }
 }
 
+// IMAGE_CACHE_CAP bounds BOTH originalCache (decoded HTMLImage
+// promises) AND previewBlobUrls (last-bake blob URLs per id) AND
+// pipelineCaches below. A 24-MP decoded HTMLImageElement is ~100MB
+// of decoded RGBA; capping at 16 keeps the worst-case roughly under
+// 2GB across the three caches.
 const originalCache = new Map<string, Promise<HTMLImageElement>>();
 const previewBlobUrls = new Map<string, string>();
 // One pipeline cache per image id. On the common "added one op" case

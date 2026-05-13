@@ -122,9 +122,16 @@ export function isNoStore(res: Response): boolean {
   return /\bno-store\b/i.test(cc);
 }
 
-/** Add `req → res` to `cache`, then trim to the cap by deleting the
- * oldest entries (FIFO via insertion order, since the Cache API
- * doesn't expose true LRU semantics). */
+/** Add `req → res` to `cache`, then trim to the cap by deleting
+ * the oldest entries. The Cache API doesn't expose true LRU, but
+ * the spec (Service Workers — Cache#keys) guarantees `keys()`
+ * returns entries in insertion order, so an age-based FIFO trim
+ * works without tracking timestamps. A new put for an existing
+ * key updates that key in place (not moved to the end), so this
+ * is FIFO-by-first-insertion, not by last-access. That's the
+ * right policy for content-addressed /img/* URLs (ophash never
+ * collides) and acceptable for /static/* (versioned by deploy
+ * hash). */
 export async function cacheWithCap(
   cache: CacheLike,
   req: Request,

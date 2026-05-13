@@ -117,7 +117,15 @@ export function enqueue<P>(db: Db, { kind, payload, cacheKey }: EnqueueArgs<P>):
   return { id: r.lastInsertRowid, duplicate: false };
 }
 
-/** Atomically claim one queued job. Returns null if none available. */
+/** Atomically claim one queued job. Returns null if none available.
+ *
+ * Two-statement pattern (SELECT-then-UPDATE) instead of a single
+ * UPDATE...RETURNING with ORDER BY because better-sqlite3 doesn't
+ * support that combination. The race window between the two
+ * statements is closed by the UPDATE's `state='queued'` predicate +
+ * RETURNING: if another worker claimed the same id first, the
+ * UPDATE matches zero rows and `claimed` is undefined — we return
+ * null instead of double-claiming. */
 export function claim<P = unknown>(db: Db): ClaimedJob<P> | null {
   const candidate = db
     .prepare<Pick<JobRow, 'id' | 'kind' | 'payload'>>(

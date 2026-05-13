@@ -149,6 +149,11 @@ export const FigureNode = Node.create({
       // gap between thumbs / actions / caption). Setting the bit
       // explicitly at every structural layer closes that inheritance
       // hole; the figure stays a normal selectable atom otherwise.
+      // attrs.caption is rendered as a TEXT child of the div (3rd
+      // tuple entry is a string), which TipTap treats as a text
+      // node — no innerHTML construction, so the browser HTML-
+      // escapes the value on its own. Don't change to string-
+      // building HTML without re-adding explicit escaping.
       ...(attrs.caption
         ? [['div', { class: 'rkr-multi-caption', contenteditable: 'false' }, attrs.caption]]
         : [])

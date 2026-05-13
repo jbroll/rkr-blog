@@ -1,6 +1,17 @@
 // Editor draft persistence to OPFS (spec-offline §7). Single-draft
 // session today; multi-draft list lands when phase 2 pinning grows
 // past the storage panel's needs.
+//
+// Two timestamps live here with different jobs:
+// - `lastAccessedAt` (in meta/<draftId>.json) is the "recent user
+//   activity" signal; it bumps on every keystroke debounce flush
+//   below. Eviction reads it against the 7-day TTL.
+// - The lock file (`drafts/<draftId>.lock`) is the "tab alive"
+//   signal; it's written every HEARTBEAT_MS regardless of typing
+//   so eviction's lock-grace window protects an open-but-idle
+//   editor from being reclaimed. The two are deliberately
+//   independent — see eviction-pure.ts for the planner that uses
+//   both.
 
 import type { Editor } from '@tiptap/core';
 

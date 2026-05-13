@@ -301,8 +301,12 @@ async function drainLoop(): Promise<void> {
   publish({ kind: 'idle' });
   // Eviction runs after each drain-to-empty (spec-offline §7). Direct
   // call instead of pub/sub — the dependency is real and the
-  // indirection hid it. Errors swallowed to match the prior
-  // try-catch-swallow behaviour.
+  // indirection hid it. Errors here swallow on purpose: a transient
+  // OPFS failure (quota glitch, IO race) shouldn't surface from the
+  // drain loop; the NEXT drain-to-empty re-runs eviction, and the
+  // standalone startup-time eviction call gives us a second chance
+  // on the next page load. Worst case: a brief over-quota state
+  // until either path retries.
   try {
     await runEviction();
   } catch {
