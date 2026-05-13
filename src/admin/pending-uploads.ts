@@ -9,49 +9,40 @@
 // (drain succeeded but the tab died before marker delete). GC
 // runs at startup against the current outbox list.
 
-import { listDir, readJson, removeFile, writeJson } from './opfs.ts';
+import { readJson, removeFile, writeJson } from './opfs.ts';
 import { OPFS_DIRS } from './opfs-schema.ts';
-import { list as outboxList } from './outbox.ts';
 
-const DIR = OPFS_DIRS.PENDING_UPLOADS;
+export const PENDING_UPLOADS_DIR = OPFS_DIRS.PENDING_UPLOADS;
 
 interface Marker {
   seq: number;
 }
 
 export async function markPendingUpload(id: string, seq: number): Promise<void> {
-  await writeJson(`${DIR}/${id}.json`, { seq } satisfies Marker);
+  await writeJson(`${PENDING_UPLOADS_DIR}/${id}.json`, { seq } satisfies Marker);
 }
 
 export async function clearPendingUpload(id: string): Promise<void> {
   /* v8 ignore next -- file may already be gone from cross-tab drain */
-  await removeFile(`${DIR}/${id}.json`).catch(() => {});
+  await removeFile(`${PENDING_UPLOADS_DIR}/${id}.json`).catch(() => {});
 }
 
 /** True iff any of `ids` has a pending-upload marker. Returns
  * early on the first hit. */
 export async function hasPendingMarker(ids: readonly string[]): Promise<boolean> {
   for (const id of ids) {
-    const m = await readJson<Marker>(`${DIR}/${id}.json`);
+    const m = await readJson<Marker>(`${PENDING_UPLOADS_DIR}/${id}.json`);
     if (m) return true;
   }
   return false;
 }
 
-/** Reconcile markers against the live outbox. Markers whose seq
- * is no longer in the outbox (drained or coalesced away) are
- * dropped. Runs once at startup. */
-export async function gcOrphanPendingMarkers(): Promise<void> {
+/** Extract the outbox seq from a marker file. Used by the shared
+ * `gcOrphansAgainstOutbox` (outbox.ts) at startup. */
+export async function seqFromMarker(name: string): Promise<number | null> {
   /* v8 ignore start -- startup-only path; covered by e2e */
-  const entries = await listDir(DIR);
-  if (entries.length === 0) return;
-  const liveSeqs = new Set((await outboxList()).filter((e) => e.op === 'upload').map((e) => e.seq));
-  for (const name of entries) {
-    if (!name.endsWith('.json')) continue;
-    const m = await readJson<Marker>(`${DIR}/${name}`);
-    if (!m || !liveSeqs.has(m.seq)) {
-      await removeFile(`${DIR}/${name}`).catch(() => {});
-    }
-  }
+  if (!name.endsWith('.json')) return null;
+  const m = await readJson<Marker>(`${PENDING_UPLOADS_DIR}/${name}`);
+  return m?.seq ?? null;
   /* v8 ignore stop */
 }

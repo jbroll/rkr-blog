@@ -4,6 +4,7 @@
 // `SavePostConflictError` (value) from here. One-way arrow — no
 // cycle. Enforced by the circular-import gauntlet check.
 
+import { runEviction } from './eviction.ts';
 import { getState as getOnlineState } from './online-state.ts';
 import {
   listSuperseded,
@@ -298,13 +299,14 @@ async function drainLoop(): Promise<void> {
   }
 
   publish({ kind: 'idle' });
-  // After-drain-empty hook (spec-offline §7): eviction subscribes.
-  for (const fn of afterEmptyHandlers) {
-    try {
-      await fn();
-    } catch {
-      /* swallow */
-    }
+  // Eviction runs after each drain-to-empty (spec-offline §7). Direct
+  // call instead of pub/sub — the dependency is real and the
+  // indirection hid it. Errors swallowed to match the prior
+  // try-catch-swallow behaviour.
+  try {
+    await runEviction();
+  } catch {
+    /* swallow */
   }
 }
 
@@ -359,11 +361,3 @@ async function readEntryBlobOrThrow(seq: number): Promise<Blob> {
   return blob;
 }
 /* v8 ignore stop */
-
-const afterEmptyHandlers = new Set<() => Promise<void> | void>();
-
-/** @public */
-export function onAfterDrainEmpty(handler: () => Promise<void> | void): () => void {
-  afterEmptyHandlers.add(handler);
-  return () => afterEmptyHandlers.delete(handler);
-}

@@ -96,31 +96,43 @@ export async function readEntryBlob(seq: number): Promise<Blob | null> {
   return readBlob(blobPath(seq));
 }
 
-/** GC orphan blobs under `outbox-blobs/`. append() writes the blob
- * before the JSON (intentional — a crash between blob+JSON leaves
- * an orphan blob rather than a JSON pointing at a missing blob,
- * the latter halts the drain). Eviction doesn't sweep this dir, so
- * orphans accumulate over time on quota / IO failure.
+/** Live outbox seqs (filename-parsed; no JSON I/O). */
+async function listLiveSeqs(): Promise<Set<number>> {
+  const names = await listDir(OUTBOX_DIR).catch(() => [] as string[]);
+  const seqs = new Set<number>();
+  for (const name of names) {
+    const m = /^(\d+)\./.exec(name);
+    if (m) seqs.add(Number(m[1]));
+  }
+  return seqs;
+}
+
+/** GC orphan files in `dir` against the live outbox. Each file's
+ * seq is derived by `seqFromName` (sync regex for filename-encoded
+ * seq, or async readJson for inline-encoded seq). Files whose seq
+ * is not in the live set are removed.
  *
- * Match by name: outbox-blobs/<seq>.bin paired with outbox/<seq>.<op>.json.
- * Any .bin whose <seq> doesn't appear in the JSON dir is orphan.
+ * Two orphan classes are reconciled this way:
+ *  - `outbox-blobs/<seq>.bin` — written before the JSON commits
+ *    (intentional ordering; crash between blob+JSON leaves an
+ *    orphan blob rather than a drain-halting dangling JSON).
+ *  - `pending-uploads/<id>.json` — written at outboxAppend time,
+ *    removed at drainUpload success. A tab killed between drain
+ *    success and the marker-delete leaves an orphan.
+ *
  * Best-effort; failures don't block startup.
  * @public */
-export async function gcOrphanOutboxBlobs(): Promise<number> {
-  const jsonNames = await listDir(OUTBOX_DIR).catch(() => [] as string[]);
-  const blobNames = await listDir(BLOB_DIR).catch(() => [] as string[]);
-  const liveSeqs = new Set<number>();
-  for (const name of jsonNames) {
-    const m = /^(\d+)\./.exec(name);
-    if (m) liveSeqs.add(Number(m[1]));
-  }
+export async function gcOrphansAgainstOutbox(
+  dir: string,
+  seqFromName: (name: string) => Promise<number | null> | number | null
+): Promise<number> {
+  const live = await listLiveSeqs();
+  const names = await listDir(dir).catch(() => [] as string[]);
   let removed = 0;
-  for (const name of blobNames) {
-    const m = /^(\d+)\.bin$/.exec(name);
-    if (!m) continue;
-    const seq = Number(m[1]);
-    if (liveSeqs.has(seq)) continue;
-    await removeFile(`${BLOB_DIR}/${name}`);
+  for (const name of names) {
+    const seq = await seqFromName(name);
+    if (seq !== null && live.has(seq)) continue;
+    await removeFile(`${dir}/${name}`).catch(() => {});
     removed++;
   }
   return removed;

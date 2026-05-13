@@ -10,27 +10,21 @@ import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts'
 import { runEviction } from './eviction.ts';
 import { hydrateLocalThumbs } from './local-thumb.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
-import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
+import { ensureSchema, OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
-  gcOrphanOutboxBlobs,
+  gcOrphansAgainstOutbox,
   append as outboxAppend,
   list as outboxList,
   pendingCount
 } from './outbox.ts';
 import { refreshPageTitle } from './page-title.ts';
-import { gcOrphanPendingMarkers } from './pending-uploads.ts';
+import { PENDING_UPLOADS_DIR, seqFromMarker } from './pending-uploads.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
 import { openStoragePanel } from './storage-panel.ts';
-import {
-  discardConflictedSave,
-  forceConflictedSave,
-  onAfterDrainEmpty,
-  registerDrainer,
-  tryDrain
-} from './sync.ts';
+import { discardConflictedSave, forceConflictedSave, registerDrainer, tryDrain } from './sync.ts';
 
 export async function startOfflineInfrastructure(editor: Editor): Promise<void> {
   const ready = runStart(editor);
@@ -69,16 +63,16 @@ async function runStart(editor: Editor): Promise<void> {
     // op='bake' entries that have no drainer in this build. Drop them
     // up front so the drain loop doesn't halt on the first one.
     void dropLegacyOpEntries();
-    // Sweep orphan outbox blobs (writeBlob succeeded but the JSON
-    // write failed — quota, IO error). Eviction doesn't reach this
-    // dir, so without an explicit GC orphans accumulate until OPFS
-    // fills up.
-    void gcOrphanOutboxBlobs();
-    // Pending-upload markers for save-waits-for-uploads. Same race
-    // shape as outbox blobs: a drain that succeeded but the tab died
-    // before clear leaves a stale marker. Reconcile against the live
-    // outbox.
-    void gcOrphanPendingMarkers();
+    // Sweep two classes of outbox orphans against the live JSON list:
+    // blob files (writeBlob succeeded but JSON write didn't), and
+    // pending-upload markers (drain succeeded but the tab died before
+    // the marker delete). Eviction doesn't reach either dir; without
+    // these sweeps they'd accumulate.
+    void gcOrphansAgainstOutbox(OPFS_DIRS.OUTBOX_BLOBS, (name) => {
+      const m = /^(\d+)\.bin$/.exec(name);
+      return m ? Number(m[1]) : null;
+    });
+    void gcOrphansAgainstOutbox(PENDING_UPLOADS_DIR, seqFromMarker);
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.
     //   ?new=1     → discard any in-progress draftId and create a
@@ -141,7 +135,9 @@ async function runStart(editor: Editor): Promise<void> {
     }
     startDraftPersistence(editor, draftId);
     mountStatusBadge();
-    onAfterDrainEmpty(() => runEviction().then(() => undefined));
+    // Eviction-after-drain is wired directly inside sync.ts; this
+    // initial run reclaims OPFS for whatever's already stale on
+    // mount.
     void runEviction();
     const pending = await pendingCount();
     if (pending > 0) setStatus(`${pending} pending offline edit(s)`);
