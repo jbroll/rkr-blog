@@ -46,6 +46,15 @@ async function pendingUploadIds(): Promise<Set<string>> {
   return ids;
 }
 
+/** Per-id blob URL registry. Without revoking on replacement, every
+ * fresh hydration leaks the prior URL's underlying Blob until tab
+ * close — a real growth path during long sessions or pages with
+ * many figures. canvas-loaders.ts holds an analogous map for the
+ * preview pipeline; we deliberately keep them separate because the
+ * lifetimes differ (preview rebuilds on every op; thumb rebuilds
+ * once per upload + once per re-hydration). */
+const thumbBlobUrls = new Map<string, string>();
+
 /** Swap `<img.rkr-image[data-id="<id>"]>` srcs in the editor to a
  * blob: URL backed by the OPFS original.
  *
@@ -61,7 +70,8 @@ async function pendingUploadIds(): Promise<Set<string>> {
  *   silently hide the saved crop/rotate/etc on every reload.
  *
  * Safe to call repeatedly; imgs with no local copy in OPFS are
- * left alone. */
+ * left alone. Prior URLs for the same id are revoked before the
+ * new one is set so blobs don't accumulate across re-hydrations. */
 export async function hydrateLocalThumbs(editor: Editor, ids?: readonly string[]): Promise<void> {
   let targets: string[];
   if (ids) {
@@ -82,6 +92,9 @@ export async function hydrateLocalThumbs(editor: Editor, ids?: readonly string[]
       const blob = await readLocalOriginal(id);
       if (!blob) return;
       const url = URL.createObjectURL(blob);
+      const prior = thumbBlobUrls.get(id);
+      if (prior) URL.revokeObjectURL(prior);
+      thumbBlobUrls.set(id, url);
       const matches = editor.view.dom.querySelectorAll<HTMLImageElement>(
         `img.rkr-image[data-id="${id}"]`
       );
