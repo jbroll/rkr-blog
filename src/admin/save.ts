@@ -90,6 +90,12 @@ export async function handleSave(editor: Editor): Promise<void> {
     setStatus(`syncing ${referencedIds.length} image(s)…`);
     await awaitDrainSettled();
   }
+  // Re-check after the drain settles. awaitDrainSettled returns once
+  // the leader-elected drain reaches an idle/halted/conflict state,
+  // but a partial drain (one id committed, another halted on a 4xx)
+  // leaves some markers behind. If any are still present, fall through
+  // to the offline-queue branch — POSTing now would write a post
+  // referencing ids the server can't resolve.
   const uploadsStillPending = await hasPendingMarker(referencedIds);
   if (getState() !== 'offline' && !uploadsStillPending) {
     try {
@@ -112,12 +118,21 @@ export async function handleSave(editor: Editor): Promise<void> {
       // same 409 on drain and surface it via DrainStatus 'conflict'.
     }
   }
-  await queueSavePost(payload);
+  await queueSavePost(payload, uploadsStillPending ? referencedIds.length : 0);
 }
 
-async function queueSavePost(payload: SavePostPayload): Promise<void> {
+async function queueSavePost(payload: SavePostPayload, pendingImages: number): Promise<void> {
   await outboxAppend({ op: 'savePost', payload });
-  setStatus(`queued /${payload.slug} for sync`);
+  // Distinguish the "you're offline" case from the "online but an
+  // upload is still draining" case — the second one points at a
+  // partial drain (some referenced image's upload halted), which
+  // the user should know about so they don't expect the post to
+  // appear at /:slug yet.
+  if (pendingImages > 0) {
+    setStatus(`queued /${payload.slug} — ${pendingImages} image(s) still syncing`);
+  } else {
+    setStatus(`queued /${payload.slug} for sync`);
+  }
   void tryDrain();
 }
 
