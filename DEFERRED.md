@@ -209,23 +209,6 @@ under Fly's edge timeout (~15s), or invert the policy (queue first,
 await briefly with a short timeout, return 202 quickly). Worth a
 focused look before the demo gets traffic.
 
-### Render 500 on pathological tiny PNG
-
-**Source.** Smoke testing 2026-05-09 — a hand-rolled 1×1 PNG
-(67 bytes) triggered `"render failed"` 500 from `GET /img/...`.
-
-**What.** Sharp throws on the derivative pipeline for inputs at the
-extreme small end. The route catches the throw and returns 500;
-there's no "input is too small to derive a variant from" guard
-upstream.
-
-**Why deferred.** Every realistic source image works. The 1×1 PNG
-came from a synthetic test fixture, not a real upload path.
-
-**Trigger.** If a real upload triggers it (e.g., an image that
-encoded as 1×1 due to a corrupt EXIF orientation), or if we ever
-allow tiny icons / thumbnails as figure inputs.
-
 ### `src/admin/main.ts` is exactly at the 500-line size cap
 
 **Source.** Size audit 2026-05-09, refreshed after per-cell editing
