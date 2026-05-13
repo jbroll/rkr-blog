@@ -28,6 +28,13 @@ const FLOOR = 0.75;
 const LCOV_PATH = 'coverage/e2e/lcov.info';
 const BASELINE_PATH = 'coverage-baseline.json';
 
+// Files exempt from the new-file gate. Service worker code runs in a
+// separate thread that Playwright's page.coverage can't instrument, so
+// the e2e suite is structurally unable to exercise these files. They
+// are covered by unit tests under test/site/ instead (e.g. sw-core.ts
+// at 100% lines via test/site/sw-core.test.ts).
+const EXEMPT: ReadonlySet<string> = new Set(['src/site/sw.ts', 'src/site/sw-core.ts']);
+
 interface FileMetric {
   linesFound: number;
   linesHit: number;
@@ -109,6 +116,7 @@ function checkOne(
   prev: FileMetric | undefined,
   cur: FileMetric | undefined
 ): Failure | null {
+  if (EXEMPT.has(file)) return null;
   const inHead = existedInHead(file);
 
   // Case 1: brand-new file. Must hit the floor.
