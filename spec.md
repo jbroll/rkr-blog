@@ -414,7 +414,6 @@ preserving the existing per-node-type editing affordances.
 |---|---|---|
 | Local upload | multi-file input + drag-drop / paste into the editor | session |
 | Plain URL | server-side fetch (size + content-type capped) | session |
-| Dropbox | Chooser SDK | none for read |
 | OneDrive | File Picker SDK + Graph API | OAuth2 |
 | Google Drive | Picker API + Drive v3 (`drive.file` scope) | OAuth2 |
 
@@ -428,26 +427,68 @@ OAuth tokens are stored encrypted at rest with a server-held key.
 
 ## 11. HTTP routes
 
+Routes are split across `src/routes/*.ts` files (each kept under
+the 500-line size cap). Auth required is `session` (Google OAuth +
+allowlist) unless noted; `bearer` (ADMIN_TOKEN) endpoints accept
+either mechanism, useful for scripted clients.
+
 ```
-GET  /                              rendered post index
-GET  /:slug                         rendered single post
-GET  /img/:filename                 derivative image (cache-miss handler)
-POST /admin/login                   OAuth start (provider redirect)
-GET  /admin                         editor SPA
-POST /admin/posts                   create post
-PUT  /admin/posts/:id               update post
-POST /admin/upload                  multipart, streams to originals
-POST /admin/import/url              server-side fetch
-POST /admin/import/dropbox          accept Chooser payload
-POST /admin/import/onedrive         accept Picker payload + token
-POST /admin/import/gdrive           accept Picker payload + token
-GET  /admin/preview/:id             302 to a derivative URL the editor uses as <img src>
-GET  /admin/original/:id            stream the master bytes for the client canvas pipeline
-GET  /admin/sidecar/:id/meta        sidecar dimensions + ops + redoStack
-POST /admin/sidecar/:id/ops         replace ops + (optional) redoStack
-POST /admin/sidecar/:id/bake        upload the client-baked post-ops image
-GET  /health                        liveness probe
+# Public — public.ts
+GET    /                              rendered post index (paginated)
+GET    /:slug                         rendered single post
+GET    /img/:filename                 derivative image (cache-miss handler)
+
+# Liveness — server.ts
+GET    /health                        liveness probe
+
+# Auth — auth.ts
+GET    /login                         login page (token + Google buttons)
+GET    /admin/auth/google/start       Google OAuth begin (redirect)
+GET    /admin/auth/google/callback    Google OAuth code exchange
+POST   /admin/auth/token-login        ADMIN_TOKEN bearer login (form)
+POST   /admin/logout                  destroy session
+
+# Admin core — admin.ts
+GET    /admin/editor                  editor SPA shell
+POST   /admin/posts                   save markdown (insert or overwrite by slug)
+POST   /admin/upload                  multipart, streams to originals
+POST   /admin/reset                   wipe posts/images/cache (bearer)
+
+# Admin posts index — admin-posts.ts
+GET    /admin/posts                   post list (drafts + published)
+POST   /admin/posts/:slug/delete      delete a post + its sidecar refs
+POST   /admin/posts/:slug/status      flip draft ↔ published
+
+# Admin image edit — admin-image-lookup.ts + admin-sidecar-edit.ts
+GET    /admin/preview/:id             302 to a derivative URL the editor uses as <img src>
+GET    /admin/original/:id            stream the master bytes for the client canvas pipeline
+GET    /admin/sidecar/:id/meta        sidecar dimensions + ops + redoStack
+POST   /admin/sidecar/:id/commit      replace ops + (optional) post-ops bake upload (atomic)
+
+# Admin settings — admin-settings.ts
+GET    /admin/settings                read site title / tagline / theme
+POST   /admin/settings                update site config
+
+# Admin imports — admin-import-url.ts + integrations-{gdrive,onedrive}.ts
+POST   /admin/import/url              server-side fetch
+POST   /admin/import/gdrive           Google Drive Picker payload
+POST   /admin/import/onedrive         OneDrive Picker payload
+
+# Admin offline pin/load — admin-post-bundle.ts
+GET    /admin/post-bundle/:slug       full post JSON for offline editor load
+
+# Integrations — integrations-gdrive.ts (and identical onedrive.ts)
+GET    /admin/integrations/<p>/connect          OAuth initiation
+GET    /admin/integrations/<p>/callback         OAuth code exchange
+GET    /admin/integrations/<p>/picker-config    Picker SDK config
+GET    /admin/integrations/<p>/status           connected user info
+GET    /admin/integrations/<p>/access-token     short-lived token for Picker SDK
+POST   /admin/integrations/<p>/disconnect       revoke tokens
 ```
+
+(`<p>` ∈ {`gdrive`, `onedrive`}; OneDrive Picker SDK integration is
+deferred pending MS Entra app registration — server-side endpoints
+are in place.)
 
 ## 12. Operator commands
 
