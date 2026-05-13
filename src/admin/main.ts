@@ -5,11 +5,11 @@ import StarterKit from '@tiptap/starter-kit';
 // CSS side-effect import — esbuild bundles into static/admin/main.js.
 import 'cropperjs/dist/cropper.css';
 
-import { scheduleAttrCommit } from './attr-commit';
 import { hasWebglSupport } from './canvas-loaders';
 import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
+import { makeCommitFigureAttr, wireDebouncedAttrInput } from './figure-attr-panel';
 import { type FigureAttrs, FigureNode } from './figure-node';
 import { dirtyImageStates } from './image-edit';
 import { wireImageEditPanel } from './image-edit-panel';
@@ -34,7 +34,8 @@ function mount(): void {
   // Figure-level inputs.
   const attrCaption = $<HTMLInputElement>('rkr-figure-caption');
   const attrMatrixRoot = $<HTMLDivElement>('rkr-figure-matrix');
-  // commitFigureAttr's hoisted declaration makes the forward ref safe.
+  // The arrow captures commitFigureAttr lexically; it's defined later
+  // in this scope but only invoked when the user actually picks a layout.
   const matrixControl = mountMatrixControl(attrMatrixRoot, (raw) =>
     commitFigureAttr('matrix', raw)
   );
@@ -337,16 +338,7 @@ function mount(): void {
     if (ev.target === figureDialog) figureDialog.close();
   });
 
-  /** Patch a single figure attr. Field name maps directly to a
-   * FigureAttrs key; value is the raw input value (timer is coerced). */
-  function commitFigureAttr(name: keyof FigureAttrs, value: string): void {
-    if (populating || !editor.isActive('figure')) return;
-    const patch: Partial<FigureAttrs> =
-      name === 'timer'
-        ? { timer: Math.max(0, Math.min(60, Math.floor(Number(value) || 0))) }
-        : ({ [name]: value } as Partial<FigureAttrs>);
-    editor.chain().focus().updateAttributes('figure', patch).run();
-  }
+  const commitFigureAttr = makeCommitFigureAttr(editor, () => populating);
 
   /** Replace one slot of a parallel array (pads with empties). */
   function spliceCellSlot(current: string, sep: '|' | ',', idx: number, value: string): string {
@@ -363,9 +355,12 @@ function mount(): void {
       setStatus('warning: justify=inline hides the caption at render time');
     }
   };
-  attrCaption.addEventListener('input', () => {
-    scheduleAttrCommit('caption', () => commitFigureAttr('caption', attrCaption.value));
-    warnInlineCap();
+  wireDebouncedAttrInput({
+    key: 'caption',
+    input: attrCaption,
+    buildValue: () => attrCaption.value,
+    commit: (v, h) => commitFigureAttr('caption', v, { addToHistory: h }),
+    onInput: warnInlineCap
   });
   attrJustify.addEventListener('change', () => {
     commitFigureAttr('justify', attrJustify.value);
@@ -378,21 +373,27 @@ function mount(): void {
 
   // Per-cell caption + alt: edit the slot in the parallel captions
   // (pipe-separated) and alts (comma-separated) arrays.
-  attrCellCaption.addEventListener('input', () => {
-    if (populating || activeCellIndex === null || !editor.isActive('figure')) return;
-    const idx = activeCellIndex;
-    scheduleAttrCommit('captions', () => {
+  const cellSlotGuard = (): boolean =>
+    !populating && activeCellIndex !== null && editor.isActive('figure');
+  wireDebouncedAttrInput({
+    key: 'captions',
+    input: attrCellCaption,
+    buildValue: () => {
+      if (!cellSlotGuard() || activeCellIndex === null) return null;
       const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).captions ?? '';
-      commitFigureAttr('captions', spliceCellSlot(cur, '|', idx, attrCellCaption.value));
-    });
+      return spliceCellSlot(cur, '|', activeCellIndex, attrCellCaption.value);
+    },
+    commit: (v, h) => commitFigureAttr('captions', v, { addToHistory: h })
   });
-  attrCellAlt.addEventListener('input', () => {
-    if (populating || activeCellIndex === null || !editor.isActive('figure')) return;
-    const idx = activeCellIndex;
-    scheduleAttrCommit('alts', () => {
+  wireDebouncedAttrInput({
+    key: 'alts',
+    input: attrCellAlt,
+    buildValue: () => {
+      if (!cellSlotGuard() || activeCellIndex === null) return null;
       const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).alts ?? '';
-      commitFigureAttr('alts', spliceCellSlot(cur, ',', idx, attrCellAlt.value.trim()));
-    });
+      return spliceCellSlot(cur, ',', activeCellIndex, attrCellAlt.value.trim());
+    },
+    commit: (v, h) => commitFigureAttr('alts', v, { addToHistory: h })
   });
 
   // Remove the active cell from the figure (image bytes + sidecar

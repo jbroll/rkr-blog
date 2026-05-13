@@ -40,3 +40,13 @@ export function flushPendingAttrCommits(): void {
   }
   pending.clear();
 }
+
+/** Drop the pending fn for `key` without running it. Used by blur
+ * handlers that are about to replace the pending silent commit with
+ * a history-eligible commit of the same value. */
+export function cancelPendingAttrCommit(key: string): void {
+  const prev = pending.get(key);
+  if (!prev) return;
+  clearTimeout(prev.timer);
+  pending.delete(key);
+}
