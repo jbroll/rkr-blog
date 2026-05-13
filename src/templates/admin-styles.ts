@@ -258,15 +258,16 @@ export const ADMIN_CSS = `
   .rkr-cell-dialog-head h2 { margin-right: auto; }
   .rkr-cell-dialog-head .rkr-cell-dialog-close { order: 2; margin-left: 1.25rem; }
   .rkr-cell-dialog-head .rkr-cell-delete { order: 1; }
-  #rkroll-admin-root button.rkr-cell-delete {
+  /* <dialog> is at body scope, outside #rkroll-admin-root — selector
+     must NOT scope to that id or the default button chrome (border,
+     grey background) leaks through. */
+  .rkr-cell-delete {
     background: none; border: 0; padding: .25rem; cursor: pointer;
     color: var(--rkr-muted); display: inline-flex; align-items: center;
     line-height: 1;
   }
-  #rkroll-admin-root button.rkr-cell-delete:hover,
-  #rkroll-admin-root button.rkr-cell-delete:focus-visible {
-    color: var(--rkr-danger);
-  }
+  .rkr-cell-delete:hover,
+  .rkr-cell-delete:focus-visible { color: var(--rkr-danger); }
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
   #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }
   #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
