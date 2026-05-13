@@ -91,7 +91,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 20,
-      "linesHit": 20
+      "linesHit": 19
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 37
+      "linesHit": 34
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -166,8 +166,8 @@
       "linesHit": 6
     },
     "src/admin/page-title.ts": {
-      "linesFound": 16,
-      "linesHit": 16
+      "linesFound": 18,
+      "linesHit": 18
     },
     "src/admin/image-edit-panel.ts": {
       "linesFound": 52,
@@ -211,7 +211,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 25,
-      "linesHit": 24
+      "linesHit": 23
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,

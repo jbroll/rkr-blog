@@ -74,16 +74,18 @@ export const ADMIN_CSS = `
     -moz-user-select: none; -ms-user-select: none;
     -webkit-touch-callout: none; touch-action: pan-y;
   }
-  /* Editor mode label ("New post" / "Edit post") — muted heading
-     above the title input, identifies the create-vs-edit mode. */
-  #rkr-page-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--rkr-muted, #707070);
-    margin: 0 0 .75rem;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+  /* Mode label + flush-right View link on the same baseline. */
+  .rkr-page-title-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 1rem; margin: 0 0 .75rem;
   }
+  #rkr-page-title {
+    font-size: 1rem; font-weight: 500; margin: 0;
+    color: var(--rkr-muted, #707070);
+    letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .rkr-page-view { font-size: .9rem; color: var(--rkr-link); text-decoration: none; }
+  .rkr-page-view:hover { color: var(--rkr-link-hover); text-decoration: underline; }
   /* Admin chrome reuses site.css --rkr-* tokens; fallbacks after the
      comma cover site.css failing to load. */
   /* Sticky toolbar: pins to the viewport edge once scrolled into the
@@ -203,8 +205,7 @@ export const ADMIN_CSS = `
   .rkr-matrix-params { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .rkr-matrix-params[hidden] { display: none; }
   .rkr-matrix-params input[type="number"] { width: 3rem; }
-  /* Source-picker dialog: vertical button stack with a small inset.
-     showModal()'s built-in backdrop dimming gives focus separation. */
+  /* Source-picker dialog: vertical button stack with a small inset. */
   /* Per-image modal — opened when the author clicks one image inside
      a figure. Hosts the cell caption + alt and the full image-edit
      pipeline. Width capped so it doesn't span the full viewport on
@@ -343,10 +344,8 @@ export const ADMIN_CSS = `
     grid-column: 2;
     grid-row: 1 / -1;
   }
-  /* 3-col grid; rows grow to fit the tallest image in the row so
-     aspect ratio is preserved. align-items: start keeps shorter
-     images flush to the top of their row rather than vertically
-     centring inside whitespace. */
+  /* 3-col grid; rows grow with the tallest image, align-items:start
+     keeps shorter images flush to the row top. */
   #rkroll-admin-root .rkr-multi-thumbs {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

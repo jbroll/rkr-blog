@@ -27,10 +27,21 @@ function render(): void {
   const h1 = $('rkr-page-title');
   // Slug is the load-state signal: new drafts start blank, the
   // server fills it in on save, pin loads seed it from the bundle.
-  const label = slugInput.value.trim() ? 'Edit post' : 'New post';
+  const slug = slugInput.value.trim();
+  const label = slug ? 'Edit post' : 'New post';
   h1.textContent = label;
   const tabTitle = titleInput.value.trim() || label;
   document.title = `${dirty ? '● ' : ''}${tabTitle}${BASE_TITLE_SUFFIX}`;
+  // View link goes to /<slug>. Hidden until the post is saved so a
+  // brand-new draft doesn't show a dead "View" affordance.
+  const view = $<HTMLAnchorElement>('rkr-page-view');
+  if (slug) {
+    view.href = `/${slug}`;
+    view.hidden = false;
+  } else {
+    view.removeAttribute('href');
+    view.hidden = true;
+  }
 }
 
 export function initPageTitle(editor: Editor): void {

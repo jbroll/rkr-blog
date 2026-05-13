@@ -36,7 +36,12 @@ ${ADMIN_CSS}
 <body>
 ${siteHead(data.site, { isAdmin: true })}
 <div class="rkr-admin-content">
-<h1 id="rkr-page-title">New post</h1>
+<div class="rkr-page-title-row">
+  <h1 id="rkr-page-title">New post</h1>
+  <!-- View link to the post's permalink. Hidden until the post is
+       saved (has a slug); page-title.ts toggles + sets href. -->
+  <a id="rkr-page-view" class="rkr-page-view" href="" hidden>View →</a>
+</div>
 <div class="rkr-meta">
   <label for="rkr-title">Title</label>       <input id="rkr-title" type="text"/>
   <label for="rkr-subtitle">Subtitle</label> <input id="rkr-subtitle" type="text" placeholder="optional"/>
