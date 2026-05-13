@@ -131,6 +131,39 @@ test('site: figure cell opens the PhotoSwipe lightbox', async ({ page }) => {
   await expect(pswp).toBeVisible({ timeout: 5_000 });
 });
 
+test('site: carousel autoplay advances + pause button stops it', async ({ page }) => {
+  test.setTimeout(60_000);
+  await login(page);
+  const ids = await Promise.all([0, 1].map((i) => uploadJpeg(page, i + 20)));
+  const slug = `e2e-autoplay-${Date.now()}`;
+  const idsAttr = ids.map((id) => id.slice(0, 8)).join(',');
+  // timer=1 (seconds) drives autoplay via setInterval inside
+  // setupCarousel; with reduced-motion off, start() is called on
+  // mount.
+  await seedPost(page, {
+    title: 'autoplay',
+    slug,
+    markdown: `::figure{ids=${idsAttr} matrix="1x1" timer=1}\n`
+  });
+  await page.goto(`/${slug}`);
+  const carousel = page.locator('.rkr-carousel').first();
+  const dots = carousel.locator('.rkr-carousel-dot');
+  await expect(dots).toHaveCount(2);
+  await expect(dots.nth(0)).toHaveAttribute('aria-current', 'true');
+
+  // Autoplay button starts in 'playing' state (aria-pressed=true).
+  const play = carousel.locator('.rkr-carousel-play');
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+
+  // After ~1.2s the autoplay tick has fired; the active dot moved.
+  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true', { timeout: 3_000 });
+
+  // Pause-on-focus: focusing the carousel root invokes stop() via
+  // the focusin listener, flipping the play button to 'paused'.
+  await carousel.focus();
+  await expect(play).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('site: single-image figure renders without carousel chrome', async ({ page }) => {
   // Negative case so the carousel test's "first dot active" assertion
   // hasn't accidentally flipped on a default that always applies.

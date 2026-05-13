@@ -503,3 +503,50 @@ surfaces persistent failures via the status panel.
 reloading (which would mean the entry is genuinely poisoned and
 the retry budget should ratchet).
 
+## UI e2e coverage — skipped surfaces
+
+Sub-50% UI source files NOT covered by the May 2026 e2e push
+because they're not reasonably testable from a headless Playwright
+run. Tracked here so a future credential/SDK change unlocks them.
+
+### `src/admin/pick.ts` (0%, 7 LOC)
+**What.** Thin wrapper around `<input type="file">.click()` that
+returns a `Promise<File[]>`. Existing flows use Playwright's
+`setInputFiles` which writes the FileList directly, bypassing the
+click → OS file picker path.
+
+**Why deferred.** Driving the OS picker requires either headed
+browser + a robot library, or a fixture-server intercept of the
+file-input dialog. Not worth it for 7 lines.
+
+**Trigger.** Substantial refactor of the upload flow that makes
+pick.ts the unique entry point.
+
+### `src/admin/integrations/gdrive.ts` (2%, 53 LOC) + `onedrive.ts` (0%, 26 LOC)
+**What.** Google Drive + OneDrive picker integration. Require
+provider OAuth credentials (`GOOGLE_CLIENT_ID`, `MICROSOFT_CLIENT_ID`)
+and the provider-hosted picker SDKs.
+
+**Why deferred.** Out-of-process dependencies that can't run in
+a hermetic test environment. Existing unit tests cover the
+server-side OAuth flow (`test/routes/integrations-*.test.ts`)
+with stubs.
+
+**Trigger.** When test fixtures for the picker SDKs become
+available, or when integration tests against a credentialed
+staging environment are introduced.
+
+### `src/admin/perspective-modal.ts` (1%, 73 LOC) + `src/lib/canvas-math.ts` (23% partial)
+**What.** Perspective rectify uses WebGL for the homography
+rendering. The math is in canvas-math.ts; the UI shell in
+perspective-modal.ts.
+
+**Why deferred.** Chromium headless support for WebGL varies
+across versions (`--use-gl=swiftshader` flag is required and not
+always stable). E2e tests of perspective tend to flake across
+CI runs.
+
+**Trigger.** When Playwright + chromium settle on a stable
+headless WebGL path, or when we ship a Canvas2D fallback
+implementation.
+

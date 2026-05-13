@@ -310,6 +310,67 @@ test('editor: rotate single image then save edits', async ({ page }) => {
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
 
+// Multi-op chain coverage for src/admin/canvas.ts (applyFlip,
+// applyResample paths) plus the shared validateOps client-side
+// pass on save. Rotate-only is tested above; this adds flip + a
+// resample width-set so the canvas pipeline runs three different
+// op kinds in sequence.
+test('editor: rotate + flip + resample chain saves three ops', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e multi-op');
+  await setSlug(page, `e2e-multi-op-${Date.now()}`);
+
+  // Use a 16×16 PNG so resample width 8 produces a non-degenerate
+  // post-ops image (above MIN_RENDER_DIM).
+  const buf = await sharp({
+    create: { width: 16, height: 16, channels: 3, background: { r: 0, g: 200, b: 0 } }
+  })
+    .png()
+    .toBuffer();
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'multi-op.png',
+    mimeType: 'image/png',
+    buffer: buf
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded multi-op/, {
+    timeout: 10_000
+  });
+
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true');
+
+  // 1. Rotate right (existing).
+  await page.locator('#rkr-image-rotate-r-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^rotate /, { timeout: 5_000 });
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(1);
+
+  // 2. Flip horizontally (applyFlip horizontal axis).
+  await page.locator('#rkr-image-flip-h-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^flip /, { timeout: 5_000 });
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(2);
+
+  // 3. Flip vertically (applyFlip vertical axis — different branch).
+  await page.locator('#rkr-image-flip-v-btn').click();
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(3);
+
+  // 4. Resample to 12px width (applyResample path).
+  await page.locator('#rkr-image-resample').fill('12');
+  await page.locator('#rkr-image-resample-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^resample /, {
+    timeout: 5_000
+  });
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(4);
+
+  // Save commits all three ops to the sidecar in one /commit POST.
+  await page.locator('#rkr-image-save-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, {
+    timeout: 10_000
+  });
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+});
+
 // Cropper modal coverage: the crop button opens a <dialog> with
 // cropperjs mounted. We don't drive an actual crop — the test confirms
 // the modal opens (regression-guards the cropper-modal.ts extraction)
