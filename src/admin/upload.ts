@@ -24,6 +24,7 @@ import { computeContentId, extForMime } from '../lib/content-id.ts';
 import { resizeForUpload } from './ingest-resize-client.ts';
 import { writeBlob } from './opfs.ts';
 import { append as outboxAppend } from './outbox.ts';
+import { markPendingUpload } from './pending-uploads.ts';
 import { tryDrain } from './sync.ts';
 
 export interface UploadResponse {
@@ -46,10 +47,11 @@ export async function uploadImage(file: File): Promise<UploadResponse> {
 
   const id = await computeContentId(blob);
   await writeBlob(`originals/${id}.${ext}`, blob);
-  await outboxAppend({
+  const seq = await outboxAppend({
     op: 'upload',
     payload: { id, filename, mimeType }
   });
+  await markPendingUpload(id, seq);
   void tryDrain();
   return { id, bytes: blob.size, ext, deduplicated: false };
 }

@@ -19,7 +19,12 @@ export const OPFS_DIRS = {
   IMAGE_STATE: 'image-state',
   BAKES: 'bakes',
   OUTBOX: 'outbox',
-  OUTBOX_BLOBS: 'outbox-blobs'
+  OUTBOX_BLOBS: 'outbox-blobs',
+  /** Reverse index for save-waits-for-uploads: a per-id marker file
+   * landed at queueUpload time, removed at drainUpload success. Lets
+   * the save guard ask `exists(<id>)?` in O(1) instead of scanning
+   * the whole outbox JSON list. */
+  PENDING_UPLOADS: 'pending-uploads'
 } as const;
 
 /** @public */

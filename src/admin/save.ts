@@ -13,8 +13,9 @@ import { $, setStatus, setStatusWithLink } from './dom';
 import { getOrCreateDraftId, readMeta, updateMeta } from './draft.ts';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
 import { getState } from './online-state.ts';
-import { append as outboxAppend, list as outboxList } from './outbox.ts';
+import { append as outboxAppend } from './outbox.ts';
 import { markClean } from './page-title.ts';
+import { hasPendingMarker } from './pending-uploads.ts';
 import { awaitDrainSettled, tryDrain } from './sync.ts';
 
 interface SaveResponse {
@@ -84,12 +85,12 @@ export async function handleSave(editor: Editor): Promise<void> {
   // original dims and looks subtly wrong until the upload lands.
   // awaitDrainSettled queues on the leader lock so any in-flight
   // drain finishes before our pass starts.
-  const referencedIds = extractFigureIds(markdown);
-  if (getState() !== 'offline' && (await hasPendingUploadsFor(referencedIds))) {
+  const referencedIds = collectFigureIds(editor);
+  if (getState() !== 'offline' && (await hasPendingMarker(referencedIds))) {
     setStatus(`syncing ${referencedIds.length} image(s)…`);
     await awaitDrainSettled();
   }
-  const uploadsStillPending = await hasPendingUploadsFor(referencedIds);
+  const uploadsStillPending = await hasPendingMarker(referencedIds);
   if (getState() !== 'offline' && !uploadsStillPending) {
     try {
       const result = await postSavePost(payload);
@@ -120,31 +121,19 @@ async function queueSavePost(payload: SavePostPayload): Promise<void> {
   void tryDrain();
 }
 
-/** Pull the comma-separated id list out of every `::figure{…ids=…}`
- * directive in the saved markdown. Returns deduped ids; empty when
- * the post has no figures. proseToMarkdown emits the ids
- * double-quoted (`ids="aaa,bbb"`); the capture strips surrounding
- * quotes before splitting. */
-function extractFigureIds(markdown: string): string[] {
+/** Walk the editor's ProseMirror state for `figure` nodes and
+ * collect every `ids` attribute (comma-separated). Structural —
+ * no regex over the rendered markdown, no DOM lookup, no
+ * coupling to directive syntax. */
+function collectFigureIds(editor: Editor): string[] {
   const ids = new Set<string>();
-  // Capture everything after `ids=` up to the next whitespace or
-  // `}`; the value may be bare or `"…"`-quoted. Strip a leading +
-  // trailing `"` before splitting on `,`.
-  const re = /::figure\{[^}]*\bids=("[^"]*"|[^\s}]+)/g;
-  for (const match of markdown.matchAll(re)) {
-    const list = match[1]?.replace(/^"|"$/g, '');
-    if (!list) continue;
-    for (const raw of list.split(',')) {
-      const id = raw.trim();
+  editor.state.doc.descendants((node) => {
+    if (node.type.name !== 'figure') return;
+    const raw = (node.attrs as { ids?: string }).ids ?? '';
+    for (const part of raw.split(',')) {
+      const id = part.trim();
       if (id) ids.add(id);
     }
-  }
+  });
   return [...ids];
-}
-
-async function hasPendingUploadsFor(ids: string[]): Promise<boolean> {
-  if (ids.length === 0) return false;
-  const entries = await outboxList();
-  const idSet = new Set(ids);
-  return entries.some((e) => e.op === 'upload' && idSet.has(e.payload.id));
 }

@@ -3,6 +3,7 @@
 import { extForMime } from '../lib/content-id.ts';
 import type { OutboxEntry } from '../lib/outbox-types.ts';
 import { readBlob } from './opfs.ts';
+import { clearPendingUpload } from './pending-uploads.ts';
 import { type Drainer, SavePostConflictError } from './sync.ts';
 
 /** Shared POST + outbox-seq header + non-2xx → throw with a
@@ -45,6 +46,8 @@ export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   fd.append('file', blob, entry.payload.filename);
   const res = await postFormDrain('upload', '/admin/upload', fd, entry.seq);
   await res.json();
+  // Clear the save-guard marker — server now has the bytes.
+  await clearPendingUpload(entry.payload.id);
 };
 
 export const drainCommitImageEdit: Drainer = async (entry, blob) => {

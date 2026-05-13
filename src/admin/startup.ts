@@ -19,6 +19,7 @@ import {
   pendingCount
 } from './outbox.ts';
 import { refreshPageTitle } from './page-title.ts';
+import { gcOrphanPendingMarkers } from './pending-uploads.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
@@ -73,6 +74,11 @@ async function runStart(editor: Editor): Promise<void> {
     // dir, so without an explicit GC orphans accumulate until OPFS
     // fills up.
     void gcOrphanOutboxBlobs();
+    // Pending-upload markers for save-waits-for-uploads. Same race
+    // shape as outbox blobs: a drain that succeeded but the tab died
+    // before clear leaves a stale marker. Reconcile against the live
+    // outbox.
+    void gcOrphanPendingMarkers();
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.
     //   ?new=1     → discard any in-progress draftId and create a

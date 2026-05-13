@@ -50,16 +50,16 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 45,
-      "linesHit": 38
+      "linesFound": 40,
+      "linesHit": 33
     },
     "src/admin/toolbar.ts": {
       "linesFound": 13,
       "linesHit": 11
     },
     "src/admin/upload.ts": {
-      "linesFound": 6,
-      "linesHit": 6
+      "linesFound": 8,
+      "linesHit": 8
     },
     "src/admin/opfs-schema.ts": {
       "linesFound": 16,
@@ -91,7 +91,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 21,
-      "linesHit": 20
+      "linesHit": 21
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 34
+      "linesHit": 37
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -211,7 +211,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 25,
-      "linesHit": 23
+      "linesHit": 24
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
@@ -232,6 +232,10 @@
     "src/admin/figure-attr-panel.ts": {
       "linesFound": 13,
       "linesHit": 11
+    },
+    "src/admin/pending-uploads.ts": {
+      "linesFound": 9,
+      "linesHit": 9
     }
   }
 }
