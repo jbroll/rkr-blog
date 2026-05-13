@@ -23,6 +23,7 @@ Practical guidelines for the e2e suite. Two layers:
 | `test-e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes. |
 | `playwright.config.ts` | Wires the webServer + global teardown. `workers: 1` (the suite shares one server). |
 | `coverage-baseline.json` | Per-file lcov baseline for the pre-commit ratchet (see §10). |
+| `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-core.test.ts` for the service worker). These run under c8, not Playwright; see §10 for the ratchet's `EXEMPT` carve-out. |
 
 Run:
 
