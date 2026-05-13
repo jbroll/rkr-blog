@@ -257,6 +257,22 @@ Two paths to passing:
 
 `coverage-baseline.json` updates automatically on every passing commit, so improvements ratchet forward without manual bookkeeping.
 
+### Carve-outs: code Playwright structurally can't see
+
+`scripts/check-e2e-coverage.ts` keeps a small `EXEMPT` set of files
+that bypass the new-file rule because the e2e harness cannot
+instrument them. Today that's the service worker (`src/site/sw.ts`,
+`src/site/sw-core.ts`) — Playwright's `page.coverage` only sees the
+page's JS context, not the SW thread. These files are unit-tested in
+Node via `test/site/sw-core.test.ts` with a Map-backed mock
+`CacheStorage`, and that suite is enforced by the c8 per-file gate
+in `npm run test:coverage` (≥ 90% lines / ≥ 75% branches).
+
+When you add code that's structurally invisible to e2e (web workers,
+SharedWorker, AudioWorklet, etc.), add the source file to `EXEMPT`
+and pair it with a unit test under `test/site/`. Don't game the gate
+for code that *is* reachable from a page — add an e2e spec instead.
+
 ---
 
 ## 11. Common gotchas (cheat sheet)

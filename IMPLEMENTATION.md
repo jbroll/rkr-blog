@@ -28,7 +28,19 @@ the phase; pause for sign-off; move on.
     - `<link rel="manifest">` in `src/templates/layout.ts` + `post.ts`.
 
 0d. **Service worker (public side only)**.
-    - `src/site/sw.ts`, built to `static/site/sw.js`.
+    - `src/site/sw.ts`, built to `static/site/sw.js`. Thin
+      event-listener glue: install / activate / fetch / message
+      delegate to handlers in `src/site/sw-core.ts`.
+    - `src/site/sw-core.ts` is the pure logic — cache strategies
+      (cache-first for `/img/*`, SWR for `/static/*` and pages),
+      LRU caps, and cross-origin / admin / `/_debug/` pass-through.
+      Handlers take an injectable `CacheStorageLike` (structural
+      interface so the module typechecks under both `tsconfig.json`
+      and `tsconfig.browser.json`) and are unit-tested in Node via
+      `test/site/sw-core.test.ts` with a Map-backed mock cache.
+      Playwright cannot instrument the SW thread, so the unit suite
+      is the substitute; see TESTING.md §10 for the
+      `check-e2e-coverage.ts` EXEMPT carve-out.
     - Three caches: `rkr-shell-v<hash>`, `rkr-pages-v<hash>`,
       `rkr-images-v<hash>`. Strategy per spec-offline §9.
     - Registered from `src/templates/layout.ts` (public pages only;

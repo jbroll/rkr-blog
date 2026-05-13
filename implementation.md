@@ -89,7 +89,10 @@ rkroll-cms/
 │   │   └── canvas-math.ts    # pure math (DOM-free, server-testable)
 │   ├── site/                 # browser bundle (esbuild → static/site/)
 │   │   ├── lightbox.ts
-│   │   └── carousel.ts
+│   │   ├── carousel.ts
+│   │   ├── sw.ts             # service worker — event-listener glue
+│   │   ├── sw-core.ts        # SW logic, pure (Node-testable via mock cache)
+│   │   └── sw-register.ts    # page-side SW registration + auth-flush hook
 │   ├── templates/            # public-facing templates (template literals)
 │   │   ├── layout.ts
 │   │   ├── post.ts
@@ -102,13 +105,24 @@ rkroll-cms/
 │   │   ├── integrations-gdrive.ts
 │   │   └── integrations-onedrive.ts
 │   ├── cli/                  # one file per `site-admin` subcommand
+│   │   ├── init.ts
+│   │   ├── migrate.ts
 │   │   ├── render.ts
 │   │   ├── reindex.ts
 │   │   ├── gc.ts
-│   │   └── verify.ts
+│   │   ├── verify.ts
+│   │   ├── jobs.ts
+│   │   ├── user.ts
+│   │   ├── reset.ts
+│   │   ├── import-wp.ts
+│   │   └── server.ts
 │   └── server.ts             # buildApp() for tests + bin/server.js
-├── test/                     # mirrors src/ layout
-│   ├── lib/, routes/, widgets/, admin/, cli/
+├── test/                     # mirrors src/ layout (server-side unit suite)
+│   ├── lib/, routes/, widgets/, cli/
+│   ├── site/                 # browser-only code unit-tested in Node
+│   │                         # (sw-core etc. — paths Playwright can't
+│   │                         # reach because the SW runs in its own
+│   │                         # thread)
 │   └── fixtures/
 │       ├── images/           # small JPEGs/PNGs (committed)
 │       └── posts/, sidecars/
