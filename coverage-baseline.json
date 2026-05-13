@@ -38,8 +38,8 @@
       "linesHit": 0
     },
     "src/admin/main.ts": {
-      "linesFound": 114,
-      "linesHit": 97
+      "linesFound": 108,
+      "linesHit": 95
     },
     "src/admin/perspective-modal.ts": {
       "linesFound": 73,
@@ -91,7 +91,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 21,
-      "linesHit": 20
+      "linesHit": 21
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 34
+      "linesHit": 36
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -211,7 +211,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 25,
-      "linesHit": 23
+      "linesHit": 24
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
@@ -222,12 +222,16 @@
       "linesHit": 12
     },
     "src/admin/attr-commit.ts": {
-      "linesFound": 11,
-      "linesHit": 10
+      "linesFound": 14,
+      "linesHit": 12
     },
     "src/admin/dialog-focus.ts": {
       "linesFound": 4,
       "linesHit": 4
+    },
+    "src/admin/figure-attr-panel.ts": {
+      "linesFound": 13,
+      "linesHit": 11
     }
   }
 }

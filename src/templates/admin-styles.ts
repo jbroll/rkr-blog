@@ -243,6 +243,7 @@ export const ADMIN_CSS = `
     align-items: center; padding: .75rem;
   }
   .rkr-cell-dialog-body #rkr-image-edit { grid-column: 1 / -1; display: contents; }
+  .rkr-cell-hint { grid-column: 1 / -1; margin: .5rem 0 0; padding: .5rem; color: var(--rkr-muted); font-style: italic; text-align: center; border: 1px dashed var(--rkr-rule); border-radius: 4px; }
   /* Live image preview inside the cell dialog. max-height keeps the
      modal from pushing past the viewport on a tall portrait crop. */
   .rkr-cell-preview {

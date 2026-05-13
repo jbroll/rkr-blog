@@ -137,6 +137,7 @@ ${siteHead(data.site, { isAdmin: true })}
     <input id="rkr-cell-caption" type="text" placeholder="caption for this image"/>
     <label for="rkr-cell-alt">Alt text</label>
     <input id="rkr-cell-alt" type="text" placeholder="alt for this image; blank if decorative"/>
+    <p id="rkr-cell-hint" class="rkr-cell-hint" hidden>Click an image in the editor to edit it</p>
     <div id="rkr-image-edit" hidden>
       <span></span>
       <span class="rkr-image-actions">

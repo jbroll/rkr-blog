@@ -64,6 +64,11 @@ export interface ImageEditPanel {
 
 export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   const { editor, section, buttons, resampleInput, editsList, activeImageId } = deps;
+  // Empty-state hint shown in the cell dialog when no cell is active.
+  // openCellDialog can fire with activeCellIndex===null (idx falls back
+  // to 0 for caption/alt but the image-edit section stays hidden), so
+  // first-time users get a pointer instead of a silent gap.
+  const hint = document.getElementById('rkr-cell-hint') as HTMLElement | null;
 
   /** Render one row per op (in click order), plus per-row delete
    * buttons, and update the undo/redo/save/reset button states. */
@@ -207,6 +212,11 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
       void saveImageEdits(id, s).then(
         () => {
           renderEditsPanel(id, s);
+          // Repoint the editor's <img data-id> at the freshly-baked
+          // server derivative so the in-editor pixels match what
+          // visitors will see (and so a same-id cell elsewhere on the
+          // page picks up the bake without a re-select).
+          void refreshImagePreview(editor, id, s.ops).then(() => updateDialogPreview(id));
           setStatus(`saved edits ${id.slice(0, 8)}…`);
         },
         (err: unknown) => {
@@ -233,9 +243,11 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     }
     section.hidden = true;
     section.dataset.ready = 'false';
+    if (hint) hint.hidden = false;
   }
 
   function activateForId(id: string, stillCurrent: () => boolean): void {
+    if (hint) hint.hidden = true;
     buttons.reset.hidden = true;
     resampleInput.value = '';
     buttons.undo.disabled = true;
