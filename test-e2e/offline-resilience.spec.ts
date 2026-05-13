@@ -207,3 +207,97 @@ test('drain: per-entry retry with backoff recovers from transient 5xx', async ({
   // retries were also intercepted).
   expect(attempts).toBeGreaterThanOrEqual(3);
 });
+
+test('drain: survives intermittent connection (online → offline mid-drain → online)', async ({
+  page,
+  context
+}) => {
+  test.setTimeout(90_000);
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Queue 4 savePost entries offline. Each goes into the outbox
+  // with a distinct slug, so drainSavePost will POST 4 times.
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+
+  const stamp = Date.now();
+  const slugs = [0, 1, 2, 3].map((i) => `e2e-flap-${stamp}-${i}`);
+  await page.evaluate(async (ss) => {
+    type AppendFn = (entry: {
+      op: 'savePost';
+      payload: { slug: string; title: string; markdown: string };
+    }) => Promise<number>;
+    const append = (window as unknown as { __rkrOutboxAppend: AppendFn }).__rkrOutboxAppend;
+    for (const slug of ss) {
+      await append({
+        op: 'savePost',
+        payload: { slug, title: `flap ${slug}`, markdown: 'body\n' }
+      });
+    }
+  }, slugs);
+
+  // Verify all 4 are queued.
+  const queuedBefore = await page.evaluate(async () => {
+    type Entry = { op: string };
+    const list = (window as unknown as { __rkrOutboxList: () => Promise<Entry[]> }).__rkrOutboxList;
+    return (await list()).length;
+  });
+  expect(queuedBefore).toBe(4);
+
+  // Slow each /admin/posts response by 300ms so the drain takes
+  // long enough for an online → offline toggle to actually land
+  // mid-drain. Without the slowdown the four entries flush in
+  // ~50ms and the flap doesn't catch any in-flight.
+  await context.route('**/admin/posts', async (route) => {
+    await new Promise((r) => setTimeout(r, 300));
+    await route.continue();
+  });
+
+  // First reconnect — drain starts.
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+
+  // After ~500ms, flap: go offline. Some entries should have drained,
+  // some remain queued.
+  await page.waitForTimeout(500);
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+
+  // Wait briefly, then reconnect for good.
+  await page.waitForTimeout(800);
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+
+  // Drain completes for ALL 4 slugs eventually.
+  await expect
+    .poll(
+      async () => {
+        return page.evaluate(async () => {
+          type Entry = { seq: number; op: string };
+          const list = (window as unknown as { __rkrOutboxList: () => Promise<Entry[]> })
+            .__rkrOutboxList;
+          return (await list()).length;
+        });
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(0);
+
+  // Each slug exists on the server.
+  for (const slug of slugs) {
+    const res = await page.request.get(`/admin/posts/${slug}/raw`).catch(() => null);
+    // Not all routes expose /raw; fall back to checking the listing
+    // via the indexed-posts API or just verifying via the public path.
+    if (res && res.status() === 200) continue;
+    // Public path for a draft 404s; check the admin index has the slug.
+    const idx = await page.request.get('/');
+    expect(idx.status()).toBe(200);
+    const body = await idx.text();
+    expect(body).toContain(slug);
+  }
+});
