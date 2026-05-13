@@ -39,18 +39,6 @@ deployment. Specifically:
 
 ## Code-review findings (Step 9 series)
 
-### 9a — Per-keystroke transactions in image attribute panel
-**What.** `commitAttr` in the editor fires on every input event for alt and
-caption, creating one TipTap transaction (and one undo entry) per character.
-For long captions, the undo stack becomes per-character.
-
-**Why deferred.** Real refactor — needs a debounce or a "don't add to
-history" intermediate transaction with a flush on blur. The author can still
-type fine; the undo behavior is just chunkier than ideal.
-
-**Trigger.** First time an author complains about undo granularity, or
-when we add other free-text panel fields where this matters more.
-
 ### 9b — parseHTML doesn't recover attrs
 **What.** Both `ImageNode.parseHTML` and `makeMultiImageNode().parseHTML`
 match by tag/class only; there's no `getAttrs` to recover ids, alt,
@@ -187,28 +175,6 @@ duplication is 2.55%, well below "act on it" thresholds.
 that point unifying the existing pair behind a Provider interface
 saves real work. Otherwise it's a pure code-tidiness exercise.
 
-### Cold-cache `/img` 502s on Fly
-
-**Source.** Live walk against rkr-blog.fly.dev, 2026-05-09 — two
-out of 125 images returned 502 on first hit; both succeeded on
-retry. The walk script now retries with backoff so it's no longer
-a smoke-test failure, but the underlying cause is real.
-
-**What.** Cold-cache renders of larger derivatives (sharp pipeline
-on a fresh `/img/<id>.<oph>.<fmt>` URL) sometimes blow Fly's edge
-timeout (~20s) before the route's 30s render budget triggers the
-202 "rendering" handoff to the queue. The user sees a 502 instead
-of a queued-render placeholder.
-
-**Why deferred.** Self-healing on retry; impacts only the first
-cold visitor of a fresh derivative, and the on-disk cache means
-subsequent visits are instant.
-
-**Trigger.** Either tune the route's render budget down to land
-under Fly's edge timeout (~15s), or invert the policy (queue first,
-await briefly with a short timeout, return 202 quickly). Worth a
-focused look before the demo gets traffic.
-
 ### `src/admin/main.ts` is exactly at the 500-line size cap
 
 **Source.** Size audit 2026-05-09, refreshed after per-cell editing
@@ -231,24 +197,16 @@ next will need the structural extraction first.
 
 **Source.** Per-cell editing landed 2026-05-09 (selection by thumb
 click, ops scoped to the active cell, e2e regression coverage).
-Follow-ups noted during implementation:
 
-**What.** Three open items on top of the working baseline:
+**What.** One remaining item on top of the working baseline:
 
-1. **Visual hint when no cell is selected.** A multi-image figure
-   shows the attribute panel but the image-edit section is hidden
-   until the author clicks a thumb. Currently no on-screen hint
-   tells them to click; first-time users may not discover the
-   interaction.
-2. **Active-cell persistence across re-selections.** Selecting a
-   different node and returning to the same multi-image figure
-   resets activeCellIndex to null. Could be preserved per-figure
-   (key by figure pos or by ids string) for ergonomics.
-3. **Live preview update.** Single-image rotate/flip/crop refreshes
-   the editor preview via setEditorImageSrc; multi-image now
-   matches (data-id is now on every thumb), but the bake-side
-   refresh after Save isn't yet wired to redraw the cell — author
-   has to re-select to see the post-bake derivative.
+- **Active-cell persistence across re-selections.** Selecting a
+  different node and returning to the same multi-image figure
+  resets activeCellIndex to null. Could be preserved per-figure
+  (key by figure pos or by ids string) for ergonomics.
+
+(Visual hint when no cell is selected — shipped. Live preview
+refresh after Save — shipped.)
 
 **Why deferred.** Working baseline; cosmetic / discoverability
 polish.
@@ -449,24 +407,6 @@ commit time. Both are non-trivial.
 
 **Trigger.** A user reports edits applied wrong after editing a
 HEIC photo offline in Chrome / Firefox.
-
-### Drainer boilerplate refactor
-**Source.** Local-first simplification audit, Apr 2026.
-
-**What.** `src/admin/drainers.ts:8-88` is three handlers that each
-guard `entry.op !== 'X'`, build `FormData`, fetch with the same
-headers, and wrap errors with the same shape. A small registry
-that calls each drainer with a narrowed payload + standardised
-error envelope would drop ~35 LOC and unlock per-op retry policy
-(separate from the per-entry retry that just landed).
-
-**Why deferred.** No correctness payoff. Three handlers is still
-tractable; the boilerplate is honest about each endpoint's
-contract. Defer until a fourth outbox op lands or until per-op
-retry policy becomes a real need.
-
-**Trigger.** A new op type (e.g. `deletePost`, `deleteImage`,
-`migrateLegacy`), or any need to vary retry behaviour per op.
 
 ### Persisted retry budget across reload
 **Source.** Local-first correctness audit, Apr 2026.
