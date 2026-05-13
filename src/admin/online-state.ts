@@ -80,9 +80,18 @@ function scheduleNextProbe(): void {
   }, PROBE_INTERVAL_MS);
 }
 
+// Monotonic counter — a stale in-flight probe (from the offline-
+// state 5s scheduler) can finish AFTER a fresher 'online'-event-
+// triggered probe and clobber the state with its own delayed
+// result. Stamp each probe and only publish if it's still the
+// latest.
+let probeSeq = 0;
+
 async function runProbe(): Promise<void> {
   const wasOnline = current === 'online';
+  const seq = ++probeSeq;
   const ok = await probe();
+  if (seq !== probeSeq) return; // newer probe already settled the state
   publish(ok ? 'online' : 'offline');
   // Re-probe on a cadence only when not currently online. Once
   // online, the next check runs lazily via a sync attempt failing

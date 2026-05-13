@@ -123,17 +123,28 @@ function setupCarousel(root: HTMLElement): CarouselState | null {
     for (const btn of [prev, next, ...dots]) {
       btn?.addEventListener('click', stop);
     }
-    // Pause on hover/focus; resume not automatic (let the user opt in
-    // via the play button to avoid surprise re-starts).
-    root.addEventListener('mouseenter', stop);
-    root.addEventListener('focusin', stop);
-    // Pause when the tab is hidden.
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stop();
-    });
-
     if (!reduced) start();
     else stop();
+
+    // Mount cooldown: ignore pause triggers (hover / focusin /
+    // visibilitychange) for the first 500ms after mount. The
+    // browser emits a transient visibilitychange + page-handshake
+    // focusin during navigation that would otherwise undo the
+    // start() above and leave the carousel paused with no user
+    // action. Real user interactions land later than 500ms after
+    // page mount in practice, so this only suppresses the bogus
+    // mount-time fires.
+    const MOUNT_COOLDOWN_MS = 500;
+    const mountedAt = performance.now();
+    const guardedStop = (): void => {
+      if (performance.now() - mountedAt < MOUNT_COOLDOWN_MS) return;
+      stop();
+    };
+    root.addEventListener('mouseenter', guardedStop);
+    root.addEventListener('focusin', guardedStop);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) guardedStop();
+    });
   }
 
   setActive(0);

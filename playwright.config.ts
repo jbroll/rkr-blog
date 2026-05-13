@@ -32,9 +32,22 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',
-    headless: true
+    headless: true,
+    // Headless Chromium defaults prefers-reduced-motion=reduce in
+    // some versions; the carousel autoplay test (and any future
+    // animation-aware test) needs the user-default "no-preference"
+    // so the public-site code follows the same code path real
+    // visitors do.
+    reducedMotion: 'no-preference'
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      // Override after spread so devices['Desktop Chrome'] doesn't
+      // re-set reducedMotion=reduce in some Playwright versions.
+      use: { ...devices['Desktop Chrome'], reducedMotion: 'no-preference' }
+    }
+  ],
   webServer: {
     command:
       'node --no-warnings=ExperimentalWarning --experimental-strip-types test-e2e/server-runner.ts',

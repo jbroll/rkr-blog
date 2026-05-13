@@ -70,8 +70,8 @@
       "linesHit": 51
     },
     "src/admin/online-state.ts": {
-      "linesFound": 26,
-      "linesHit": 24
+      "linesFound": 27,
+      "linesHit": 25
     },
     "src/admin/outbox.ts": {
       "linesFound": 7,
@@ -83,7 +83,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 32,
-      "linesHit": 28
+      "linesHit": 29
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 36
+      "linesHit": 37
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -150,8 +150,8 @@
       "linesHit": 35
     },
     "src/site/carousel.ts": {
-      "linesFound": 43,
-      "linesHit": 42
+      "linesFound": 46,
+      "linesHit": 45
     },
     "src/site/img-retry.ts": {
       "linesFound": 33,
