@@ -124,12 +124,13 @@ ${siteHead(data.site, { isAdmin: true })}
 <dialog id="rkr-cell-dialog" aria-labelledby="rkr-cell-dialog-title">
   <form method="dialog" class="rkr-cell-dialog-head">
     <h2 id="rkr-cell-dialog-title">Image</h2>
-    <!-- Delete sits in the header beside the close X. The
-         margin-left:auto + extra gap rule in admin-styles keeps it
-         away from the X so a stray tap doesn't fire delete instead
-         of close. Confirm + splice live in main.ts. -->
-    <button type="button" id="rkr-cell-delete-btn" class="rkr-cell-delete" aria-label="Remove image from figure" title="Remove image from figure">${icon('trash2', 18)}</button>
+    <!-- Close is FIRST in DOM order so showModal's focusing steps
+         land here (Enter on dialog open = close, harmless). Delete
+         follows but is reordered visually to its left via flex
+         order in admin-styles, with extra gap so a stray tap on
+         the X doesn't fire delete. Confirm + splice in main.ts. -->
     <button type="submit" class="rkr-cell-dialog-close" aria-label="Close">✕</button>
+    <button type="button" id="rkr-cell-delete-btn" class="rkr-cell-delete" aria-label="Remove image from figure" title="Remove image from figure">${icon('trash2', 18)}</button>
   </form>
   <div id="rkr-figure-attrs-cell" class="rkr-cell-dialog-body" data-scope="cell">
     <label for="rkr-cell-caption">Caption</label>

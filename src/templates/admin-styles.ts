@@ -206,10 +206,7 @@ export const ADMIN_CSS = `
   .rkr-matrix-params[hidden] { display: none; }
   .rkr-matrix-params input[type="number"] { width: 3rem; }
   /* Source-picker dialog: vertical button stack with a small inset. */
-  /* Per-image modal — opened when the author clicks one image inside
-     a figure. Hosts the cell caption + alt and the full image-edit
-     pipeline. Width capped so it doesn't span the full viewport on
-     large screens; native ::backdrop dims the editor behind. */
+  /* Per-image modal: cell caption + alt + image-edit pipeline. */
   #rkr-cell-dialog {
     padding: 0;
     border: 1px solid var(--rkr-rule);
@@ -254,10 +251,13 @@ export const ADMIN_CSS = `
     background: color-mix(in srgb, var(--rkr-muted) 12%, transparent);
     border: 1px solid var(--rkr-rule); border-radius: 4px;
   }
-  /* Cell delete sits in the dialog head beside close. h2 takes
-     auto margin-right; extra margin-left on close gives a
-     finger-friendly gap so a stray tap doesn't fire delete. */
+  /* Close is FIRST in DOM order so it's the default-focused
+     element on dialog open; flex order swaps the visual layout
+     back to [delete][close]. Extra margin keeps the X from
+     fat-finger-overlapping delete. */
   .rkr-cell-dialog-head h2 { margin-right: auto; }
+  .rkr-cell-dialog-head .rkr-cell-dialog-close { order: 2; margin-left: 1.25rem; }
+  .rkr-cell-dialog-head .rkr-cell-delete { order: 1; }
   #rkroll-admin-root button.rkr-cell-delete {
     background: none; border: 0; padding: .25rem; cursor: pointer;
     color: var(--rkr-muted); display: inline-flex; align-items: center;
@@ -267,7 +267,6 @@ export const ADMIN_CSS = `
   #rkroll-admin-root button.rkr-cell-delete:focus-visible {
     color: var(--rkr-danger);
   }
-  .rkr-cell-dialog-head .rkr-cell-dialog-close { margin-left: 1.25rem; }
   #rkr-source-picker { padding: 1rem 1.25rem; border: 1px solid var(--rkr-rule); border-radius: 6px; }
   #rkr-source-picker h2 { margin: 0 0 .5rem; font-size: 1rem; }
   #rkr-source-picker .rkr-source-actions { display: flex; flex-direction: column; gap: .35rem; min-width: 14rem; }
