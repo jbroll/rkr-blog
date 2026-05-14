@@ -18,6 +18,9 @@ export interface PostPageData extends SiteChrome {
   slug: string;
   date?: string;
   bodyHtml: string;
+  /** Full-bleed banner rendered between the site header and <main>.
+   * Populated when the post's first element is a ::figure directive. */
+  bannerHtml?: string;
   /** Logged-in admin → render admin strip with an "Edit this post"
    * link in siteHead. */
   isAdmin?: boolean;
@@ -50,7 +53,7 @@ ${stylesheetLinks()}
 </head>
 <body>
 ${siteHead(post.site, { isAdmin: post.isAdmin })}
-<main id="main" tabindex="-1">
+${post.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <article>
 <header>
 <h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>

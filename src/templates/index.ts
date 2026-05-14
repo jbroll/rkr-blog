@@ -32,6 +32,9 @@ export interface IndexPageData extends SiteChrome {
   posts: IndexEntry[];
   page: number;
   totalPages: number;
+  /** Full-bleed site banner rendered between site header and <main>.
+   * Populated when the site config has a bannerImageId. */
+  bannerHtml?: string;
   /** Logged-in admin → render the admin strip in siteHead and the
    * full posts table (drafts + status / pin / delete). */
   isAdmin?: boolean;
@@ -67,7 +70,7 @@ ${stylesheetLinks()}
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
-<main id="main" tabindex="-1">
+${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
 ${body}
 ${pager}

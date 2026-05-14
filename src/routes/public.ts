@@ -36,6 +36,7 @@ function setPublicSecurityHeaders(reply: import('fastify').FastifyReply): void {
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import type { Root, RootContent } from 'mdast';
 import { readIndexedPostBySlug, readIndexedPosts } from '../cli/reindex.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
@@ -53,7 +54,7 @@ import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import { imageDimensions } from '../lib/widget-helpers.ts';
-import { WidgetRegistry } from '../lib/widgets.ts';
+import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 
 // Smallest source dimension the derivative pipeline will accept.
 // Sharp + the encoders (mozjpeg, libwebp, libavif) refuse or produce
@@ -84,6 +85,35 @@ export interface PublicRoutesOpts {
   renderBudgetMs?: number;
   /** Override site branding (title/tagline). Default reads from env. */
   site?: SiteConfig;
+}
+
+/** If the post AST's first non-yaml node is a ::figure leafDirective,
+ * splice it out, inject justify=bleed, and return its rendered HTML.
+ * Returns null when the first element is anything else (heading, paragraph…). */
+async function extractPostBanner(
+  ast: Root,
+  ctx: { siteRoot: string; widgets: WidgetRegistry }
+): Promise<string | null> {
+  let firstIdx = -1;
+  for (let i = 0; i < ast.children.length; i++) {
+    if (ast.children[i]?.type !== 'yaml') {
+      firstIdx = i;
+      break;
+    }
+  }
+  if (firstIdx === -1) return null;
+  const first = ast.children[firstIdx] as RootContent;
+  if (first.type !== 'leafDirective') return null;
+  const dir = first as unknown as DirectiveNode;
+  if (dir.name !== 'figure') return null;
+
+  const bannerNode: DirectiveNode = {
+    ...dir,
+    attributes: { ...(dir.attributes ?? {}), justify: 'bleed' }
+  };
+  const html = await ctx.widgets.dispatch('figure', bannerNode, ctx);
+  ast.children.splice(firstIdx, 1);
+  return html;
 }
 
 export default async function publicRoutes(
@@ -143,6 +173,18 @@ export default async function publicRoutes(
       offset,
       status: isAdmin ? null : 'published'
     });
+
+    let indexBannerHtml: string | undefined;
+    if (site.bannerImageId) {
+      const bannerNode: DirectiveNode = {
+        type: 'leafDirective',
+        name: 'figure',
+        attributes: { ids: site.bannerImageId, justify: 'bleed' },
+        children: []
+      };
+      indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
+    }
+
     const html = renderIndexPage({
       site,
       page,
@@ -153,6 +195,7 @@ export default async function publicRoutes(
         ...(r.published_at ? { date: r.published_at } : {}),
         ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
       })),
+      ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
       isAdmin
     });
 
@@ -187,7 +230,9 @@ export default async function publicRoutes(
     const fullPath = path.join(siteRoot, row.path);
     const raw = await fs.promises.readFile(fullPath, 'utf8');
     const parsed = parsePost(raw);
-    const bodyHtml = await renderPostHtml(parsed.ast, { siteRoot, widgets });
+    const ctx = { siteRoot, widgets };
+    const bannerHtml = await extractPostBanner(parsed.ast, ctx);
+    const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 
     const html = renderPostPage({
       site,
@@ -198,6 +243,7 @@ export default async function publicRoutes(
       slug: parsed.frontmatter.slug,
       ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
       bodyHtml,
+      ...(bannerHtml ? { bannerHtml } : {}),
       isAdmin: !!req.user
     });
 

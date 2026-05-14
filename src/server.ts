@@ -14,7 +14,7 @@ sharp.concurrency(1);
 
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
-import { paths, serverConfig } from './lib/config.ts';
+import { paths, type SiteConfig, serverConfig } from './lib/config.ts';
 import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
@@ -44,6 +44,8 @@ export interface BuildAppOpts {
   /** Override the URL-import fetcher (tests use plain `fetch` to skip the
    * SSRF guard against fixture servers on 127.0.0.1). */
   urlFetcher?: UrlFetcher;
+  /** Override site branding passed to public routes (tests inject bannerImageId etc). */
+  site?: SiteConfig;
   /**
    * When set, /admin/auth routes register and admin routes are gated.
    * Test suites that don't want auth gating can omit this — auth wiring is
@@ -196,7 +198,8 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     await app.register(publicRoutes, {
       siteRoot,
       db: opts.db,
-      renderBudgetMs: opts.renderBudgetMs
+      renderBudgetMs: opts.renderBudgetMs,
+      ...(opts.site ? { site: opts.site } : {})
     });
 
     if (opts.startWorker !== false) {

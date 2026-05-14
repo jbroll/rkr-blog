@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
+import sharp from 'sharp';
 
 import { runReindex } from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
 import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { ingestStream } from '../../src/lib/originals.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -311,4 +314,132 @@ test('GET / anonymous: no Cache-Control no-store header', async (t) => {
   assert.equal(res.statusCode, 200);
   const cc = (res.headers['cache-control'] as string | undefined) ?? '';
   assert.ok(!/no-store/i.test(cc), `unexpected no-store: ${cc}`);
+});
+
+// ---- banner rendering -------------------------------------------------
+
+async function makeJpegBuf(seed = 0) {
+  return sharp({
+    create: {
+      width: 640 + seed,
+      height: 480,
+      channels: 3,
+      background: { r: 30 + seed, g: 60, b: 120 }
+    }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
+async function ingestOne(root: string): Promise<string> {
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpegBuf()]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'banner.jpg' }
+  });
+  return r.id;
+}
+
+test('GET /:slug: first ::figure is extracted as banner, rendered before <main> with bleed, absent from body', async (t) => {
+  const { root, app } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'banner.md',
+    {
+      slug: 'banner-post',
+      title: 'Banner Post',
+      status: 'published',
+      date: '2026-05-14T12:00:00Z'
+    },
+    `::figure{ids="${id}"}\n\nSome body text.`
+  );
+  runReindex(root);
+
+  const res = await app.inject({ method: 'GET', url: '/banner-post' });
+  assert.equal(res.statusCode, 200);
+
+  // Banner with bleed class must appear before <main>.
+  const mainIdx = res.body.indexOf('<main');
+  const bleedIdx = res.body.indexOf('rkr-justify-bleed');
+  assert.ok(bleedIdx > 0, 'banner rendered');
+  assert.ok(bleedIdx < mainIdx, 'banner appears before <main>');
+
+  // The article body must not contain the figure (it was promoted to banner).
+  const articleStart = res.body.indexOf('<article>');
+  const articleEnd = res.body.indexOf('</article>');
+  assert.ok(articleStart > 0 && articleEnd > articleStart, 'article present');
+  const articleHtml = res.body.slice(articleStart, articleEnd);
+  assert.doesNotMatch(articleHtml, /rkr-figure/, 'figure not in article body');
+
+  // The body text that follows the figure must still render.
+  assert.match(articleHtml, /Some body text/);
+});
+
+test('GET /:slug: ::figure NOT first (text before it) stays in body, no banner', async (t) => {
+  const { root, app } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'inline.md',
+    {
+      slug: 'inline-post',
+      title: 'Inline Post',
+      status: 'published',
+      date: '2026-05-14T12:00:00Z'
+    },
+    `Intro paragraph.\n\n::figure{ids="${id}"}`
+  );
+  runReindex(root);
+
+  const res = await app.inject({ method: 'GET', url: '/inline-post' });
+  assert.equal(res.statusCode, 200);
+
+  // No bleed banner before <main>.
+  const mainIdx = res.body.indexOf('<main');
+  const beforeMain = res.body.slice(0, mainIdx);
+  assert.doesNotMatch(beforeMain, /rkr-justify-bleed/);
+
+  // Figure is inside the article.
+  const articleStart = res.body.indexOf('<article>');
+  const articleEnd = res.body.indexOf('</article>');
+  const articleHtml = res.body.slice(articleStart, articleEnd);
+  assert.match(articleHtml, /rkr-figure/);
+});
+
+test('GET / with site bannerImageId: banner rendered before <main> with bleed', async (t) => {
+  // Set up manually so we can pass site: { bannerImageId } to buildApp
+  // without opening a second DB connection on the same file.
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const id = await ingestOne(root);
+
+  const appWithBanner = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Test Site', bannerImageId: id }
+  });
+  t.after(async () => {
+    await appWithBanner.close();
+    events.removeAllListeners('enqueued');
+  });
+
+  writePost(
+    root,
+    'post.md',
+    { slug: 'p', title: 'P', status: 'published', date: '2026-05-14T12:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+
+  const res = await appWithBanner.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+
+  const mainIdx = res.body.indexOf('<main');
+  const bleedIdx = res.body.indexOf('rkr-justify-bleed');
+  assert.ok(bleedIdx > 0, 'banner rendered on index');
+  assert.ok(bleedIdx < mainIdx, 'banner appears before <main>');
 });
