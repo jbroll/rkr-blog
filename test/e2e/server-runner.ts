@@ -1,4 +1,4 @@
-// Boots the rkroll-cms Fastify app for Playwright e2e tests. Fresh tmp
+// Boots the rkr-blog Fastify app for Playwright e2e tests. Fresh tmp
 // site root, migrations applied, secureCookies disabled (HTTP), worker
 // disabled, dummy OAuth env so the Google route registers without
 // hitting Google. The actual e2e tests exercise token-login, not OAuth.

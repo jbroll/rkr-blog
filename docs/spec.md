@@ -1,4 +1,4 @@
-# rkroll-cms — Feature specification
+# rkr-blog — Feature specification
 
 What the application does. Implementation-agnostic — an alternate stack
 should be able to reproduce the application from this document.
@@ -508,8 +508,8 @@ verify                  rehash originals; flag mismatches
 jobs failed             list jobs in state='failed' from the queue (id, kind, attempts, error)
 import-wp list <base-url>          list posts on a WordPress source
 import-wp post <base-url> <id>     import one WP post + every image it references
-import-wp push <base-url> <slug> --to <fly-url>  push one post to a remote rkroll-cms via /admin
-reset --to <fly-url> --token TOKEN wipe all post + image runtime data on a remote rkroll-cms
+import-wp push <base-url> <slug> --to <fly-url>  push one post to a remote rkr-blog via /admin
+reset --to <fly-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
 server [--port N]       run the application server

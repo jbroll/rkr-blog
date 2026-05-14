@@ -1,4 +1,4 @@
-# rkroll-cms — Implementation
+# rkr-blog — Implementation
 
 How this codebase delivers [spec.md](./spec.md). Stack choices, repo
 layout, database schema, image pipeline internals, deployment shape.
@@ -49,7 +49,7 @@ to add any of them.
 ## 2. Repo layout
 
 ```
-rkroll-cms/
+rkr-blog/
 ├── bin/
 │   ├── site-admin            # CLI entry point (Node shebang)
 │   └── server.js             # Fastify entry point
@@ -557,8 +557,8 @@ a2ensite rkroll
 systemctl reload apache2
 
 # app
-git clone <repo> /opt/rkroll-cms
-cd /opt/rkroll-cms
+git clone <repo> /opt/rkr-blog
+cd /opt/rkr-blog
 npm ci
 SITE_ROOT=/var/www/site bin/site-admin init
 cp deploy/systemd.service /etc/systemd/system/rkroll.service

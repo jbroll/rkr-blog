@@ -1,4 +1,4 @@
-# rkroll-cms — Developer quickstart
+# rkr-blog — Developer quickstart
 
 Getting set up to work on the codebase. Coding conventions, lint /
 test / hook configuration, command cheatsheet.
@@ -21,8 +21,8 @@ For how the codebase delivers it, see [implementation.md](./implementation.md).
 ## 2. Initial setup
 
 ```bash
-git clone <repo> ~/src/rkroll-cms
-cd ~/src/rkroll-cms
+git clone <repo> ~/src/rkr-blog
+cd ~/src/rkr-blog
 npm run setup                # node_modules + chromium + git hooks
 SITE_ROOT=$HOME/site bin/site-admin init
 ```

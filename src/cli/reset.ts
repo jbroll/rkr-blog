@@ -1,4 +1,4 @@
-// `site-admin reset` — call POST /admin/reset on a running rkroll-cms
+// `site-admin reset` — call POST /admin/reset on a running rkr-blog
 // to wipe all post + image runtime data. Used to clean a demo before
 // reseeding via `site-admin import-wp push`.
 //

@@ -1,4 +1,4 @@
-# rkroll-cms — Offline operation specification
+# rkr-blog — Offline operation specification
 
 > **Status as of 2026-05-13: shipped.** Phase 0 (PWA shell + SW),
 > Phase 1 (OPFS + outbox + drain), Phase 2 (pin existing posts),

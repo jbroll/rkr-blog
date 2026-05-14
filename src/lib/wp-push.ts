@@ -1,4 +1,4 @@
-// Push a WordPress post to a running rkroll-cms instance via its admin
+// Push a WordPress post to a running rkr-blog instance via its admin
 // API. Used by `site-admin import-wp push` to seed a remote site (e.g.
 // the fly.io demo) without needing local FS access on the target.
 //
@@ -26,7 +26,7 @@ import type { WpPost } from './wp-import-types.ts';
 export interface PushOpts {
   wpBaseUrl: string;
   slug: string | number;
-  /** Target rkroll-cms base URL, e.g. https://rkr-blog.fly.dev */
+  /** Target rkr-blog base URL, e.g. https://rkr-blog.fly.dev */
   toUrl: string;
   /** Matches ADMIN_TOKEN env on the target. */
   token: string;

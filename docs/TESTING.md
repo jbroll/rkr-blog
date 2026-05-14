@@ -1,4 +1,4 @@
-# Writing UI tests for rkroll-cms
+# Writing UI tests for rkr-blog
 
 Practical guidelines for the e2e suite. Two layers:
 

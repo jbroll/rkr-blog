@@ -245,6 +245,6 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
   const host = opts.host ?? cfg.host;
 
   await app.listen({ port, host });
-  app.log.info({ host, port }, 'rkroll-cms listening');
+  app.log.info({ host, port }, 'rkr-blog listening');
   return app;
 }

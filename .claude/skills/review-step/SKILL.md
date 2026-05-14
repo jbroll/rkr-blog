@@ -5,7 +5,7 @@ description: Independent code review of the most recent commit (or a specified c
 
 # review-step
 
-Run an independent code review of recently-committed work. Designed for the rkroll-cms build flow where each step lands as a single fast-forwarded commit on `main`. The PostToolUse hook in `.claude/settings.json` reminds Claude to consider invoking this after each `git commit`.
+Run an independent code review of recently-committed work. Designed for the rkr-blog build flow where each step lands as a single fast-forwarded commit on `main`. The PostToolUse hook in `.claude/settings.json` reminds Claude to consider invoking this after each `git commit`.
 
 ## What it does
 

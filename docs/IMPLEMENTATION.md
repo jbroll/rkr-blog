@@ -1,4 +1,4 @@
-# rkroll-cms — Offline implementation plan
+# rkr-blog — Offline implementation plan
 
 > **Status as of 2026-05-13: shipped.** Phases 0–3 have all landed
 > on `main`. This file is preserved as the historical plan that

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# reseed-from-roll-along.sh — reset a rkroll-cms target and re-seed it
+# reseed-from-roll-along.sh — reset a rkr-blog target and re-seed it
 # from roll-along.rkroll.com (the WordPress source for this project).
 #
 # WP source is hardcoded by design — this script is the operator's

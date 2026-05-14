@@ -1,4 +1,4 @@
-// Playwright e2e configuration. Boots the rkroll-cms server via
+// Playwright e2e configuration. Boots the rkr-blog server via
 // test-e2e/server-runner.ts (fresh tmp DB + dummy OAuth wiring) and
 // runs browser tests against it.
 //

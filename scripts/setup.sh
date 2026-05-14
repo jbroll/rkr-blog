@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/setup.sh — one-shot environment setup for rkroll-cms.
+# scripts/setup.sh — one-shot environment setup for rkr-blog.
 #
 # Idempotent: running twice does no harm. Each step prints what it's
 # doing and a brief OK / SKIP. Steps:
@@ -27,7 +27,7 @@ set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$repo_root"
 
-echo "==> rkroll-cms setup"
+echo "==> rkr-blog setup"
 
 echo "[1/3] npm install"
 if [ -d node_modules ] && [ -f node_modules/.package-lock.json ]; then

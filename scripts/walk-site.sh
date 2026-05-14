@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# walk-site.sh — visit every published post on a rkroll-cms instance and
+# walk-site.sh — visit every published post on a rkr-blog instance and
 # verify each post's images resolve. Operator smoke tool — no auth needed
 # (everything walked here is public). Exits non-zero if any post or image
 # returns a non-2xx, so it composes into CI/runbook checks.
