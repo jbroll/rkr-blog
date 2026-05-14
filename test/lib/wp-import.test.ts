@@ -578,3 +578,114 @@ test('importPost: dedupes byte-identical images across figures', async (t) => {
   const sidecarFiles = fs.readdirSync(path.join(root, 'sidecars'));
   assert.equal(sidecarFiles.length, 1);
 });
+
+test('importPost: bannerUrl ingests banner image, adds banner to frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const fetch = stubFetcher();
+  const bannerUrl = 'https://example.com/wp-content/uploads/banner.jpg';
+  const result = await importPost(makePost(POST_HTML_GALLERY), {
+    siteRoot: root,
+    fetchImage: fetch,
+    bannerUrl
+  });
+  // Banner ID should be set and be a valid 64-char hex string.
+  assert.ok(result.bannerImageId, 'bannerImageId should be set');
+  assert.match(result.bannerImageId ?? '', /^[0-9a-f]{64}$/);
+  // Banner image is included in imagesIngested.
+  assert.ok(result.imagesIngested.includes(result.bannerImageId ?? ''));
+  // Frontmatter includes banner: <id>.
+  assert.match(result.markdown, /^banner: [0-9a-f]{64}$/m);
+});
+
+test('importPost: no bannerUrl → bannerImageId undefined, no banner in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const result = await importPost(makePost(POST_HTML_GALLERY), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.equal(result.bannerImageId, undefined);
+  assert.doesNotMatch(result.markdown, /^banner:/m);
+});
+
+test('fetchWpSiteBannerUrl: extracts header image URL from WP home page', async (t) => {
+  const { fetchWpSiteBannerUrl } = await import('../../src/lib/wp-rest.ts');
+  // Fixture server returns a minimal WP-style home page with a header img.
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(`<html><body>
+      <div id="branding"><a href="/"><img src="http://wp.example/wp-content/uploads/cropped-header.jpg" width="1000" height="288" alt="Site Banner"/></a></div>
+      <div id="content">...</div>
+    </body></html>`);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const { port } = server.address() as import('node:net').AddressInfo;
+
+  const url = await fetchWpSiteBannerUrl(`http://127.0.0.1:${port}`, fetch);
+  assert.ok(url, 'should return a URL');
+  assert.match(url ?? '', /cropped-header\.jpg/);
+});
+
+test('fetchWpSiteBannerUrl: returns null when no header image found', async (t) => {
+  const { fetchWpSiteBannerUrl } = await import('../../src/lib/wp-rest.ts');
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><body><p>No header image here.</p></body></html>');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const { port } = server.address() as import('node:net').AddressInfo;
+
+  const url = await fetchWpSiteBannerUrl(`http://127.0.0.1:${port}`, fetch);
+  assert.equal(url, null);
+});
+
+test('fetchFeaturedMediaUrl: returns source_url from WP media endpoint', async (t) => {
+  const { fetchFeaturedMediaUrl } = await import('../../src/lib/wp-rest.ts');
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ source_url: 'https://example.com/uploads/photo.jpg' }));
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const { port } = server.address() as AddressInfo;
+
+  const url = await fetchFeaturedMediaUrl(`http://127.0.0.1:${port}`, 42, fetch);
+  assert.equal(url, 'https://example.com/uploads/photo.jpg');
+});
+
+test('fetchFeaturedMediaUrl: returns null for mediaId 0', async () => {
+  const { fetchFeaturedMediaUrl } = await import('../../src/lib/wp-rest.ts');
+  const url = await fetchFeaturedMediaUrl('http://127.0.0.1', 0, fetch);
+  assert.equal(url, null);
+});
+
+test('fetchWpSiteInfo: returns name and description from /wp-json/', async (t) => {
+  const { fetchWpSiteInfo } = await import('../../src/lib/wp-rest.ts');
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ name: 'My WP Blog', description: 'Just another blog' }));
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const { port } = server.address() as AddressInfo;
+
+  const info = await fetchWpSiteInfo(`http://127.0.0.1:${port}`, fetch);
+  assert.equal(info.name, 'My WP Blog');
+  assert.equal(info.description, 'Just another blog');
+});
+
+test('fetchWpSiteInfo: returns empty strings when fields are missing', async (t) => {
+  const { fetchWpSiteInfo } = await import('../../src/lib/wp-rest.ts');
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ url: 'https://example.com' }));
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const { port } = server.address() as AddressInfo;
+
+  const info = await fetchWpSiteInfo(`http://127.0.0.1:${port}`, fetch);
+  assert.equal(info.name, '');
+  assert.equal(info.description, '');
+});

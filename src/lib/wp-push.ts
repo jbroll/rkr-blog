@@ -64,6 +64,10 @@ export async function pushPost(opts: PushOpts): Promise<PushResult> {
   //    a self-hosted WP. SSRF defense matters when an attacker chose
   //    the URL; the push CLI is the operator typing it themselves.
   const post = await fetchWpPost(fetcher, opts.wpBaseUrl, opts.slug);
+  const bannerUrl = post.featured_media
+    ? ((await fetchFeaturedMediaUrlDirect(fetcher, opts.wpBaseUrl, post.featured_media)) ??
+      undefined)
+    : undefined;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-wp-push-'));
   try {
     for (const sub of ['sidecars', 'originals', 'cache/img', 'data', 'content/posts']) {
@@ -71,7 +75,8 @@ export async function pushPost(opts: PushOpts): Promise<PushResult> {
     }
     const result = await importPost(post, {
       siteRoot: tmp,
-      ...(opts.fetchImage ? { fetchImage: opts.fetchImage } : {})
+      ...(opts.fetchImage ? { fetchImage: opts.fetchImage } : {}),
+      ...(bannerUrl ? { bannerUrl } : {})
     });
 
     // 2. Upload each ingested original. Originals are sharded on disk
@@ -116,7 +121,8 @@ export async function pushPost(opts: PushOpts): Promise<PushResult> {
         title: frontmatter.title ?? post.title.rendered,
         status,
         date: frontmatter.date ?? post.date,
-        markdown: body
+        markdown: body,
+        ...(result.bannerImageId ? { banner: result.bannerImageId } : {})
       })
     });
     if (!postRes.ok) {
@@ -205,16 +211,31 @@ async function fetchWpPost(
   idOrSlug: string | number
 ): Promise<WpPost> {
   const base = stripTrailingSlash(baseUrl);
+  const fields = '_fields=id,date,modified,slug,status,title,content,excerpt,link,featured_media';
   if (typeof idOrSlug === 'number' || /^\d+$/.test(String(idOrSlug))) {
-    const url = `${base}/wp-json/wp/v2/posts/${idOrSlug}`;
+    const url = `${base}/wp-json/wp/v2/posts/${idOrSlug}?${fields}`;
     const res = await fetcher(url);
     if (!res.ok) throw new Error(`WP fetch: ${res.status} ${url}`);
     return (await res.json()) as WpPost;
   }
-  const url = `${base}/wp-json/wp/v2/posts?slug=${encodeURIComponent(String(idOrSlug))}`;
+  const url = `${base}/wp-json/wp/v2/posts?slug=${encodeURIComponent(String(idOrSlug))}&${fields}`;
   const res = await fetcher(url);
   if (!res.ok) throw new Error(`WP fetch: ${res.status} ${url}`);
   const arr = (await res.json()) as WpPost[];
   if (arr.length === 0) throw new Error(`no post with slug "${idOrSlug}"`);
   return arr[0] as WpPost;
+}
+
+/** Fetch the source URL of a WP featured media item (no safeFetch guard). */
+async function fetchFeaturedMediaUrlDirect(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  mediaId: number
+): Promise<string | null> {
+  if (!mediaId) return null;
+  const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/media/${mediaId}?_fields=source_url`;
+  const res = await fetcher(url);
+  if (!res.ok) return null;
+  const data = (await res.json()) as { source_url?: string };
+  return data.source_url ?? null;
 }

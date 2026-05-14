@@ -24,12 +24,15 @@ import type { HastNode, WpPost } from './wp-import-types.ts';
 export interface ImportResult {
   /** Frontmatter + body, ready to write to content/posts/. */
   markdown: string;
-  /** sha256 ids of every image ingested for this post (in source order). */
+  /** sha256 ids of every image ingested for this post (in source order),
+   * including the banner image if one was provided. */
   imagesIngested: string[];
   /** Per-image fetch failures, by URL. Logged; the post still imports. */
   imageErrors: Array<{ url: string; error: string }>;
   /** The path `content/posts/<date>-<slug>.md` should be written to. */
   filename: string;
+  /** Ingested id of the banner / featured image, if `opts.bannerUrl` was set. */
+  bannerImageId?: string;
 }
 
 export interface ImportOpts {
@@ -40,6 +43,9 @@ export interface ImportOpts {
   /** Cap on per-image bytes. Default 50 MB — original photos are
    * usually 5-15 MB; the cap stops a runaway from filling disk. */
   maxImageBytes?: number;
+  /** URL of the post's banner / featured image. Ingested separately
+   * from the body figures; its id lands in frontmatter as `banner:`. */
+  bannerUrl?: string;
 }
 
 /** Import one post: walk its HTML, ingest every image, emit markdown. */
@@ -96,15 +102,39 @@ export async function importPost(post: WpPost, opts: ImportOpts): Promise<Import
     replaceWithRawMarkdown(tree, fig.figureNode, directive);
   }
 
+  // Ingest the featured / banner image (separate from body figures).
+  let bannerImageId: string | undefined;
+  if (opts.bannerUrl) {
+    try {
+      const stream = await fetchImage(opts.bannerUrl);
+      const result = await ingestStream({
+        stream,
+        siteRoot: opts.siteRoot,
+        passthrough: true,
+        source: {
+          kind: 'wordpress',
+          url: opts.bannerUrl,
+          originalName: filenameFromUrl(opts.bannerUrl),
+          postUrl: post.link
+        }
+      });
+      bannerImageId = result.id;
+      imagesIngested.push(result.id);
+    } catch (err) {
+      imageErrors.push({ url: opts.bannerUrl, error: (err as Error).message });
+    }
+  }
+
   const body = emitMarkdown(tree as HastNode).trim();
-  const frontmatter = renderFrontmatter(post);
+  const frontmatter = renderFrontmatter(post, bannerImageId);
   const markdown = `${frontmatter}\n\n${body}\n`;
 
   return {
     markdown,
     imagesIngested,
     imageErrors,
-    filename: filenameFor(post)
+    filename: filenameFor(post),
+    bannerImageId
   };
 }
 
@@ -141,7 +171,7 @@ function defaultImageFetcher(): (url: string) => Promise<Readable> {
 
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
-function renderFrontmatter(post: WpPost): string {
+function renderFrontmatter(post: WpPost, bannerImageId?: string): string {
   const titleEsc = post.title.rendered.replace(/"/g, '\\"');
   const lines = [
     '---',
@@ -151,6 +181,7 @@ function renderFrontmatter(post: WpPost): string {
     'status: draft',
     `source_url: ${post.link}`,
     `source_kind: wordpress`,
+    ...(bannerImageId ? [`banner: ${bannerImageId}`] : []),
     '---'
   ];
   return lines.join('\n');

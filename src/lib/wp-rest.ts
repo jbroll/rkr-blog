@@ -45,7 +45,8 @@ export async function listPosts(
     'excerpt',
     'link',
     'categories',
-    'tags'
+    'tags',
+    'featured_media'
   ].join(',');
   const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}&status=${status}&_fields=${fields}`;
   const res = await fetcher(url);
@@ -54,6 +55,57 @@ export async function listPosts(
   const totalPages = Number(res.headers.get('X-WP-TotalPages') ?? 0);
   const posts = (await res.json()) as WpPost[];
   return { posts, total, totalPages };
+}
+
+/** Fetch the site-wide banner/header image URL from a WP home page.
+ * Looks for an <img> whose src contains "cropped-" — the WP convention
+ * for custom header images. Returns null if none is found. */
+export async function fetchWpSiteBannerUrl(
+  baseUrl: string,
+  fetcher: WpFetcher = defaultWpFetcher
+): Promise<string | null> {
+  const url = stripTrailingSlash(baseUrl) + '/';
+  const res = await fetcher(url);
+  if (!res.ok) return null;
+  const html = await res.text();
+  // WP custom header images always have "cropped-" in their filename.
+  const m = /src="([^"]*cropped-[^"]*)"/.exec(html);
+  return m?.[1] ?? null;
+}
+
+export interface WpSiteInfo {
+  name: string;
+  description: string;
+}
+
+/** Fetch site title and tagline from the WP REST API root (`/wp-json/`). */
+export async function fetchWpSiteInfo(
+  baseUrl: string,
+  fetcher: WpFetcher = defaultWpFetcher
+): Promise<WpSiteInfo> {
+  const url = `${stripTrailingSlash(baseUrl)}/wp-json/`;
+  const res = await fetcher(url);
+  if (!res.ok) return { name: '', description: '' };
+  const data = (await res.json()) as Record<string, unknown>;
+  return {
+    name: typeof data.name === 'string' ? data.name : '',
+    description: typeof data.description === 'string' ? data.description : ''
+  };
+}
+
+/** Fetch the source URL of a WP featured media item.
+ * Returns null if the media ID is 0 (WP's sentinel for "no featured image"). */
+export async function fetchFeaturedMediaUrl(
+  baseUrl: string,
+  mediaId: number,
+  fetcher: WpFetcher = defaultWpFetcher
+): Promise<string | null> {
+  if (!mediaId) return null;
+  const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/media/${mediaId}?_fields=source_url`;
+  const res = await fetcher(url);
+  if (!res.ok) throw new Error(`WP fetchFeaturedMediaUrl: ${res.status} ${url}`);
+  const data = (await res.json()) as { source_url?: string };
+  return data.source_url ?? null;
 }
 
 /** Fetch a single post by numeric id or slug. */

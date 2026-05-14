@@ -8,9 +8,9 @@ import path from 'node:path';
 import { paths } from '../lib/config.ts';
 import { importPost } from '../lib/wp-import.ts';
 import { pushPost } from '../lib/wp-push.ts';
-import { fetchPost, listPosts } from '../lib/wp-rest.ts';
+import { fetchPost, fetchWpSiteBannerUrl, fetchWpSiteInfo, listPosts } from '../lib/wp-rest.ts';
 
-const SUBCOMMANDS = ['list', 'post', 'push'] as const;
+const SUBCOMMANDS = ['list', 'post', 'push', 'site-banner'] as const;
 type ImportWpSub = (typeof SUBCOMMANDS)[number];
 
 export default async function importWpCmd(argv: string[]): Promise<void> {
@@ -25,6 +25,7 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
   }
   if ((sub as ImportWpSub) === 'list') return list(argv.slice(1));
   if ((sub as ImportWpSub) === 'push') return push(argv.slice(1));
+  if ((sub as ImportWpSub) === 'site-banner') return siteBanner(argv.slice(1));
   return post(argv.slice(1));
 }
 
@@ -114,6 +115,70 @@ async function push(args: string[]): Promise<void> {
       result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
     }, status=${result.status}`
   );
+  /* c8 ignore stop */
+}
+
+async function siteBanner(args: string[]): Promise<void> {
+  const wpBaseUrl = args[0];
+  if (!wpBaseUrl) {
+    throw new Error(
+      'usage: site-admin import-wp site-banner <wp-base-url> --to <target-url> [--token TOKEN]'
+    );
+  }
+  const toUrl = stringFlag(args, '--to');
+  if (!toUrl) throw new Error('--to <target-url> is required');
+  const token = stringFlag(args, '--token') ?? process.env.ADMIN_TOKEN;
+  if (!token) throw new Error('bearer token required: pass --token or set ADMIN_TOKEN env');
+
+  /* c8 ignore start -- success path makes real HTTP calls */
+  const target = toUrl.replace(/\/$/, '');
+
+  // Fetch WP site title and tagline, then push to target.
+  console.log(`==> fetching site info from ${wpBaseUrl}`);
+  const siteInfo = await fetchWpSiteInfo(wpBaseUrl);
+  if (siteInfo.name) {
+    const siteRes = await fetch(`${target}/admin/settings/site`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ title: siteInfo.name, tagline: siteInfo.description })
+    });
+    if (!siteRes.ok)
+      throw new Error(`set site info failed: ${siteRes.status} ${await siteRes.text()}`);
+    console.log(`    title: ${siteInfo.name}`);
+    if (siteInfo.description) console.log(`    tagline: ${siteInfo.description}`);
+  }
+
+  // Fetch and upload site banner image.
+  console.log(`==> fetching site banner URL from ${wpBaseUrl}`);
+  const bannerUrl = await fetchWpSiteBannerUrl(wpBaseUrl);
+  if (!bannerUrl) throw new Error(`no header image found on ${wpBaseUrl}`);
+  console.log(`    banner URL: ${bannerUrl}`);
+
+  // Download the banner image bytes.
+  const res = await fetch(bannerUrl);
+  if (!res.ok || !res.body) throw new Error(`banner fetch failed: ${res.status} ${bannerUrl}`);
+
+  // Upload to the target site.
+  const filename = bannerUrl.split('/').pop() ?? 'banner.jpg';
+  const fd = new FormData();
+  fd.append('file', new Blob([await res.arrayBuffer()]), filename);
+  const upRes = await fetch(`${target}/admin/upload`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: fd
+  });
+  if (!upRes.ok) throw new Error(`upload failed: ${upRes.status} ${await upRes.text()}`);
+  const { id } = (await upRes.json()) as { id: string };
+  console.log(`    uploaded: ${id.slice(0, 12)}…`);
+
+  // Register as site banner.
+  const setRes = await fetch(`${target}/admin/settings/banner`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ imageId: id })
+  });
+  if (!setRes.ok) throw new Error(`set banner failed: ${setRes.status} ${await setRes.text()}`);
+  console.log(`==> site banner set (${id.slice(0, 12)}…)`);
   /* c8 ignore stop */
 }
 

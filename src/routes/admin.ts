@@ -132,9 +132,11 @@ export default async function adminRoutes(
       status?: unknown;
       date?: unknown;
       markdown?: unknown;
+      /** Sidecar ID of the post's banner/featured image. */
+      banner?: unknown;
     };
   }>('/admin/posts', { ...guard }, async (request, reply) => {
-    const { slug: slugRaw, title, subtitle, status, date, markdown } = request.body ?? {};
+    const { slug: slugRaw, title, subtitle, status, date, markdown, banner } = request.body ?? {};
 
     if (typeof title !== 'string' || !title.trim()) {
       return reply.code(400).send({ error: 'title is required' });
@@ -169,8 +171,11 @@ export default async function adminRoutes(
     );
     const dateStr = typeof date === 'string' && date.trim() ? date : new Date().toISOString();
 
+    const bannerStr =
+      typeof banner === 'string' && /^[0-9a-f]{64}$/.test(banner.trim()) ? banner.trim() : '';
     const fmLines = ['---', `title: ${yamlScalar(title)}`];
     if (subtitleStr) fmLines.push(`subtitle: ${yamlScalar(subtitleStr)}`);
+    if (bannerStr) fmLines.push(`banner: ${bannerStr}`);
     fmLines.push(
       `slug: ${yamlScalar(slug)}`,
       `date: ${yamlScalar(dateStr)}`,

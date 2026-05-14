@@ -238,9 +238,52 @@ test('GET /admin/settings?err= surfaces the error flash banner', async (t) => {
   assert.match(res.body, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
 });
 
-test('GET /admin/settings?flash=saved surfaces the ok flash banner', async (t) => {
+test('GET /admin/settings?flash=saved: 200, no inline flash (toast is JS-side)', async (t) => {
+  // The ok flash is now handled by settings-page.ts as a toast, so the
+  // server renders no inline flash element for kind=ok.
   const { app } = await setup(t);
   const res = await app.inject({ method: 'GET', url: '/admin/settings?flash=saved' });
   assert.equal(res.statusCode, 200);
-  assert.match(res.body, /class="rkr-admin-settings-flash is-ok"[^>]*>Settings saved\./);
+  assert.doesNotMatch(res.body, /rkr-admin-settings-flash is-ok/);
+});
+
+test('POST /admin/settings/site: persists title and tagline via JSON API', async (t) => {
+  const { root, app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/site',
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify({ title: 'WP Imported Title', tagline: 'WP Imported Tagline' })
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(JSON.parse(res.body), {
+    ok: true,
+    title: 'WP Imported Title',
+    tagline: 'WP Imported Tagline'
+  });
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.title, 'WP Imported Title');
+  assert.equal(onDisk.tagline, 'WP Imported Tagline');
+});
+
+test('POST /admin/settings/site: 400 on missing title', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/site',
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify({ tagline: 'Only tagline' })
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST /admin/settings/site: 400 when title exceeds the cap', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/site',
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify({ title: 'a'.repeat(201), tagline: '' })
+  });
+  assert.equal(res.statusCode, 400);
 });

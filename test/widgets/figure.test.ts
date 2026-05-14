@@ -305,7 +305,7 @@ test('::figure matrix=justified renders flexbox flow with default row height', a
   const html = await dispatch(root, { ids: ids.join(','), matrix: 'justified' });
 
   assert.match(html, /class="rkr-figure rkr-figure-justified rkr-justify-center"/);
-  assert.match(html, /style="--rkr-row-height: 240px"/);
+  assert.match(html, /style="--rkr-row-height: 180px"/);
   assert.match(html, /<div class="rkr-figure-flow">/);
   // No grid markup; no rkr-fit-* class (fit is ignored under flow).
   assert.doesNotMatch(html, /rkr-figure-grid/);

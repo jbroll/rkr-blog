@@ -15,6 +15,9 @@ export interface WpPost {
   link: string;
   categories?: number[];
   tags?: number[];
+  /** WP featured image media ID, if set. Resolved to a URL via the
+   * /wp-json/wp/v2/media/{id} endpoint during import. */
+  featured_media?: number;
 }
 
 /** Minimal hast (HTML AST) node shape we walk during import. rehype-parse

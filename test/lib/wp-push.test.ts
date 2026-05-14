@@ -398,3 +398,75 @@ test('pushPost: per-image upload failure increments imagesFailed and continues',
   assert.equal(result.imagesUploaded, 1, 'second image still landed');
   assert.equal(result.slug, 'partial-upload-fail');
 });
+
+test('pushPost: featured_media → banner uploaded, banner in post frontmatter', async (t) => {
+  const target = await startTargetApp(t, 'tok-banner');
+  const bannerBytes = await makeJpeg(99);
+  const images = new Map<string, Buffer>([
+    ['/img1.jpg', await makeJpeg(1)],
+    ['/img2.jpg', await makeJpeg(2)],
+    ['/banner.jpg', bannerBytes]
+  ]);
+  const postWithBanner: WpPost = {
+    ...TWO_UP,
+    slug: 'with-banner',
+    featured_media: 77
+  };
+  // WP fixture must also serve /wp-json/wp/v2/media/77 → source_url
+  const server = http.createServer((req, res) => {
+    const host = req.headers.host ?? '127.0.0.1';
+    const url = new URL(req.url ?? '/', `http://${host}`);
+    if (
+      url.pathname === `/wp-json/wp/v2/posts/${postWithBanner.id}` ||
+      (url.pathname === '/wp-json/wp/v2/posts' &&
+        url.searchParams.get('slug') === postWithBanner.slug)
+    ) {
+      const rewritten = {
+        ...postWithBanner,
+        content: { rendered: postWithBanner.content.rendered.replaceAll('{{HOST}}', host) }
+      };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        url.pathname.endsWith(String(postWithBanner.id))
+          ? JSON.stringify(rewritten)
+          : JSON.stringify([rewritten])
+      );
+      return;
+    }
+    if (url.pathname === '/wp-json/wp/v2/media/77') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ source_url: `http://${host}/banner.jpg` }));
+      return;
+    }
+    const buf = images.get(url.pathname);
+    if (buf) {
+      res.writeHead(200, { 'content-type': 'image/jpeg' });
+      res.end(buf);
+      return;
+    }
+    res.writeHead(404);
+    res.end('not found');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const wpBaseUrl = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
+
+  const result = await pushPost({
+    wpBaseUrl,
+    slug: 'with-banner',
+    toUrl: target.baseUrl,
+    token: 'tok-banner',
+    fetchImage: plainFetchImage
+  });
+
+  // Banner + 2 body images = 3 uploads.
+  assert.equal(result.imagesUploaded, 3);
+  assert.equal(result.imagesFailed, 0);
+
+  // Post frontmatter has banner: <id>.
+  const md = fs.readFileSync(
+    path.join(target.siteRoot, 'content', 'posts', 'with-banner.md'),
+    'utf8'
+  );
+  assert.match(md, /^banner: [0-9a-f]{64}$/m);
+});

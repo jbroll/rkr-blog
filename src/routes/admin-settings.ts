@@ -131,6 +131,44 @@ export function registerAdminSettingsRoutes(
 
     return reply.redirect('/admin/settings?flash=saved', 303);
   });
+
+  // POST /admin/settings/site — set title and tagline via JSON API.
+  // Called by `site-admin import-wp site-banner` to push WP site metadata.
+  fastify.post<{ Body: { title?: unknown; tagline?: unknown } }>(
+    '/admin/settings/site',
+    { ...guard },
+    async (request, reply) => {
+      const { title, tagline } = request.body ?? {};
+      if (typeof title !== 'string') {
+        return reply.code(400).send({ error: 'title is required' });
+      }
+      const titleTrimmed = title.trim();
+      const taglineTrimmed = typeof tagline === 'string' ? tagline.trim() : '';
+      if (titleTrimmed.length > MAX_TITLE) {
+        return reply.code(400).send({ error: 'title too long' });
+      }
+      if (taglineTrimmed.length > MAX_TAGLINE) {
+        return reply.code(400).send({ error: 'tagline too long' });
+      }
+      writePersistedSiteConfig({ title: titleTrimmed, tagline: taglineTrimmed });
+      return reply.send({ ok: true, title: titleTrimmed, tagline: taglineTrimmed });
+    }
+  );
+
+  // POST /admin/settings/banner — set the site-wide banner image by ID.
+  // Called by `site-admin import-wp site-banner` after uploading the image.
+  fastify.post<{ Body: { imageId?: unknown } }>(
+    '/admin/settings/banner',
+    { ...guard },
+    async (request, reply) => {
+      const { imageId } = request.body ?? {};
+      if (typeof imageId !== 'string' || !/^[0-9a-f]{64}$/.test(imageId)) {
+        return reply.code(400).send({ error: 'imageId must be a 64-char hex sidecar ID' });
+      }
+      writePersistedSiteConfig({ bannerImageId: imageId });
+      return reply.send({ ok: true, bannerImageId: imageId });
+    }
+  );
 }
 
 /** Form-field parser for the three numeric ingest knobs. Returns

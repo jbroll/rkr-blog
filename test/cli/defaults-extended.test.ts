@@ -351,3 +351,33 @@ test('import-wp default export: list rejects non-numeric --page', async (t) => {
   const cmd = (await import('../../src/cli/import-wp.ts')).default;
   await assert.rejects(cmd(['list', 'http://wp.example.com', '--page', 'abc']), /numeric value/);
 });
+
+test('import-wp default export: site-banner without base-url throws', async (t) => {
+  withSiteRoot(t);
+  const cmd = (await import('../../src/cli/import-wp.ts')).default;
+  await assert.rejects(cmd(['site-banner']), /usage:.*site-banner/);
+});
+
+test('import-wp default export: site-banner without --to throws', async (t) => {
+  withSiteRoot(t);
+  const cmd = (await import('../../src/cli/import-wp.ts')).default;
+  await assert.rejects(
+    cmd(['site-banner', 'http://wp.example.com']),
+    /--to <target-url> is required/
+  );
+});
+
+test('import-wp default export: site-banner without token throws', async (t) => {
+  withSiteRoot(t);
+  const prev = process.env.ADMIN_TOKEN;
+  delete process.env.ADMIN_TOKEN;
+  t.after(() => {
+    if (prev === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = prev;
+  });
+  const cmd = (await import('../../src/cli/import-wp.ts')).default;
+  await assert.rejects(
+    cmd(['site-banner', 'http://wp.example.com', '--to', 'http://fly.example.com']),
+    /bearer token required/
+  );
+});
