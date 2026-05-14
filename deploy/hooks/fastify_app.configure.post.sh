@@ -6,7 +6,7 @@ set -euo pipefail
 source "$DEPLOY_HOME/lib/common.sh"
 
 : "${APP_NAME:?APP_NAME not set}"
-: "${NODE_APP_SYSTEMD_PATH:=/lib/systemd/system}"
+: "${NODE_APP_SYSTEMD_PATH:=/etc/systemd/system}"
 : "${NODE_APP_NODE_OPTIONS:=}"
 : "${NODE_APP_MAIN_SCRIPT:=bin/server.js}"
 
