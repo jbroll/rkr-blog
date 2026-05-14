@@ -11,6 +11,7 @@
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
+import { icon } from './icons.ts';
 import { type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface AdminSettingsPageData extends SiteChrome {
@@ -42,7 +43,8 @@ export interface AdminSettingsPageData extends SiteChrome {
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
-  const flash = data.flash ? renderFlash(data.flash) : '';
+  const flash = data.flash?.kind === 'error' ? renderFlash(data.flash) : '';
+  const saveBtn = `<button type="submit" class="rkr-admin-settings-submit" aria-label="Save settings" title="Save settings">${icon('save', 18)}</button>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,13 +52,23 @@ export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Settings — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks()}
+<style>
+.rkr-admin-settings-heading-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.rkr-admin-settings-heading{margin:0}
+.rkr-admin-settings-submit{display:flex;align-items:center;background:transparent;color:var(--rkr-link);border:1px solid var(--rkr-link);border-radius:4px;padding:.25rem .5rem;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}
+.rkr-admin-settings-submit.is-dirty{background:var(--rkr-link);color:var(--rkr-bg)}
+.rkr-admin-settings-submit:hover{background:var(--rkr-link-hover,var(--rkr-link));color:var(--rkr-bg);border-color:var(--rkr-link-hover,var(--rkr-link))}
+</style>
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: true })}
 <main id="main" tabindex="-1">
-<h1 class="rkr-admin-settings-heading">Site settings</h1>
 ${flash}
 <form method="post" action="/admin/settings" class="rkr-admin-settings">
+<div class="rkr-admin-settings-heading-row">
+<h1 class="rkr-admin-settings-heading">Site settings</h1>
+${saveBtn}
+</div>
   <label for="rkr-settings-title">Title</label>
   <input id="rkr-settings-title" name="title" type="text" maxlength="200" value="${escapeAttr(data.persisted.title ?? '')}" placeholder="${escapeAttr(data.site.title)}"/>
 
@@ -87,14 +99,13 @@ ${flash}
     min="${INGEST_RESIZE_BOUNDS.webpQuality.min}" max="${INGEST_RESIZE_BOUNDS.webpQuality.max}" step="1"
     value="${data.persisted.ingestResize?.webpQuality ?? ''}"
     placeholder="${DEFAULT_INGEST_RESIZE.webpQuality}"/>
-
-  <button type="submit" class="rkr-admin-settings-submit">Save settings</button>
 </form>
 <p class="rkr-admin-settings-build">
   Build: <code title="${escapeAttr(data.gitHash)}">${escapeText(shortHash(data.gitHash))}</code>
 </p>
 </main>
 ${siteFoot(data.site, { isAdmin: true })}
+<script type="module" src="/static/admin/settings-page.js"></script>
 </body>
 </html>
 `;

@@ -51,7 +51,8 @@ test('renderAdminSettingsPage: title + tagline escape HTML', () => {
   assert.doesNotMatch(html, /autofocus="/);
 });
 
-test('renderAdminSettingsPage: flash message renders with the right kind class', () => {
+test('renderAdminSettingsPage: error flash renders inline; ok flash does not', () => {
+  // Success is handled client-side (toast); no inline element needed.
   const ok = renderAdminSettingsPage({
     site: { title: 'rkroll' },
     persisted: {},
@@ -59,7 +60,7 @@ test('renderAdminSettingsPage: flash message renders with the right kind class',
     gitHash: 'unknown',
     flash: { kind: 'ok', text: 'Settings saved.' }
   });
-  assert.match(ok, /class="rkr-admin-settings-flash is-ok"[^>]*>Settings saved\./);
+  assert.doesNotMatch(ok, /rkr-admin-settings-flash/);
 
   const err = renderAdminSettingsPage({
     site: { title: 'rkroll' },
@@ -69,6 +70,21 @@ test('renderAdminSettingsPage: flash message renders with the right kind class',
     flash: { kind: 'error', text: 'title too long' }
   });
   assert.match(err, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
+});
+
+test('renderAdminSettingsPage: save button is in the heading row with a disk icon', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    persisted: {},
+    themes: ['default'],
+    gitHash: 'unknown'
+  });
+  // Heading and button share a flex row.
+  assert.match(html, /rkr-admin-settings-heading-row/);
+  // Button has the save icon (Lucide save path signature).
+  assert.match(html, /rkr-admin-settings-submit[^>]*>[\s\S]*M19 21H5/);
+  // Submit button is still a type="submit" inside the form.
+  assert.match(html, /type="submit"/);
 });
 
 test('renderAdminSettingsPage: build chip shows the short git hash with full sha in title', () => {
