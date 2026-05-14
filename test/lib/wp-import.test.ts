@@ -93,6 +93,29 @@ const POST_HTML_LEGACY = `
 </figure>
 `;
 
+const POST_HTML_TILED_GALLERY = `
+<p>Before gallery.</p>
+<div class="wp-block-jetpack-tiled-gallery aligncenter is-style-rectangular">
+  <div class="tiled-gallery__gallery">
+    <div class="tiled-gallery__row">
+      <div class="tiled-gallery__col"><figure class="tiled-gallery__item"><img data-src="https://example.com/wp-content/uploads/a.jpg" alt="alpha"/></figure></div>
+      <div class="tiled-gallery__col"><figure class="tiled-gallery__item"><img data-src="https://example.com/wp-content/uploads/b.jpg" alt="bravo"/></figure></div>
+      <div class="tiled-gallery__col"><figure class="tiled-gallery__item"><img data-src="https://example.com/wp-content/uploads/c.jpg" alt=""/></figure></div>
+      <div class="tiled-gallery__col"><figure class="tiled-gallery__item"><img data-src="https://example.com/wp-content/uploads/d.jpg" alt=""/></figure></div>
+    </div>
+  </div>
+</div>
+<p>After gallery.</p>
+`;
+
+const POST_HTML_EMBED = `
+<p>Watch this video:</p>
+<figure class="wp-block-embed is-type-rich is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio"><div class="wp-block-embed__wrapper">
+https://www.youtube.com/watch?v=abc123
+</div></figure>
+<p>End of post.</p>
+`;
+
 function makePost(content: string, slug = 'test-post'): WpPost {
   return {
     id: 1,
@@ -688,4 +711,36 @@ test('fetchWpSiteInfo: returns empty strings when fields are missing', async (t)
   const info = await fetchWpSiteInfo(`http://127.0.0.1:${port}`, fetch);
   assert.equal(info.name, '');
   assert.equal(info.description, '');
+});
+
+test('importPost: jetpack tiled gallery → single ::figure matrix=justified', async (t) => {
+  // All images from a wp-block-jetpack-tiled-gallery should be grouped
+  // into one ::figure directive, not split into individual directives.
+  const root = freshSiteRoot(t);
+  const result = await importPost(makePost(POST_HTML_TILED_GALLERY), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.equal(result.imagesIngested.length, 4, 'should ingest all 4 gallery images');
+  const directives = result.markdown.match(/::figure/g) ?? [];
+  assert.equal(directives.length, 1, 'should produce exactly one ::figure directive');
+  assert.match(result.markdown, /matrix=justified/, 'should use justified layout for 4+ images');
+  assert.match(result.markdown, /Before gallery\./, 'prose before gallery survives');
+  assert.match(result.markdown, /After gallery\./, 'prose after gallery survives');
+});
+
+test('importPost: wp-block-embed → URL preserved as plain link', async (t) => {
+  const root = freshSiteRoot(t);
+  const result = await importPost(makePost(POST_HTML_EMBED), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.match(
+    result.markdown,
+    /https:\/\/www\.youtube\.com\/watch\?v=abc123/,
+    'YouTube URL should survive'
+  );
+  assert.doesNotMatch(result.markdown, /<!-- import: dropped/, 'should not emit a dropped comment');
+  assert.match(result.markdown, /Watch this video/, 'prose before embed survives');
+  assert.match(result.markdown, /End of post/, 'prose after embed survives');
 });

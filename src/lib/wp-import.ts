@@ -228,6 +228,19 @@ function collectFigures(tree: unknown): CollectedFigure[] {
       for (const c of node.children ?? []) walk(c, fig);
       return;
     }
+    // Jetpack tiled gallery: outer wrapper is a <div>, not a <figure>.
+    // Walk its subtree collecting all <figure.tiled-gallery__item> imgs.
+    if (node.tagName === 'div' && hasClass(node, 'wp-block-jetpack-tiled-gallery')) {
+      const fig: CollectedFigure = {
+        figureNode: node,
+        kind: 'gallery',
+        items: [],
+        outerCaption: null
+      };
+      out.push(fig);
+      for (const c of node.children ?? []) walk(c, fig);
+      return;
+    }
     // Any other <figure> that contains an <img> is treated as an
     // image figure. This covers `wp-block-image` (Gutenberg) AND
     // older theme variants like `aligncenter size-large

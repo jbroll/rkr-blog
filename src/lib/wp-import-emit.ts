@@ -69,11 +69,21 @@ function renderBlock(node: HastNode): string {
       const text = code ? collectText(code) : collectText(node);
       return `\`\`\`\n${text.replace(/\n+$/, '')}\n\`\`\``;
     }
-    case 'figure':
-      // Should already have been replaced with a directive marker by
-      // collectFigures + replaceWithRawMarkdown. If a stray figure
-      // survives (non-WP-block class), drop it with a comment.
+    case 'figure': {
+      // wp-block-embed: extract the raw URL from the wrapper div and
+      // emit it as a plain link so the content isn't silently lost.
+      const classes = node.properties?.className;
+      const isEmbed = Array.isArray(classes)
+        ? classes.includes('wp-block-embed')
+        : typeof classes === 'string' && classes.split(/\s+/).includes('wp-block-embed');
+      if (isEmbed) {
+        const url = collectText(node).trim();
+        return url || '';
+      }
+      // Any other figure that wasn't replaced by collectFigures gets a
+      // comment placeholder so content isn't silently lost.
       return '<!-- import: dropped non-WP figure -->';
+    }
     case 'div':
     case 'section':
     case 'article':
