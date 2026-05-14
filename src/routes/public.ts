@@ -231,7 +231,19 @@ export default async function publicRoutes(
     const raw = await fs.promises.readFile(fullPath, 'utf8');
     const parsed = parsePost(raw);
     const ctx = { siteRoot, widgets };
-    const bannerHtml = await extractPostBanner(parsed.ast, ctx);
+    // Banner priority: auto-detect first ::figure in body, then fall back
+    // to the `banner:` frontmatter field (set by the WP importer from
+    // the post's featured_media).
+    let bannerHtml = await extractPostBanner(parsed.ast, ctx);
+    if (!bannerHtml && typeof parsed.frontmatter.banner === 'string' && parsed.frontmatter.banner) {
+      const bannerNode: DirectiveNode = {
+        type: 'leafDirective',
+        name: 'figure',
+        attributes: { ids: parsed.frontmatter.banner as string, justify: 'bleed' },
+        children: []
+      };
+      bannerHtml = await widgets.dispatch('figure', bannerNode, ctx);
+    }
     const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 
     const html = renderPostPage({

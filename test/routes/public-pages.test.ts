@@ -376,6 +376,36 @@ test('GET /:slug: first ::figure is extracted as banner, rendered before <main> 
   assert.match(articleHtml, /Some body text/);
 });
 
+test('GET /:slug: banner: frontmatter fallback renders bleed banner when body has no leading figure', async (t) => {
+  const { root, app } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'fm-banner.md',
+    {
+      slug: 'fm-banner',
+      title: 'FM Banner',
+      status: 'published',
+      date: '2026-05-14T12:00:00Z',
+      banner: id
+    },
+    'Body text with no leading figure.'
+  );
+  runReindex(root);
+
+  const res = await app.inject({ method: 'GET', url: '/fm-banner' });
+  assert.equal(res.statusCode, 200);
+
+  // Frontmatter banner rendered with bleed before <main>.
+  const mainIdx = res.body.indexOf('<main');
+  const bleedIdx = res.body.indexOf('rkr-justify-bleed');
+  assert.ok(bleedIdx > 0, 'banner rendered from frontmatter');
+  assert.ok(bleedIdx < mainIdx, 'banner before <main>');
+
+  // Body text still present in article.
+  assert.match(res.body, /Body text with no leading figure/);
+});
+
 test('GET /:slug: ::figure NOT first (text before it) stays in body, no banner', async (t) => {
   const { root, app } = await setup(t);
   const id = await ingestOne(root);
