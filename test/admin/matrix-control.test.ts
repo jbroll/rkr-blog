@@ -24,7 +24,7 @@ test('parseMatrix: NxM with clamping', () => {
 });
 
 test('parseMatrix: justified + masonry with and without param', () => {
-  assert.deepEqual(adminParse('justified'), { kind: 'justified', param: 240 });
+  assert.deepEqual(adminParse('justified'), { kind: 'justified', param: 180 });
   assert.deepEqual(adminParse('justified:320'), { kind: 'justified', param: 320 });
   assert.deepEqual(adminParse('masonry'), { kind: 'masonry', param: 3 });
   assert.deepEqual(adminParse('masonry:5'), { kind: 'masonry', param: 5 });
@@ -48,7 +48,7 @@ test('serializeMatrix: non-default Grid emits NxM', () => {
 });
 
 test('serializeMatrix: justified omits :H when it matches the default', () => {
-  assert.equal(serializeMatrix({ kind: 'justified', param: 240 }), 'justified');
+  assert.equal(serializeMatrix({ kind: 'justified', param: 180 }), 'justified');
   assert.equal(serializeMatrix({ kind: 'justified', param: 320 }), 'justified:320');
 });
 

@@ -89,7 +89,7 @@ ${siteHead(data.site, { isAdmin: true })}
       </div>
       <div class="rkr-matrix-params" data-matrix-group="justified" hidden>
         <label for="rkr-matrix-height">Row height (px)</label>
-        <input id="rkr-matrix-height" type="number" min="50" max="1000" step="10" value="240"/>
+        <input id="rkr-matrix-height" type="number" min="50" max="1000" step="10" value="180"/>
       </div>
       <div class="rkr-matrix-params" data-matrix-group="masonry" hidden>
         <label for="rkr-matrix-mcols">Cols</label>

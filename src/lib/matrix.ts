@@ -24,7 +24,7 @@ export interface MatrixFlow {
 export type MatrixSpec = MatrixGrid | MatrixFlow;
 
 const MAX_GRID_DIM = 12;
-export const FLOW_DEFAULTS = { justified: 240, masonry: 3 } as const;
+export const FLOW_DEFAULTS = { justified: 180, masonry: 3 } as const;
 const MATRIX_DEFAULT: MatrixGrid = { kind: 'grid', rows: 1, cols: 1 };
 
 export function parseMatrix(raw: unknown): MatrixSpec {
