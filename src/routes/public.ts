@@ -96,7 +96,7 @@ export default async function publicRoutes(
   // (rare, mostly AVIF on big sources) take the 202 path; img-retry.js
   // polls back with backoff until the cache lands.
   const { siteRoot, db, renderBudgetMs = 8_000 } = opts;
-  const site = opts.site ?? siteConfig();
+  const getSite = (): SiteConfig => opts.site ?? siteConfig();
 
   // Render dedup: concurrent /img requests for the same filename
   // share one renderDerivative promise instead of starting parallel
@@ -124,6 +124,7 @@ export default async function publicRoutes(
   // ---- index: GET / -----------------------------------------------------
 
   fastify.get<{ Querystring: { page?: string } }>('/', async (req, reply) => {
+    const site = getSite();
     const requested = Number.parseInt(req.query.page ?? '1', 10);
     const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
     const offset = (page - 1) * PAGE_SIZE;
@@ -167,6 +168,7 @@ export default async function publicRoutes(
   // ---- post: GET /:slug -------------------------------------------------
 
   fastify.get<{ Params: { slug: string } }>('/:slug', async (req, reply) => {
+    const site = getSite();
     const { slug } = req.params;
     const row = readIndexedPostBySlug(db, slug);
     // Authed visitors see drafts (matches the index page, which links
