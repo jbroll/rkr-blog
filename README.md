@@ -14,7 +14,7 @@ Pages load fast. Images render once and serve from disk with long-cache headers.
 
 ## Stack
 
-Node 22, Fastify, SQLite, Apache. No bundler, no ORM, no Redis. TypeScript runs as-is via `--experimental-strip-types`. Deployed on Fly.io.
+Node 22, Fastify, SQLite, Apache. No bundler, no ORM, no Redis. TypeScript runs as-is via `--experimental-strip-types`.
 
 ## Docs
 

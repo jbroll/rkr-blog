@@ -10,7 +10,7 @@ app = "rkr-blog"
 primary_region = "ams"
 
 [build]
-  dockerfile = "deploy/Dockerfile"
+  dockerfile = "fly-deploy/Dockerfile"
 
 [env]
   PUBLIC_BASE_URL = "https://rkr-blog.fly.dev"

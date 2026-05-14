@@ -1,12 +1,12 @@
 [Unit]
-Description=rkroll-cms Fastify server
+Description=rkr-blog Fastify server
 After=network.target
 
 [Service]
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/rkroll-cms
+WorkingDirectory=/opt/rkr-blog
 Environment=NODE_ENV=production
 Environment=SITE_ROOT=/var/www/site
 Environment=PORT=3000
