@@ -53,7 +53,7 @@ export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
 <title>Settings — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks()}
 <style>
-.rkr-admin-settings-heading-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.rkr-admin-settings-heading-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;grid-column:1/-1}
 .rkr-admin-settings-heading{margin:0}
 .rkr-admin-settings-submit{display:flex;align-items:center;background:transparent;color:var(--rkr-link);border:1px solid var(--rkr-link);border-radius:4px;padding:.25rem .5rem;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}
 .rkr-admin-settings-submit.is-dirty{background:var(--rkr-link);color:var(--rkr-bg)}
