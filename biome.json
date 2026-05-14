@@ -11,8 +11,7 @@
       "src/**/*.js",
       "test/**/*.ts",
       "test/**/*.js",
-      "test-e2e/**/*.ts",
-      "playwright.config.ts",
+      "test/**/*.ts",
       "scripts/**/*.ts",
       "bin/server.js",
       "bin/site-admin"
@@ -92,7 +91,7 @@
         "src/lib/wp-push.ts",
         "src/admin/**/*.ts",
         "src/site/**/*.ts",
-        "test-e2e/**/*.ts"
+        "test/e2e/**/*.ts"
       ],
       "linter": {
         "rules": {

@@ -17,7 +17,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BASELINE_PATH = 'bundle-size-baseline.json';
+const BASELINE_PATH = 'scripts/bundle-size-baseline.json';
 const GROWTH_BUDGET = 0.1; // 10%
 const DIRS = ['static/admin', 'static/site'] as const;
 

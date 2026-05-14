@@ -15,10 +15,10 @@
 //
 // Inputs:
 //   - coverage/e2e/lcov.info       (produced by `npm run test:e2e`)
-//   - coverage-baseline.json       (tracked at repo root)
+//   - scripts/coverage-baseline.json  (tracked in scripts/)
 //   - argv: list of staged src/admin/** + src/site/** files
 // Outputs:
-//   - coverage-baseline.json       rewritten on pass
+//   - scripts/coverage-baseline.json  rewritten on pass
 //   - exit 0/1
 
 import { execSync } from 'node:child_process';
@@ -26,7 +26,7 @@ import fs from 'node:fs';
 
 const FLOOR = 0.75;
 const LCOV_PATH = 'coverage/e2e/lcov.info';
-const BASELINE_PATH = 'coverage-baseline.json';
+const BASELINE_PATH = 'scripts/coverage-baseline.json';
 
 // Files exempt from the new-file gate. Service worker code runs in a
 // separate thread that Playwright's page.coverage can't instrument, so

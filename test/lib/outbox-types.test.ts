@@ -75,16 +75,32 @@ test('coalescePending: commitImageEdit coalesces by id, latest seq wins', () => 
   );
 });
 
-test('coalescePending: upload entries are NEVER coalesced (content-addressed)', () => {
-  // Two uploads with identical payload → both kept. Server dedups
-  // server-side so the second drain is a no-op anyway.
+test('coalescePending: upload entries coalesce by id, latest seq wins', () => {
+  // Same image added twice offline → only the latest upload drains.
+  // The blob is stored once in originals/<id>.<ext>; sending twice
+  // wastes bandwidth (server dedup makes the second a no-op anyway).
   const a = entry(1, 'upload', {
     payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
   });
   const b = entry(2, 'upload', {
     payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
   });
-  assert.equal(coalescePending([a, b]).length, 2);
+  const result = coalescePending([a, b]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.seq, 2);
+});
+
+test('coalescePending: upload entries with different ids both kept', () => {
+  const a = entry(1, 'upload', {
+    payload: { id: 'abc', filename: 'a.png', mimeType: 'image/png' }
+  });
+  const b = entry(2, 'upload', {
+    payload: { id: 'def', filename: 'b.png', mimeType: 'image/png' }
+  });
+  assert.deepEqual(
+    coalescePending([a, b]).map((e) => e.seq),
+    [1, 2]
+  );
 });
 
 test('coalescePending: mixed ops preserve causal order across kept entries', () => {

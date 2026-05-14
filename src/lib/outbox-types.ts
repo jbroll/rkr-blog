@@ -60,12 +60,14 @@ export type OutboxEntry =
   | (OutboxEntryBase & { op: 'commitImageEdit'; payload: CommitImageEditPayload })
   | (OutboxEntryBase & { op: 'savePost'; payload: SavePostPayload });
 
-/** Keep only the latest savePost per slug + commitImageEdit per id.
- * Upload is NOT coalesced — uploads are idempotent server-side
- * (content-addressed) and each carries a distinct blob. */
+/** Keep only the latest savePost per slug, commitImageEdit per id,
+ * and upload per id. The upload blob lives in originals/<id>.<ext>
+ * (written once at ingest time), so draining N uploads of the same
+ * image would send the same bytes N times; only the latest is needed. */
 export function coalescePending(entries: readonly OutboxEntry[]): OutboxEntry[] {
   const latestSavePost = new Map<string, number>();
   const latestCommit = new Map<string, number>();
+  const latestUpload = new Map<string, number>();
   for (const e of entries) {
     if (e.op === 'savePost') {
       const prev = latestSavePost.get(e.payload.slug);
@@ -77,11 +79,17 @@ export function coalescePending(entries: readonly OutboxEntry[]): OutboxEntry[] 
       if (prev === undefined || e.seq > prev) {
         latestCommit.set(e.payload.id, e.seq);
       }
+    } else if (e.op === 'upload') {
+      const prev = latestUpload.get(e.payload.id);
+      if (prev === undefined || e.seq > prev) {
+        latestUpload.set(e.payload.id, e.seq);
+      }
     }
   }
   return entries.filter((e) => {
     if (e.op === 'savePost') return latestSavePost.get(e.payload.slug) === e.seq;
     if (e.op === 'commitImageEdit') return latestCommit.get(e.payload.id) === e.seq;
+    if (e.op === 'upload') return latestUpload.get(e.payload.id) === e.seq;
     return true;
   });
 }

@@ -16,7 +16,7 @@ const HOST = '127.0.0.1';
 const BASE_URL = `http://${HOST}:${PORT}`;
 
 export default defineConfig({
-  testDir: './test-e2e',
+  testDir: './test/e2e',
   testMatch: /.*\.spec\.ts$/,
   fullyParallel: false,
   workers: 1, // single worker so the shared server isn't raced
@@ -24,11 +24,11 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? 'github' : 'list',
   timeout: 30_000,
-  // V8 coverage capture lives in test-e2e/coverage-fixtures.ts (per-
-  // test) + test-e2e/global-teardown.ts (final report generation).
+  // V8 coverage capture lives in test/e2e/coverage-fixtures.ts (per-
+  // test) + test/e2e/global-teardown.ts (final report generation).
   // mcr handles source-map resolution so reports show src/admin/main.ts
   // line coverage rather than the bundled URL.
-  globalTeardown: './test-e2e/global-teardown.ts',
+  globalTeardown: './test/e2e/global-teardown.ts',
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',
@@ -50,7 +50,7 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      'node --no-warnings=ExperimentalWarning --experimental-strip-types test-e2e/server-runner.ts',
+      'node --no-warnings=ExperimentalWarning --experimental-strip-types test/e2e/server-runner.ts',
     url: `${BASE_URL}/health`,
     timeout: 30_000,
     reuseExistingServer: !process.env.CI,

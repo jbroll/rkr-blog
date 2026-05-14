@@ -21,8 +21,8 @@
     "knip": "knip",
     "knip:gate": "knip --no-progress",
     "circular": "dpdm --circular --no-warning --no-tree --exit-code circular:1 'src/**/*.ts'",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
+    "test:e2e": "playwright test --config test/playwright.config.ts",
+    "test:e2e:headed": "playwright test --config test/playwright.config.ts --headed",
     "test:coverage:full": "rm -rf coverage && npm run --silent test:coverage:report && npm run --silent build:admin && npm run --silent build:site && npm run --silent test:e2e",
     "format": "biome format --write",
     "check": "npm run typecheck && biome check && npm run test:coverage",
@@ -53,6 +53,40 @@
     "sharp": "^0.33.0",
     "unified": "^11.0.5",
     "yaml": "^2.5.0"
+  },
+  "knip": {
+    "entry": [
+      "src/cli/init.ts",
+      "src/cli/migrate.ts",
+      "src/cli/render.ts",
+      "src/cli/gc.ts",
+      "src/cli/server.ts",
+      "src/cli/user.ts",
+      "src/cli/import-wp.ts",
+      "src/cli/reset.ts",
+      "src/cli/jobs.ts",
+      "src/admin/posts-list.ts",
+      "src/site/carousel.ts",
+      "src/site/copy-link.ts",
+      "src/site/img-retry.ts",
+      "src/site/sw.ts",
+      "src/site/sw-register.ts",
+      "scripts/check-bundle-size.ts",
+      "scripts/check-duplicate-types.ts",
+      "scripts/check-no-reexports.ts",
+      "scripts/check-e2e-coverage.ts",
+      "scripts/check-orientation.mjs",
+      "test/**/*.test.ts",
+      "test/e2e/**/*.spec.ts",
+      "test/playwright.config.ts"
+    ],
+    "ignore": [
+      "src/admin/css.d.ts",
+      "src/site/css.d.ts"
+    ],
+    "ignoreDependencies": [
+      "typescript-language-server"
+    ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",

@@ -36,12 +36,12 @@ from disk thereafter.
 
 ## Read next
 
-- **[spec.md](./spec.md)** — what the application does. The features
+- **[docs/spec.md](./docs/spec.md)** — what the application does. The features
   and behavior an alternate implementation would need to reproduce.
-- **[implementation.md](./implementation.md)** — how this codebase
+- **[docs/implementation.md](./docs/implementation.md)** — how this codebase
   delivers the spec: stack choices, repo layout, database schema,
   image-pipeline internals, build order.
-- **[developer-quickstart.md](./developer-quickstart.md)** — local
+- **[docs/developer-quickstart.md](./docs/developer-quickstart.md)** — local
   development setup, coding conventions, test/lint/hook configuration,
   command cheatsheet.
 
