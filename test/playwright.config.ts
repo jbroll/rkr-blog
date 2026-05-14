@@ -37,15 +37,13 @@ export default defineConfig({
     // some versions; the carousel autoplay test (and any future
     // animation-aware test) needs the user-default "no-preference"
     // so the public-site code follows the same code path real
-    // visitors do.
-    reducedMotion: 'no-preference'
+    // visitors do. reducedMotion moved to contextOptions in PW 1.59.
+    contextOptions: { reducedMotion: 'no-preference' }
   },
   projects: [
     {
       name: 'chromium',
-      // Override after spread so devices['Desktop Chrome'] doesn't
-      // re-set reducedMotion=reduce in some Playwright versions.
-      use: { ...devices['Desktop Chrome'], reducedMotion: 'no-preference' }
+      use: { ...devices['Desktop Chrome'], contextOptions: { reducedMotion: 'no-preference' } }
     }
   ],
   webServer: {

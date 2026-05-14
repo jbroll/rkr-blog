@@ -12,9 +12,9 @@
   },
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning --experimental-strip-types bin/server.js",
-    "test": "node --test --no-warnings=ExperimentalWarning --experimental-strip-types",
-    "test:coverage": "c8 --include='src/**/*.ts' --exclude='src/admin/**' --exclude='**/*.test.ts' --reporter=text --check-coverage --per-file --lines=90 --branches=75 --functions=90 -- node --no-warnings=ExperimentalWarning --experimental-strip-types --test",
-    "test:coverage:report": "c8 --include='src/**/*.ts' --exclude='src/admin/**' --exclude='**/*.test.ts' --reporter=text --reporter=text-summary -- node --no-warnings=ExperimentalWarning --experimental-strip-types --test",
+    "test": "node --test --no-warnings=ExperimentalWarning --experimental-strip-types 'test/**/*.test.ts'",
+    "test:coverage": "c8 --include='src/**/*.ts' --exclude='src/admin/**' --exclude='**/*.test.ts' --reporter=text --check-coverage --per-file --lines=90 --branches=75 --functions=90 -- node --no-warnings=ExperimentalWarning --experimental-strip-types --test 'test/**/*.test.ts'",
+    "test:coverage:report": "c8 --include='src/**/*.ts' --exclude='src/admin/**' --exclude='**/*.test.ts' --reporter=text --reporter=text-summary -- node --no-warnings=ExperimentalWarning --experimental-strip-types --test 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
     "lint": "biome check",
     "lint:fix": "biome check --write",

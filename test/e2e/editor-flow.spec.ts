@@ -1474,7 +1474,11 @@ test('editor: pin existing post → offline edit → reconnect drains', async ({
   // pointing at the parsed markdown, and bumps currentDraftId.
   const pinResult = await page.evaluate(async (s) => {
     const fn = (
-      window as unknown as { __rkrPin: (s: string) => Promise<{ progress: { total: number } }> }
+      window as unknown as {
+        __rkrPin: (
+          s: string
+        ) => Promise<{ progress: { total: number; fetched: number; skipped: number } }>;
+      }
     ).__rkrPin;
     return fn(s);
   }, slug);

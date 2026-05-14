@@ -36,6 +36,8 @@ if compgen -G "src/**/*.ts" > /dev/null || compgen -G "test/**/*.ts" > /dev/null
   npx --no-install tsc --noEmit
   echo "==> tsc --noEmit (browser)"
   npx --no-install tsc -p tsconfig.browser.json --noEmit
+  echo "==> tsc --noEmit (e2e)"
+  npx --no-install tsc -p tsconfig.e2e.json --noEmit
 fi
 
 # Cross-file duplicate type/interface/enum names. Biome and tsc don't catch

@@ -12,9 +12,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { open } from '../src/lib/db.ts';
-import { migrate } from '../src/lib/migrate.ts';
-import { buildApp } from '../src/server.ts';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+import { open } from '../../src/lib/db.ts';
+import { migrate } from '../../src/lib/migrate.ts';
+import { buildApp } from '../../src/server.ts';
 
 const root = process.env.SITE_ROOT;
 if (!root) throw new Error('SITE_ROOT required');
@@ -53,7 +55,10 @@ const app = await buildApp({
 const E2E_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
 app.post<{ Params: { slug: string }; Body: { offsetMs?: number } }>(
   '/admin/test/bump-mtime/:slug',
-  async (request, reply) => {
+  async (
+    request: FastifyRequest<{ Params: { slug: string }; Body: { offsetMs?: number } }>,
+    reply: FastifyReply
+  ) => {
     const slug = request.params.slug;
     if (!E2E_SLUG_RE.test(slug) || slug.length > 100) {
       return reply.code(400).send({ error: 'invalid slug' });

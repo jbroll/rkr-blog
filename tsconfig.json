@@ -25,6 +25,6 @@
 
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "bin/**/*.ts", "scripts/**/*.ts"],
+  "include": ["src/**/*.ts", "test/*.ts", "test/e2e/server-runner.ts", "bin/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "src/admin/**", "src/site/**", "static/**"]
 }
