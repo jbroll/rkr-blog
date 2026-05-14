@@ -10,8 +10,7 @@ import type { Db } from './db.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Repo layout: src/lib/migrate.ts → ../../migrations
-const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', 'migrations');
+const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', 'migrations');
 
 export interface MigrationEntry {
   filename: string;

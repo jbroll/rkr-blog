@@ -28,7 +28,6 @@ COPY tsconfig.json tsconfig.browser.json biome.json ./
 COPY bin ./bin
 COPY src ./src
 COPY static ./static
-COPY migrations ./migrations
 # Bring .git over solely to capture the SHA into a small text file the
 # runtime stage can read. Done in its own RUN so the layer is small
 # and the heavy .git tree doesn't end up in the runtime image.
@@ -54,7 +53,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/bin ./bin
 COPY --from=builder /app/src ./src
-COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/static ./static
 COPY --from=builder /app/git-hash ./git-hash
 
