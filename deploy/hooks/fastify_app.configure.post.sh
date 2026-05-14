@@ -7,10 +7,10 @@ source "$DEPLOY_HOME/lib/common.sh"
 
 : "${APP_NAME:?APP_NAME not set}"
 : "${NODE_APP_SYSTEMD_PATH:=/etc/systemd/system}"
-: "${NODE_APP_NODE_OPTIONS:=}"
+: "${FASTIFY_APP_NODE_OPTIONS:=}"
 : "${NODE_APP_MAIN_SCRIPT:=bin/server.js}"
 
-init_cmd="/usr/bin/node ${NODE_APP_NODE_OPTIONS} bin/site-admin init"
+init_cmd="/usr/bin/node ${FASTIFY_APP_NODE_OPTIONS} bin/site-admin init"
 service_file="${NODE_APP_SYSTEMD_PATH}/${APP_NAME}.service"
 
 remote_exec "sudo sed -i 's|^ExecStart=|ExecStartPre=${init_cmd}\nExecStart=|' '${service_file}'"
