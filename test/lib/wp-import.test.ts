@@ -754,5 +754,68 @@ test('importPost: HTML entities in title are decoded to Unicode', async (t) => {
   const post = makePost('', 'test-post');
   post.title.rendered = 'Picking Up the Scamp at the &#8220;Nest&#8221;';
   const result = await importPost(post, { siteRoot: root, fetchImage: stubFetcher() });
-  assert.match(result.markdown, /title: "Picking Up the Scamp at the “Nest”"/);
+  // &#8220; → U+201C, &#8221; → U+201D; outer quotes are ASCII U+0022
+  const lq = String.fromCodePoint(0x201c);
+  const rq = String.fromCodePoint(0x201d);
+  const q = String.fromCodePoint(0x22);
+  const expected = `title: ${q}Picking Up the Scamp at the ${lq}Nest${rq}${q}`;
+  assert.ok(
+    result.markdown.includes(expected),
+    `expected decoded curly quotes in title, got: ${result.markdown.split('\n')[1]}`
+  );
+});
+
+// ---- tag resolution tests -----------------------------------------------
+
+test('importPost: tags resolved via fetchTagNames appear in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = {
+    ...makePost('<p>Tagged post.</p>'),
+    tags: [10, 20]
+  };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher(),
+    fetchTagNames: async (ids) => {
+      assert.deepEqual(ids, [10, 20]);
+      return ['travel', 'food'];
+    }
+  });
+  assert.match(result.markdown, /^tags:/m);
+  assert.match(result.markdown, /- travel/);
+  assert.match(result.markdown, /- food/);
+});
+
+test('importPost: no tags field → no tags in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const result = await importPost(makePost('<p>No tags.</p>'), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.doesNotMatch(result.markdown, /^tags:/m);
+});
+
+test('importPost: empty tags array → no tags in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = { ...makePost('<p>Empty tags.</p>'), tags: [] };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.doesNotMatch(result.markdown, /^tags:/m);
+});
+
+test('importPost: fetchTagNames failure is non-fatal, post imports without tags', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = { ...makePost('<p>Fail tags.</p>'), tags: [99] };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher(),
+    fetchTagNames: async () => {
+      throw new Error('network error');
+    }
+  });
+  // Post still imports successfully, just no tags block
+  assert.match(result.markdown, /Fail tags/);
+  assert.doesNotMatch(result.markdown, /^tags:/m);
 });

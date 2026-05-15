@@ -26,6 +26,8 @@ export interface SavePostPayload {
   /** Server-side updated_at the client saw at edit-start. Sent as
    * X-Rkr-Last-Synced-At; omitted for fresh never-synced posts. */
   lastSyncedAt?: string;
+  /** Tag names to attach to the post. */
+  tags?: string[];
 }
 
 /** @public */

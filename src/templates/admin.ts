@@ -45,6 +45,7 @@ ${siteHead(data.site, { isAdmin: true })}
 <div class="rkr-meta">
   <label for="rkr-title">Title</label>       <input id="rkr-title" type="text"/>
   <label for="rkr-subtitle">Subtitle</label> <input id="rkr-subtitle" type="text" placeholder="optional"/>
+  <label for="rkr-tags">Tags</label>         <div id="rkr-tags" class="rkr-tag-input" aria-label="Tags"></div>
   <!-- Slug is internal: the server derives it from the title on first
        save, and existing posts keep their loaded value. The admin
        doesn't see or edit it; a Copy-link button on the toolbar

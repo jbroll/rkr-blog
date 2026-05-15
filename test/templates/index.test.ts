@@ -61,10 +61,16 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /<a href="\/hello">Hello<\/a>/);
   assert.match(html, /<a href="\/wip">WIP<\/a>/);
   assert.match(html, /action="\/admin\/posts\/hello\/status"/);
-  assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-published"/);
-  assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-draft"/);
-  assert.match(html, /<option value="published" selected>published<\/option>/);
-  assert.match(html, /<option value="draft" selected>draft<\/option>/);
+  // Status icon buttons: eye = published, eyeOff = draft. Toggle flips to opposite status.
+  assert.match(html, /class="rkr-admin-posts-status-btn is-published"/);
+  assert.match(html, /class="rkr-admin-posts-status-btn is-draft"/);
+  assert.match(html, /aria-label="Published — click to unpublish"/);
+  assert.match(html, /aria-label="Draft — click to publish"/);
+  // Hidden input carries the target (opposite) status for the form submit.
+  assert.match(html, /<input [^>]*name="status"[^>]*value="draft"/);
+  assert.match(html, /<input [^>]*name="status"[^>]*value="published"/);
+  // No select element in the status column.
+  assert.doesNotMatch(html, /<select [^>]*name="status"/);
   // Pin / delete buttons render the Lucide icons (no text label) —
   // accessible name lives on aria-label.
   assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled><svg [^>]*>/);
@@ -73,10 +79,9 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
   assert.match(html, />2026-05-01</);
 
-  // The posts-list bundle is loaded so the status select auto-
-  // submits and pin buttons read OPFS. Admin FABs (+ + ⚙) replace
+  // The posts-list bundle is loaded so pin buttons read OPFS. Admin FABs (+ + ⚙) replace
   // the old admin strip; the strip itself is gone.
-  assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
+  assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js/);
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New post"/);
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="Settings"/);
@@ -171,4 +176,128 @@ test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
   });
   assert.ok(!html.includes('<script>alert(1)</script>'), 'title must be HTML-escaped');
   assert.match(html, /&lt;script&gt;/);
+});
+
+// ---------------------------------------------------------------------------
+// Tag rail tests
+// ---------------------------------------------------------------------------
+
+test('renderIndexPage: tag rail renders when tagCounts provided', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [
+      { name: 'travel', count: 12 },
+      { name: 'food', count: 3 }
+    ]
+  });
+  assert.match(html, /<aside class="rkr-tag-rail"/);
+  assert.match(html, /aria-label="Tags"/);
+  assert.match(html, /href="\/\?tag=travel"/);
+  assert.match(html, /travel \(12\)/);
+  assert.match(html, /href="\/\?tag=food"/);
+  assert.match(html, /food \(3\)/);
+});
+
+test('renderIndexPage: no tag rail when tagCounts is empty', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: []
+  });
+  assert.doesNotMatch(html, /rkr-tag-rail/);
+});
+
+test('renderIndexPage: no tag rail when tagCounts is absent', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: []
+  });
+  assert.doesNotMatch(html, /rkr-tag-rail/);
+});
+
+test('renderIndexPage: active tag gets aria-current + clear link', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [
+      { name: 'travel', count: 12 },
+      { name: 'food', count: 3 }
+    ],
+    activeTag: 'travel'
+  });
+  assert.match(html, /aria-current="page"/);
+  // Clear link points back to unfiltered index
+  assert.match(html, /href="\/"[^>]*>.*clear/s);
+  // Inactive tag has no aria-current
+  assert.doesNotMatch(html, /href="\/\?tag=food"[^>]*aria-current/);
+});
+
+test('renderIndexPage: pager preserves ?tag= when active', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 3,
+    posts: [],
+    tagCounts: [{ name: 'travel', count: 30 }],
+    activeTag: 'travel'
+  });
+  assert.match(html, /href="\/\?page=2&amp;tag=travel"/);
+});
+
+test('renderIndexPage: sort toggle renders asc/desc links', () => {
+  const descHtml = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    sort: 'desc'
+  });
+  // desc view: link to switch to asc
+  assert.match(descHtml, /href="\/\?sort=asc"/);
+  assert.doesNotMatch(descHtml, /href="\/\?sort=desc"/);
+
+  const ascHtml = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    sort: 'asc'
+  });
+  // asc view: link to switch to desc (or back to default)
+  assert.match(ascHtml, /href="\/(\?sort=desc)?"/);
+  assert.doesNotMatch(ascHtml, /href="\/\?sort=asc"/);
+});
+
+test('renderIndexPage: sort toggle preserves ?tag= param', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [{ name: 'travel', count: 5 }],
+    activeTag: 'travel',
+    sort: 'asc'
+  });
+  // toggle back to desc should keep tag
+  assert.match(html, /href="\/\?tag=travel"/);
+});
+
+test('renderIndexPage: pager preserves ?sort= when asc', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 3,
+    posts: [],
+    sort: 'asc'
+  });
+  assert.match(html, /href="\/\?page=2&amp;sort=asc"/);
 });

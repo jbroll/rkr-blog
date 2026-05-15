@@ -38,19 +38,32 @@ export interface IndexPageData extends SiteChrome {
   /** Logged-in admin → render the admin strip in siteHead and the
    * full posts table (drafts + status / pin / delete). */
   isAdmin?: boolean;
+  /** Tag counts for the tag rail sidebar. When absent or empty, the
+   * rail is not rendered. */
+  tagCounts?: { name: string; count: number }[];
+  /** The currently-active tag filter, if any. */
+  activeTag?: string;
+  /** Current sort direction. 'desc' (default) = newest first; 'asc' = oldest first. */
+  sort?: 'asc' | 'desc';
 }
 
 export function renderIndexPage(data: IndexPageData): string {
   const v = bundleVersion();
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
+  const isAsc = data.sort === 'asc';
+  // Build query suffix for pager and sort toggle — preserves active tag + sort together.
+  const tagSuffix = data.activeTag ? `&amp;tag=${encodeURIComponent(data.activeTag)}` : '';
+  const sortSuffix = isAsc ? '&amp;sort=asc' : '';
   const pager =
     data.totalPages > 1
       ? `<nav aria-label="pagination">
   <span>page ${data.page} of ${data.totalPages}</span>
-  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}">prev</a>` : ''}
-  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}">next</a>` : ''}
+  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}${tagSuffix}${sortSuffix}">prev</a>` : ''}
+  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
 </nav>`
       : '';
+  const sortToggle = renderSortToggle(isAsc, data.activeTag);
+  const tagRail = renderTagRail(data.tagCounts, data.activeTag);
   // The posts-list bundle wires status-select auto-submit + pin/unpin
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
   // never see those controls.
@@ -72,9 +85,10 @@ ${stylesheetLinks()}
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
 ${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
-${body}
+${sortToggle}${body}
 ${pager}
 </main>
+${tagRail}
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
 ${data.isAdmin ? indexAdminFabs() : ''}
 ${postsListScript}
@@ -162,12 +176,10 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
     <td>${iso ? `<time datetime="${escapeAttr(iso)}">${escapeText(label)}</time>` : ''}</td>
     <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
-        <label class="rkr-vh" for="rkr-status-${escapeAttr(p.slug)}">Status for ${escapeAttr(p.title)}</label>
-        <select id="rkr-status-${escapeAttr(p.slug)}" name="status" class="rkr-admin-posts-status is-${status}">
-          <option value="draft"${status === 'draft' ? ' selected' : ''}>draft</option>
-          <option value="published"${status === 'published' ? ' selected' : ''}>published</option>
-        </select>
-        <noscript><button type="submit">apply</button></noscript>
+        <input type="hidden" name="status" value="${status === 'published' ? 'draft' : 'published'}"/>
+        <button type="submit" class="rkr-admin-posts-status-btn is-${status}"
+          aria-label="${status === 'published' ? 'Published — click to unpublish' : 'Draft — click to publish'}"
+          title="${status === 'published' ? 'Published' : 'Draft'}">${icon(status === 'published' ? 'eye' : 'eyeOff', 18)}</button>
       </form>
     </td>
     <td class="rkr-admin-posts-action">
@@ -179,4 +191,39 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
       </form>
     </td>
   </tr>`;
+}
+
+/** Renders the tag rail aside. Returns empty string when tagCounts is
+ * absent or empty — callers can splice the result directly into the
+ * HTML without a wrapper conditional. */
+function renderTagRail(
+  tagCounts: { name: string; count: number }[] | undefined,
+  activeTag: string | undefined
+): string {
+  if (!tagCounts || tagCounts.length === 0) return '';
+  const clearLink = activeTag ? `\n  <a class="rkr-tag-clear" href="/">clear</a>` : '';
+  const pills = tagCounts
+    .map((t) => {
+      const href = `/?tag=${encodeURIComponent(t.name)}`;
+      const isActive = t.name === activeTag;
+      const current = isActive ? ' aria-current="page"' : '';
+      return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
+    })
+    .join('\n');
+  return `<aside class="rkr-tag-rail" aria-label="Tags">${clearLink}
+${pills}
+</aside>`;
+}
+
+/** Sort toggle: a single link that flips between oldest-first and newest-first.
+ * Returns empty string for admin view (admin table always sorts by updated_at). */
+function renderSortToggle(isAsc: boolean, activeTag: string | undefined): string {
+  const tagPart = activeTag ? `tag=${encodeURIComponent(activeTag)}&amp;` : '';
+  if (isAsc) {
+    // Currently oldest-first → offer link back to newest-first (default, no sort param)
+    const href = activeTag ? `/?tag=${encodeURIComponent(activeTag)}` : '/';
+    return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}">newest first</a>\n`;
+  }
+  // Currently newest-first (default) → offer link to oldest-first
+  return `<a class="rkr-sort-toggle" href="/?${tagPart}sort=asc">oldest first</a>\n`;
 }

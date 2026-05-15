@@ -37,7 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Root, RootContent } from 'mdast';
-import { readIndexedPostBySlug, readIndexedPosts } from '../cli/reindex.ts';
+import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../cli/reindex.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -151,60 +151,75 @@ export default async function publicRoutes(
 
   // ---- index: GET / -----------------------------------------------------
 
-  fastify.get<{ Querystring: { page?: string } }>('/', async (req, reply) => {
-    const site = getSite();
-    const requested = Number.parseInt(req.query.page ?? '1', 10);
-    const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
-    const offset = (page - 1) * PAGE_SIZE;
-    const isAdmin = !!req.user;
-    // Authed visitors see drafts + published (the homepage doubles as
-    // the admin posts list). Anonymous visitors keep the published-
-    // only filter so drafts stay invisible until promotion.
-    const countSql = isAdmin
-      ? 'SELECT COUNT(*) AS n FROM posts'
-      : "SELECT COUNT(*) AS n FROM posts WHERE status = 'published'";
-    const total = (db.prepare<{ n: number }>(countSql).get() ?? { n: 0 }).n;
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  fastify.get<{ Querystring: { page?: string; tag?: string; sort?: string } }>(
+    '/',
+    async (req, reply) => {
+      const site = getSite();
+      const requested = Number.parseInt(req.query.page ?? '1', 10);
+      const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
+      const offset = (page - 1) * PAGE_SIZE;
+      const isAdmin = !!req.user;
+      const activeTag =
+        typeof req.query.tag === 'string' && req.query.tag.trim()
+          ? req.query.tag.trim()
+          : undefined;
+      const sort: 'asc' | 'desc' = req.query.sort === 'asc' ? 'asc' : 'desc';
+      // Authed visitors see drafts + published (the homepage doubles as
+      // the admin posts list). Anonymous visitors keep the published-
+      // only filter so drafts stay invisible until promotion.
+      const status: 'published' | null = isAdmin ? null : 'published';
+      const total = countPosts(db, status, activeTag);
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    const rows = readIndexedPosts(db, {
-      limit: PAGE_SIZE,
-      offset,
-      status: isAdmin ? null : 'published'
-    });
+      const rows = readIndexedPosts(db, {
+        limit: PAGE_SIZE,
+        offset,
+        status,
+        tag: activeTag,
+        sort: isAdmin ? 'desc' : sort
+      });
 
-    let indexBannerHtml: string | undefined;
-    if (site.bannerImageId) {
-      const bannerNode: DirectiveNode = {
-        type: 'leafDirective',
-        name: 'figure',
-        attributes: { ids: site.bannerImageId, justify: 'bleed' },
-        children: []
-      };
-      indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
+      // Tag rail: show for anonymous public views only (admin view is the
+      // posts table and doesn't need the rail).
+      const tagCounts = isAdmin ? undefined : readTagCounts(db, { status: 'published' });
+
+      let indexBannerHtml: string | undefined;
+      if (site.bannerImageId) {
+        const bannerNode: DirectiveNode = {
+          type: 'leafDirective',
+          name: 'figure',
+          attributes: { ids: site.bannerImageId, justify: 'bleed' },
+          children: []
+        };
+        indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
+      }
+
+      const html = renderIndexPage({
+        site,
+        page,
+        totalPages,
+        posts: rows.map((r) => ({
+          slug: r.slug,
+          title: r.title,
+          ...(r.published_at ? { date: r.published_at } : {}),
+          ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
+        })),
+        ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
+        isAdmin,
+        ...(tagCounts && tagCounts.length > 0 ? { tagCounts } : {}),
+        ...(activeTag ? { activeTag } : {}),
+        ...(!isAdmin ? { sort } : {})
+      });
+
+      setPublicSecurityHeaders(reply);
+      // Authed responses carry session-private chrome (admin strip,
+      // per-row controls). Mark them no-store so the SW + any HTTP
+      // intermediary skip caching — a post-action 303 redirect to /
+      // would otherwise serve the previously-cached pre-action body.
+      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+      return reply.type('text/html; charset=utf-8').send(html);
     }
-
-    const html = renderIndexPage({
-      site,
-      page,
-      totalPages,
-      posts: rows.map((r) => ({
-        slug: r.slug,
-        title: r.title,
-        ...(r.published_at ? { date: r.published_at } : {}),
-        ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
-      })),
-      ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
-      isAdmin
-    });
-
-    setPublicSecurityHeaders(reply);
-    // Authed responses carry session-private chrome (admin strip,
-    // per-row controls). Mark them no-store so the SW + any HTTP
-    // intermediary skip caching — a post-action 303 redirect to /
-    // would otherwise serve the previously-cached pre-action body.
-    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-    return reply.type('text/html; charset=utf-8').send(html);
-  });
+  );
 
   // ---- post: GET /:slug -------------------------------------------------
 
@@ -356,6 +371,28 @@ export default async function publicRoutes(
         .send(fs.createReadStream(result.path));
     }
   );
+}
+
+/** Count posts matching the given status + optional tag filter. */
+function countPosts(db: Db, status: 'published' | null, tag: string | undefined): number {
+  if (tag) {
+    const sql =
+      status === null
+        ? `SELECT COUNT(*) AS n FROM posts p
+           JOIN post_tags pt ON pt.post_id = p.id
+           JOIN tags tg ON tg.id = pt.tag_id AND tg.name = ? COLLATE NOCASE`
+        : `SELECT COUNT(*) AS n FROM posts p
+           JOIN post_tags pt ON pt.post_id = p.id
+           JOIN tags tg ON tg.id = pt.tag_id AND tg.name = ? COLLATE NOCASE
+           WHERE p.status = ?`;
+    const params = status === null ? [tag] : [tag, status];
+    return (db.prepare<{ n: number }>(sql).get(...params) ?? { n: 0 }).n;
+  }
+  const sql =
+    status === null
+      ? 'SELECT COUNT(*) AS n FROM posts'
+      : "SELECT COUNT(*) AS n FROM posts WHERE status = 'published'";
+  return (db.prepare<{ n: number }>(sql).get() ?? { n: 0 }).n;
 }
 
 interface VariantOutputMatch {

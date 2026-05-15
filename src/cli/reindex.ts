@@ -20,6 +20,11 @@ export interface IndexedPost {
   path: string;
 }
 
+export interface TagCount {
+  name: string;
+  count: number;
+}
+
 export default async function reindexCmd(_argv: string[]): Promise<void> {
   const r = runReindex(paths().root);
   console.log(
@@ -100,11 +105,22 @@ function doReindex(
         ).run(slug, frontmatter.title, status, created, updatedAt, publishedAt, relPath);
         inserted++;
       }
+
+      // Sync tags for this post.
+      const postId =
+        existing?.id ??
+        (db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug)?.id as number);
+      syncPostTags(
+        db,
+        postId,
+        Array.isArray(frontmatter.tags) ? (frontmatter.tags as string[]) : []
+      );
     }
   });
   upsert();
 
   // Remove rows whose source file is gone.
+  // ON DELETE CASCADE in post_tags keeps that table clean automatically.
   const removed = db.transaction((): number => {
     const all = db.prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts').all();
     const orphans = all.filter((row) => !seenSlugs.has(row.slug));
@@ -114,7 +130,29 @@ function doReindex(
     return orphans.length;
   })();
 
+  // Prune tags that no longer appear in any post_tags row.
+  db.prepare('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags)').run();
+
   return { inserted, updated, removed };
+}
+
+/** Replace the full tag set for one post. Called inside the upsert transaction. */
+function syncPostTags(db: Db, postId: number, rawTags: string[]): void {
+  db.prepare('DELETE FROM post_tags WHERE post_id = ?').run(postId);
+  for (const raw of rawTags) {
+    const name = String(raw).trim();
+    if (!name) continue;
+    db.prepare('INSERT OR IGNORE INTO tags(name) VALUES (?)').run(name);
+    const tag = db
+      .prepare<{ id: number }>('SELECT id FROM tags WHERE name = ? COLLATE NOCASE')
+      .get(name);
+    if (tag) {
+      db.prepare('INSERT OR IGNORE INTO post_tags(post_id, tag_id) VALUES (?, ?)').run(
+        postId,
+        tag.id
+      );
+    }
+  }
 }
 
 function listMarkdown(dir: string): string[] {
@@ -126,33 +164,78 @@ function listMarkdown(dir: string): string[] {
 
 export function readIndexedPosts(
   db: Db,
-  opts: { limit?: number; offset?: number; status?: 'draft' | 'published' | null } = {}
+  opts: {
+    limit?: number;
+    offset?: number;
+    status?: 'draft' | 'published' | null;
+    tag?: string;
+    /** 'desc' (default) = newest first; 'asc' = oldest first. */
+    sort?: 'asc' | 'desc';
+  } = {}
 ): IndexedPost[] {
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
+  const tag = opts.tag ?? null;
+  const dir = opts.sort === 'asc' ? 'ASC' : 'DESC';
+
+  // Build optional tag join/filter clause.
+  const tagJoin = tag
+    ? `JOIN post_tags pt ON pt.post_id = p.id
+       JOIN tags tg ON tg.id = pt.tag_id AND tg.name = ? COLLATE NOCASE`
+    : '';
+  const tagParam = tag ? [tag] : [];
+
   // status === null → no filter (admin view: drafts + published).
   // status === undefined → default to 'published' (anonymous view).
   // status === 'draft' | 'published' → filter to that status.
   if (opts.status === null) {
     return db
       .prepare<IndexedPost>(
-        `SELECT slug, title, status, created_at, updated_at, published_at, path
-           FROM posts
-          ORDER BY updated_at DESC, slug ASC
+        `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
+           FROM posts p
+           ${tagJoin}
+          ORDER BY p.updated_at ${dir}, p.slug ASC
           LIMIT ? OFFSET ?`
       )
-      .all(limit, offset);
+      .all(...tagParam, limit, offset);
   }
   const status = opts.status ?? 'published';
   return db
     .prepare<IndexedPost>(
-      `SELECT slug, title, status, created_at, updated_at, published_at, path
-         FROM posts
-        WHERE status = ?
-        ORDER BY published_at DESC, slug ASC
+      `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
+         FROM posts p
+         ${tagJoin}
+        WHERE p.status = ?
+        ORDER BY p.published_at ${dir}, p.slug ASC
         LIMIT ? OFFSET ?`
     )
-    .all(status, limit, offset);
+    .all(...tagParam, status, limit, offset);
+}
+
+/** Tag counts for the sidebar.
+ * status === null → count all posts; status === 'published' → published only. */
+export function readTagCounts(db: Db, opts: { status: 'published' | null }): TagCount[] {
+  if (opts.status === null) {
+    return db
+      .prepare<TagCount>(
+        `SELECT t.name, COUNT(*) AS count
+           FROM tags t
+           JOIN post_tags pt ON pt.tag_id = t.id
+          GROUP BY t.id
+          ORDER BY count DESC, t.name ASC`
+      )
+      .all();
+  }
+  return db
+    .prepare<TagCount>(
+      `SELECT t.name, COUNT(*) AS count
+         FROM tags t
+         JOIN post_tags pt ON pt.tag_id = t.id
+         JOIN posts p ON p.id = pt.post_id AND p.status = ?
+        GROUP BY t.id
+        ORDER BY count DESC, t.name ASC`
+    )
+    .all(opts.status);
 }
 
 /** All indexed posts (drafts + published), newest-updated first.

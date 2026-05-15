@@ -8,6 +8,7 @@ import {
   readAllIndexedPosts,
   readIndexedPostBySlug,
   readIndexedPosts,
+  readTagCounts,
   runReindex
 } from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
@@ -31,6 +32,24 @@ function writePost(
     .map(([k, v]) => `${k}: ${v}`)
     .join('\n');
   fs.writeFileSync(path.join(root, 'content', 'posts', filename), `---\n${fm}\n---\n\n${body}\n`);
+}
+
+/** Write a post whose frontmatter includes a YAML flow-sequence tags field. */
+function writePostWithTags(
+  root: string,
+  filename: string,
+  base: Record<string, string>,
+  tags: string[],
+  body = 'body'
+): void {
+  const baseFm = Object.entries(base)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n');
+  const tagsFm = tags.length ? `\ntags: [${tags.map((t) => JSON.stringify(t)).join(', ')}]` : '';
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', filename),
+    `---\n${baseFm}${tagsFm}\n---\n\n${body}\n`
+  );
 }
 
 test('runReindex inserts new posts on first run', (t) => {
@@ -136,6 +155,200 @@ test('readAllIndexedPosts returns drafts + published, newest-updated first', (t)
     assert.ok(slugs.has('a') && slugs.has('b'));
     const statuses = new Set(all.map((p) => p.status));
     assert.ok(statuses.has('draft') && statuses.has('published'));
+  } finally {
+    db.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tag sync tests
+// ---------------------------------------------------------------------------
+
+test('tags from frontmatter land in tags + post_tags tables', (t) => {
+  const root = freshSiteRoot(t);
+  writePostWithTags(root, 'a.md', { slug: 'a', title: 'A', status: 'published' }, [
+    'travel',
+    'food'
+  ]);
+  runReindex(root);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const tags = db
+      .prepare<{ name: string }>('SELECT name FROM tags ORDER BY name')
+      .all()
+      .map((r) => r.name);
+    assert.deepEqual(tags, ['food', 'travel']);
+
+    const post = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get('a');
+    assert.ok(post);
+    const postTags = db
+      .prepare<{ name: string }>(
+        `SELECT t.name FROM post_tags pt JOIN tags t ON t.id = pt.tag_id
+         WHERE pt.post_id = ? ORDER BY t.name`
+      )
+      .all(post.id)
+      .map((r) => r.name);
+    assert.deepEqual(postTags, ['food', 'travel']);
+  } finally {
+    db.close();
+  }
+});
+
+test('reindex replaces post tags on update (old tags removed, new ones added)', (t) => {
+  const root = freshSiteRoot(t);
+  writePostWithTags(root, 'a.md', { slug: 'a', title: 'A', status: 'published' }, ['travel']);
+  runReindex(root);
+
+  // Overwrite with a different tag set.
+  writePostWithTags(root, 'a.md', { slug: 'a', title: 'A', status: 'published' }, ['food']);
+  runReindex(root);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const post = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get('a');
+    assert.ok(post);
+    const postTags = db
+      .prepare<{ name: string }>(
+        `SELECT t.name FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = ?`
+      )
+      .all(post.id)
+      .map((r) => r.name);
+    assert.deepEqual(postTags, ['food']);
+  } finally {
+    db.close();
+  }
+});
+
+test('orphaned tags pruned after post deletion', (t) => {
+  const root = freshSiteRoot(t);
+  writePostWithTags(root, 'a.md', { slug: 'a', title: 'A', status: 'published' }, ['unique-tag']);
+  runReindex(root);
+
+  fs.unlinkSync(path.join(root, 'content', 'posts', 'a.md'));
+  runReindex(root);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const tags = db.prepare<{ name: string }>('SELECT name FROM tags').all();
+    assert.equal(tags.length, 0, 'orphaned tag should be pruned');
+  } finally {
+    db.close();
+  }
+});
+
+test('readIndexedPosts tag filter returns only matching posts', (t) => {
+  const root = freshSiteRoot(t);
+  writePostWithTags(
+    root,
+    'a.md',
+    { slug: 'a', title: 'A', status: 'published', date: '2026-01-01T00:00:00Z' },
+    ['travel']
+  );
+  writePostWithTags(
+    root,
+    'b.md',
+    { slug: 'b', title: 'B', status: 'published', date: '2026-01-02T00:00:00Z' },
+    ['food', 'travel']
+  );
+  writePostWithTags(
+    root,
+    'c.md',
+    { slug: 'c', title: 'C', status: 'published', date: '2026-01-03T00:00:00Z' },
+    ['food']
+  );
+  runReindex(root);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const travelPosts = readIndexedPosts(db, { tag: 'travel' });
+    const slugs = travelPosts.map((p) => p.slug).sort();
+    assert.deepEqual(slugs, ['a', 'b']);
+
+    const foodPosts = readIndexedPosts(db, { tag: 'food' });
+    const foodSlugs = foodPosts.map((p) => p.slug).sort();
+    assert.deepEqual(foodSlugs, ['b', 'c']);
+
+    // Case-insensitive match
+    const upperPosts = readIndexedPosts(db, { tag: 'TRAVEL' });
+    assert.equal(upperPosts.length, 2);
+  } finally {
+    db.close();
+  }
+});
+
+test('readTagCounts returns name + count sorted by count DESC', (t) => {
+  const root = freshSiteRoot(t);
+  writePostWithTags(
+    root,
+    'a.md',
+    { slug: 'a', title: 'A', status: 'published', date: '2026-01-01T00:00:00Z' },
+    ['travel']
+  );
+  writePostWithTags(
+    root,
+    'b.md',
+    { slug: 'b', title: 'B', status: 'published', date: '2026-01-02T00:00:00Z' },
+    ['food', 'travel']
+  );
+  writePostWithTags(
+    root,
+    'c.md',
+    { slug: 'c', title: 'C', status: 'draft', date: '2026-01-03T00:00:00Z' },
+    ['food']
+  );
+  runReindex(root);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    // Anonymous view: only published
+    const counts = readTagCounts(db, { status: 'published' });
+    assert.equal(counts[0]?.name, 'travel'); // 2 published posts
+    assert.equal(counts[0]?.count, 2);
+    assert.equal(counts[1]?.name, 'food'); // 1 published post (b)
+    assert.equal(counts[1]?.count, 1);
+
+    // Admin view: all statuses
+    const adminCounts = readTagCounts(db, { status: null });
+    const foodEntry = adminCounts.find((c) => c.name === 'food');
+    assert.equal(foodEntry?.count, 2); // b (published) + c (draft)
+  } finally {
+    db.close();
+  }
+});
+
+test('readIndexedPosts sort:asc returns oldest published_at first', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(
+    root,
+    'older.md',
+    { slug: 'older', title: 'Older', status: 'published', date: '2025-01-01T00:00:00Z' },
+    'body'
+  );
+  writePost(
+    root,
+    'newer.md',
+    { slug: 'newer', title: 'Newer', status: 'published', date: '2026-06-01T00:00:00Z' },
+    'body'
+  );
+  writePost(
+    root,
+    'middle.md',
+    { slug: 'middle', title: 'Middle', status: 'published', date: '2025-06-01T00:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const asc = readIndexedPosts(db, { status: 'published', sort: 'asc' });
+    assert.deepEqual(
+      asc.map((p) => p.slug),
+      ['older', 'middle', 'newer']
+    );
+
+    const desc = readIndexedPosts(db, { status: 'published', sort: 'desc' });
+    assert.equal(desc[0]?.slug, 'newer');
+    assert.equal(desc[desc.length - 1]?.slug, 'older');
   } finally {
     db.close();
   }
