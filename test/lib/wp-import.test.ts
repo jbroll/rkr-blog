@@ -602,7 +602,7 @@ test('importPost: dedupes byte-identical images across figures', async (t) => {
   assert.equal(sidecarFiles.length, 1);
 });
 
-test('importPost: bannerUrl ingests banner image, adds banner to frontmatter', async (t) => {
+test('importPost: bannerUrl ingests banner image, prepends ::figure{justify=bleed aspect=3:1} to body', async (t) => {
   const root = freshSiteRoot(t);
   const fetch = stubFetcher();
   const bannerUrl = 'https://example.com/wp-content/uploads/banner.jpg';
@@ -616,11 +616,13 @@ test('importPost: bannerUrl ingests banner image, adds banner to frontmatter', a
   assert.match(result.bannerImageId ?? '', /^[0-9a-f]{64}$/);
   // Banner image is included in imagesIngested.
   assert.ok(result.imagesIngested.includes(result.bannerImageId ?? ''));
-  // Frontmatter includes banner: <id>.
-  assert.match(result.markdown, /^banner: [0-9a-f]{64}$/m);
+  // Body starts with a ::figure directive (after frontmatter blank line).
+  assert.match(result.markdown, /^::figure\{ids="[0-9a-f]{64}" justify=bleed aspect=3:1\}$/m);
+  // No `banner:` in frontmatter.
+  assert.doesNotMatch(result.markdown, /^banner:/m);
 });
 
-test('importPost: no bannerUrl → bannerImageId undefined, no banner in frontmatter', async (t) => {
+test('importPost: no bannerUrl → no ::figure banner, no banner: in frontmatter', async (t) => {
   const root = freshSiteRoot(t);
   const result = await importPost(makePost(POST_HTML_GALLERY), {
     siteRoot: root,
@@ -628,6 +630,8 @@ test('importPost: no bannerUrl → bannerImageId undefined, no banner in frontma
   });
   assert.equal(result.bannerImageId, undefined);
   assert.doesNotMatch(result.markdown, /^banner:/m);
+  // No banner directive at start of body.
+  assert.doesNotMatch(result.markdown, /^::figure\{[^}]*justify=bleed/m);
 });
 
 test('fetchWpSiteBannerUrl: extracts header image URL from WP home page', async (t) => {

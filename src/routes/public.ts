@@ -88,8 +88,10 @@ export interface PublicRoutesOpts {
 }
 
 /** If the post AST's first non-yaml node is a ::figure leafDirective,
- * splice it out, inject justify=bleed, and return its rendered HTML.
- * Returns null when the first element is anything else (heading, paragraph…). */
+ * splice it out and return its rendered HTML. The directive's own
+ * attributes (justify, aspect, etc.) are preserved verbatim so the
+ * author controls the banner appearance by editing the markdown.
+ * Returns null when the first element is anything else. */
 async function extractPostBanner(
   ast: Root,
   ctx: { siteRoot: string; widgets: WidgetRegistry }
@@ -107,11 +109,7 @@ async function extractPostBanner(
   const dir = first as unknown as DirectiveNode;
   if (dir.name !== 'figure') return null;
 
-  const bannerNode: DirectiveNode = {
-    ...dir,
-    attributes: { ...(dir.attributes ?? {}), justify: 'bleed' }
-  };
-  const html = await ctx.widgets.dispatch('figure', bannerNode, ctx);
+  const html = await ctx.widgets.dispatch('figure', dir, ctx);
   ast.children.splice(firstIdx, 1);
   return html;
 }
@@ -231,19 +229,7 @@ export default async function publicRoutes(
     const raw = await fs.promises.readFile(fullPath, 'utf8');
     const parsed = parsePost(raw);
     const ctx = { siteRoot, widgets };
-    // Banner priority: auto-detect first ::figure in body, then fall back
-    // to the `banner:` frontmatter field (set by the WP importer from
-    // the post's featured_media).
-    let bannerHtml = await extractPostBanner(parsed.ast, ctx);
-    if (!bannerHtml && typeof parsed.frontmatter.banner === 'string' && parsed.frontmatter.banner) {
-      const bannerNode: DirectiveNode = {
-        type: 'leafDirective',
-        name: 'figure',
-        attributes: { ids: parsed.frontmatter.banner as string, justify: 'bleed' },
-        children: []
-      };
-      bannerHtml = await widgets.dispatch('figure', bannerNode, ctx);
-    }
+    const bannerHtml = await extractPostBanner(parsed.ast, ctx);
     const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 
     const html = renderPostPage({

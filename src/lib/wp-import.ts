@@ -126,8 +126,14 @@ export async function importPost(post: WpPost, opts: ImportOpts): Promise<Import
   }
 
   const body = emitMarkdown(tree as HastNode).trim();
-  const frontmatter = renderFrontmatter(post, bannerImageId);
-  const markdown = `${frontmatter}\n\n${body}\n`;
+  const frontmatter = renderFrontmatter(post);
+  // Banner image leads the body as a ::figure directive so the author
+  // can edit its attributes (justify, aspect, etc.) directly in markdown.
+  // Default: full-bleed with a 3:1 crop so it reads as a page banner.
+  const bannerDirective = bannerImageId
+    ? `::figure{ids="${bannerImageId}" justify=bleed aspect=3:1}\n\n`
+    : '';
+  const markdown = `${frontmatter}\n\n${bannerDirective}${body}\n`;
 
   return {
     markdown,
@@ -171,7 +177,7 @@ function defaultImageFetcher(): (url: string) => Promise<Readable> {
 
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
-function renderFrontmatter(post: WpPost, bannerImageId?: string): string {
+function renderFrontmatter(post: WpPost): string {
   const titleEsc = post.title.rendered.replace(/"/g, '\\"');
   const lines = [
     '---',
@@ -181,7 +187,6 @@ function renderFrontmatter(post: WpPost, bannerImageId?: string): string {
     'status: draft',
     `source_url: ${post.link}`,
     `source_kind: wordpress`,
-    ...(bannerImageId ? [`banner: ${bannerImageId}`] : []),
     '---'
   ];
   return lines.join('\n');

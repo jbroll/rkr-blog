@@ -180,9 +180,9 @@ test('::figure (matrix=2x2): rendered URLs resolve (sample one per image)', asyn
 
   const page = await app.inject({ method: 'GET', url: '/fig-roundtrip' });
   assert.equal(page.statusCode, 200);
-  // Sanity: first-figure banner auto-detection promotes this to a
-  // bleed banner (no other content precedes it in the post).
-  assert.match(page.body, /class="rkr-figure rkr-justify-bleed rkr-fit-cover"/);
+  // Auto-detection extracts the first ::figure as a banner. The directive
+  // has no justify attribute so it renders with the default (center).
+  assert.match(page.body, /class="rkr-figure rkr-justify-center rkr-fit-cover"/);
   assert.match(page.body, /<div class="rkr-figure-grid"/);
   await assertSampledImagesResolve(app, page.body);
 });
