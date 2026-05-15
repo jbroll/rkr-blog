@@ -55,7 +55,7 @@ export function renderIndexPage(data: IndexPageData): string {
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
   // never see those controls.
   const postsListScript = data.isAdmin
-    ? '<script type="module" src="/static/admin/posts-list.js"></script>'
+    ? `<script type="module" src="/static/admin/posts-list.js${bundleVersion()}"></script>`
     : '';
   return `<!DOCTYPE html>
 <html lang="en">

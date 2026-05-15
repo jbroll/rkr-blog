@@ -125,7 +125,10 @@ export async function ingestStream({
 
   let meta: sharp.Metadata;
   try {
-    meta = await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT }).metadata();
+    meta = await sharp(tmpPath, {
+      limitInputPixels: SHARP_INGEST_PIXEL_LIMIT,
+      failOn: 'error'
+    }).metadata();
   } catch (err) {
     await safeUnlink(tmpPath);
     throw new Error(`ingestStream: not a recognized image: ${(err as Error).message}`);
@@ -200,7 +203,7 @@ export async function ingestStream({
       const uploadExt = FORMAT_TO_EXT[uploadFormat] ?? 'bin';
       const normTmp = `${tmpPath}.norm.${uploadExt}`;
       try {
-        await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT })
+        await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT, failOn: 'error' })
           .rotate()
           .toFile(normTmp);
       } catch (err) {
@@ -212,7 +215,10 @@ export async function ingestStream({
       }
       await safeUnlink(tmpPath);
       await fs.promises.rename(normTmp, tmpPath);
-      meta = await sharp(tmpPath, { limitInputPixels: SHARP_INGEST_PIXEL_LIMIT }).metadata();
+      meta = await sharp(tmpPath, {
+        limitInputPixels: SHARP_INGEST_PIXEL_LIMIT,
+        failOn: 'error'
+      }).metadata();
     }
 
     let resized: ResizeResult;

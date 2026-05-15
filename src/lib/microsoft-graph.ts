@@ -28,6 +28,98 @@ export interface OneDriveFileFetch {
   contentLength: number | null;
 }
 
+export interface OneDriveBrowseItem {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  mimeType?: string;
+  thumbnailUrl?: string;
+}
+
+/**
+ * List the direct children of a OneDrive folder, filtered to image files
+ * and subfolders. folderId 'root' targets the drive root. Items are
+ * returned folders-first, both groups sorted by name.
+ */
+export interface OneDriveFolderPage {
+  items: OneDriveBrowseItem[];
+  nextLink: string | null;
+}
+
+export async function listOneDriveFolder(
+  accessToken: string,
+  folderId: string,
+  opts: { fetcher?: typeof fetch; nextLink?: string } = {}
+): Promise<OneDriveFolderPage> {
+  const fetchImpl = opts.fetcher ?? fetch;
+  let fetchUrl: string;
+  if (opts.nextLink) {
+    fetchUrl = opts.nextLink;
+  } else {
+    const base =
+      folderId === 'root'
+        ? `${GRAPH_BASE}/me/drive/root/children`
+        : `${GRAPH_BASE}/me/drive/items/${encodeURIComponent(folderId)}/children`;
+    const url = new URL(base);
+    url.searchParams.set('$top', '50');
+    url.searchParams.set('$orderby', 'lastModifiedDateTime desc');
+    fetchUrl = url.toString();
+  }
+  const res = await fetchImpl(fetchUrl, {
+    headers: { authorization: `Bearer ${accessToken}` }
+  });
+  if (!res.ok) throw new Error(`Graph ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as {
+    value?: Array<{
+      id?: string;
+      name?: string;
+      file?: { mimeType?: string } | null;
+      folder?: object | null;
+    }>;
+    '@odata.nextLink'?: string;
+  };
+  const raw = data.value ?? [];
+  const items: OneDriveBrowseItem[] = raw
+    .filter((item) => item.folder != null || item.file?.mimeType?.startsWith('image/'))
+    .map((item) => ({
+      id: item.id ?? '',
+      name: item.name ?? '',
+      type: item.folder != null ? ('folder' as const) : ('file' as const),
+      mimeType: item.file?.mimeType
+    }));
+  // Folders first; files already newest-first from Graph
+  items.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+    return 0;
+  });
+  return { items, nextLink: data['@odata.nextLink'] ?? null };
+}
+
+/**
+ * Fetch the small thumbnail URL for a single OneDrive item. Returns null
+ * when no thumbnail is available (folder, unsupported type, etc.).
+ * Uses the individual thumbnails endpoint rather than $expand on the
+ * children list, which avoids the SPO license check on personal accounts.
+ */
+export async function getOneDriveThumbnail(
+  accessToken: string,
+  itemId: string,
+  opts: { fetcher?: typeof fetch } = {}
+): Promise<string | null> {
+  const fetchImpl = opts.fetcher ?? fetch;
+  const res = await fetchImpl(
+    `${GRAPH_BASE}/me/drive/items/${encodeURIComponent(itemId)}/thumbnails/0`,
+    { headers: { authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    large?: { url?: string };
+    medium?: { url?: string };
+    small?: { url?: string };
+  };
+  return data.large?.url ?? data.medium?.url ?? data.small?.url ?? null;
+}
+
 /**
  * Fetch metadata + bytes for a OneDrive item. The caller streams `body`
  * into ingestStream. Gated by a 30s wall-clock timeout; the metadata

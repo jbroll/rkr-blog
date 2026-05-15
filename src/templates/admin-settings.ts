@@ -12,7 +12,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { icon } from './icons.ts';
-import { type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
+import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface AdminSettingsPageData extends SiteChrome {
   /** Persisted values to pre-fill the form. Defaults from env vars
@@ -42,6 +42,8 @@ export interface AdminSettingsPageData extends SiteChrome {
   gitHash: string;
   /** Whether the current user has a stored Google Drive OAuth token. */
   gdriveConnected: boolean;
+  /** Whether the current user has a stored OneDrive OAuth token. */
+  onedriveConnected: boolean;
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
@@ -106,33 +108,43 @@ ${saveBtn}
     value="${data.persisted.ingestResize?.webpQuality ?? ''}"
     placeholder="${DEFAULT_INGEST_RESIZE.webpQuality}"/>
 </form>
-${renderIntegrations(data.gdriveConnected)}
+${renderIntegrations(data.gdriveConnected, data.onedriveConnected)}
 <p class="rkr-admin-settings-build">
   Build: <code title="${escapeAttr(data.gitHash)}">${escapeText(shortHash(data.gitHash))}</code>
 </p>
 </main>
 ${siteFoot(data.site, { isAdmin: true })}
-<script type="module" src="/static/admin/settings-page.js"></script>
+<script type="module" src="/static/admin/settings-page.js${bundleVersion()}"></script>
 </body>
 </html>
 `;
 }
 
-function renderIntegrations(gdriveConnected: boolean): string {
-  const statusLabel = gdriveConnected ? 'Connected' : 'Not connected';
-  const statusClass = gdriveConnected ? ' is-connected' : '';
-  const action = gdriveConnected
-    ? `<form method="post" action="/admin/settings/gdrive/disconnect" style="margin:0"><button type="submit" class="rkr-admin-settings-submit">Disconnect</button></form>`
-    : `<a href="/admin/integrations/gdrive/connect" class="rkr-admin-settings-submit">Connect</a>`;
+function renderIntegrationRow(
+  label: string,
+  connected: boolean,
+  connectHref: string,
+  disconnectAction: string
+): string {
+  const statusLabel = connected ? 'Connected' : 'Not connected';
+  const statusClass = connected ? ' is-connected' : '';
+  const action = connected
+    ? `<form method="post" action="${disconnectAction}" style="margin:0"><button type="submit" class="rkr-admin-settings-submit">Disconnect</button></form>`
+    : `<a href="${connectHref}" class="rkr-admin-settings-submit">Connect</a>`;
+  return `<div class="rkr-admin-settings-integration">
+  <span class="rkr-admin-settings-integration-label">${label}</span>
+  <span class="rkr-admin-settings-integration-status${statusClass}">${statusLabel}</span>
+  ${action}
+</div>`;
+}
+
+function renderIntegrations(gdriveConnected: boolean, onedriveConnected: boolean): string {
   return `<section class="rkr-admin-settings">
 <div class="rkr-admin-settings-heading-row">
 <h2 class="rkr-admin-settings-heading">Integrations</h2>
 </div>
-<div class="rkr-admin-settings-integration">
-  <span class="rkr-admin-settings-integration-label">Google Drive</span>
-  <span class="rkr-admin-settings-integration-status${statusClass}">${statusLabel}</span>
-  ${action}
-</div>
+${renderIntegrationRow('Google Drive', gdriveConnected, '/admin/integrations/gdrive/connect', '/admin/settings/gdrive/disconnect')}
+${renderIntegrationRow('OneDrive', onedriveConnected, '/admin/integrations/onedrive/connect', '/admin/settings/onedrive/disconnect')}
 </section>`;
 }
 

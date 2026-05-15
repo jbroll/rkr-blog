@@ -46,13 +46,20 @@ export const ADMIN_CSS = `
   .rkr-admin-content button,
   #rkr-page-title,
   #rkroll-admin-toolbar,
-  #rkroll-admin-status,
   #rkr-sync-badge,
   #rkroll-admin-article .rkr-figure-actions,
   .rkr-cell-dialog-head,
   .rkr-cell-dialog-body > label {
     user-select: none;
     -webkit-user-select: none;
+  }
+  #rkroll-admin-status {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #rkroll-admin-status.is-error {
+    user-select: text;
+    -webkit-user-select: text;
   }
   .rkr-admin-content :is(input, textarea, [contenteditable='true']),
   .rkr-admin-content :is(input, textarea, [contenteditable='true']) * {
@@ -495,4 +502,80 @@ export const ADMIN_CSS = `
   }
   #rkr-persp-modal #rkr-persp-status { flex: 1; color: var(--rkr-muted); font-size: .9rem; }
   #rkr-persp-modal button { padding: .35rem .85rem; cursor: pointer; }
+  /* OneDrive file browser modal */
+  #rkr-onedrive-browser {
+    border: 1px solid var(--rkr-rule); border-radius: 6px; padding: 0;
+    width: min(80vw, 56rem); max-width: 95vw; height: min(80vh, 42rem);
+    background: var(--rkr-bg); color: var(--rkr-text);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #rkr-onedrive-browser::backdrop { background: rgba(0,0,0,.6); }
+  .rkr-od-head {
+    padding: .75rem 1rem; border-bottom: 1px solid var(--rkr-rule);
+    display: flex; align-items: baseline; gap: .75rem; flex-shrink: 0; flex-wrap: wrap;
+  }
+  .rkr-od-title { font-weight: 600; font-size: 1rem; white-space: nowrap; }
+  .rkr-od-breadcrumb { display: flex; align-items: center; font-size: .875rem; flex-wrap: wrap; }
+  .rkr-od-crumb-btn {
+    background: none; border: none; color: var(--rkr-link); cursor: pointer;
+    padding: 0 .15rem; font: inherit; font-size: .875rem;
+  }
+  .rkr-od-crumb { color: var(--rkr-muted); padding: 0 .15rem; }
+  .rkr-od-sep { color: var(--rkr-muted); }
+  .rkr-od-grid {
+    flex: 1; min-height: 0; overflow-y: auto; padding: .75rem;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+    gap: .5rem; align-content: start;
+  }
+  .rkr-od-item {
+    display: flex; flex-direction: column; align-items: center; gap: .3rem;
+    padding: .4rem; border: 1px solid var(--rkr-rule); border-radius: 4px;
+    background: none; cursor: pointer; min-width: 0;
+    transition: background-color .1s ease-out, border-color .1s ease-out;
+  }
+  .rkr-od-item:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--rkr-link) 10%, transparent);
+    border-color: var(--rkr-link);
+  }
+  .rkr-od-item.rkr-od-selected {
+    background: color-mix(in srgb, var(--rkr-link) 18%, transparent);
+    border-color: var(--rkr-link);
+    box-shadow: 0 0 0 2px var(--rkr-link);
+  }
+  .rkr-od-item:disabled { opacity: .45; cursor: default; }
+  .rkr-od-thumb {
+    width: 100%; aspect-ratio: 1; display: flex; align-items: center;
+    justify-content: center; overflow: hidden; border-radius: 3px;
+  }
+  .rkr-od-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rkr-od-folder .rkr-od-thumb { color: var(--rkr-link); }
+  .rkr-od-file .rkr-od-thumb svg { color: var(--rkr-muted); }
+  .rkr-od-name {
+    font-size: .7rem; line-height: 1.3; color: var(--rkr-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+  }
+  .rkr-od-placeholder {
+    grid-column: 1/-1; padding: 3rem 1rem;
+    text-align: center; color: var(--rkr-muted); font-size: .9rem;
+  }
+  .rkr-od-placeholder.rkr-od-error {
+    color: var(--rkr-warn, #c00); user-select: text; -webkit-user-select: text;
+  }
+  .rkr-od-foot {
+    padding: .65rem 1rem; border-top: 1px solid var(--rkr-rule);
+    display: flex; align-items: center; gap: .75rem; flex-shrink: 0;
+  }
+  .rkr-od-status {
+    flex: 1; color: var(--rkr-muted); font-size: .85rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rkr-od-cancel { padding: .35rem .85rem; cursor: pointer; }
+  .rkr-od-import {
+    padding: .35rem .85rem; cursor: pointer;
+    background: var(--rkr-link); color: var(--rkr-bg);
+    border: 1px solid var(--rkr-link); border-radius: 4px; font-weight: 600;
+  }
+  .rkr-od-import:hover:not(:disabled) { background: var(--rkr-link-hover); border-color: var(--rkr-link-hover); }
+  .rkr-od-import:disabled { opacity: .5; cursor: default; }
 `;

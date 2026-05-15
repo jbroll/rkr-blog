@@ -55,17 +55,33 @@ export function registerAdminSettingsRoutes(
       const gitHash = resolveGitHash();
       const user = req.user;
       let gdriveConnected = false;
+      let onedriveConnected = false;
       if (user && db) {
         const key = readSecretKey(siteRoot);
         gdriveConnected = readToken(db, key, user.id, 'gdrive') !== null;
+        onedriveConnected = readToken(db, key, user.id, 'onedrive') !== null;
       }
-      return reply
-        .type('text/html; charset=utf-8')
-        .send(
-          renderAdminSettingsPage({ site, persisted, themes, flash, gitHash, gdriveConnected })
-        );
+      return reply.type('text/html; charset=utf-8').send(
+        renderAdminSettingsPage({
+          site,
+          persisted,
+          themes,
+          flash,
+          gitHash,
+          gdriveConnected,
+          onedriveConnected
+        })
+      );
     }
   );
+
+  fastify.post('/admin/settings/onedrive/disconnect', { ...guard }, async (req, reply) => {
+    const user = req.user;
+    if (user && db) {
+      deleteToken(db, user.id, 'onedrive');
+    }
+    return reply.redirect('/admin/settings', 303);
+  });
 
   fastify.post('/admin/settings/gdrive/disconnect', { ...guard }, async (req, reply) => {
     const user = req.user;

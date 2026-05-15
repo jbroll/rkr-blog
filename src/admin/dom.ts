@@ -19,7 +19,7 @@ export function $<T extends HTMLElement = HTMLElement>(id: string): T {
 export function setStatus(msg: string, isError = false): void {
   const el = $('rkroll-admin-status');
   el.textContent = msg;
-  el.style.userSelect = isError ? 'text' : '';
+  el.classList.toggle('is-error', isError);
 }
 
 /** Status line with a trailing link — used after a successful save to

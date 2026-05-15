@@ -17,6 +17,7 @@ import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { runReindex } from '../cli/reindex.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
+import { resolveGitHash } from '../lib/build-info.ts';
 import { paths, siteConfig } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -104,7 +105,12 @@ export default async function adminRoutes(
       .header('Content-Security-Policy', ADMIN_EDITOR_CSP)
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
-      .send(renderAdminPage({ site: siteConfig(), bundleUrl: '/static/admin/main.js' }));
+      .send(
+        renderAdminPage({
+          site: siteConfig(),
+          bundleUrl: `/static/admin/main.js?v=${resolveGitHash().slice(0, 12)}`
+        })
+      );
   });
 
   // /admin/posts (now 301 → /) + per-row status / delete endpoints.
@@ -472,9 +478,13 @@ const ADMIN_EDITOR_CSP = [
   "default-src 'self'",
   "script-src 'self' https://apis.google.com 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.googleusercontent.com",
-  "connect-src 'self' https://apis.google.com https://*.googleapis.com https://accounts.google.com",
+  "img-src 'self' data: blob: https://*.googleusercontent.com https://*.1drv.com https://*.onedrive.live.com https://*.svc.ms",
+  "connect-src 'self' https://apis.google.com https://*.googleapis.com https://accounts.google.com https://login.microsoftonline.com",
   'frame-src https://docs.google.com https://accounts.google.com',
+  // OneDrive picker opens as a popup (window.open), not an iframe, so
+  // frame-src is not needed. popup-src is not a standard CSP directive;
+  // popups inherit the opener's settings only for navigate-to / form-action.
+  "form-action 'self' https://onedrive.live.com https://*.sharepoint.com",
   "font-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",

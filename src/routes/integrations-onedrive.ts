@@ -25,7 +25,11 @@ import { generateCodeVerifier, generateState, MicrosoftEntraId, type OAuth2Token
 import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
 import type { Db } from '../lib/db.ts';
-import { fetchOneDriveFile } from '../lib/microsoft-graph.ts';
+import {
+  fetchOneDriveFile,
+  getOneDriveThumbnail,
+  listOneDriveFolder
+} from '../lib/microsoft-graph.ts';
 import {
   deleteToken,
   isExpired,
@@ -38,9 +42,15 @@ import { readSecretKey } from '../lib/secrets.ts';
 import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
 
 const PROVIDER = 'onedrive';
-// Files.Read is the narrowest scope that lets us fetch user-selected
-// files. offline_access yields a refresh_token so we can renew without
-// re-prompting. Same pattern as gdrive's `drive.file`.
+// AUTH_SCOPES go in the connect authorization URL (consent screen).
+// https://api.onedrive.com/Files.Read covers the personal OneDrive v1 API
+// that the File Picker v8 at onedrive.live.com requests a token for when
+// running against a personal (consumer) account. Must be consented upfront
+// here; it can only be redeemed via the AAD tenant endpoint, not /consumers.
+const AUTH_SCOPES = ['Files.Read', 'offline_access'];
+// SCOPES is the narrower set used when refreshing the stored Graph token
+// (ensureFresh). Excludes api.onedrive.com to avoid AADSTS65001 on tenants
+// that haven't explicitly consented — only the picker-token path uses it.
 const SCOPES = ['Files.Read', 'offline_access'];
 const STATE_COOKIE = 'rkr_onedrive_state';
 const STATE_TTL_S = 600;
@@ -79,7 +89,7 @@ export default async function integrationsOnedriveRoutes(
   fastify.get('/admin/integrations/onedrive/connect', { ...guard }, async (_req, reply) => {
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
-    const url = exchange.authorizationUrl(state, codeVerifier, SCOPES);
+    const url = exchange.authorizationUrl(state, codeVerifier, AUTH_SCOPES);
     // `prompt=consent` forces the consent screen so refresh_token issuance
     // is reliable. Microsoft yields refresh_token by default when
     // offline_access is in scope, but consent on first connect is the
@@ -197,6 +207,57 @@ export default async function integrationsOnedriveRoutes(
     return { accessToken: fresh.access_token, expiresAt: fresh.expires_at };
   });
 
+  // Returns a short-lived access token scoped to a specific resource URI —
+  // used by the client-side File Picker v8 authenticate handler. Personal
+  // OneDrive (consumer) pickers request tokens for
+  // my.microsoftpersonalcontent.com, not for Graph; this endpoint derives
+  // the right scope from the resource and uses the stored refresh token to
+  // get it without touching the persisted Graph token.
+  fastify.get<{ Querystring: { resource?: string } }>(
+    '/admin/integrations/onedrive/picker-token',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const stored = readToken(db, key, user.id, PROVIDER);
+      if (!stored) return reply.code(404).send({ error: 'onedrive not connected' });
+      if (!stored.refresh_token) return reply.code(412).send({ error: 'no refresh token stored' });
+
+      const resource = (req.query.resource ?? '').trim();
+      // Consumer resources (api.onedrive.com, my.microsoftpersonalcontent.com)
+      // must be redeemed at the 'consumers' endpoint — the tenant-specific
+      // Entra endpoint (login.microsoftonline.com/{guid}) doesn't know about
+      // them. Use consumerExchange for those; fall back to the regular
+      // exchange for Graph and unknown resources.
+      // my.microsoftpersonalcontent.com is a consumer-only service whose
+      // scope doesn't exist in the OAuth token system at all — return a
+      // quick 404 so the picker can move on to the next authenticate request
+      // (api.onedrive.com) rather than waiting for a token refresh to fail.
+      if (resource.startsWith('https://my.microsoftpersonalcontent.com')) {
+        return reply.code(404).send({ error: 'unsupported resource' });
+      }
+      // api.onedrive.com: use the explicit scope from AUTH_SCOPES; the user
+      // consented to it during connect. Must use the regular AAD tenant
+      // exchange, not consumers (/consumers rejects api.onedrive.com tokens).
+      const scope =
+        resource === 'https://api.onedrive.com'
+          ? 'https://api.onedrive.com/Files.Read'
+          : resource
+            ? `${resource}/.default`
+            : 'Files.Read';
+
+      try {
+        const refreshed = await exchange.refresh(stored.refresh_token, [scope, 'offline_access']);
+        return { accessToken: refreshed.accessToken() };
+      } catch (err) {
+        req.log.warn({ err, resource, scope }, 'onedrive picker token refresh failed');
+        return reply.code(500).send({ error: 'token refresh failed' });
+      }
+    }
+  );
+
   fastify.post('/admin/integrations/onedrive/disconnect', { ...guard }, async (req, reply) => {
     const user = req.user;
     /* c8 ignore next 2 -- requireUser preHandler */
@@ -204,6 +265,56 @@ export default async function integrationsOnedriveRoutes(
     const removed = deleteToken(db, user.id, PROVIDER);
     return reply.send({ removed });
   });
+
+  fastify.get<{ Querystring: { folderId?: string; nextLink?: string } }>(
+    '/admin/integrations/onedrive/files',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'onedrive not connected' });
+      const folderId = (req.query.folderId ?? 'root').trim() || 'root';
+      const nextLink = req.query.nextLink?.trim() || undefined;
+      try {
+        const page = await listOneDriveFolder(fresh.access_token, folderId, {
+          ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {}),
+          ...(nextLink ? { nextLink } : {})
+        });
+        return page;
+      } catch (err) {
+        req.log.warn({ err, folderId }, 'onedrive folder list failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    }
+  );
+
+  fastify.get<{ Querystring: { itemId?: string } }>(
+    '/admin/integrations/onedrive/thumbnail',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const itemId = (req.query.itemId ?? '').trim();
+      if (!itemId) return reply.code(400).send({ error: 'itemId required' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'onedrive not connected' });
+      let url: string | null = null;
+      try {
+        url = await getOneDriveThumbnail(fresh.access_token, itemId, {
+          ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, itemId }, 'onedrive thumbnail failed');
+      }
+      if (!url) return reply.code(404).send({ error: 'no thumbnail' });
+      return { url };
+    }
+  );
 
   fastify.post<{ Body: ProviderImportBody }>(
     '/admin/import/onedrive',
