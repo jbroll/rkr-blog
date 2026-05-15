@@ -76,7 +76,7 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   // The posts-list bundle is loaded so the status select auto-
   // submits and pin buttons read OPFS. Admin FABs (+ + ⚙) replace
   // the old admin strip; the strip itself is gone.
-  assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
+  assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js/);
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New post"/);
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="Settings"/);
@@ -171,4 +171,79 @@ test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
   });
   assert.ok(!html.includes('<script>alert(1)</script>'), 'title must be HTML-escaped');
   assert.match(html, /&lt;script&gt;/);
+});
+
+// ---------------------------------------------------------------------------
+// Tag rail tests
+// ---------------------------------------------------------------------------
+
+test('renderIndexPage: tag rail renders when tagCounts provided', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [
+      { name: 'travel', count: 12 },
+      { name: 'food', count: 3 }
+    ]
+  });
+  assert.match(html, /<aside class="rkr-tag-rail"/);
+  assert.match(html, /aria-label="Tags"/);
+  assert.match(html, /href="\/\?tag=travel"/);
+  assert.match(html, /travel \(12\)/);
+  assert.match(html, /href="\/\?tag=food"/);
+  assert.match(html, /food \(3\)/);
+});
+
+test('renderIndexPage: no tag rail when tagCounts is empty', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: []
+  });
+  assert.doesNotMatch(html, /rkr-tag-rail/);
+});
+
+test('renderIndexPage: no tag rail when tagCounts is absent', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: []
+  });
+  assert.doesNotMatch(html, /rkr-tag-rail/);
+});
+
+test('renderIndexPage: active tag gets aria-current + clear link', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [
+      { name: 'travel', count: 12 },
+      { name: 'food', count: 3 }
+    ],
+    activeTag: 'travel'
+  });
+  assert.match(html, /aria-current="page"/);
+  // Clear link points back to unfiltered index
+  assert.match(html, /href="\/"[^>]*>.*clear/s);
+  // Inactive tag has no aria-current
+  assert.doesNotMatch(html, /href="\/\?tag=food"[^>]*aria-current/);
+});
+
+test('renderIndexPage: pager preserves ?tag= when active', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 3,
+    posts: [],
+    tagCounts: [{ name: 'travel', count: 30 }],
+    activeTag: 'travel'
+  });
+  assert.match(html, /href="\/\?page=2&amp;tag=travel"/);
 });

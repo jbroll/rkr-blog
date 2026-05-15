@@ -38,19 +38,26 @@ export interface IndexPageData extends SiteChrome {
   /** Logged-in admin → render the admin strip in siteHead and the
    * full posts table (drafts + status / pin / delete). */
   isAdmin?: boolean;
+  /** Tag counts for the tag rail sidebar. When absent or empty, the
+   * rail is not rendered. */
+  tagCounts?: { name: string; count: number }[];
+  /** The currently-active tag filter, if any. */
+  activeTag?: string;
 }
 
 export function renderIndexPage(data: IndexPageData): string {
   const v = bundleVersion();
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
+  const tagSuffix = data.activeTag ? `&amp;tag=${encodeURIComponent(data.activeTag)}` : '';
   const pager =
     data.totalPages > 1
       ? `<nav aria-label="pagination">
   <span>page ${data.page} of ${data.totalPages}</span>
-  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}">prev</a>` : ''}
-  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}">next</a>` : ''}
+  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}${tagSuffix}">prev</a>` : ''}
+  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}">next</a>` : ''}
 </nav>`
       : '';
+  const tagRail = renderTagRail(data.tagCounts, data.activeTag);
   // The posts-list bundle wires status-select auto-submit + pin/unpin
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
   // never see those controls.
@@ -75,6 +82,7 @@ ${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
 ${body}
 ${pager}
 </main>
+${tagRail}
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
 ${data.isAdmin ? indexAdminFabs() : ''}
 ${postsListScript}
@@ -179,4 +187,26 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
       </form>
     </td>
   </tr>`;
+}
+
+/** Renders the tag rail aside. Returns empty string when tagCounts is
+ * absent or empty — callers can splice the result directly into the
+ * HTML without a wrapper conditional. */
+function renderTagRail(
+  tagCounts: { name: string; count: number }[] | undefined,
+  activeTag: string | undefined
+): string {
+  if (!tagCounts || tagCounts.length === 0) return '';
+  const clearLink = activeTag ? `\n  <a class="rkr-tag-clear" href="/">clear</a>` : '';
+  const pills = tagCounts
+    .map((t) => {
+      const href = `/?tag=${encodeURIComponent(t.name)}`;
+      const isActive = t.name === activeTag;
+      const current = isActive ? ' aria-current="page"' : '';
+      return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
+    })
+    .join('\n');
+  return `<aside class="rkr-tag-rail" aria-label="Tags">${clearLink}
+${pills}
+</aside>`;
 }

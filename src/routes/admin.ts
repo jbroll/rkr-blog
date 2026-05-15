@@ -38,6 +38,7 @@ import { registerAdminPostsRoutes } from './admin-posts.ts';
 import { prewarmVariants } from './admin-prewarm.ts';
 import { registerAdminSettingsRoutes } from './admin-settings.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
+import { registerAdminTagsRoute } from './admin-tags.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -129,6 +130,7 @@ export default async function adminRoutes(
 
   registerSidecarEditRoutes(fastify, { siteRoot, guard });
   registerPostBundleRoutes(fastify, { siteRoot, guard });
+  registerAdminTagsRoute(fastify, { siteRoot, guard });
 
   fastify.post<{
     Body: {
@@ -140,9 +142,20 @@ export default async function adminRoutes(
       markdown?: unknown;
       /** Sidecar ID of the post's banner/featured image. */
       banner?: unknown;
+      /** Tag names to attach to the post. */
+      tags?: unknown;
     };
   }>('/admin/posts', { ...guard }, async (request, reply) => {
-    const { slug: slugRaw, title, subtitle, status, date, markdown, banner } = request.body ?? {};
+    const {
+      slug: slugRaw,
+      title,
+      subtitle,
+      status,
+      date,
+      markdown,
+      banner,
+      tags: tagsRaw
+    } = request.body ?? {};
 
     if (typeof title !== 'string' || !title.trim()) {
       return reply.code(400).send({ error: 'title is required' });
@@ -179,9 +192,16 @@ export default async function adminRoutes(
 
     const bannerStr =
       typeof banner === 'string' && /^[0-9a-f]{64}$/.test(banner.trim()) ? banner.trim() : '';
+    // Validate + clean tags: array of trimmed strings ≤32 chars, deduped
+    // (case-insensitive first-occurrence wins), max 20.
+    const cleanTags = cleanTagList(tagsRaw);
     const fmLines = ['---', `title: ${yamlScalar(title)}`];
     if (subtitleStr) fmLines.push(`subtitle: ${yamlScalar(subtitleStr)}`);
     if (bannerStr) fmLines.push(`banner: ${bannerStr}`);
+    if (cleanTags.length > 0) {
+      fmLines.push('tags:');
+      for (const tag of cleanTags) fmLines.push(`- ${yamlScalar(tag)}`);
+    }
     fmLines.push(
       `slug: ${yamlScalar(slug)}`,
       `date: ${yamlScalar(dateStr)}`,
@@ -459,6 +479,30 @@ async function wipeRuntimeData(siteRoot: string): Promise<ResetCounts> {
     }
   }
   return { posts, originals, sidecars, cacheFiles, postsTableRows };
+}
+
+const MAX_TAG_LENGTH = 32;
+const MAX_TAGS = 20;
+
+/** Validate and deduplicate an incoming tags value from the request body.
+ * Accepts an array; non-string entries and blank/overlong strings are
+ * dropped. Deduplication is case-insensitive (first occurrence wins).
+ * Returns at most MAX_TAGS entries. */
+function cleanTagList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.length > MAX_TAG_LENGTH) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= MAX_TAGS) break;
+  }
+  return out;
 }
 
 /**
