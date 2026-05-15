@@ -25,8 +25,6 @@ import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
 import { openStoragePanel } from './storage-panel.ts';
 import { discardConflictedSave, forceConflictedSave, registerDrainer, tryDrain } from './sync.ts';
-import { createTagInput } from './tag-input.ts';
-import { getTagInput, setTagInput } from './tag-input-instance.ts';
 
 export async function startOfflineInfrastructure(editor: Editor): Promise<void> {
   const ready = runStart(editor);
@@ -137,14 +135,6 @@ async function runStart(editor: Editor): Promise<void> {
     }
     startDraftPersistence(editor, draftId);
     mountStatusBadge();
-    // Mount the tag-input widget once. The container div is emitted by
-    // the admin template; if it's absent (e.g. older snapshot) we skip
-    // silently — save.ts falls back to an empty tag list.
-    /* c8 ignore next 5 -- DOM-coupled */
-    const tagContainer = document.getElementById('rkr-tags');
-    if (tagContainer) {
-      setTagInput(createTagInput(tagContainer));
-    }
     // Eviction-after-drain is wired directly inside sync.ts; this
     // initial run reclaims OPFS for whatever's already stale on
     // mount.
@@ -168,7 +158,8 @@ function seedFormFields(manifest: PinManifest): void {
   if (slugEl) slugEl.value = manifest.slug;
   if (titleEl) titleEl.value = manifest.title;
   if (subtitleEl) subtitleEl.value = manifest.subtitle ?? '';
-  getTagInput()?.setTags(manifest.tags ?? []);
+  const tagsEl = document.getElementById('rkr-tags') as HTMLInputElement | null;
+  if (tagsEl) tagsEl.value = (manifest.tags ?? []).join(', ');
   // Programmatic value assignment doesn't fire 'input' events, so the
   // page-title binding wouldn't see the new slug otherwise.
   refreshPageTitle();

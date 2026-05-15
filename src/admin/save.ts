@@ -17,7 +17,7 @@ import { append as outboxAppend } from './outbox.ts';
 import { markClean } from './page-title.ts';
 import { hasPendingMarker } from './pending-uploads.ts';
 import { awaitDrainSettled, tryDrain } from './sync.ts';
-import { getTagInput } from './tag-input-instance';
+import { parseTagInput, deduplicateTags } from './tag-input.ts';
 import { showToast } from './toast.ts';
 
 interface SaveResponse {
@@ -78,7 +78,7 @@ export async function handleSave(editor: Editor): Promise<void> {
     ...(subtitle ? { subtitle } : {}),
     markdown,
     lastSyncedAt: meta?.lastSyncedAt,
-    tags: getTagInput()?.getTags() ?? []
+    tags: deduplicateTags(parseTagInput((document.getElementById('rkr-tags') as HTMLInputElement | null)?.value ?? ''))
   };
   setStatus('saving…');
   // If any referenced image still has an `upload` entry queued in
