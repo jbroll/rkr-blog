@@ -171,7 +171,7 @@ export async function pickFromDrive(): Promise<string[]> {
             ids.push(r.id);
             setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
           } catch (err) {
-            setStatus(`Drive import error: ${(err as Error).message}`);
+            setStatus(`Drive import error: ${(err as Error).message}`, true);
           }
         }
         resolve(ids);
