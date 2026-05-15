@@ -261,17 +261,21 @@ test('readIndexedPosts tag filter returns only matching posts', (t) => {
 
   const db = open(path.join(root, 'data', 'site.db'));
   try {
-    const travelPosts = readIndexedPosts(db, { tag: 'travel' });
+    const travelPosts = readIndexedPosts(db, { tags: ['travel'] });
     const slugs = travelPosts.map((p) => p.slug).sort();
     assert.deepEqual(slugs, ['a', 'b']);
 
-    const foodPosts = readIndexedPosts(db, { tag: 'food' });
+    const foodPosts = readIndexedPosts(db, { tags: ['food'] });
     const foodSlugs = foodPosts.map((p) => p.slug).sort();
     assert.deepEqual(foodSlugs, ['b', 'c']);
 
     // Case-insensitive match
-    const upperPosts = readIndexedPosts(db, { tag: 'TRAVEL' });
+    const upperPosts = readIndexedPosts(db, { tags: ['TRAVEL'] });
     assert.equal(upperPosts.length, 2);
+
+    // Multi-tag AND: only post B has both travel + food
+    const andPosts = readIndexedPosts(db, { tags: ['travel', 'food'] });
+    assert.deepEqual(andPosts.map((p) => p.slug), ['b']);
   } finally {
     db.close();
   }

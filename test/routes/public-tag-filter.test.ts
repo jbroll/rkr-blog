@@ -146,6 +146,29 @@ test('GET /?sort=asc: sort toggle link present', async (t) => {
 
 // --- Draft vs published visibility -------------------------------------------
 
+test('GET /?tag=travel&tag=food: AND filter returns only posts with both tags', async (t) => {
+  const root = freshSiteRoot(t);
+  writePost(root, 'both', 'Both Tags', ['travel', 'food']);
+  writePost(root, 'travel-only', 'Travel Only', ['travel']);
+  writePost(root, 'food-only', 'Food Only', ['food']);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  runReindex(root);
+  t.after(() => db.close());
+  const app = await buildApp({ siteRoot: root, db, startWorker: false });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/?tag=travel&tag=food' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Both Tags/);
+  assert.doesNotMatch(res.body, /Travel Only/);
+  assert.doesNotMatch(res.body, /Food Only/);
+  // Both pills active
+  assert.match(res.body, /aria-current="page"/);
+});
+
+// --- Draft vs published visibility -------------------------------------------
+
 test('GET /: anonymous view shows no tag rail when all tagged posts are drafts', async (t) => {
   // This is the most common reason a tag rail "doesn't appear" after saving
   // a post with tags: the post is still a draft, which the public index hides.

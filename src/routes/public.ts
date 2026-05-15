@@ -150,24 +150,30 @@ export default async function publicRoutes(
 
   // ---- index: GET / -----------------------------------------------------
 
-  fastify.get<{ Querystring: { page?: string; tag?: string; sort?: string } }>(
+  fastify.get<{ Querystring: { page?: string; tag?: string | string[]; sort?: string } }>(
     '/',
     async (req, reply) => {
       const site = getSite();
       const isAdmin = !!req.user;
-      const activeTag =
-        typeof req.query.tag === 'string' && req.query.tag.trim()
-          ? req.query.tag.trim()
-          : undefined;
+      // Normalise ?tag= to a deduplicated string array (Fastify may deliver
+      // a string for a single value or string[] for repeated params).
+      const rawTag = req.query.tag;
+      const activeTags = Array.from(
+        new Set(
+          (Array.isArray(rawTag) ? rawTag : rawTag ? [rawTag] : [])
+            .map((t) => t.trim())
+            .filter(Boolean)
+        )
+      );
       const sort: 'asc' | 'desc' = req.query.sort === 'asc' ? 'asc' : 'desc';
       // Authed visitors see drafts + published (the homepage doubles as
       // the admin posts list). Anonymous visitors keep the published-
       // only filter so drafts stay invisible until promotion.
       const status: 'published' | null = isAdmin ? null : 'published';
 
-      const total = countPosts(db, status, activeTag);
+      const total = countPosts(db, status, activeTags);
 
-      const rows = readIndexedPosts(db, { limit: total, offset: 0, status, tag: activeTag, sort });
+      const rows = readIndexedPosts(db, { limit: total, offset: 0, status, tags: activeTags, sort });
 
       // Tag rail: all posts for admin (drafts count too); published-only for anonymous.
       const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });
@@ -196,7 +202,7 @@ export default async function publicRoutes(
         ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
         isAdmin,
         ...(tagCounts.length > 0 ? { tagCounts } : {}),
-        ...(activeTag ? { activeTag } : {}),
+        ...(activeTags.length > 0 ? { activeTags } : {}),
         sort
       });
 
@@ -362,19 +368,20 @@ export default async function publicRoutes(
   );
 }
 
-/** Count posts matching the given status + optional tag filter. */
-function countPosts(db: Db, status: 'published' | null, tag: string | undefined): number {
-  if (tag) {
-    const sql =
-      status === null
-        ? `SELECT COUNT(*) AS n FROM posts p
-           JOIN post_tags pt ON pt.post_id = p.id
-           JOIN tags tg ON tg.id = pt.tag_id AND tg.name = ? COLLATE NOCASE`
-        : `SELECT COUNT(*) AS n FROM posts p
-           JOIN post_tags pt ON pt.post_id = p.id
-           JOIN tags tg ON tg.id = pt.tag_id AND tg.name = ? COLLATE NOCASE
-           WHERE p.status = ?`;
-    const params = status === null ? [tag] : [tag, status];
+/** Count posts matching the given status + optional multi-tag AND filter. */
+function countPosts(db: Db, status: 'published' | null, tags: string[]): number {
+  if (tags.length > 0) {
+    const ph = tags.map(() => '?').join(', ');
+    const statusFilter = status === null ? '' : ' AND p.status = ?';
+    const sql = `SELECT COUNT(*) AS n FROM posts p
+       WHERE p.id IN (
+         SELECT pt.post_id FROM post_tags pt
+         JOIN tags tg ON tg.id = pt.tag_id
+         WHERE tg.name IN (${ph}) COLLATE NOCASE
+         GROUP BY pt.post_id
+         HAVING COUNT(DISTINCT pt.tag_id) = ${tags.length}
+       )${statusFilter}`;
+    const params = status === null ? tags : [...tags, status];
     return (db.prepare<{ n: number }>(sql).get(...params) ?? { n: 0 }).n;
   }
   const sql =

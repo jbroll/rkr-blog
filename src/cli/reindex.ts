@@ -168,22 +168,29 @@ export function readIndexedPosts(
     limit?: number;
     offset?: number;
     status?: 'draft' | 'published' | null;
-    tag?: string;
+    /** Multi-tag AND filter: post must carry every listed tag. */
+    tags?: string[];
     /** 'desc' (default) = newest first; 'asc' = oldest first. */
     sort?: 'asc' | 'desc';
   } = {}
 ): IndexedPost[] {
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
-  const tag = opts.tag ?? null;
+  const tags = opts.tags && opts.tags.length > 0 ? opts.tags : null;
   const dir = opts.sort === 'asc' ? 'ASC' : 'DESC';
 
-  // Build optional tag join/filter clause.
-  const tagJoin = tag
-    ? `JOIN post_tags pt ON pt.post_id = p.id
-       JOIN tags tg ON tg.id = pt.tag_id AND tg.name = ? COLLATE NOCASE`
+  // Build optional multi-tag AND sub-query.
+  // Post must appear in post_tags for every requested tag (HAVING COUNT = n).
+  const tagFilter = tags
+    ? `AND p.id IN (
+         SELECT pt.post_id FROM post_tags pt
+         JOIN tags tg ON tg.id = pt.tag_id
+         WHERE tg.name IN (${tags.map(() => '?').join(', ')}) COLLATE NOCASE
+         GROUP BY pt.post_id
+         HAVING COUNT(DISTINCT pt.tag_id) = ${tags.length}
+       )`
     : '';
-  const tagParam = tag ? [tag] : [];
+  const tagParams: string[] = tags ?? [];
 
   // status === null → no filter (admin view: drafts + published).
   // status === undefined → default to 'published' (anonymous view).
@@ -193,23 +200,22 @@ export function readIndexedPosts(
       .prepare<IndexedPost>(
         `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
            FROM posts p
-           ${tagJoin}
+          WHERE 1=1 ${tagFilter}
           ORDER BY p.updated_at ${dir}, p.slug ASC
           LIMIT ? OFFSET ?`
       )
-      .all(...tagParam, limit, offset);
+      .all(...tagParams, limit, offset);
   }
   const status = opts.status ?? 'published';
   return db
     .prepare<IndexedPost>(
       `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
          FROM posts p
-         ${tagJoin}
-        WHERE p.status = ?
+        WHERE p.status = ? ${tagFilter}
         ORDER BY p.published_at ${dir}, p.slug ASC
         LIMIT ? OFFSET ?`
     )
-    .all(...tagParam, status, limit, offset);
+    .all(status, ...tagParams, limit, offset);
 }
 
 /** Tag counts for the sidebar.

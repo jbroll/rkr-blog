@@ -41,8 +41,9 @@ export interface IndexPageData extends SiteChrome {
   /** Tag counts for the tag rail sidebar. When absent or empty, the
    * rail is not rendered. */
   tagCounts?: { name: string; count: number }[];
-  /** The currently-active tag filter, if any. */
-  activeTag?: string;
+  /** The currently-active tag filters. Multiple tags = AND logic (post must
+   * have all of them). Replaces the former single-string activeTag field. */
+  activeTags?: string[];
   /** Current sort direction. 'desc' (default) = newest first; 'asc' = oldest first. */
   sort?: 'asc' | 'desc';
 }
@@ -51,8 +52,11 @@ export function renderIndexPage(data: IndexPageData): string {
   const v = bundleVersion();
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
   const isAsc = data.sort === 'asc';
-  // Build query suffix for pager and sort toggle — preserves active tag + sort together.
-  const tagSuffix = data.activeTag ? `&amp;tag=${encodeURIComponent(data.activeTag)}` : '';
+  const activeTags = data.activeTags ?? [];
+  // Build query suffix for pager — preserves all active tags + sort together.
+  const tagSuffix = activeTags.length
+    ? '&amp;' + activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')
+    : '';
   const sortSuffix = isAsc ? '&amp;sort=asc' : '';
   const pager =
     data.totalPages > 1
@@ -62,8 +66,8 @@ export function renderIndexPage(data: IndexPageData): string {
   ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
 </nav>`
       : '';
-  const sortToggle = renderSortToggle(isAsc, data.activeTag, data.isAdmin);
-  const tagRail = renderTagRail(data.tagCounts, data.activeTag);
+  const sortToggle = renderSortToggle(isAsc, activeTags, data.isAdmin);
+  const tagRail = renderTagRail(data.tagCounts, activeTags);
   // The posts-list bundle wires status-select auto-submit + pin/unpin
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
   // never see those controls.
@@ -202,14 +206,25 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
  * HTML without a wrapper conditional. */
 function renderTagRail(
   tagCounts: { name: string; count: number }[] | undefined,
-  activeTag: string | undefined
+  activeTags: string[]
 ): string {
   if (!tagCounts || tagCounts.length === 0) return '';
   const pills = tagCounts
     .map((t) => {
-      const isActive = t.name === activeTag;
-      // Active pill toggles the filter off (links to /); inactive pill activates it.
-      const href = isActive ? '/' : `/?tag=${encodeURIComponent(t.name)}`;
+      const isActive = activeTags.includes(t.name);
+      // Active pill: clicking removes this tag from the selection.
+      // Inactive pill: clicking adds this tag to the selection.
+      let href: string;
+      if (isActive) {
+        const remaining = activeTags.filter((a) => a !== t.name);
+        href =
+          remaining.length === 0
+            ? '/'
+            : `/?${remaining.map((a) => `tag=${encodeURIComponent(a)}`).join('&')}`;
+      } else {
+        const next = [...activeTags, t.name];
+        href = `/?${next.map((a) => `tag=${encodeURIComponent(a)}`).join('&')}`;
+      }
       const current = isActive ? ' aria-current="page"' : '';
       return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
     })
@@ -224,7 +239,7 @@ ${pills}
  * Anonymous view: a link that adds/removes ?sort=asc via server-side requery. */
 function renderSortToggle(
   isAsc: boolean,
-  activeTag: string | undefined,
+  activeTags: string[],
   isAdmin: boolean | undefined
 ): string {
   if (isAdmin) {
@@ -235,10 +250,13 @@ function renderSortToggle(
     const label = isAsc ? 'newest first' : 'oldest first';
     return `<button class="rkr-sort-toggle" data-sort-toggle data-sort-dir="${dir}">${icon('arrowUpDown', 14)} ${label}</button>\n`;
   }
-  const tagPart = activeTag ? `tag=${encodeURIComponent(activeTag)}&amp;` : '';
+  const tagQS = activeTags.length
+    ? activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')
+    : '';
   if (isAsc) {
-    const href = activeTag ? `/?tag=${encodeURIComponent(activeTag)}` : '/';
+    const href = tagQS ? `/?${tagQS}` : '/';
     return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}">newest first</a>\n`;
   }
-  return `<a class="rkr-sort-toggle" href="/?${tagPart}sort=asc">oldest first</a>\n`;
+  const prefix = tagQS ? `${tagQS}&amp;` : '';
+  return `<a class="rkr-sort-toggle" href="/?${prefix}sort=asc">oldest first</a>\n`;
 }

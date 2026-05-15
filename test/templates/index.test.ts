@@ -232,7 +232,7 @@ test('renderIndexPage: active tag gets aria-current and toggles off on click', (
       { name: 'travel', count: 12 },
       { name: 'food', count: 3 }
     ],
-    activeTag: 'travel'
+    activeTags: ['travel']
   });
   assert.match(html, /aria-current="page"/);
   // Active pill links to / (toggle off) — no separate "clear" link needed.
@@ -249,9 +249,47 @@ test('renderIndexPage: pager preserves ?tag= when active', () => {
     totalPages: 3,
     posts: [],
     tagCounts: [{ name: 'travel', count: 30 }],
-    activeTag: 'travel'
+    activeTags: ['travel']
   });
   assert.match(html, /href="\/\?page=2&amp;tag=travel"/);
+});
+
+test('renderIndexPage: multi-tag AND — active pills toggle off individually', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [
+      { name: 'travel', count: 12 },
+      { name: 'food', count: 3 },
+      { name: 'hiking', count: 5 }
+    ],
+    activeTags: ['travel', 'food']
+  });
+  // Both travel and food pills are active (aria-current).
+  assert.match(html, /href="\/\?tag=food"[^>]*aria-current="page"/);
+  assert.match(html, /href="\/\?tag=travel"[^>]*aria-current="page"/);
+  // Clicking 'travel' (to deselect) → links to /?tag=food (keeps food).
+  assert.match(html, /href="\/\?tag=food"[^>]*aria-current="page"/);
+  // Clicking 'food' (to deselect) → links to /?tag=travel (keeps travel).
+  assert.match(html, /href="\/\?tag=travel"[^>]*aria-current="page"/);
+  // Inactive tag 'hiking' links to add it to the selection.
+  assert.match(html, /href="\/\?tag=travel&amp;tag=food&amp;tag=hiking"/);
+  // No aria-current on hiking.
+  assert.doesNotMatch(html, /href="\/\?tag=travel&amp;tag=food&amp;tag=hiking"[^>]*aria-current/);
+});
+
+test('renderIndexPage: pager preserves multiple ?tag= params', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 3,
+    posts: [],
+    tagCounts: [{ name: 'travel', count: 30 }, { name: 'food', count: 10 }],
+    activeTags: ['travel', 'food']
+  });
+  assert.match(html, /href="\/\?page=2&amp;tag=travel&amp;tag=food"/);
 });
 
 test('renderIndexPage: sort toggle renders asc/desc links', () => {
@@ -285,7 +323,7 @@ test('renderIndexPage: sort toggle preserves ?tag= param', () => {
     totalPages: 1,
     posts: [],
     tagCounts: [{ name: 'travel', count: 5 }],
-    activeTag: 'travel',
+    activeTags: ['travel'],
     sort: 'asc'
   });
   // toggle back to desc should keep tag

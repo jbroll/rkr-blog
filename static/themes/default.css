@@ -319,6 +319,9 @@ body {
 .rkr-tag-rail {
   flex: 1;
   padding-top: 0.25rem;
+  position: sticky;
+  top: 1rem;
+  align-self: flex-start;
 }
 @media (max-width: 640px) {
   .rkr-index-layout--has-rail { flex-direction: column; }
