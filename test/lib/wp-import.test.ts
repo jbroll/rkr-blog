@@ -748,3 +748,11 @@ test('importPost: wp-block-embed → URL preserved as plain link', async (t) => 
   assert.match(result.markdown, /Watch this video/, 'prose before embed survives');
   assert.match(result.markdown, /End of post/, 'prose after embed survives');
 });
+
+test('importPost: HTML entities in title are decoded to Unicode', async (t) => {
+  const root = freshSiteRoot(t);
+  const post = makePost('', 'test-post');
+  post.title.rendered = 'Picking Up the Scamp at the &#8220;Nest&#8221;';
+  const result = await importPost(post, { siteRoot: root, fetchImage: stubFetcher() });
+  assert.match(result.markdown, /title: "Picking Up the Scamp at the “Nest”"/);
+});

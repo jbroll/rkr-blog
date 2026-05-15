@@ -178,7 +178,7 @@ function defaultImageFetcher(): (url: string) => Promise<Readable> {
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
 function renderFrontmatter(post: WpPost): string {
-  const titleEsc = post.title.rendered.replace(/"/g, '\\"');
+  const titleEsc = decodeHtmlEntities(post.title.rendered).replace(/"/g, '\\"');
   const lines = [
     '---',
     `title: "${titleEsc}"`,
@@ -190,6 +190,16 @@ function renderFrontmatter(post: WpPost): string {
     '---'
   ];
   return lines.join('\n');
+}
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(parseInt(n, 10)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
 }
 
 // ---- figure collection + directive emission ---------------------------
