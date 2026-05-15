@@ -135,6 +135,7 @@ async function runStart(editor: Editor): Promise<void> {
     }
     startDraftPersistence(editor, draftId);
     mountStatusBadge();
+    void populateTagsDatalist();
     // Eviction-after-drain is wired directly inside sync.ts; this
     // initial run reclaims OPFS for whatever's already stale on
     // mount.
@@ -148,6 +149,20 @@ async function runStart(editor: Editor): Promise<void> {
     await tryDrain();
   } catch (err) {
     setStatus(`offline cache init failed: ${(err as Error).message}`);
+  }
+}
+
+/* c8 ignore next 12 -- DOM + fetch coupled */
+async function populateTagsDatalist(): Promise<void> {
+  const list = document.getElementById('rkr-tags-list') as HTMLDataListElement | null;
+  if (!list) return;
+  try {
+    const res = await fetch('/admin/api/tags?q=');
+    if (!res.ok) return;
+    const tags = (await res.json()) as { name: string }[];
+    list.innerHTML = tags.map((t) => `<option value="${t.name}"></option>`).join('');
+  } catch {
+    // Non-critical — just means no suggestions appear.
   }
 }
 
