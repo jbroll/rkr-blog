@@ -316,3 +316,40 @@ test('readTagCounts returns name + count sorted by count DESC', (t) => {
     db.close();
   }
 });
+
+test('readIndexedPosts sort:asc returns oldest published_at first', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(
+    root,
+    'older.md',
+    { slug: 'older', title: 'Older', status: 'published', date: '2025-01-01T00:00:00Z' },
+    'body'
+  );
+  writePost(
+    root,
+    'newer.md',
+    { slug: 'newer', title: 'Newer', status: 'published', date: '2026-06-01T00:00:00Z' },
+    'body'
+  );
+  writePost(
+    root,
+    'middle.md',
+    { slug: 'middle', title: 'Middle', status: 'published', date: '2025-06-01T00:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const asc = readIndexedPosts(db, { status: 'published', sort: 'asc' });
+    assert.deepEqual(
+      asc.map((p) => p.slug),
+      ['older', 'middle', 'newer']
+    );
+
+    const desc = readIndexedPosts(db, { status: 'published', sort: 'desc' });
+    assert.equal(desc[0]?.slug, 'newer');
+    assert.equal(desc[desc.length - 1]?.slug, 'older');
+  } finally {
+    db.close();
+  }
+});

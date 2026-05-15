@@ -151,67 +151,75 @@ export default async function publicRoutes(
 
   // ---- index: GET / -----------------------------------------------------
 
-  fastify.get<{ Querystring: { page?: string; tag?: string } }>('/', async (req, reply) => {
-    const site = getSite();
-    const requested = Number.parseInt(req.query.page ?? '1', 10);
-    const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
-    const offset = (page - 1) * PAGE_SIZE;
-    const isAdmin = !!req.user;
-    const activeTag =
-      typeof req.query.tag === 'string' && req.query.tag.trim() ? req.query.tag.trim() : undefined;
-    // Authed visitors see drafts + published (the homepage doubles as
-    // the admin posts list). Anonymous visitors keep the published-
-    // only filter so drafts stay invisible until promotion.
-    const status: 'published' | null = isAdmin ? null : 'published';
-    const total = countPosts(db, status, activeTag);
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  fastify.get<{ Querystring: { page?: string; tag?: string; sort?: string } }>(
+    '/',
+    async (req, reply) => {
+      const site = getSite();
+      const requested = Number.parseInt(req.query.page ?? '1', 10);
+      const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
+      const offset = (page - 1) * PAGE_SIZE;
+      const isAdmin = !!req.user;
+      const activeTag =
+        typeof req.query.tag === 'string' && req.query.tag.trim()
+          ? req.query.tag.trim()
+          : undefined;
+      const sort: 'asc' | 'desc' = req.query.sort === 'asc' ? 'asc' : 'desc';
+      // Authed visitors see drafts + published (the homepage doubles as
+      // the admin posts list). Anonymous visitors keep the published-
+      // only filter so drafts stay invisible until promotion.
+      const status: 'published' | null = isAdmin ? null : 'published';
+      const total = countPosts(db, status, activeTag);
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    const rows = readIndexedPosts(db, {
-      limit: PAGE_SIZE,
-      offset,
-      status,
-      tag: activeTag
-    });
+      const rows = readIndexedPosts(db, {
+        limit: PAGE_SIZE,
+        offset,
+        status,
+        tag: activeTag,
+        sort: isAdmin ? 'desc' : sort
+      });
 
-    // Tag rail: show for anonymous public views only (admin view is the
-    // posts table and doesn't need the rail).
-    const tagCounts = isAdmin ? undefined : readTagCounts(db, { status: 'published' });
+      // Tag rail: show for anonymous public views only (admin view is the
+      // posts table and doesn't need the rail).
+      const tagCounts = isAdmin ? undefined : readTagCounts(db, { status: 'published' });
 
-    let indexBannerHtml: string | undefined;
-    if (site.bannerImageId) {
-      const bannerNode: DirectiveNode = {
-        type: 'leafDirective',
-        name: 'figure',
-        attributes: { ids: site.bannerImageId, justify: 'bleed' },
-        children: []
-      };
-      indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
+      let indexBannerHtml: string | undefined;
+      if (site.bannerImageId) {
+        const bannerNode: DirectiveNode = {
+          type: 'leafDirective',
+          name: 'figure',
+          attributes: { ids: site.bannerImageId, justify: 'bleed' },
+          children: []
+        };
+        indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
+      }
+
+      const html = renderIndexPage({
+        site,
+        page,
+        totalPages,
+        posts: rows.map((r) => ({
+          slug: r.slug,
+          title: r.title,
+          ...(r.published_at ? { date: r.published_at } : {}),
+          ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
+        })),
+        ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
+        isAdmin,
+        ...(tagCounts && tagCounts.length > 0 ? { tagCounts } : {}),
+        ...(activeTag ? { activeTag } : {}),
+        ...(!isAdmin ? { sort } : {})
+      });
+
+      setPublicSecurityHeaders(reply);
+      // Authed responses carry session-private chrome (admin strip,
+      // per-row controls). Mark them no-store so the SW + any HTTP
+      // intermediary skip caching — a post-action 303 redirect to /
+      // would otherwise serve the previously-cached pre-action body.
+      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+      return reply.type('text/html; charset=utf-8').send(html);
     }
-
-    const html = renderIndexPage({
-      site,
-      page,
-      totalPages,
-      posts: rows.map((r) => ({
-        slug: r.slug,
-        title: r.title,
-        ...(r.published_at ? { date: r.published_at } : {}),
-        ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
-      })),
-      ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
-      isAdmin,
-      ...(tagCounts && tagCounts.length > 0 ? { tagCounts } : {}),
-      ...(activeTag ? { activeTag } : {})
-    });
-
-    setPublicSecurityHeaders(reply);
-    // Authed responses carry session-private chrome (admin strip,
-    // per-row controls). Mark them no-store so the SW + any HTTP
-    // intermediary skip caching — a post-action 303 redirect to /
-    // would otherwise serve the previously-cached pre-action body.
-    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-    return reply.type('text/html; charset=utf-8').send(html);
-  });
+  );
 
   // ---- post: GET /:slug -------------------------------------------------
 

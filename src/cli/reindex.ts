@@ -169,11 +169,14 @@ export function readIndexedPosts(
     offset?: number;
     status?: 'draft' | 'published' | null;
     tag?: string;
+    /** 'desc' (default) = newest first; 'asc' = oldest first. */
+    sort?: 'asc' | 'desc';
   } = {}
 ): IndexedPost[] {
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
   const tag = opts.tag ?? null;
+  const dir = opts.sort === 'asc' ? 'ASC' : 'DESC';
 
   // Build optional tag join/filter clause.
   const tagJoin = tag
@@ -191,7 +194,7 @@ export function readIndexedPosts(
         `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
            FROM posts p
            ${tagJoin}
-          ORDER BY p.updated_at DESC, p.slug ASC
+          ORDER BY p.updated_at ${dir}, p.slug ASC
           LIMIT ? OFFSET ?`
       )
       .all(...tagParam, limit, offset);
@@ -203,7 +206,7 @@ export function readIndexedPosts(
          FROM posts p
          ${tagJoin}
         WHERE p.status = ?
-        ORDER BY p.published_at DESC, p.slug ASC
+        ORDER BY p.published_at ${dir}, p.slug ASC
         LIMIT ? OFFSET ?`
     )
     .all(...tagParam, status, limit, offset);

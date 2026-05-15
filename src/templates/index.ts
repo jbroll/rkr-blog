@@ -43,20 +43,26 @@ export interface IndexPageData extends SiteChrome {
   tagCounts?: { name: string; count: number }[];
   /** The currently-active tag filter, if any. */
   activeTag?: string;
+  /** Current sort direction. 'desc' (default) = newest first; 'asc' = oldest first. */
+  sort?: 'asc' | 'desc';
 }
 
 export function renderIndexPage(data: IndexPageData): string {
   const v = bundleVersion();
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
+  const isAsc = data.sort === 'asc';
+  // Build query suffix for pager and sort toggle — preserves active tag + sort together.
   const tagSuffix = data.activeTag ? `&amp;tag=${encodeURIComponent(data.activeTag)}` : '';
+  const sortSuffix = isAsc ? '&amp;sort=asc' : '';
   const pager =
     data.totalPages > 1
       ? `<nav aria-label="pagination">
   <span>page ${data.page} of ${data.totalPages}</span>
-  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}${tagSuffix}">prev</a>` : ''}
-  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}">next</a>` : ''}
+  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}${tagSuffix}${sortSuffix}">prev</a>` : ''}
+  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
 </nav>`
       : '';
+  const sortToggle = renderSortToggle(isAsc, data.activeTag);
   const tagRail = renderTagRail(data.tagCounts, data.activeTag);
   // The posts-list bundle wires status-select auto-submit + pin/unpin
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
@@ -79,7 +85,7 @@ ${stylesheetLinks()}
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
 ${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
-${body}
+${sortToggle}${body}
 ${pager}
 </main>
 ${tagRail}
@@ -209,4 +215,17 @@ function renderTagRail(
   return `<aside class="rkr-tag-rail" aria-label="Tags">${clearLink}
 ${pills}
 </aside>`;
+}
+
+/** Sort toggle: a single link that flips between oldest-first and newest-first.
+ * Returns empty string for admin view (admin table always sorts by updated_at). */
+function renderSortToggle(isAsc: boolean, activeTag: string | undefined): string {
+  const tagPart = activeTag ? `tag=${encodeURIComponent(activeTag)}&amp;` : '';
+  if (isAsc) {
+    // Currently oldest-first → offer link back to newest-first (default, no sort param)
+    const href = activeTag ? `/?tag=${encodeURIComponent(activeTag)}` : '/';
+    return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}">newest first</a>\n`;
+  }
+  // Currently newest-first (default) → offer link to oldest-first
+  return `<a class="rkr-sort-toggle" href="/?${tagPart}sort=asc">oldest first</a>\n`;
 }

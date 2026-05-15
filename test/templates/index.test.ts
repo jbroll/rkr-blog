@@ -247,3 +247,52 @@ test('renderIndexPage: pager preserves ?tag= when active', () => {
   });
   assert.match(html, /href="\/\?page=2&amp;tag=travel"/);
 });
+
+test('renderIndexPage: sort toggle renders asc/desc links', () => {
+  const descHtml = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    sort: 'desc'
+  });
+  // desc view: link to switch to asc
+  assert.match(descHtml, /href="\/\?sort=asc"/);
+  assert.doesNotMatch(descHtml, /href="\/\?sort=desc"/);
+
+  const ascHtml = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    sort: 'asc'
+  });
+  // asc view: link to switch to desc (or back to default)
+  assert.match(ascHtml, /href="\/(\?sort=desc)?"/);
+  assert.doesNotMatch(ascHtml, /href="\/\?sort=asc"/);
+});
+
+test('renderIndexPage: sort toggle preserves ?tag= param', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [{ name: 'travel', count: 5 }],
+    activeTag: 'travel',
+    sort: 'asc'
+  });
+  // toggle back to desc should keep tag
+  assert.match(html, /href="\/\?tag=travel"/);
+});
+
+test('renderIndexPage: pager preserves ?sort= when asc', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 3,
+    posts: [],
+    sort: 'asc'
+  });
+  assert.match(html, /href="\/\?page=2&amp;sort=asc"/);
+});

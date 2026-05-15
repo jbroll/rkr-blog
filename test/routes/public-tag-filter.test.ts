@@ -97,3 +97,39 @@ test('GET /?tag=TRAVEL: case-insensitive match', async (t) => {
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Travel Post/);
 });
+
+test('GET /?sort=asc: oldest post appears before newest', async (t) => {
+  const root = freshSiteRoot(t);
+  // Write posts with explicit dates, using a field separator safe for YAML
+  const write = (slug: string, title: string, date: string) => {
+    const md = `---\ntitle: ${title}\nslug: ${slug}\ndate: ${date}\nstatus: published\n---\n\nBody.\n`;
+    fs.writeFileSync(path.join(root, 'content', 'posts', `${slug}.md`), md, 'utf8');
+  };
+  write('old-post', 'Old Post', '2020-01-01T00:00:00Z');
+  write('new-post', 'New Post', '2025-01-01T00:00:00Z');
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  runReindex(root);
+  t.after(() => db.close());
+  const app = await buildApp({ siteRoot: root, db, startWorker: false });
+  t.after(() => app.close());
+
+  const asc = await app.inject({ method: 'GET', url: '/?sort=asc' });
+  const ascOldIdx = asc.body.indexOf('Old Post');
+  const ascNewIdx = asc.body.indexOf('New Post');
+  assert.ok(ascOldIdx < ascNewIdx, 'oldest first in asc view');
+
+  const desc = await app.inject({ method: 'GET', url: '/' });
+  const descOldIdx = desc.body.indexOf('Old Post');
+  const descNewIdx = desc.body.indexOf('New Post');
+  assert.ok(descNewIdx < descOldIdx, 'newest first in default (desc) view');
+});
+
+test('GET /?sort=asc: sort toggle link present', async (t) => {
+  const { app } = await setup(t);
+  const asc = await app.inject({ method: 'GET', url: '/?sort=asc' });
+  assert.match(asc.body, /href="\/"/); // link back to newest-first (no sort param)
+
+  const desc = await app.inject({ method: 'GET', url: '/' });
+  assert.match(desc.body, /href="\/\?sort=asc"/); // link to oldest-first
+});
