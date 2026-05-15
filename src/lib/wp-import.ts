@@ -46,11 +46,16 @@ export interface ImportOpts {
   /** URL of the post's banner / featured image. Ingested separately
    * from the body figures; its id lands in frontmatter as `banner:`. */
   bannerUrl?: string;
+  /** Override tag-name resolver for tests. Given the WP tag IDs from
+   * the post, returns an array of name strings. Default: fetches
+   * /wp/v2/tags?include=<ids> from the post's origin. */
+  fetchTagNames?: (tagIds: number[], postLink: string) => Promise<string[]>;
 }
 
 /** Import one post: walk its HTML, ingest every image, emit markdown. */
 export async function importPost(post: WpPost, opts: ImportOpts): Promise<ImportResult> {
   const fetchImage = opts.fetchImage ?? defaultImageFetcher();
+  const resolveTagNames = opts.fetchTagNames ?? defaultTagFetcher();
   const imagesIngested: string[] = [];
   const imageErrors: Array<{ url: string; error: string }> = [];
 
@@ -125,8 +130,19 @@ export async function importPost(post: WpPost, opts: ImportOpts): Promise<Import
     }
   }
 
+  // Resolve tag IDs → names. A fetch failure is non-fatal: the post
+  // imports without tags rather than failing entirely.
+  let tagNames: string[] = [];
+  if (post.tags && post.tags.length > 0) {
+    try {
+      tagNames = await resolveTagNames(post.tags, post.link);
+    } catch {
+      /* c8 ignore next -- fetch failures are non-fatal */
+    }
+  }
+
   const body = emitMarkdown(tree as HastNode).trim();
-  const frontmatter = renderFrontmatter(post);
+  const frontmatter = renderFrontmatter(post, tagNames);
   // Banner image leads the body as a ::figure directive so the author
   // can edit its attributes (justify, aspect, etc.) directly in markdown.
   // Default: full-bleed with a 3:1 crop so it reads as a page banner.
@@ -173,11 +189,24 @@ function defaultImageFetcher(): (url: string) => Promise<Readable> {
     return Readable.fromWeb(res.body);
   };
 }
+
+/** Default WP tag resolver: fetches /wp/v2/tags?include=<ids> from the
+ * same origin as `postLink` and maps each result to its `name` string. */
+function defaultTagFetcher(): (tagIds: number[], postLink: string) => Promise<string[]> {
+  return async (tagIds: number[], postLink: string) => {
+    const origin = new URL(postLink).origin;
+    const url = `${origin}/wp-json/wp/v2/tags?include=${tagIds.join(',')}&per_page=100`;
+    const res = await safeFetch(url, { timeoutMs: 15_000 });
+    if (!res.ok) throw new Error(`wp tags fetch ${res.status}`);
+    const data = (await res.json()) as Array<{ name: string }>;
+    return data.map((t) => t.name);
+  };
+}
 /* c8 ignore stop */
 
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
-function renderFrontmatter(post: WpPost): string {
+function renderFrontmatter(post: WpPost, tagNames: string[] = []): string {
   const titleEsc = post.title.rendered.replace(/"/g, '\\"');
   const lines = [
     '---',
@@ -186,9 +215,13 @@ function renderFrontmatter(post: WpPost): string {
     `date: ${post.date}`,
     'status: draft',
     `source_url: ${post.link}`,
-    `source_kind: wordpress`,
-    '---'
+    `source_kind: wordpress`
   ];
+  if (tagNames.length > 0) {
+    lines.push('tags:');
+    for (const name of tagNames) lines.push(`- ${name}`);
+  }
+  lines.push('---');
   return lines.join('\n');
 }
 

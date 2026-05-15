@@ -748,3 +748,58 @@ test('importPost: wp-block-embed → URL preserved as plain link', async (t) => 
   assert.match(result.markdown, /Watch this video/, 'prose before embed survives');
   assert.match(result.markdown, /End of post/, 'prose after embed survives');
 });
+
+// ---- tag resolution tests -----------------------------------------------
+
+test('importPost: tags resolved via fetchTagNames appear in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = {
+    ...makePost('<p>Tagged post.</p>'),
+    tags: [10, 20]
+  };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher(),
+    fetchTagNames: async (ids) => {
+      assert.deepEqual(ids, [10, 20]);
+      return ['travel', 'food'];
+    }
+  });
+  assert.match(result.markdown, /^tags:/m);
+  assert.match(result.markdown, /- travel/);
+  assert.match(result.markdown, /- food/);
+});
+
+test('importPost: no tags field → no tags in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const result = await importPost(makePost('<p>No tags.</p>'), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.doesNotMatch(result.markdown, /^tags:/m);
+});
+
+test('importPost: empty tags array → no tags in frontmatter', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = { ...makePost('<p>Empty tags.</p>'), tags: [] };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.doesNotMatch(result.markdown, /^tags:/m);
+});
+
+test('importPost: fetchTagNames failure is non-fatal, post imports without tags', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = { ...makePost('<p>Fail tags.</p>'), tags: [99] };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher(),
+    fetchTagNames: async () => {
+      throw new Error('network error');
+    }
+  });
+  // Post still imports successfully, just no tags block
+  assert.match(result.markdown, /Fail tags/);
+  assert.doesNotMatch(result.markdown, /^tags:/m);
+});
