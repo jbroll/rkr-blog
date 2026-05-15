@@ -171,17 +171,10 @@ export default async function publicRoutes(
       const total = countPosts(db, status, activeTag);
       const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-      const rows = readIndexedPosts(db, {
-        limit: PAGE_SIZE,
-        offset,
-        status,
-        tag: activeTag,
-        sort: isAdmin ? 'desc' : sort
-      });
+      const rows = readIndexedPosts(db, { limit: PAGE_SIZE, offset, status, tag: activeTag, sort });
 
-      // Tag rail: show for anonymous public views only (admin view is the
-      // posts table and doesn't need the rail).
-      const tagCounts = isAdmin ? undefined : readTagCounts(db, { status: 'published' });
+      // Tag rail: all posts for admin (drafts count too); published-only for anonymous.
+      const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });
 
       let indexBannerHtml: string | undefined;
       if (site.bannerImageId) {
@@ -206,9 +199,9 @@ export default async function publicRoutes(
         })),
         ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
         isAdmin,
-        ...(tagCounts && tagCounts.length > 0 ? { tagCounts } : {}),
+        ...(tagCounts.length > 0 ? { tagCounts } : {}),
         ...(activeTag ? { activeTag } : {}),
-        ...(!isAdmin ? { sort } : {})
+        sort
       });
 
       setPublicSecurityHeaders(reply);

@@ -291,6 +291,18 @@ test('renderIndexPage: sort toggle preserves ?tag= param', () => {
   assert.match(html, /href="\/\?tag=travel"/);
 });
 
+test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, not a link', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    isAdmin: true,
+    posts: []
+  });
+  assert.match(html, /<button[^>]*data-sort-toggle/);
+  assert.doesNotMatch(html, /href="\/\?sort=asc"/);
+});
+
 test('renderIndexPage: pager preserves ?sort= when asc', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },

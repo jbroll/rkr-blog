@@ -1,8 +1,11 @@
 // Admin posts list (/admin/posts) client glue:
 //
 //   Status icon button: a plain form submit flips draft↔published;
-//   no JS needed for the toggle itself. The button shows an eye icon
-//   (published) or eye-off (draft); aria-label carries the text.
+//   no JS needed for the toggle itself. The button shows a globe icon
+//   (published) or lock (draft); aria-label carries the text.
+//
+//   Sort button: client-side re-sort of the table rows by the datetime
+//   attribute of each row's <time> element; no page reload.
 //
 //   Pin / Unpin button per row reads OPFS to learn which slugs are
 //   currently pinned, paints the button state, and on click invokes
@@ -14,6 +17,32 @@
 import { icon } from '../templates/icons.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { type PinProgress, pinnedSlugs, pinPost, unpinSlug } from './pin.ts';
+
+const SORT_ASC_LABEL = `${icon('arrowUpDown', 14)} newest first`;
+const SORT_DESC_LABEL = `${icon('arrowUpDown', 14)} oldest first`;
+
+function sortAdminTable(asc: boolean): void {
+  const tbody = document.querySelector<HTMLElement>('.rkr-admin-posts tbody');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('tr[data-slug]'));
+  rows.sort((a, b) => {
+    const ta = a.querySelector('time')?.getAttribute('datetime') ?? '';
+    const tb = b.querySelector('time')?.getAttribute('datetime') ?? '';
+    return asc ? ta.localeCompare(tb) : tb.localeCompare(ta);
+  });
+  for (const row of rows) tbody.appendChild(row);
+}
+
+function wireSortToggle(): void {
+  const btn = document.querySelector<HTMLButtonElement>('button[data-sort-toggle]');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const isAsc = btn.dataset.sortDir !== 'asc';
+    btn.dataset.sortDir = isAsc ? 'asc' : 'desc';
+    btn.innerHTML = isAsc ? SORT_ASC_LABEL : SORT_DESC_LABEL;
+    sortAdminTable(isAsc);
+  });
+}
 
 const PIN_ICON = icon('pin', 18);
 const PIN_OFF_ICON = icon('pinOff', 18);
@@ -95,6 +124,7 @@ function wireDeleteConfirms(): void {
 }
 
 async function init(): Promise<void> {
+  wireSortToggle();
   wireDeleteConfirms();
   const pinButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>('button[data-pin-toggle]')

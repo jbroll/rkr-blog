@@ -62,7 +62,7 @@ export function renderIndexPage(data: IndexPageData): string {
   ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
 </nav>`
       : '';
-  const sortToggle = renderSortToggle(isAsc, data.activeTag);
+  const sortToggle = renderSortToggle(isAsc, data.activeTag, data.isAdmin);
   const tagRail = renderTagRail(data.tagCounts, data.activeTag);
   // The posts-list bundle wires status-select auto-submit + pin/unpin
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
@@ -215,15 +215,26 @@ ${pills}
 </aside>`;
 }
 
-/** Sort toggle: a single link that flips between oldest-first and newest-first.
- * Returns empty string for admin view (admin table always sorts by updated_at). */
-function renderSortToggle(isAsc: boolean, activeTag: string | undefined): string {
+/** Sort toggle.
+ * Admin view: a client-side button (posts-list.js sorts the table without a reload).
+ * Anonymous view: a link that adds/removes ?sort=asc via server-side requery. */
+function renderSortToggle(
+  isAsc: boolean,
+  activeTag: string | undefined,
+  isAdmin: boolean | undefined
+): string {
+  if (isAdmin) {
+    // Button sorts the table client-side without a reload.
+    // data-sort-dir reflects the current server-rendered order so the
+    // first click always flips to the opposite direction.
+    const dir = isAsc ? 'asc' : 'desc';
+    const label = isAsc ? 'newest first' : 'oldest first';
+    return `<button class="rkr-sort-toggle" data-sort-toggle data-sort-dir="${dir}">${icon('arrowUpDown', 14)} ${label}</button>\n`;
+  }
   const tagPart = activeTag ? `tag=${encodeURIComponent(activeTag)}&amp;` : '';
   if (isAsc) {
-    // Currently oldest-first → offer link back to newest-first (default, no sort param)
     const href = activeTag ? `/?tag=${encodeURIComponent(activeTag)}` : '/';
     return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}">newest first</a>\n`;
   }
-  // Currently newest-first (default) → offer link to oldest-first
   return `<a class="rkr-sort-toggle" href="/?${tagPart}sort=asc">oldest first</a>\n`;
 }
