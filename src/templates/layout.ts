@@ -6,7 +6,7 @@
 //     icon on /:slug for "Edit this post", plus + and gear FABs on /
 //     for "New post" + "Settings". Rendered by each template; see
 //     adminFabs() helpers below.
-//   * The footer's discreet entry point: "Login" for anonymous,
+//   * The header's top-right corner: "Login" for anonymous,
 //     "Logout" for authed (POST form so CSRF/origin guards fire).
 
 import { resolveGitHash } from '../lib/build-info.ts';
@@ -59,47 +59,40 @@ export interface SiteChrome {
 }
 
 export interface HeadOpts {
-  /** Admin context only affects the footer (Login → Logout swap)
-   * and the per-page FABs that templates render. The header chrome
-   * is identical for authed + anonymous visitors. */
+  /** Controls the Login/Logout affordance in the header top-right.
+   * When true, renders a Logout POST form; when false/omitted, a Login link. */
   isAdmin?: boolean;
 }
 
-export function siteHead(site: SiteChrome['site'], _opts: HeadOpts = {}): string {
+export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string {
   const tagline = site.tagline
     ? `<span class="rkr-site-tagline">${escapeText(site.tagline)}</span>`
     : '';
+  const auth = opts.isAdmin
+    ? `<form method="post" action="/admin/logout" class="rkr-site-head-auth-form">
+    <button type="submit" class="rkr-site-head-auth-btn">Logout</button>
+  </form>`
+    : `<a class="rkr-site-head-auth-btn" href="/login" rel="nofollow">Login</a>`;
   return `<a class="rkr-skip" href="#main">Skip to content</a>
 <header class="rkr-site-head">
   <div class="rkr-site-head-inner">
-    <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
-    ${tagline}
+    <div class="rkr-site-head-brand">
+      <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
+      ${tagline}
+    </div>
+    <div class="rkr-site-head-auth">${auth}</div>
   </div>
 </header>`;
 }
 
 export interface FootOpts {
-  /** When true the discreet footer link is "Logout" (POST form); when
-   * false (or omitted) it's "Login" pointing at /login. */
   isAdmin?: boolean;
 }
 
-export function siteFoot(site: SiteChrome['site'], opts: FootOpts = {}): string {
+export function siteFoot(site: SiteChrome['site'], _opts: FootOpts = {}): string {
   const year = new Date().getFullYear();
-  // The footer carries the only auth-state affordance now that the
-  // admin strip is gone: anonymous visitors see a Login link;
-  // authed visitors see a Logout form-button (POST so the
-  // CSRF/origin guard fires).
-  const adminLink = opts.isAdmin
-    ? `<span class="rkr-site-foot-sep" aria-hidden="true">·</span>
-  <form method="post" action="/admin/logout" class="rkr-site-foot-logout-form">
-    <button type="submit" class="rkr-site-foot-admin">Logout</button>
-  </form>`
-    : `<span class="rkr-site-foot-sep" aria-hidden="true">·</span>
-  <a class="rkr-site-foot-admin" href="/login" rel="nofollow">Login</a>`;
   return `<footer class="rkr-site-foot">
-  &copy; ${year} ${escapeAttr(site.title)}
-  ${adminLink}
+  &copy; ${year} ${escapeText(site.title)}
 </footer>`;
 }
 

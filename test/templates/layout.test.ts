@@ -37,37 +37,34 @@ test('bundleVersion: produces a stable ?v= suffix per process', () => {
   assert.equal(bundleVersion(), bundleVersion());
 });
 
-test('siteHead: renders site title + tagline; no admin strip in either mode', () => {
-  // The admin strip is gone — admin actions live in per-page FABs
-  // and the Login/Logout switch in siteFoot. siteHead is identical
-  // for anonymous and authed visitors.
-  const anon = siteHead({ title: 'My site', tagline: 'wat' });
-  const auth = siteHead({ title: 'My site', tagline: 'wat' }, { isAdmin: true });
-  for (const html of [anon, auth]) {
-    assert.match(html, /My site/);
-    assert.match(html, /wat/);
-    assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
-    assert.ok(!html.includes('New post'), 'New post moved to a FAB');
-    assert.ok(!html.includes('Logout'), 'Logout moved to the footer');
-  }
-});
-
-test('siteFoot: anonymous visitor sees the Login link', () => {
-  const html = siteFoot({ title: 'My site' });
+test('siteHead: anonymous visitor sees Login link in the header', () => {
+  const html = siteHead({ title: 'My site', tagline: 'wat' });
+  assert.match(html, /My site/);
+  assert.match(html, /wat/);
   assert.match(html, /href="\/login"/);
   assert.match(html, />Login</);
   assert.ok(!html.includes('Logout'), 'no Logout for anonymous visitors');
-  assert.match(html, /My site/);
+  assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
+  assert.ok(!html.includes('New post'), 'New post moved to a FAB');
 });
 
-test('siteFoot: authed visitor sees a POST-form Logout button', () => {
-  const html = siteFoot({ title: 'My site' }, { isAdmin: true });
-  // Logout is POST (CSRF/origin guard fires); rendered as a button
-  // inside a tiny inline <form> so it sits next to the © line.
+test('siteHead: authed visitor sees a POST-form Logout button in the header', () => {
+  const html = siteHead({ title: 'My site', tagline: 'wat' }, { isAdmin: true });
+  assert.match(html, /My site/);
   assert.match(html, /<form [^>]*method="post" [^>]*action="\/admin\/logout"/);
   assert.match(html, /<button[^>]*>Logout</);
-  // No anonymous Login link when authed.
   assert.ok(!html.includes('href="/login"'), 'no Login link when authed');
+  assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
+});
+
+test('siteFoot: renders copyright line without auth links', () => {
+  const anon = siteFoot({ title: 'My site' });
+  const auth = siteFoot({ title: 'My site' }, { isAdmin: true });
+  for (const html of [anon, auth]) {
+    assert.match(html, /My site/);
+    assert.ok(!html.includes('Login'), 'Login is in the header now');
+    assert.ok(!html.includes('Logout'), 'Logout is in the header now');
+  }
 });
 
 test('indexAdminFabs: renders + (New post) and ⚙ (Settings) as anchors', () => {

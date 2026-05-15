@@ -2,9 +2,10 @@
 //
 // Resolution order (first hit wins):
 //   1. GIT_HASH env var          — runtime override (CI overrides, local probes)
-//   2. file at GIT_HASH_FILE     — Dockerfile bakes /app/git-hash at build time
-//   3. .git/HEAD (chasing refs)  — local dev outside Docker
-//   4. 'unknown'                 — gracefully degrade rather than crash /health
+//   2. file at GIT_HASH_FILE     — explicit file path override
+//   3. git-hash file near module — deploy hook writes <app-root>/git-hash at build time
+//   4. .git/HEAD (chasing refs)  — local dev with a git checkout
+//   5. 'unknown'                 — gracefully degrade rather than crash /health
 //
 // Resolved once per process and cached. The handler reads the cached
 // value; calling resolveGitHash() again returns the same string.
@@ -35,6 +36,9 @@ function resolveUncached(): string {
   const fromFile = readHashFile(process.env.GIT_HASH_FILE);
   if (fromFile) return fromFile;
 
+  const fromNearModule = readHashNearModule();
+  if (fromNearModule) return fromNearModule;
+
   const fromGitDir = readFromGitDir();
   if (fromGitDir) return fromGitDir;
 
@@ -49,6 +53,23 @@ function readHashFile(file: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+/** Walk up from this module's directory looking for a `git-hash` file
+ * written by the deploy hook. Finds e.g. /opt/rkr-blog/git-hash when
+ * the module lives at /opt/rkr-blog/src/lib/build-info.ts. */
+function readHashNearModule(): string | null {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  let dir = here;
+  for (let i = 0; i < 12; i++) {
+    const candidate = path.join(dir, 'git-hash');
+    const hash = readHashFile(candidate);
+    if (hash) return hash;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
 }
 
 /** Walk up from this module's directory to find a .git dir, then resolve

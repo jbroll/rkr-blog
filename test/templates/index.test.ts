@@ -85,7 +85,7 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New post"/);
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="Settings"/);
-  // Footer Login/Logout swap shows Logout (authed).
+  // Header Login/Logout swap shows Logout (authed).
   assert.match(html, /<form [^>]*action="\/admin\/logout"[^>]*>/);
 });
 
