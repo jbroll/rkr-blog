@@ -45,6 +45,7 @@ export interface StubOpts {
   exchangeReturns?: StubTokens;
   refreshReturns?: StubTokens;
   exchangeThrows?: Error;
+  refreshThrows?: Error;
 }
 
 /** Fabricate an arctic-compatible OAuth2Tokens object. The route only

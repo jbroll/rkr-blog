@@ -63,6 +63,7 @@ function stubExchange(opts: StubOpts = {}): OneDriveTokenExchange {
       );
     },
     async refresh() {
+      if (opts.refreshThrows) throw opts.refreshThrows;
       return stubOAuth2Tokens(
         opts.refreshReturns ?? {
           accessToken: 'ms-access-refreshed',
@@ -96,7 +97,7 @@ function stubGraphFetcher(filename: string, mime: string, body: Buffer): typeof 
   }) as typeof fetch;
 }
 
-async function setup(t: TestContext, opts: StubOpts = {}) {
+async function setup(t: TestContext, opts: StubOpts = {}, graphFetcher?: typeof fetch) {
   const root = freshSiteRoot(t);
   const db = open(path.join(root, 'data', 'site.db'));
   migrate(db);
@@ -109,7 +110,7 @@ async function setup(t: TestContext, opts: StubOpts = {}) {
     db,
     startWorker: false,
     auth: { exchange: noopAuthExchange, secureCookies: false },
-    onedrive: { exchange }
+    onedrive: { exchange, graphFetcher }
   });
   t.after(() => app.close());
 
@@ -472,6 +473,370 @@ test('POST /admin/import/onedrive 415s on non-image content-type', async (t) => 
   });
   assert.equal(res.statusCode, 415);
   assert.match(res.json<ErrorBody>().error, /content-type/);
+});
+
+// ---- callback edge case -------------------------------------------------
+
+test('callback: state cookie is valid JSON but missing required fields → 400', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const stateCookie = encodeURIComponent('{}');
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<ErrorBody>().error, /malformed state cookie/);
+});
+
+// ---- /picker-token -------------------------------------------------------
+
+test('picker-token: 404 when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/picker-token',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+test('picker-token: 412 when no refresh token stored', async (t) => {
+  const { app, db, user, sessionCookie } = await connectFixture(t);
+  db.prepare('UPDATE oauth_tokens SET refresh_token = NULL WHERE user_id = ?').run(user.id);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/picker-token',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 412);
+});
+
+test('picker-token: 404 for my.microsoftpersonalcontent.com resource', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/picker-token?resource=https://my.microsoftpersonalcontent.com/something',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+test('picker-token: returns access token for api.onedrive.com resource', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/picker-token?resource=https://api.onedrive.com',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json<{ accessToken: string }>().accessToken, 'ms-access-refreshed');
+});
+
+test('picker-token: returns access token for generic resource using .default scope', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/picker-token?resource=https://some-service.example.com',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.json<{ accessToken: string }>().accessToken);
+});
+
+test('picker-token: 500 when token refresh throws', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t, {
+    refreshThrows: new Error('upstream busted')
+  });
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/picker-token?resource=https://api.onedrive.com',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 500);
+});
+
+// ---- /files --------------------------------------------------------------
+
+test('GET /admin/integrations/onedrive/files: 404 when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/files?folderId=root',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 404);
+  assert.match(res.json<ErrorBody>().error, /not connected/);
+});
+
+test('GET /admin/integrations/onedrive/files: returns items from Graph', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const listFetcher = (async (_url: string | URL) =>
+    new Response(
+      JSON.stringify({ value: [{ id: 'img1', name: 'photo.jpg', file: { mimeType: 'image/jpeg' } }] }),
+      { headers: { 'content-type': 'application/json' } }
+    )) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: listFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/files?folderId=root',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json<{ items: Array<{ name: string }> }>();
+  assert.equal(body.items.length, 1);
+  assert.equal(body.items[0].name, 'photo.jpg');
+});
+
+test('GET /admin/integrations/onedrive/files: 400 when Graph call fails', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const failFetcher = (async (_url: string | URL) =>
+    new Response('internal error', { status: 500 })) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: failFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/files?folderId=root',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+// ---- /thumbnail ----------------------------------------------------------
+
+test('GET /admin/integrations/onedrive/thumbnail: 400 when itemId is missing', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/thumbnail',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 400);
+  assert.match(res.json<ErrorBody>().error, /itemId required/);
+});
+
+test('GET /admin/integrations/onedrive/thumbnail: 404 when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/thumbnail?itemId=x',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+test('GET /admin/integrations/onedrive/thumbnail: returns url from Graph', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const thumbFetcher = (async (_url: string | URL) =>
+    new Response(
+      JSON.stringify({ large: { url: 'https://thumb.example.com/large.jpg' } }),
+      { headers: { 'content-type': 'application/json' } }
+    )) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: thumbFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/thumbnail?itemId=img1',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json<{ url: string }>().url, 'https://thumb.example.com/large.jpg');
+});
+
+test('GET /admin/integrations/onedrive/thumbnail: 404 when Graph has no thumbnail', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const noThumbFetcher = (async (_url: string | URL) =>
+    new Response('not found', { status: 404 })) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: noThumbFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/thumbnail?itemId=img1',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+// ---- import failure tests ------------------------------------------------
+
+test('POST /admin/import/onedrive 400s when Graph fetch fails', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const failFetcher = (async (_url: string | URL) =>
+    new Response('internal error', { status: 500 })) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: failFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/onedrive',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'ms-id' }
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST /admin/import/onedrive 400s when ingest fails', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const badBytes = Buffer.from('not-a-jpeg');
+  const badFetcher = (async (url: string | URL) => {
+    const u = typeof url === 'string' ? url : url.toString();
+    if (u.endsWith('/content')) {
+      return new Response(badBytes, {
+        headers: { 'content-type': 'image/jpeg', 'content-length': String(badBytes.length) }
+      });
+    }
+    return new Response(
+      JSON.stringify({ id: 'ms-id', name: 'bad.jpg', file: { mimeType: 'image/jpeg' } }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: badFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/onedrive',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'ms-id' }
+  });
+  assert.equal(res.statusCode, 400);
 });
 
 test.after(() => {

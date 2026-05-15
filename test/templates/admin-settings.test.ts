@@ -110,3 +110,33 @@ test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
   });
   assert.match(html, /<code[^>]*>unknown<\/code>/);
 });
+
+test('renderAdminSettingsPage: ingestResize fields show persisted values', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    persisted: { ingestResize: { maxDim: 2400, scalePct: 80, webpQuality: 70 } },
+    themes: ['default'],
+    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown'
+  });
+  assert.match(html, /value="2400"/);
+  assert.match(html, /value="80"/);
+  assert.match(html, /value="70"/);
+});
+
+test('renderAdminSettingsPage: connected integration shows Disconnect button', () => {
+  const htmlGdrive = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: true, onedriveConnected: false, gitHash: 'unknown'
+  });
+  assert.match(htmlGdrive, /Disconnect/);
+
+  const htmlOnedrive = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false, onedriveConnected: true, gitHash: 'unknown'
+  });
+  assert.match(htmlOnedrive, /Disconnect/);
+});

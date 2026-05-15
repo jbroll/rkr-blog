@@ -287,3 +287,64 @@ test('POST /admin/settings/site: 400 when title exceeds the cap', async (t) => {
   });
   assert.equal(res.statusCode, 400);
 });
+
+test('POST /admin/settings: 303 with err= on invalid ingestScalePct', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'ingestMaxDim=&ingestScalePct=banana&ingestWebpQuality='
+  });
+  assert.equal(res.statusCode, 303);
+  assert.match(res.headers.location as string, /err=.*scale/);
+});
+
+test('POST /admin/settings: 303 with err= on out-of-range ingestWebpQuality', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'ingestMaxDim=&ingestScalePct=&ingestWebpQuality=999'
+  });
+  assert.equal(res.statusCode, 303);
+  assert.match(res.headers.location as string, /err=.*webp%20quality/);
+});
+
+test('POST /admin/settings/site: 400 when tagline exceeds the cap', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/site',
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify({ title: 'ok', tagline: 'b'.repeat(501) })
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST /admin/settings/banner: persists a valid imageId', async (t) => {
+  const { root, app } = await setup(t);
+  const imageId = 'a'.repeat(64);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/banner',
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify({ imageId })
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), { ok: true, bannerImageId: imageId });
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.bannerImageId, imageId);
+});
+
+test('POST /admin/settings/banner: 400 on invalid imageId', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/banner',
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify({ imageId: 'short' })
+  });
+  assert.equal(res.statusCode, 400);
+});

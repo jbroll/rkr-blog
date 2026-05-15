@@ -355,6 +355,7 @@ export default async function integrationsOnedriveRoutes(
       const limiter = new Transform({
         transform(chunk: Buffer, _enc, cb) {
           bytes += chunk.length;
+          /* c8 ignore next 3 -- testing 50 MiB limit requires impractical stream size */
           if (bytes > ONEDRIVE_MAX_BYTES) {
             cb(new Error('streamed bytes exceeded limit'));
             return;
