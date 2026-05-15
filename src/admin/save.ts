@@ -17,6 +17,7 @@ import { append as outboxAppend } from './outbox.ts';
 import { markClean } from './page-title.ts';
 import { hasPendingMarker } from './pending-uploads.ts';
 import { awaitDrainSettled, tryDrain } from './sync.ts';
+import { getTagInput } from './tag-input-instance';
 import { showToast } from './toast.ts';
 
 interface SaveResponse {
@@ -76,7 +77,8 @@ export async function handleSave(editor: Editor): Promise<void> {
     title,
     ...(subtitle ? { subtitle } : {}),
     markdown,
-    lastSyncedAt: meta?.lastSyncedAt
+    lastSyncedAt: meta?.lastSyncedAt,
+    tags: getTagInput()?.getTags() ?? []
   };
   setStatus('saving…');
   // If any referenced image still has an `upload` entry queued in

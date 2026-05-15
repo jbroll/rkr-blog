@@ -20,6 +20,8 @@ export interface PinManifest {
   markdown: string;
   originals: { id: string; ext: string; bytes: number }[];
   sidecars: { id: string; json: Sidecar }[];
+  /** Tag names attached to the post; empty array when untagged. */
+  tags?: string[];
 }
 
 /** @public */

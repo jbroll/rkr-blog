@@ -84,7 +84,10 @@ export function registerPostBundleRoutes(
         lastModified: new Date(stat.mtimeMs).toISOString(),
         markdown,
         originals,
-        sidecars
+        sidecars,
+        tags: Array.isArray(fm.tags)
+          ? (fm.tags as string[]).filter((t) => typeof t === 'string')
+          : []
       };
     }
   );
