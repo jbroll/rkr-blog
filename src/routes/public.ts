@@ -155,9 +155,6 @@ export default async function publicRoutes(
     '/',
     async (req, reply) => {
       const site = getSite();
-      const requested = Number.parseInt(req.query.page ?? '1', 10);
-      const page = Number.isFinite(requested) && requested >= 1 ? requested : 1;
-      const offset = (page - 1) * PAGE_SIZE;
       const isAdmin = !!req.user;
       const activeTag =
         typeof req.query.tag === 'string' && req.query.tag.trim()
@@ -168,10 +165,18 @@ export default async function publicRoutes(
       // the admin posts list). Anonymous visitors keep the published-
       // only filter so drafts stay invisible until promotion.
       const status: 'published' | null = isAdmin ? null : 'published';
-      const total = countPosts(db, status, activeTag);
-      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-      const rows = readIndexedPosts(db, { limit: PAGE_SIZE, offset, status, tag: activeTag, sort });
+      // Admin loads all posts so the client-side sort button works across
+      // the full list and drafts (which lack published_at) don't fall off
+      // the end of a paginated view.
+      const requested = Number.parseInt(req.query.page ?? '1', 10);
+      const page = isAdmin ? 1 : (Number.isFinite(requested) && requested >= 1 ? requested : 1);
+      const total = countPosts(db, status, activeTag);
+      const totalPages = isAdmin ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
+      const offset = isAdmin ? 0 : (page - 1) * PAGE_SIZE;
+      const limit = isAdmin ? total : PAGE_SIZE;
+
+      const rows = readIndexedPosts(db, { limit, offset, status, tag: activeTag, sort });
 
       // Tag rail: all posts for admin (drafts count too); published-only for anonymous.
       const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });
