@@ -16,6 +16,7 @@ import { Readable } from 'node:stream';
 import rehypeParse from 'rehype-parse';
 import { unified } from 'unified';
 
+import { decodeHtmlEntities } from './content.ts';
 import { ingestStream } from './originals.ts';
 import { safeFetch } from './url-safety.ts';
 import { collectText, emitMarkdown, findFirst } from './wp-import-emit.ts';
@@ -190,16 +191,6 @@ function renderFrontmatter(post: WpPost): string {
     '---'
   ];
   return lines.join('\n');
-}
-
-function decodeHtmlEntities(s: string): string {
-  return s
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(parseInt(n, 10)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'");
 }
 
 // ---- figure collection + directive emission ---------------------------

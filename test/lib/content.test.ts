@@ -163,3 +163,17 @@ test('safeLinkUrl: a colon inside the path is not a scheme', () => {
   // explicit `https://` is one keystroke.)
   assert.equal(safeLinkUrl('a:b'), '#');
 });
+
+test('parsePost decodes HTML entities in title and subtitle', () => {
+  const raw = `---
+title: "Picking Up the Scamp at the &#8220;Nest&#8221;"
+subtitle: "Heading home&#8230;"
+slug: nest-trip
+---
+
+Body.
+`;
+  const { frontmatter } = parsePost(raw);
+  assert.equal(frontmatter.title, 'Picking Up the Scamp at the “Nest”');
+  assert.equal(frontmatter.subtitle, 'Heading home…');
+});
