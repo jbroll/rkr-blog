@@ -61,10 +61,16 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /<a href="\/hello">Hello<\/a>/);
   assert.match(html, /<a href="\/wip">WIP<\/a>/);
   assert.match(html, /action="\/admin\/posts\/hello\/status"/);
-  assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-published"/);
-  assert.match(html, /<select [^>]*name="status"[^>]*class="rkr-admin-posts-status is-draft"/);
-  assert.match(html, /<option value="published" selected>published<\/option>/);
-  assert.match(html, /<option value="draft" selected>draft<\/option>/);
+  // Status icon buttons: eye = published, eyeOff = draft. Toggle flips to opposite status.
+  assert.match(html, /class="rkr-admin-posts-status-btn is-published"/);
+  assert.match(html, /class="rkr-admin-posts-status-btn is-draft"/);
+  assert.match(html, /aria-label="Published — click to unpublish"/);
+  assert.match(html, /aria-label="Draft — click to publish"/);
+  // Hidden input carries the target (opposite) status for the form submit.
+  assert.match(html, /<input [^>]*name="status"[^>]*value="draft"/);
+  assert.match(html, /<input [^>]*name="status"[^>]*value="published"/);
+  // No select element in the status column.
+  assert.doesNotMatch(html, /<select [^>]*name="status"/);
   // Pin / delete buttons render the Lucide icons (no text label) —
   // accessible name lives on aria-label.
   assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled><svg [^>]*>/);
@@ -73,8 +79,7 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
   assert.match(html, />2026-05-01</);
 
-  // The posts-list bundle is loaded so the status select auto-
-  // submits and pin buttons read OPFS. Admin FABs (+ + ⚙) replace
+  // The posts-list bundle is loaded so pin buttons read OPFS. Admin FABs (+ + ⚙) replace
   // the old admin strip; the strip itself is gone.
   assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js/);
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');

@@ -1,17 +1,15 @@
-// Admin posts list (/admin/posts) client glue. Two concerns:
+// Admin posts list (/admin/posts) client glue:
 //
-//   1. Status select per row submits its parent <form> on change so
-//      the author doesn't have to click a separate Apply button.
-//      The form posts to /admin/posts/:slug/status which 303-redirects
-//      back to the list — no JS-only flow, the noscript Apply button
-//      keeps non-JS browsers working too.
+//   Status icon button: a plain form submit flips draft↔published;
+//   no JS needed for the toggle itself. The button shows an eye icon
+//   (published) or eye-off (draft); aria-label carries the text.
 //
-//   2. Pin / Unpin button per row reads OPFS to learn which slugs are
-//      currently pinned, paints the button state, and on click invokes
-//      pinPost / unpinSlug. Pinning downloads the post bundle (markdown
-//      + originals + sidecars) into OPFS so the post survives going
-//      offline; unpin flips meta.mode back to 'cached' (eviction
-//      reclaims on the next sweep).
+//   Pin / Unpin button per row reads OPFS to learn which slugs are
+//   currently pinned, paints the button state, and on click invokes
+//   pinPost / unpinSlug. Pinning downloads the post bundle (markdown
+//   + originals + sidecars) into OPFS so the post survives going
+//   offline; unpin flips meta.mode back to 'cached' (eviction
+//   reclaims on the next sweep).
 
 import { icon } from '../templates/icons.ts';
 import { ensureSchema } from './opfs-schema.ts';
@@ -19,23 +17,6 @@ import { type PinProgress, pinnedSlugs, pinPost, unpinSlug } from './pin.ts';
 
 const PIN_ICON = icon('pin', 18);
 const PIN_OFF_ICON = icon('pinOff', 18);
-
-function wireStatusForms(): void {
-  for (const form of document.querySelectorAll<HTMLFormElement>(
-    'form.rkr-admin-posts-status-form'
-  )) {
-    const select = form.querySelector<HTMLSelectElement>('select[name="status"]');
-    if (!select) continue;
-    select.addEventListener('change', () => {
-      // is-* class drives the public-style coloured pill; flip
-      // optimistically so the author sees feedback before the page
-      // reload that the form submit triggers.
-      select.classList.remove('is-draft', 'is-published');
-      select.classList.add(`is-${select.value}`);
-      form.submit();
-    });
-  }
-}
 
 function setRowPinState(button: HTMLButtonElement, pinned: boolean): void {
   button.disabled = false;
@@ -114,7 +95,6 @@ function wireDeleteConfirms(): void {
 }
 
 async function init(): Promise<void> {
-  wireStatusForms();
   wireDeleteConfirms();
   const pinButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>('button[data-pin-toggle]')

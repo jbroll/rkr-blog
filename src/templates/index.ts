@@ -176,12 +176,10 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
     <td>${iso ? `<time datetime="${escapeAttr(iso)}">${escapeText(label)}</time>` : ''}</td>
     <td class="rkr-admin-posts-action">
       <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
-        <label class="rkr-vh" for="rkr-status-${escapeAttr(p.slug)}">Status for ${escapeAttr(p.title)}</label>
-        <select id="rkr-status-${escapeAttr(p.slug)}" name="status" class="rkr-admin-posts-status is-${status}">
-          <option value="draft"${status === 'draft' ? ' selected' : ''}>draft</option>
-          <option value="published"${status === 'published' ? ' selected' : ''}>published</option>
-        </select>
-        <noscript><button type="submit">apply</button></noscript>
+        <input type="hidden" name="status" value="${status === 'published' ? 'draft' : 'published'}"/>
+        <button type="submit" class="rkr-admin-posts-status-btn is-${status}"
+          aria-label="${status === 'published' ? 'Published — click to unpublish' : 'Draft — click to publish'}"
+          title="${status === 'published' ? 'Published' : 'Draft'}">${icon(status === 'published' ? 'eye' : 'eyeOff', 18)}</button>
       </form>
     </td>
     <td class="rkr-admin-posts-action">
