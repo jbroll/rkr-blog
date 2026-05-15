@@ -315,10 +315,9 @@ body {
   max-width: var(--rkr-content);
   margin: 0 auto;
 }
-.rkr-index-posts { flex: 1; min-width: 0; }
+.rkr-index-posts { flex: 4; min-width: 0; }
 .rkr-tag-rail {
-  flex-shrink: 0;
-  width: 12rem;
+  flex: 1;
   padding-top: 0.25rem;
 }
 @media (max-width: 640px) {
