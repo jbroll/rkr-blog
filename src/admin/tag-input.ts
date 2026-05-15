@@ -94,6 +94,14 @@ export function createTagInput(container: HTMLElement): TagInputWidget {
     container.appendChild(input);
   }
 
+  // Clicking anywhere in the container (including padding/pills area)
+  // focuses the input so the user doesn't have to aim at the thin field.
+  container.addEventListener('click', (e) => {
+    if (e.target === container) {
+      container.querySelector<HTMLInputElement>('input')?.focus();
+    }
+  });
+
   render();
 
   return {
