@@ -287,7 +287,7 @@ test('GET / authed: includes drafts + admin table + no-store header', async (t) 
   // (no <thead> — controls' aria-labels carry their accessible names).
   assert.match(res.body, /<table class="rkr-admin-posts">/);
   assert.match(res.body, /action="\/admin\/posts\/draft\/status"/);
-  assert.match(res.body, /<script[^>]*src="\/static\/admin\/posts-list\.js"/);
+  assert.match(res.body, /<script[^>]*src="\/static\/admin\/posts-list\.js/);
   // SW honours no-store on the response and skips caching so a
   // post-action redirect doesn't shadow the next load.
   assert.match(res.headers['cache-control'] as string, /no-store/);

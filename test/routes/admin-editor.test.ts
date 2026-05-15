@@ -73,7 +73,7 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<div id="rkroll-admin-root">/);
   assert.match(res.body, /<article id="rkroll-admin-article"><\/article>/);
-  assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js"><\/script>/);
+  assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js[^"]*"><\/script>/);
 
   // Public theme stylesheets (base + the active theme) are loaded so
   // the editor preview matches the rendered post.
