@@ -84,11 +84,15 @@ ${stylesheetLinks()}
 <body>
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
 ${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
+<div class="rkr-index-layout${tagRail ? ' rkr-index-layout--has-rail' : ''}">
+<div class="rkr-index-posts">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
 ${sortToggle}${body}
 ${pager}
-</main>
+</div>
 ${tagRail}
+</div>
+</main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
 ${data.isAdmin ? indexAdminFabs() : ''}
 ${postsListScript}

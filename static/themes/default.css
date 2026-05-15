@@ -306,11 +306,24 @@ body {
 }
 .rkr-sort-toggle:hover { color: var(--rkr-link); }
 
-/* Tag rail — public index sidebar showing tag pills + optional clear link. */
+/* Tag rail — right sidebar on the index page. */
+.rkr-index-layout { display: block; }
+.rkr-index-layout--has-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  max-width: var(--rkr-content);
+  margin: 0 auto;
+}
+.rkr-index-posts { flex: 1; min-width: 0; }
 .rkr-tag-rail {
-  margin: 1.5rem 0;
-  padding: 1rem 0;
-  border-top: 1px solid var(--rkr-rule);
+  flex-shrink: 0;
+  width: 12rem;
+  padding-top: 0.25rem;
+}
+@media (max-width: 640px) {
+  .rkr-index-layout--has-rail { flex-direction: column; }
+  .rkr-tag-rail { width: 100%; border-top: 1px solid var(--rkr-rule); padding-top: 1rem; }
 }
 .rkr-tag-pill {
   display: inline-block;
