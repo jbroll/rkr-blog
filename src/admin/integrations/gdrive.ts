@@ -36,6 +36,7 @@ interface PickerDoc {
 interface PickerResponseShape {
   action: string;
   docs?: PickerDoc[];
+  message?: string;
 }
 interface PickerInstance {
   setVisible(visible: boolean): void;
@@ -53,7 +54,7 @@ interface GoogleGlobal {
     PickerBuilder: new () => PickerBuilder;
     DocsView: new (viewId?: unknown) => unknown;
     ViewId: { DOCS_IMAGES: unknown };
-    Action: { PICKED: string; CANCEL: string };
+    Action: { PICKED: string; CANCEL: string; ERROR: string };
   };
 }
 interface GapiGlobal {
@@ -152,13 +153,19 @@ export async function pickFromDrive(): Promise<string[]> {
   // await ids. CANCEL / no-pick resolves an empty array.
   return new Promise<string[]>((resolve) => {
     const view = new picker.DocsView(picker.ViewId.DOCS_IMAGES);
-    const instance = new picker.PickerBuilder()
+    let builder = new picker.PickerBuilder()
       .addView(view)
       .setOAuthToken(token.accessToken)
-      .setDeveloperKey(config.developerKey)
-      .setAppId(config.appId)
+      .setAppId(config.appId);
+    if (config.developerKey) builder = builder.setDeveloperKey(config.developerKey);
+    const instance = builder
       .setCallback(async (data) => {
         if (data.action === picker.Action.CANCEL) {
+          resolve([]);
+          return;
+        }
+        if (data.action === picker.Action.ERROR) {
+          setStatus(`Drive picker error: ${data.message ?? 'unknown error'}`, true);
           resolve([]);
           return;
         }

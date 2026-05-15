@@ -1,5 +1,5 @@
 // Google Drive picker integration. Per-user OAuth grant with the
-// drive.file scope (only files the user creates or opens via Picker —
+// drive.readonly scope (read-only access to the user's Drive files —
 // avoids broad-access verification). Tokens stored encrypted in
 // oauth_tokens, keyed by (user_id, 'gdrive').
 //
@@ -30,7 +30,7 @@ import { readSecretKey } from '../lib/secrets.ts';
 import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
 
 const PROVIDER = 'gdrive';
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
 const STATE_COOKIE = 'rkr_gdrive_state';
 const STATE_TTL_S = 600;
 
@@ -146,13 +146,13 @@ export default async function integrationsGdriveRoutes(
 
   fastify.get('/admin/integrations/gdrive/picker-config', { ...guard }, async (_req, reply) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
-    const developerKey = process.env.GOOGLE_PICKER_API_KEY;
     const appId = process.env.GOOGLE_PICKER_APP_ID;
-    if (!clientId || !developerKey || !appId) {
-      return reply
-        .code(404)
-        .send({ error: 'picker not configured (set GOOGLE_PICKER_API_KEY, GOOGLE_PICKER_APP_ID)' });
+    if (!clientId || !appId) {
+      return reply.code(404).send({ error: 'picker not configured (set GOOGLE_PICKER_APP_ID)' });
     }
+    // developerKey is optional — picker works without it when OAuth scope covers
+    // the file being accessed. Omit to skip setDeveloperKey if not set.
+    const developerKey = process.env.GOOGLE_PICKER_API_KEY ?? '';
     return { clientId, developerKey, appId };
   });
 

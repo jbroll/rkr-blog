@@ -8,7 +8,7 @@ test('renderAdminSettingsPage: form pre-fills persisted values', () => {
     site: { title: 'rkroll' },
     persisted: { title: 'My Blog', tagline: 'A subtitle', theme: 'papermod' },
     themes: ['default', 'papermod', 'terminal'],
-    gitHash: 'unknown'
+    gdriveConnected: false, gitHash: 'unknown'
   });
   // Title + tagline are <input value="…">.
   assert.match(html, /<input id="rkr-settings-title"[^>]*value="My Blog"/);
@@ -32,7 +32,7 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gitHash: 'unknown'
+    gdriveConnected: false, gitHash: 'unknown'
   });
   assert.match(html, /<input id="rkr-settings-title"[^>]*value=""/);
   assert.match(html, /placeholder="rkroll"/);
@@ -43,7 +43,7 @@ test('renderAdminSettingsPage: title + tagline escape HTML', () => {
     site: { title: 'rkroll' },
     persisted: { title: '<script>x</script>', tagline: '" autofocus="' },
     themes: ['default'],
-    gitHash: 'unknown'
+    gdriveConnected: false, gitHash: 'unknown'
   });
   assert.ok(!html.includes('<script>x</script>'), 'title must be escaped');
   // The quote in the tagline must be entity-escaped so it doesn't
@@ -57,7 +57,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gitHash: 'unknown',
+    gdriveConnected: false, gitHash: 'unknown',
     flash: { kind: 'ok', text: 'Settings saved.' }
   });
   assert.doesNotMatch(ok, /rkr-admin-settings-flash/);
@@ -66,7 +66,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gitHash: 'unknown',
+    gdriveConnected: false, gitHash: 'unknown',
     flash: { kind: 'error', text: 'title too long' }
   });
   assert.match(err, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
@@ -77,7 +77,7 @@ test('renderAdminSettingsPage: save button is in the heading row with a disk ico
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gitHash: 'unknown'
+    gdriveConnected: false, gitHash: 'unknown'
   });
   // Heading and button share a flex row.
   assert.match(html, /rkr-admin-settings-heading-row/);
@@ -92,7 +92,7 @@ test('renderAdminSettingsPage: build chip shows the short git hash with full sha
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gitHash: 'abc123def456789ffeed0011223344556677889a'
+    gdriveConnected: false, gitHash: 'abc123def456789ffeed0011223344556677889a'
   });
   // Short form (12 chars) is the visible text; full sha is in the
   // title attr so a hover reveals the exact commit.
@@ -106,7 +106,7 @@ test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gitHash: 'unknown'
+    gdriveConnected: false, gitHash: 'unknown'
   });
   assert.match(html, /<code[^>]*>unknown<\/code>/);
 });

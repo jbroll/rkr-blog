@@ -19,7 +19,10 @@ import {
   siteConfig,
   writePersistedSiteConfig
 } from '../lib/config.ts';
+import type { Db } from '../lib/db.ts';
 import { INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
+import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
+import { readSecretKey } from '../lib/secrets.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 
 const MAX_TITLE = 200;
@@ -31,13 +34,15 @@ const VALID_THEME_NAME = /^[a-z][a-z0-9-]*$/;
 
 export interface AdminSettingsRoutesOpts {
   guard: Record<string, unknown>;
+  db?: Db;
+  siteRoot: string;
 }
 
 export function registerAdminSettingsRoutes(
   fastify: FastifyInstance,
   opts: AdminSettingsRoutesOpts
 ): void {
-  const { guard } = opts;
+  const { guard, db, siteRoot } = opts;
 
   fastify.get<{ Querystring: { flash?: string; err?: string } }>(
     '/admin/settings',
@@ -48,11 +53,27 @@ export function registerAdminSettingsRoutes(
       const site = siteConfig();
       const flash = decodeFlash(req.query);
       const gitHash = resolveGitHash();
+      const user = req.user;
+      let gdriveConnected = false;
+      if (user && db) {
+        const key = readSecretKey(siteRoot);
+        gdriveConnected = readToken(db, key, user.id, 'gdrive') !== null;
+      }
       return reply
         .type('text/html; charset=utf-8')
-        .send(renderAdminSettingsPage({ site, persisted, themes, flash, gitHash }));
+        .send(
+          renderAdminSettingsPage({ site, persisted, themes, flash, gitHash, gdriveConnected })
+        );
     }
   );
+
+  fastify.post('/admin/settings/gdrive/disconnect', { ...guard }, async (req, reply) => {
+    const user = req.user;
+    if (user && db) {
+      deleteToken(db, user.id, 'gdrive');
+    }
+    return reply.redirect('/admin/settings', 303);
+  });
 
   fastify.post<{
     Body: {

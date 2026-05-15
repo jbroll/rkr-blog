@@ -114,7 +114,7 @@ export default async function adminRoutes(
 
   // Site settings (title / tagline / theme) — surfaces the persisted
   // config that lib/config.ts already reads on every request.
-  registerAdminSettingsRoutes(fastify, { guard });
+  registerAdminSettingsRoutes(fastify, { guard, db: opts.db, siteRoot });
 
   const { invalidate: invalidateSidecarListCache } = registerImageLookupRoutes(fastify, {
     siteRoot,
@@ -470,7 +470,7 @@ async function wipeRuntimeData(siteRoot: string): Promise<ResetCounts> {
  */
 const ADMIN_EDITOR_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://apis.google.com",
+  "script-src 'self' https://apis.google.com 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.googleusercontent.com",
   "connect-src 'self' https://apis.google.com https://*.googleapis.com https://accounts.google.com",

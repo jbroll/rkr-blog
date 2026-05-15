@@ -13,7 +13,9 @@ if (params.get('flash') === 'saved') {
 }
 
 const form = document.querySelector<HTMLFormElement>('form.rkr-admin-settings');
-const saveBtn = document.querySelector<HTMLButtonElement>('.rkr-admin-settings-submit');
+const saveBtn = document.querySelector<HTMLButtonElement>(
+  'form.rkr-admin-settings .rkr-admin-settings-submit'
+);
 if (form && saveBtn) {
   form.addEventListener('input', () => saveBtn.classList.add('is-dirty'));
   form.addEventListener('change', () => saveBtn.classList.add('is-dirty'));

@@ -40,6 +40,8 @@ export interface AdminSettingsPageData extends SiteChrome {
    * (matches /health's gitHash field). 'unknown' when neither a
    * GIT_COMMIT env var nor a build-time /app/git-hash file is set. */
   gitHash: string;
+  /** Whether the current user has a stored Google Drive OAuth token. */
+  gdriveConnected: boolean;
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
@@ -58,6 +60,10 @@ ${stylesheetLinks()}
 .rkr-admin-settings-submit{display:flex;align-items:center;background:transparent;color:var(--rkr-link);border:1px solid var(--rkr-link);border-radius:4px;padding:.25rem .5rem;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}
 .rkr-admin-settings-submit.is-dirty{background:var(--rkr-link);color:var(--rkr-bg)}
 .rkr-admin-settings-submit:hover{background:var(--rkr-link-hover,var(--rkr-link));color:var(--rkr-bg);border-color:var(--rkr-link-hover,var(--rkr-link))}
+.rkr-admin-settings-integration{display:flex;align-items:center;gap:1rem;grid-column:1/-1;padding:.5rem 0}
+.rkr-admin-settings-integration-label{flex:1;font-weight:500}
+.rkr-admin-settings-integration-status{color:var(--rkr-muted,#888);font-size:.875em}
+.rkr-admin-settings-integration-status.is-connected{color:var(--rkr-ok,#2a2)}
 </style>
 </head>
 <body>
@@ -100,6 +106,7 @@ ${saveBtn}
     value="${data.persisted.ingestResize?.webpQuality ?? ''}"
     placeholder="${DEFAULT_INGEST_RESIZE.webpQuality}"/>
 </form>
+${renderIntegrations(data.gdriveConnected)}
 <p class="rkr-admin-settings-build">
   Build: <code title="${escapeAttr(data.gitHash)}">${escapeText(shortHash(data.gitHash))}</code>
 </p>
@@ -109,6 +116,24 @@ ${siteFoot(data.site, { isAdmin: true })}
 </body>
 </html>
 `;
+}
+
+function renderIntegrations(gdriveConnected: boolean): string {
+  const statusLabel = gdriveConnected ? 'Connected' : 'Not connected';
+  const statusClass = gdriveConnected ? ' is-connected' : '';
+  const action = gdriveConnected
+    ? `<form method="post" action="/admin/settings/gdrive/disconnect" style="margin:0"><button type="submit" class="rkr-admin-settings-submit">Disconnect</button></form>`
+    : `<a href="/admin/integrations/gdrive/connect" class="rkr-admin-settings-submit">Connect</a>`;
+  return `<section class="rkr-admin-settings">
+<div class="rkr-admin-settings-heading-row">
+<h2 class="rkr-admin-settings-heading">Integrations</h2>
+</div>
+<div class="rkr-admin-settings-integration">
+  <span class="rkr-admin-settings-integration-label">Google Drive</span>
+  <span class="rkr-admin-settings-integration-status${statusClass}">${statusLabel}</span>
+  ${action}
+</div>
+</section>`;
 }
 
 function renderFlash(flash: { kind: 'ok' | 'error'; text: string }): string {
