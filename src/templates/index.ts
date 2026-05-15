@@ -205,16 +205,16 @@ function renderTagRail(
   activeTag: string | undefined
 ): string {
   if (!tagCounts || tagCounts.length === 0) return '';
-  const clearLink = activeTag ? `\n  <a class="rkr-tag-clear" href="/">clear</a>` : '';
   const pills = tagCounts
     .map((t) => {
-      const href = `/?tag=${encodeURIComponent(t.name)}`;
       const isActive = t.name === activeTag;
+      // Active pill toggles the filter off (links to /); inactive pill activates it.
+      const href = isActive ? '/' : `/?tag=${encodeURIComponent(t.name)}`;
       const current = isActive ? ' aria-current="page"' : '';
       return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
     })
     .join('\n');
-  return `<aside class="rkr-tag-rail" aria-label="Tags">${clearLink}
+  return `<aside class="rkr-tag-rail" aria-label="Tags">
 ${pills}
 </aside>`;
 }

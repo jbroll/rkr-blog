@@ -222,7 +222,7 @@ test('renderIndexPage: no tag rail when tagCounts is absent', () => {
   assert.doesNotMatch(html, /rkr-tag-rail/);
 });
 
-test('renderIndexPage: active tag gets aria-current + clear link', () => {
+test('renderIndexPage: active tag gets aria-current and toggles off on click', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
@@ -235,8 +235,9 @@ test('renderIndexPage: active tag gets aria-current + clear link', () => {
     activeTag: 'travel'
   });
   assert.match(html, /aria-current="page"/);
-  // Clear link points back to unfiltered index
-  assert.match(html, /href="\/"[^>]*>.*clear/s);
+  // Active pill links to / (toggle off) — no separate "clear" link needed.
+  assert.match(html, /href="\/"[^>]*aria-current="page"/);
+  assert.doesNotMatch(html, /class="rkr-tag-clear"/, 'no separate clear link');
   // Inactive tag has no aria-current
   assert.doesNotMatch(html, /href="\/\?tag=food"[^>]*aria-current/);
 });

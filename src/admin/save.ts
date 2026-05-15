@@ -24,6 +24,7 @@ interface SaveResponse {
   slug: string;
   inserted: boolean;
   updatedAt: string;
+  date?: string;
 }
 
 async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
@@ -78,7 +79,11 @@ export async function handleSave(editor: Editor): Promise<void> {
     ...(subtitle ? { subtitle } : {}),
     markdown,
     lastSyncedAt: meta?.lastSyncedAt,
-    tags: deduplicateTags(parseTagInput((document.getElementById('rkr-tags') as HTMLInputElement | null)?.value ?? ''))
+    tags: deduplicateTags(parseTagInput((document.getElementById('rkr-tags') as HTMLInputElement | null)?.value ?? '')),
+    ...(() => {
+      const d = (document.getElementById('rkr-date') as HTMLInputElement | null)?.value;
+      return d ? { date: `${d}T00:00:00.000Z` } : {};
+    })()
   };
   setStatus('saving…');
   // If any referenced image still has an `upload` entry queued in
@@ -106,6 +111,12 @@ export async function handleSave(editor: Editor): Promise<void> {
       // Echo the server-resolved slug back into the hidden input so
       // the next save's payload includes it.
       $<HTMLInputElement>('rkr-slug').value = result.slug;
+      // Seed the date input from the server's resolved date so subsequent
+      // saves preserve it (new posts get their date assigned here).
+      if (result.date) {
+        const dateEl = document.getElementById('rkr-date') as HTMLInputElement | null;
+        if (dateEl && !dateEl.value) dateEl.value = result.date.slice(0, 10);
+      }
       await updateMeta(draftId, { slug: result.slug, lastSyncedAt: result.updatedAt });
       // Flush the SW pages cache so the "view →" click (and any
       // subsequent /:slug navigation in this tab or another) doesn't

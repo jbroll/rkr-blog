@@ -289,8 +289,10 @@ export default async function adminRoutes(
     // can stamp meta.lastSyncedAt for the next save's conflict
     // check (spec-offline §6 — clients must know what the server
     // saw to detect concurrent writes).
+    // Also echo back the resolved date so new posts can populate
+    // the date input without a full reload.
     const updatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
-    return { slug, inserted, updatedAt };
+    return { slug, inserted, updatedAt, date: dateStr };
   });
 
   fastify.post('/admin/upload', { ...guard }, async (request, reply) => {

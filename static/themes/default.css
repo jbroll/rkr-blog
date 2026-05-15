@@ -337,10 +337,7 @@ body {
 .rkr-tag-pill[aria-current="page"] {
   background: var(--rkr-link); border-color: var(--rkr-link); color: var(--rkr-bg);
 }
-.rkr-tag-clear {
-  font-size: 0.85rem; color: var(--rkr-muted); text-decoration: none; margin-left: 0.25rem;
-}
-.rkr-tag-clear:hover { color: var(--rkr-link); }
+
 
 /* Editor tag-input chip widget (inside .rkr-meta grid). */
 .rkr-tag-input {

@@ -175,6 +175,8 @@ function seedFormFields(manifest: PinManifest): void {
   if (subtitleEl) subtitleEl.value = manifest.subtitle ?? '';
   const tagsEl = document.getElementById('rkr-tags') as HTMLInputElement | null;
   if (tagsEl) tagsEl.value = (manifest.tags ?? []).join(', ');
+  const dateEl = document.getElementById('rkr-date') as HTMLInputElement | null;
+  if (dateEl && manifest.date) dateEl.value = manifest.date.slice(0, 10);
   // Programmatic value assignment doesn't fire 'input' events, so the
   // page-title binding wouldn't see the new slug otherwise.
   refreshPageTitle();
