@@ -179,7 +179,7 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
         <input type="hidden" name="status" value="${status === 'published' ? 'draft' : 'published'}"/>
         <button type="submit" class="rkr-admin-posts-status-btn is-${status}"
           aria-label="${status === 'published' ? 'Published — click to unpublish' : 'Draft — click to publish'}"
-          title="${status === 'published' ? 'Published' : 'Draft'}">${icon(status === 'published' ? 'eye' : 'eyeOff', 18)}</button>
+          title="${status === 'published' ? 'Published' : 'Draft'}">${icon(status === 'published' ? 'globe' : 'lock', 18)}</button>
       </form>
     </td>
     <td class="rkr-admin-posts-action">

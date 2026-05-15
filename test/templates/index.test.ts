@@ -61,7 +61,7 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.match(html, /<a href="\/hello">Hello<\/a>/);
   assert.match(html, /<a href="\/wip">WIP<\/a>/);
   assert.match(html, /action="\/admin\/posts\/hello\/status"/);
-  // Status icon buttons: eye = published, eyeOff = draft. Toggle flips to opposite status.
+  // Status icon buttons: globe = published, lock = draft. Toggle flips to opposite status.
   assert.match(html, /class="rkr-admin-posts-status-btn is-published"/);
   assert.match(html, /class="rkr-admin-posts-status-btn is-draft"/);
   assert.match(html, /aria-label="Published — click to unpublish"/);
