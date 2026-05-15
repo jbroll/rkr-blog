@@ -69,7 +69,6 @@ import { renderPostPage } from '../templates/post.ts';
 import figureWidget from '../widgets/figure.ts';
 
 const FILENAME_RE = /^([0-9a-f]{64})\.([0-9a-f]{12})\.(webp|avif|jpeg|jpg|png)$/;
-const PAGE_SIZE = 20;
 
 const MIME: Record<OutputFormat, string> = {
   webp: 'image/webp',
@@ -166,17 +165,9 @@ export default async function publicRoutes(
       // only filter so drafts stay invisible until promotion.
       const status: 'published' | null = isAdmin ? null : 'published';
 
-      // Admin loads all posts so the client-side sort button works across
-      // the full list and drafts (which lack published_at) don't fall off
-      // the end of a paginated view.
-      const requested = Number.parseInt(req.query.page ?? '1', 10);
-      const page = isAdmin ? 1 : (Number.isFinite(requested) && requested >= 1 ? requested : 1);
       const total = countPosts(db, status, activeTag);
-      const totalPages = isAdmin ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
-      const offset = isAdmin ? 0 : (page - 1) * PAGE_SIZE;
-      const limit = isAdmin ? total : PAGE_SIZE;
 
-      const rows = readIndexedPosts(db, { limit, offset, status, tag: activeTag, sort });
+      const rows = readIndexedPosts(db, { limit: total, offset: 0, status, tag: activeTag, sort });
 
       // Tag rail: all posts for admin (drafts count too); published-only for anonymous.
       const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });
@@ -194,8 +185,8 @@ export default async function publicRoutes(
 
       const html = renderIndexPage({
         site,
-        page,
-        totalPages,
+        page: 1,
+        totalPages: 1,
         posts: rows.map((r) => ({
           slug: r.slug,
           title: r.title,

@@ -234,6 +234,13 @@ body {
   color: var(--rkr-link);
 }
 .rkr-admin-posts-status-form { display: inline; margin: 0; }
+.rkr-admin-posts-status-btn {
+  background: none; border: 0; padding: 0.2rem; cursor: pointer;
+  display: inline-flex; align-items: center; vertical-align: middle; line-height: 1;
+  color: var(--rkr-muted);
+}
+.rkr-admin-posts-status-btn.is-published { color: var(--rkr-link); }
+.rkr-admin-posts-status-btn:hover { color: var(--rkr-link); }
 /* Each action lives in its own column so the controls stack on a
    vertical line across rows. `width:1%` lets the browser shrink-wrap
    the column to the widest cell content; the title cell soaks up the
@@ -277,6 +284,65 @@ body {
   font-style: italic;
 }
 .rkr-admin-posts-empty a { color: var(--rkr-link); }
+
+/* Sort toggle — anonymous view: plain link; admin view: button.
+   Both get the same look: muted small text with leading icon. */
+.rkr-sort-toggle {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font: inherit; font-size: 0.85rem;
+  color: var(--rkr-muted); text-decoration: none;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+.rkr-sort-toggle:hover { color: var(--rkr-link); }
+
+/* Tag rail — public index sidebar showing tag pills + optional clear link. */
+.rkr-tag-rail {
+  margin: 1.5rem 0;
+  padding: 1rem 0;
+  border-top: 1px solid var(--rkr-rule);
+}
+.rkr-tag-pill {
+  display: inline-block;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.6rem;
+  margin: 0.2rem 0.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--rkr-rule);
+  color: var(--rkr-text); text-decoration: none;
+}
+.rkr-tag-pill:hover { border-color: var(--rkr-link); color: var(--rkr-link); }
+.rkr-tag-pill[aria-current="page"] {
+  background: var(--rkr-link); border-color: var(--rkr-link); color: var(--rkr-bg);
+}
+.rkr-tag-clear {
+  font-size: 0.85rem; color: var(--rkr-muted); text-decoration: none; margin-left: 0.25rem;
+}
+.rkr-tag-clear:hover { color: var(--rkr-link); }
+
+/* Editor tag-input chip widget (inside .rkr-meta grid). */
+.rkr-tag-input {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem;
+  min-height: 2.1rem; padding: 0.25rem 0.4rem;
+  border: 1px solid var(--rkr-rule); border-radius: var(--rkr-radius);
+  background: var(--rkr-bg); cursor: text;
+}
+.rkr-tag-input:focus-within { outline: 2px solid var(--rkr-link); outline-offset: -1px; }
+.rkr-tag-input-field {
+  border: 0; outline: 0; background: transparent;
+  font: inherit; font-size: 0.9rem; flex: 1; min-width: 8rem; color: var(--rkr-text);
+}
+.rkr-tag-pill-editor {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  font-size: 0.8rem; padding: 0.1rem 0.5rem;
+  background: color-mix(in srgb, var(--rkr-link) 12%, transparent);
+  color: var(--rkr-link); border-radius: 999px;
+}
+.rkr-tag-remove {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: inherit; font-size: 0.95rem; line-height: 1; opacity: 0.65;
+}
+.rkr-tag-remove:hover { opacity: 1; }
 
 /* Settings page: a vertical two-column grid mirroring the editor's
    meta panel (label on the left, input on the right). */

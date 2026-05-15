@@ -160,36 +160,6 @@ test('GET /:slug 404s for an unknown slug with the themed not-found page', async
   assert.match(res.body, /<main[^>]*class="rkr-notfound"/);
 });
 
-test('GET / paginates when published posts exceed the page size', async (t) => {
-  const { root, app } = await setup(t);
-
-  // Page size is 20 in src/routes/public.ts; create 25 posts.
-  for (let i = 0; i < 25; i++) {
-    const padded = String(i).padStart(2, '0');
-    writePost(
-      root,
-      `${padded}.md`,
-      {
-        slug: `p${padded}`,
-        title: `Post ${padded}`,
-        status: 'published',
-        date: `2026-05-${(i % 28) + 1 < 10 ? '0' : ''}${(i % 28) + 1}T00:00:00Z`
-      },
-      'body'
-    );
-  }
-  runReindex(root);
-
-  const r1 = await app.inject({ method: 'GET', url: '/' });
-  assert.equal(r1.statusCode, 200);
-  assert.match(r1.body, /page 1 of 2/);
-  assert.match(r1.body, /rel="next"/);
-
-  const r2 = await app.inject({ method: 'GET', url: '/?page=2' });
-  assert.equal(r2.statusCode, 200);
-  assert.match(r2.body, /page 2 of 2/);
-  assert.match(r2.body, /rel="prev"/);
-});
 
 test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking headers', async (t) => {
   // Defense-in-depth for the markdown renderer's "raw HTML passes
