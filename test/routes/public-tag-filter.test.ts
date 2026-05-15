@@ -20,11 +20,21 @@ function freshSiteRoot(t: TestContext): string {
   return root;
 }
 
+function writePostMd(
+  root: string,
+  slug: string,
+  title: string,
+  status: 'published' | 'draft',
+  tags: string[] = []
+): void {
+  const tagsBlock = tags.length > 0 ? `tags:\n${tags.map((t) => `- ${t}`).join('\n')}\n` : '';
+  const md = `---\ntitle: ${title}\nslug: ${slug}\ndate: 2026-01-01T00:00:00Z\nstatus: ${status}\n${tagsBlock}---\n\nBody text.\n`;
+  fs.writeFileSync(path.join(root, 'content', 'posts', `${slug}.md`), md, 'utf8');
+}
+
 /** Write a minimal published post with optional tags. */
 function writePost(root: string, slug: string, title: string, tags: string[] = []): void {
-  const tagsBlock = tags.length > 0 ? `tags:\n${tags.map((t) => `- ${t}`).join('\n')}\n` : '';
-  const md = `---\ntitle: ${title}\nslug: ${slug}\ndate: 2026-01-01T00:00:00Z\nstatus: published\n${tagsBlock}---\n\nBody text.\n`;
-  fs.writeFileSync(path.join(root, 'content', 'posts', `${slug}.md`), md, 'utf8');
+  writePostMd(root, slug, title, 'published', tags);
 }
 
 async function setup(t: TestContext) {
@@ -132,4 +142,45 @@ test('GET /?sort=asc: sort toggle link present', async (t) => {
 
   const desc = await app.inject({ method: 'GET', url: '/' });
   assert.match(desc.body, /href="\/\?sort=asc"/); // link to oldest-first
+});
+
+// --- Draft vs published visibility -------------------------------------------
+
+test('GET /: anonymous view shows no tag rail when all tagged posts are drafts', async (t) => {
+  // This is the most common reason a tag rail "doesn't appear" after saving
+  // a post with tags: the post is still a draft, which the public index hides.
+  const root = freshSiteRoot(t);
+  writePostMd(root, 'draft-post', 'Draft Post', 'draft', ['travel']);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  runReindex(root);
+  t.after(() => db.close());
+  const app = await buildApp({ siteRoot: root, db, startWorker: false });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(res.body, /rkr-tag-rail/, 'no tag rail for draft-only posts on anonymous view');
+});
+
+test('GET /: anonymous view shows tag rail once a tagged draft is published', async (t) => {
+  const root = freshSiteRoot(t);
+  writePostMd(root, 'my-post', 'My Post', 'draft', ['travel']);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  runReindex(root);
+  t.after(() => db.close());
+  const app = await buildApp({ siteRoot: root, db, startWorker: false });
+  t.after(() => app.close());
+
+  const draft = await app.inject({ method: 'GET', url: '/' });
+  assert.doesNotMatch(draft.body, /rkr-tag-rail/, 'no rail before publishing');
+
+  // Publish the post and re-index.
+  writePostMd(root, 'my-post', 'My Post', 'published', ['travel']);
+  runReindex(root);
+
+  const published = await app.inject({ method: 'GET', url: '/' });
+  assert.match(published.body, /rkr-tag-rail/, 'rail appears after publishing');
+  assert.match(published.body, /travel/);
 });
