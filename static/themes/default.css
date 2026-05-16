@@ -1099,3 +1099,55 @@ body[data-mode="figure"] .rkr-page-title-row,
 body[data-mode="figure"] .rkr-meta {
   display: none;
 }
+
+/* Comment moderation page (/admin/comments). Uses the theme tokens so
+   it follows the active theme (incl. dark mode) instead of a bespoke
+   inline stylesheet. */
+.amc-wrap {
+  max-width: 60rem;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+.amc-list {
+  list-style: none;
+  padding: 0;
+}
+.amc-row {
+  border: 1px solid var(--rkr-rule);
+  border-radius: var(--rkr-radius);
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+.amc-queued {
+  border-color: var(--rkr-link);
+}
+.amc-meta {
+  font-size: 0.85rem;
+  color: var(--rkr-muted);
+}
+.amc-body {
+  white-space: pre-wrap;
+  margin: 0.5rem 0;
+}
+.amc-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.amc-actions form {
+  margin: 0;
+}
+.amc-actions button {
+  appearance: none;
+  background: transparent;
+  color: var(--rkr-text);
+  border: 1px solid var(--rkr-rule);
+  border-radius: var(--rkr-radius);
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.amc-actions button:hover,
+.amc-actions button:focus-visible {
+  color: var(--rkr-link);
+  border-color: var(--rkr-link);
+}

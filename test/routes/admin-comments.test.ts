@@ -45,6 +45,10 @@ test('GET /admin/comments lists queued comments', async (t) => {
   const res = await app.inject({ method: 'GET', url: '/admin/comments' });
   assert.equal(res.statusCode, 200);
   assert.ok(res.body.includes('queued one'));
+  // follows site theming: links the theme stylesheets, no bespoke inline CSS
+  assert.match(res.body, /<link rel="stylesheet" href="\/static\/base\.css/);
+  assert.match(res.body, /\/static\/themes\/default\.css/);
+  assert.ok(!res.body.includes('<style>'), 'no hardcoded inline stylesheet');
 });
 
 test('POST /admin/comments/:id/approve → published + 303', async (t) => {

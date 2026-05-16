@@ -4,6 +4,7 @@
 
 import type { ModerationRow } from '../lib/comments.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { stylesheetLinks } from './layout.ts';
 
 function row(c: ModerationRow): string {
   const score = c.spam_score === null ? '' : ` · spam ${(c.spam_score * 100).toFixed(0)}%`;
@@ -32,17 +33,11 @@ export function renderAdminCommentsPage(rows: ModerationRow[]): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Comment moderation</title>
-<style>
-body{font:16px/1.5 system-ui;margin:2rem;max-width:60rem}
-.amc-list{list-style:none;padding:0}
-.amc-row{border:1px solid #ccc;border-radius:6px;padding:1rem;margin:.75rem 0}
-.amc-queued{border-color:#c60}
-.amc-meta{font-size:.85rem;color:#555}
-.amc-body{white-space:pre-wrap;margin:.5rem 0}
-.amc-actions{display:flex;gap:.5rem}
-.amc-actions form{margin:0}
-</style></head><body>
+${stylesheetLinks()}
+</head><body>
+<main class="amc-wrap" id="main">
 <h1>Comment moderation</h1>
 ${list}
+</main>
 </body></html>`;
 }
