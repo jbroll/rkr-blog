@@ -28,6 +28,16 @@ interface IndexEntry {
   updatedAt?: string;
 }
 
+export interface IndexTeaser {
+  slug: string;
+  title: string;
+  date?: string;
+  /** Trusted renderer output (figure widget HTML). */
+  bannerHtml: string;
+  /** Trusted renderer output (first paragraph → inline HTML). */
+  excerptHtml: string;
+}
+
 export interface IndexPageData extends SiteChrome {
   posts: IndexEntry[];
   page: number;
@@ -35,6 +45,9 @@ export interface IndexPageData extends SiteChrome {
   /** Full-bleed site banner rendered between site header and <main>.
    * Populated when the site config has a bannerImageId. */
   bannerHtml?: string;
+  /** Anonymous view only. When set, the top post is featured above the
+   * list and is expected to have been removed from `posts` by the route. */
+  teaser?: IndexTeaser;
   /** Logged-in admin → render the admin strip in siteHead and the
    * full posts table (drafts + status / pin / delete). */
   isAdmin?: boolean;
@@ -51,6 +64,7 @@ export interface IndexPageData extends SiteChrome {
 export function renderIndexPage(data: IndexPageData): string {
   const v = bundleVersion();
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
+  const teaserHtml = !data.isAdmin && data.teaser ? renderTeaser(data.teaser) : '';
   const isAsc = data.sort === 'asc';
   const activeTags = data.activeTags ?? [];
   // Build query suffix for pager — preserves all active tags + sort together.
@@ -91,7 +105,7 @@ ${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <div class="rkr-index-layout${tagRail ? ' rkr-index-layout--has-rail' : ''}">
 <div class="rkr-index-posts">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
-${sortToggle}${body}
+${teaserHtml}${sortToggle}${body}
 ${pager}
 </div>
 ${tagRail}
@@ -118,6 +132,21 @@ function renderAnonymousList(posts: IndexEntry[]): string {
   return `<ul class="post-list">
 ${items}
 </ul>`;
+}
+
+function renderTeaser(t: IndexTeaser): string {
+  const dateBlock = t.date
+    ? `<time datetime="${escapeAttr(t.date)}">${escapeText(t.date.slice(0, 10))}</time>`
+    : '';
+  return `<article class="rkr-teaser">
+${t.bannerHtml}<div class="rkr-teaser-body">
+<h2 class="rkr-teaser-title"><a href="/${escapeAttr(t.slug)}">${escapeText(t.title)}</a></h2>
+${dateBlock}
+<div class="rkr-teaser-excerpt">${t.excerptHtml}</div>
+<a class="rkr-teaser-more" href="/${escapeAttr(t.slug)}">Read the full post &rarr;</a>
+</div>
+</article>
+`;
 }
 
 /** Group an ISO-string field across the list, returning per-day

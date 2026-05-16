@@ -66,7 +66,7 @@ import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 const MIN_RENDER_DIM = 16;
 
 import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
-import { renderIndexPage } from '../templates/index.ts';
+import { type IndexTeaser, renderIndexPage } from '../templates/index.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
 import figureWidget from '../widgets/figure.ts';
@@ -115,6 +115,18 @@ async function extractPostBanner(
   const html = await ctx.widgets.dispatch('figure', dir, ctx);
   ast.children.splice(firstIdx, 1);
   return html;
+}
+
+/** First remaining top-level paragraph rendered to inline HTML (links /
+ * emphasis preserved). Call AFTER extractPostBanner has spliced the hero
+ * figure out, so "first paragraph" is the lede. Null when none. */
+async function extractFirstParagraph(
+  ast: Root,
+  ctx: { siteRoot: string; widgets: WidgetRegistry }
+): Promise<string | null> {
+  const para = ast.children.find((n) => n.type === 'paragraph');
+  if (!para) return null;
+  return renderPostHtml({ type: 'root', children: [para] }, ctx);
 }
 
 export default async function publicRoutes(
@@ -221,17 +233,49 @@ export default async function publicRoutes(
         indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
       }
 
+      // Teaser: anonymous view only, behind the postTeaser toggle.
+      // Read the current top post, splice out its hero figure + first
+      // paragraph (same renderer the _site-banner.md block above uses),
+      // and drop that post from the list so it is not duplicated.
+      // path already includes content/posts/ (reindex.ts), so join
+      // directly onto siteRoot — same as the GET /:slug handler.
+      let teaser: IndexTeaser | undefined;
+      let listRows = rows;
+      const top = rows[0];
+      if (!isAdmin && site.postTeaser && top) {
+        try {
+          const rawTop = fs.readFileSync(path.join(siteRoot, top.path), 'utf8');
+          const { ast } = parsePost(rawTop);
+          const ctx = { siteRoot, widgets };
+          const bannerHtml = await extractPostBanner(ast, ctx);
+          const excerptHtml = bannerHtml ? await extractFirstParagraph(ast, ctx) : null;
+          if (bannerHtml && excerptHtml) {
+            teaser = {
+              slug: top.slug,
+              title: top.title,
+              ...(top.published_at ? { date: top.published_at } : {}),
+              bannerHtml,
+              excerptHtml
+            };
+            listRows = rows.slice(1);
+          }
+        } catch {
+          // Unreadable / malformed top post → no teaser, full list.
+        }
+      }
+
       const html = renderIndexPage({
         site,
         page: 1,
         totalPages: 1,
-        posts: rows.map((r) => ({
+        posts: listRows.map((r) => ({
           slug: r.slug,
           title: r.title,
           ...(r.published_at ? { date: r.published_at } : {}),
           ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
         })),
         ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
+        ...(teaser ? { teaser } : {}),
         isAdmin,
         ...(tagCounts.length > 0 ? { tagCounts } : {}),
         ...(activeTags.length > 0 ? { activeTags } : {}),

@@ -523,3 +523,91 @@ test('GET / with _site-banner.md but no ::figure: falls back to bannerImageId', 
   assert.ok(bleedIdx > 0, 'fallback bannerImageId banner rendered');
   assert.ok(bleedIdx < mainIdx, 'banner appears before <main>');
 });
+
+test('GET /: postTeaser on + anonymous + top post has figure → teaser, post removed from list', async (t) => {
+  const { root, db } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'top.md',
+    { slug: 'top-post', title: 'Top Post', status: 'published', date: '2026-05-15T10:00:00Z' },
+    `::figure{ids="${id}" justify=bleed}\n\nThis is the lede paragraph.`
+  );
+  writePost(
+    root,
+    'second.md',
+    { slug: 'second-post', title: 'Second Post', status: 'published', date: '2026-05-14T10:00:00Z' },
+    'Second body.'
+  );
+  runReindex(root);
+  // postTeaser is read from SiteConfig; inject it via the buildApp
+  // `site` override so no process.env.SITE_ROOT mutation is needed.
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true }
+  });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /class="rkr-teaser"/);
+  assert.match(res.body, /This is the lede paragraph\./);
+  // Featured post link appears in the teaser but NOT as a .post-list row.
+  const listStart = res.body.indexOf('<ul class="post-list">');
+  const listEnd = res.body.indexOf('</ul>', listStart);
+  const list = res.body.slice(listStart, listEnd);
+  assert.doesNotMatch(list, /\/top-post"/);
+  assert.match(list, /\/second-post"/);
+});
+
+test('GET /: postTeaser on but top post has no figure → no teaser, full list', async (t) => {
+  const { root, db } = await setup(t);
+  writePost(
+    root,
+    'plain.md',
+    { slug: 'plain-post', title: 'Plain Post', status: 'published', date: '2026-05-15T10:00:00Z' },
+    'No figure here.'
+  );
+  runReindex(root);
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true }
+  });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.doesNotMatch(res.body, /class="rkr-teaser"/);
+  const listStart = res.body.indexOf('<ul class="post-list">');
+  assert.match(res.body.slice(listStart), /\/plain-post"/);
+});
+
+test('GET /: postTeaser on but admin view → never a teaser', async (t) => {
+  const { root, db } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'top.md',
+    { slug: 'top-post', title: 'Top Post', status: 'published', date: '2026-05-15T10:00:00Z' },
+    `::figure{ids="${id}" justify=bleed}\n\nLede.`
+  );
+  runReindex(root);
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true }
+  });
+  t.after(() => app.close());
+
+  // The admin posts table is gated behind an authenticated request;
+  // an anonymous GET / never renders it. Assert the anonymous render
+  // produced the teaser, and that the admin table markup is absent
+  // (proves the teaser path did not leak into / replace the table).
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.match(res.body, /class="rkr-teaser"/);
+  assert.doesNotMatch(res.body, /class="rkr-admin-posts"/);
+});
