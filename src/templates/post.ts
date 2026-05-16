@@ -28,6 +28,8 @@ export interface PostPageData extends SiteChrome {
   isAdmin?: boolean;
   /** Published comment thread for this post. */
   comments?: ThreadComment[];
+  /** Notice shown above the comment form (e.g. after a no-JS submit redirect). */
+  commentNotice?: string;
 }
 
 export function renderPostPage(post: PostPageData): string {
@@ -38,7 +40,7 @@ export function renderPostPage(post: PostPageData): string {
     ? `<p class="rkr-post-subtitle">${escapeText(post.subtitle)}</p>`
     : '';
 
-  const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug)}`;
+  const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug, post.commentNotice ? { notice: post.commentNotice } : {})}`;
   const v = bundleVersion();
   return `<!DOCTYPE html>
 <html lang="en">

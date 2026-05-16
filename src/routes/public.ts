@@ -249,63 +249,72 @@ export default async function publicRoutes(
 
   // ---- post: GET /:slug -------------------------------------------------
 
-  fastify.get<{ Params: { slug: string } }>('/:slug', async (req, reply) => {
-    const site = getSite();
-    const { slug } = req.params;
-    // _-prefixed slugs are system posts (e.g. _site-banner); they are
-    // never indexed and must never be directly accessible via the public
-    // route — return 404 unconditionally, even for authenticated users.
-    if (slug.startsWith('_')) {
+  fastify.get<{ Params: { slug: string }; Querystring: { submitted?: string } }>(
+    '/:slug',
+    async (req, reply) => {
+      const site = getSite();
+      const { slug } = req.params;
+      // _-prefixed slugs are system posts (e.g. _site-banner); they are
+      // never indexed and must never be directly accessible via the public
+      // route — return 404 unconditionally, even for authenticated users.
+      if (slug.startsWith('_')) {
+        setPublicSecurityHeaders(reply);
+        const isAdmin = !!req.user;
+        if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+        return reply
+          .code(404)
+          .type('text/html; charset=utf-8')
+          .send(renderNotFoundPage({ site, isAdmin }));
+      }
+      const row = readIndexedPostBySlug(db, slug);
+      // Authed visitors see drafts (matches the index page, which links
+      // drafts straight to /:slug from the admin table). Anonymous
+      // visitors keep the published-only filter.
+      if (!row || (row.status !== 'published' && !req.user)) {
+        setPublicSecurityHeaders(reply);
+        const isAdmin = !!req.user;
+        if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+        return reply
+          .code(404)
+          .type('text/html; charset=utf-8')
+          .send(renderNotFoundPage({ site, isAdmin }));
+      }
+
+      const fullPath = path.join(siteRoot, row.path);
+      const raw = await fs.promises.readFile(fullPath, 'utf8');
+      const parsed = parsePost(raw);
+      const ctx = { siteRoot, widgets };
+      const bannerHtml = await extractPostBanner(parsed.ast, ctx);
+      const bodyHtml = await renderPostHtml(parsed.ast, ctx);
+
+      const postId = getPostIdBySlug(db, parsed.frontmatter.slug);
+      const comments = postId === null ? [] : listPublishedThread(db, postId);
+
+      const html = renderPostPage({
+        site,
+        title: parsed.frontmatter.title,
+        ...(typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()
+          ? { subtitle: parsed.frontmatter.subtitle }
+          : {}),
+        slug: parsed.frontmatter.slug,
+        ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
+        bodyHtml,
+        ...(bannerHtml ? { bannerHtml } : {}),
+        isAdmin: !!req.user,
+        comments,
+        ...(req.query.submitted === '1'
+          ? {
+              commentNotice:
+                'Thanks — your comment has been received and will appear shortly after review.'
+            }
+          : {})
+      });
+
       setPublicSecurityHeaders(reply);
-      const isAdmin = !!req.user;
-      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-      return reply
-        .code(404)
-        .type('text/html; charset=utf-8')
-        .send(renderNotFoundPage({ site, isAdmin }));
+      if (req.user) reply.header('Cache-Control', 'private, no-store');
+      return reply.type('text/html; charset=utf-8').send(html);
     }
-    const row = readIndexedPostBySlug(db, slug);
-    // Authed visitors see drafts (matches the index page, which links
-    // drafts straight to /:slug from the admin table). Anonymous
-    // visitors keep the published-only filter.
-    if (!row || (row.status !== 'published' && !req.user)) {
-      setPublicSecurityHeaders(reply);
-      const isAdmin = !!req.user;
-      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-      return reply
-        .code(404)
-        .type('text/html; charset=utf-8')
-        .send(renderNotFoundPage({ site, isAdmin }));
-    }
-
-    const fullPath = path.join(siteRoot, row.path);
-    const raw = await fs.promises.readFile(fullPath, 'utf8');
-    const parsed = parsePost(raw);
-    const ctx = { siteRoot, widgets };
-    const bannerHtml = await extractPostBanner(parsed.ast, ctx);
-    const bodyHtml = await renderPostHtml(parsed.ast, ctx);
-
-    const postId = getPostIdBySlug(db, parsed.frontmatter.slug);
-    const comments = postId === null ? [] : listPublishedThread(db, postId);
-
-    const html = renderPostPage({
-      site,
-      title: parsed.frontmatter.title,
-      ...(typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()
-        ? { subtitle: parsed.frontmatter.subtitle }
-        : {}),
-      slug: parsed.frontmatter.slug,
-      ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
-      bodyHtml,
-      ...(bannerHtml ? { bannerHtml } : {}),
-      isAdmin: !!req.user,
-      comments
-    });
-
-    setPublicSecurityHeaders(reply);
-    if (req.user) reply.header('Cache-Control', 'private, no-store');
-    return reply.type('text/html; charset=utf-8').send(html);
-  });
+  );
 
   // ---- derivative image: GET /img/:filename -----------------------------
 

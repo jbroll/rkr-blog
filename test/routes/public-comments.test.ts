@@ -41,7 +41,7 @@ test('valid submission stores a pending comment + enqueues a classify job + 303'
     payload: form({ name: 'Ann', email: 'ann@e.com', url: '', body: 'nice', website: '', t: '0' })
   });
   assert.equal(res.statusCode, 303);
-  assert.match(res.headers.location as string, /\/hello#respond/);
+  assert.match(res.headers.location as string, /\/hello\?submitted=1#respond/);
   const c = db.prepare<{ status: string }>('SELECT status FROM comments').get();
   assert.equal(c?.status, 'pending');
   const j = db.prepare<{ kind: string; state: string }>('SELECT kind,state FROM jobs').get();

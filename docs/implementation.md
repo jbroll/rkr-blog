@@ -736,7 +736,8 @@ comments never auto-publish). Retries live inside the classifier
 (`SPAM_MAX_ATTEMPTS` attempts per job invocation) because the `jobs`
 table has no built-in auto-retry — a deliberate, faithful realization
 of the spec's "bounded retries, queue on failure". If `OLLAMA_BASE_URL`
-is unset, the handler skips classification and the comment stays `queued`.
+is unset (or the proxy is unreachable), the classify job fails safe: after
+bounded retries the comment is set to `queued` for manual review.
 
 ### Anti-abuse (pre-LLM)
 

@@ -36,6 +36,28 @@ async function setup(t: TestContext) {
   return { app, db };
 }
 
+test('GET /:slug?submitted=1 shows notice; GET /:slug without query does not', async (t) => {
+  const { app } = await setup(t);
+  const withNotice = await app.inject({ method: 'GET', url: '/hello?submitted=1' });
+  assert.equal(withNotice.statusCode, 200);
+  assert.ok(
+    withNotice.body.includes('rkr-comment-notice'),
+    'notice element present when submitted=1'
+  );
+  assert.ok(withNotice.body.includes('role="status"'), 'role="status" present when submitted=1');
+  assert.ok(
+    withNotice.body.includes('will appear shortly after review'),
+    'notice text present when submitted=1'
+  );
+
+  const withoutNotice = await app.inject({ method: 'GET', url: '/hello' });
+  assert.equal(withoutNotice.statusCode, 200);
+  assert.ok(
+    !withoutNotice.body.includes('rkr-comment-notice'),
+    'notice element absent when no submitted param'
+  );
+});
+
 test('published comments render on the post page; pending do not', async (t) => {
   const { app, db } = await setup(t);
   const pid = db.prepare<{ id: number }>("SELECT id FROM posts WHERE slug='hello'").get()

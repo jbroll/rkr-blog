@@ -67,6 +67,9 @@ export async function importWpComments(
     do {
       const r = await listComments(baseUrl, { page, perPage: 100 }, ...(fetcher ? [fetcher] : []));
       totalPages = r.totalPages || 1;
+      // Page-local sort: ensures a top-level parent is processed before its reply within
+      // the same page. A reply whose top-level parent lands on a later page is flattened
+      // to top-level, which is acceptable per spec §7 (one-level threading, no orphan).
       const sorted = [...r.comments].sort((a, b) => Number(a.parent) - Number(b.parent));
       for (const c of sorted) {
         const slug = idToSlug.get(c.post);

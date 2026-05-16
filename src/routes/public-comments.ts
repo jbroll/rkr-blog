@@ -44,7 +44,7 @@ export function registerPublicCommentRoutes(
       // Honeypot: a populated `website` field means a bot. Silent
       // success (303) so the bot can't tell it was filtered.
       if (str(body.website) !== '') {
-        return reply.code(303).header('location', `/${slug}#respond`).send();
+        return reply.code(303).header('location', `/${slug}?submitted=1#respond`).send();
       }
 
       const postId = getPostIdBySlug(db, slug);
@@ -110,7 +110,7 @@ export function registerPublicCommentRoutes(
         enqueue(db, { kind: 'classify', payload: { commentId: id } });
       }
 
-      return reply.code(303).header('location', `/${slug}#respond`).send();
+      return reply.code(303).header('location', `/${slug}?submitted=1#respond`).send();
     }
   );
 }
