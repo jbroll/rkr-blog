@@ -756,6 +756,21 @@ test('keyboard ArrowRight reorders a focused thumb', async ({ page }) => {
   await page.locator('img[data-cell-index="0"]').focus();
   await page.keyboard.press('ArrowRight');
   await expect.poll(ids).toEqual([before[1], before[0]]);
+
+  // Code-review concern (Task 4): after the PM re-render, focus must
+  // stay on the moved image so a keyboard user can keep pressing
+  // arrows. The moved image (was before[0]) is now at index 1.
+  await expect
+    .poll(() =>
+      page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-id'))
+    )
+    .toBe(before[0]);
+  // If this assertion fails, focus is lost across the ProseMirror
+  // re-render. Fix in src/admin/figure-reorder.ts by re-resolving the
+  // moved thumb AFTER the commit settles (e.g. requestAnimationFrame,
+  // re-finding the placeholder via the same nodeDOM walk since the
+  // atom's DOM is replaced) rather than focusing the pre-render node.
+  // Do NOT just delete the assertion.
 });
 ```
 
