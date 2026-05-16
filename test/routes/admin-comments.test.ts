@@ -49,6 +49,9 @@ test('GET /admin/comments lists queued comments', async (t) => {
   assert.match(res.body, /<link rel="stylesheet" href="\/static\/base\.css/);
   assert.match(res.body, /\/static\/themes\/default\.css/);
   assert.ok(!res.body.includes('<style>'), 'no hardcoded inline stylesheet');
+  // site header for navigation (title links home; admin Logout shown)
+  assert.match(res.body, /class="rkr-site-head"/);
+  assert.match(res.body, /class="rkr-site-title"><a href="\/"/);
 });
 
 test('POST /admin/comments/:id/approve → published + 303', async (t) => {

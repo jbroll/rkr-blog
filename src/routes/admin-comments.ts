@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import { getCommentById, listForModeration, setCommentStatus } from '../lib/comments.ts';
+import { siteConfig } from '../lib/config.ts';
 import { open } from '../lib/db.ts';
 import { renderAdminCommentsPage } from '../templates/admin-comments.ts';
 
@@ -29,7 +30,7 @@ export function registerAdminCommentsRoutes(
       return reply
         .type('text/html; charset=utf-8')
         .header('Cache-Control', 'private, no-store')
-        .send(renderAdminCommentsPage(listForModeration(db)));
+        .send(renderAdminCommentsPage(listForModeration(db), siteConfig()));
     } finally {
       db.close();
     }
