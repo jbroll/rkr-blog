@@ -39,6 +39,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../cli/reindex.ts';
+import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -284,6 +285,9 @@ export default async function publicRoutes(
     const bannerHtml = await extractPostBanner(parsed.ast, ctx);
     const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 
+    const postId = getPostIdBySlug(db, parsed.frontmatter.slug);
+    const comments = postId === null ? [] : listPublishedThread(db, postId);
+
     const html = renderPostPage({
       site,
       title: parsed.frontmatter.title,
@@ -294,7 +298,8 @@ export default async function publicRoutes(
       ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
       bodyHtml,
       ...(bannerHtml ? { bannerHtml } : {}),
-      isAdmin: !!req.user
+      isAdmin: !!req.user,
+      comments
     });
 
     setPublicSecurityHeaders(reply);

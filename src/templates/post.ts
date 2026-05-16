@@ -1,6 +1,8 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
+import type { ThreadComment } from '../lib/comments.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { renderCommentForm, renderCommentList } from './comments.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,
@@ -24,6 +26,8 @@ export interface PostPageData extends SiteChrome {
   /** Logged-in admin → render admin strip with an "Edit this post"
    * link in siteHead. */
   isAdmin?: boolean;
+  /** Published comment thread for this post. */
+  comments?: ThreadComment[];
 }
 
 export function renderPostPage(post: PostPageData): string {
@@ -34,6 +38,7 @@ export function renderPostPage(post: PostPageData): string {
     ? `<p class="rkr-post-subtitle">${escapeText(post.subtitle)}</p>`
     : '';
 
+  const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug)}`;
   const v = bundleVersion();
   return `<!DOCTYPE html>
 <html lang="en">
@@ -62,6 +67,7 @@ ${dateBlock}
 </header>
 ${post.bodyHtml}
 </article>
+${commentsBlock}
 </main>
 ${siteFoot(post.site, { isAdmin: post.isAdmin })}
 ${post.isAdmin ? postAdminFab(post.slug) : ''}

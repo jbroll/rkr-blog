@@ -83,8 +83,7 @@
       "test/e2e/**/*.spec.ts",
       "test/playwright.config.ts",
       "bin/site-admin",
-      "src/lib/comments.ts",
-      "src/templates/comments.ts"
+      "src/lib/comments.ts"
     ],
     "ignore": [
       "src/admin/css.d.ts",
