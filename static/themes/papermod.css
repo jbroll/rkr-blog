@@ -27,6 +27,17 @@
     "Helvetica Neue", Arial, sans-serif;
   --rkr-base-size: 1rem;
   --rkr-line-height: 1.7;
+
+  /* Lighter chrome: no borders on header/footer, compact title. */
+  --rkr-head-border: none;
+  --rkr-head-padding: 1.75rem 1.5rem 0.5rem;
+  --rkr-foot-border: none;
+  --rkr-title-size: 1.15rem;
+  --rkr-title-weight: 600;
+  --rkr-title-tracking: 0;
+
+  /* Single-column post list (date stacks above title). */
+  --rkr-list-cols: 1fr;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,23 +53,13 @@
 }
 
 /* ---- Header --------------------------------------------------------- */
-/* Lighter chrome: no border under the header band, title sits flush. */
-.rkr-site-head { border-bottom: 0; padding: 1.75rem 1.5rem 0.5rem; }
-.rkr-site-title { font-size: 1.15rem; font-weight: 600; letter-spacing: 0; }
 .rkr-site-tagline { font-size: 0.85rem; }
 
 /* ---- Post list ------------------------------------------------------ */
 /* Two-line entries: date on its own muted line above the title. */
-.post-list li {
-  grid-template-columns: 1fr;
-  gap: 0.15rem;
-  padding: 1.25rem 0;
-}
+.post-list li { gap: 0.15rem; padding: 1.25rem 0; }
 .post-list time { font-size: 0.8rem; }
-.post-list a {
-  font-size: 1.15rem;
-  font-weight: 600;
-}
+.post-list a { font-size: 1.15rem; font-weight: 600; }
 
 /* ---- Article body --------------------------------------------------- */
 article > header h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.01em; }
@@ -71,7 +72,7 @@ article a { text-decoration-thickness: 1.5px; }
 article code, article pre { background: color-mix(in srgb, var(--rkr-text) 8%, var(--rkr-bg)); }
 
 /* ---- Footer -------------------------------------------------------- */
-.rkr-site-foot { border-top: 0; font-size: 0.8rem; margin-top: 3rem; }
+.rkr-site-foot { font-size: 0.8rem; margin-top: 3rem; }
 
 /* ---- Admin chrome -------------------------------------------------- */
 /* Pill-styled admin strip links — the only visual ornament on the

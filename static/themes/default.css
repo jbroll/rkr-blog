@@ -30,6 +30,27 @@
   --rkr-mono-font: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --rkr-base-size: 1.0625rem; /* 17px */
   --rkr-line-height: 1.6;
+
+  /* structural tokens — themes override these to reshape chrome without
+     writing raw class overrides against default.css selectors */
+  --rkr-head-border: 1px solid var(--rkr-rule); /* border-bottom on .rkr-site-head */
+  --rkr-head-padding: 1.5rem 1.5rem 1rem;
+  --rkr-header-direction: row;       /* flex-direction on .rkr-site-head-inner */
+  --rkr-header-text-align: left;     /* text-align on .rkr-site-head */
+  --rkr-foot-border: 1px solid var(--rkr-rule);
+  --rkr-title-size: 1.25rem;
+  --rkr-title-weight: 700;
+  --rkr-title-style: normal;
+  --rkr-title-transform: none;
+  --rkr-title-tracking: -0.01em;
+  --rkr-h1-size: 2rem;
+  --rkr-h1-style: normal;
+  --rkr-h1-weight: bold;
+  --rkr-h2-style: normal;
+  --rkr-h2-weight: bold;
+  --rkr-list-cols: max-content 1fr;  /* grid-template-columns on .post-list li */
+  --rkr-blockquote-border: 3px solid var(--rkr-rule);
+  --rkr-main-margin-left: auto;      /* override for asymmetric layouts (e.g. tufte) */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -57,13 +78,15 @@ body {
 /* ---- site chrome -------------------------------------------------- */
 
 .rkr-site-head {
-  border-bottom: 1px solid var(--rkr-rule);
-  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: var(--rkr-head-border);
+  padding: var(--rkr-head-padding);
+  text-align: var(--rkr-header-text-align);
 }
 .rkr-site-head .rkr-site-head-inner {
   max-width: var(--rkr-content);
   margin: 0 auto;
   display: flex;
+  flex-direction: var(--rkr-header-direction);
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -77,9 +100,11 @@ body {
 }
 .rkr-site-title {
   font-family: var(--rkr-display-font);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: var(--rkr-title-size);
+  font-weight: var(--rkr-title-weight);
+  font-style: var(--rkr-title-style);
+  text-transform: var(--rkr-title-transform);
+  letter-spacing: var(--rkr-title-tracking);
   margin: 0;
 }
 .rkr-site-title a {
@@ -444,7 +469,7 @@ body {
 }
 
 .rkr-site-foot {
-  border-top: 1px solid var(--rkr-rule);
+  border-top: var(--rkr-foot-border);
   margin-top: 4rem;
   padding: 1.5rem;
   font-size: 0.85rem;
@@ -486,6 +511,7 @@ body {
 main {
   max-width: var(--rkr-content);
   margin: 0 auto;
+  margin-left: var(--rkr-main-margin-left);
   padding: 2rem 1.5rem;
 }
 
@@ -501,7 +527,9 @@ article > header {
 }
 article > header h1 {
   font-family: var(--rkr-display-font);
-  font-size: 2rem;
+  font-size: var(--rkr-h1-size);
+  font-style: var(--rkr-h1-style);
+  font-weight: var(--rkr-h1-weight);
   line-height: 1.15;
   letter-spacing: -0.02em;
   margin: 0 0 .5rem;
@@ -566,6 +594,8 @@ article h2,
 article h3,
 article h4 {
   font-family: var(--rkr-display-font);
+  font-style: var(--rkr-h2-style);
+  font-weight: var(--rkr-h2-weight);
   letter-spacing: -0.015em;
   line-height: 1.25;
   margin: 2.4em 0 .6em;
@@ -583,7 +613,7 @@ article a {
 article a:hover { color: var(--rkr-link-hover); }
 
 article blockquote {
-  border-left: 3px solid var(--rkr-rule);
+  border-left: var(--rkr-blockquote-border);
   padding-left: 1rem;
   color: var(--rkr-muted);
   font-style: italic;
@@ -952,7 +982,7 @@ span.rkr-justify-inline img {
 }
 .post-list li {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: var(--rkr-list-cols);
   gap: 1.25rem;
   align-items: baseline;
   padding: 1rem 0;

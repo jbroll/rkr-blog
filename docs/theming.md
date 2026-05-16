@@ -124,6 +124,32 @@ or under `@media (prefers-color-scheme: dark)`).
 | `--rkr-base-size`   | `1.0625rem`                   | Root font size.                            |
 | `--rkr-line-height` | `1.6`                         | Body line height.                          |
 
+### Structural tokens
+
+These shape the chrome layout without raw class overrides. Prefer setting
+these over writing `.rkr-site-head { text-align: center }` in theme CSS.
+
+| Property                  | Default                       | Controls                                            |
+| ------------------------- | ----------------------------- | --------------------------------------------------- |
+| `--rkr-head-border`       | `1px solid var(--rkr-rule)`   | `border-bottom` on `.rkr-site-head`.                |
+| `--rkr-head-padding`      | `1.5rem 1.5rem 1rem`          | `padding` on `.rkr-site-head`.                      |
+| `--rkr-header-direction`  | `row`                         | `flex-direction` on `.rkr-site-head-inner`.         |
+| `--rkr-header-text-align` | `left`                        | `text-align` on `.rkr-site-head`.                   |
+| `--rkr-foot-border`       | `1px solid var(--rkr-rule)`   | `border-top` on `.rkr-site-foot`.                   |
+| `--rkr-title-size`        | `1.25rem`                     | Site title font size.                               |
+| `--rkr-title-weight`      | `700`                         | Site title font weight.                             |
+| `--rkr-title-style`       | `normal`                      | Site title font style.                              |
+| `--rkr-title-transform`   | `none`                        | Site title `text-transform`.                        |
+| `--rkr-title-tracking`    | `-0.01em`                     | Site title `letter-spacing`.                        |
+| `--rkr-h1-size`           | `2rem`                        | Post article h1 font size.                          |
+| `--rkr-h1-style`          | `normal`                      | Post article h1 font style.                         |
+| `--rkr-h1-weight`         | `bold`                        | Post article h1 font weight.                        |
+| `--rkr-h2-style`          | `normal`                      | Article h2/h3/h4 font style.                        |
+| `--rkr-h2-weight`         | `bold`                        | Article h2/h3/h4 font weight.                       |
+| `--rkr-list-cols`         | `max-content 1fr`             | `grid-template-columns` on `.post-list li`.         |
+| `--rkr-blockquote-border` | `3px solid var(--rkr-rule)`   | `border-left` on `article blockquote`.              |
+| `--rkr-main-margin-left`  | `auto`                        | `margin-left` on `main` (use `8%` for left-biased). |
+
 ## Stable class hooks
 
 A theme overrides any of the selectors below. The list is intended to

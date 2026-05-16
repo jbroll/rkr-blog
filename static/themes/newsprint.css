@@ -26,6 +26,18 @@
     "Times New Roman", serif;
   --rkr-base-size: 1.05rem;
   --rkr-line-height: 1.7;
+
+  /* Masthead: centred, double-ruled top+bottom, large uppercase title. */
+  --rkr-head-border: 4px double var(--rkr-rule);
+  --rkr-head-padding: 1.25rem 1.5rem;
+  --rkr-header-text-align: center;
+  --rkr-header-direction: column;
+  --rkr-title-size: 2.5rem;
+  --rkr-title-weight: 900;
+  --rkr-title-transform: uppercase;
+  --rkr-title-tracking: 0.03em;
+  --rkr-h1-size: 2.4rem;
+  --rkr-h1-weight: 900;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -39,21 +51,10 @@
   }
 }
 
-/* Masthead: rules above + below, centred, all-small-caps title. */
-.rkr-site-head {
-  text-align: center;
-  padding: 1.25rem 1.5rem;
-  border-top: 4px double var(--rkr-rule);
-  border-bottom: 4px double var(--rkr-rule);
-}
-.rkr-site-head .rkr-site-head-inner { flex-direction: column; align-items: center; gap: 0.25rem; }
-.rkr-site-title {
-  font-family: var(--rkr-display-font);
-  font-size: 2.5rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  font-weight: 900;
-}
+/* Second rule: border-top is above the header (no var for this). */
+.rkr-site-head { border-top: 4px double var(--rkr-rule); }
+.rkr-site-head .rkr-site-head-inner { gap: 0.25rem; }
+.rkr-site-title { font-family: var(--rkr-display-font); }
 .rkr-site-tagline { font-style: italic; font-size: 0.95rem; }
 
 /* Drop cap on the first paragraph of each article. */
@@ -67,12 +68,8 @@ article > p:first-of-type::first-letter {
   color: var(--rkr-link);
 }
 
-article > header h1 {
-  font-family: var(--rkr-display-font);
-  font-weight: 900;
-  font-size: 2.4rem;
-  letter-spacing: 0;
-}
+/* h1 letter-spacing reset — display font tracks wide by default. */
+article > header h1 { letter-spacing: 0; }
 
 /* Centred admin strip + small-caps pills. */
 .rkr-admin-strip { justify-content: center; }

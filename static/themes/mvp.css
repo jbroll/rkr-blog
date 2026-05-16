@@ -27,6 +27,12 @@
     Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
   --rkr-base-size: 1.05rem;
   --rkr-line-height: 1.6;
+
+  /* Centred header, large title — structural vars override default layout. */
+  --rkr-header-text-align: center;
+  --rkr-head-padding: 2rem 1.5rem 1rem;
+  --rkr-header-direction: column;
+  --rkr-title-size: 2rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,15 +46,8 @@
   }
 }
 
-/* MVP.css-style centred header with the title large and a tagline
-   line beneath. */
-.rkr-site-head { text-align: center; padding: 2rem 1.5rem 1rem; }
-.rkr-site-head .rkr-site-head-inner {
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-}
-.rkr-site-title { font-size: 2rem; font-weight: 700; }
+/* Tighter gap when header stacks vertically. */
+.rkr-site-head .rkr-site-head-inner { gap: 0.5rem; }
 .rkr-site-tagline { font-size: 1rem; }
 
 /* Admin strip recenters with the header. */
@@ -60,6 +59,3 @@ article pre {
   border: 1px solid var(--rkr-rule);
   box-shadow: 0 1px 2px var(--rkr-shadow);
 }
-
-/* Article body headings slightly bolder. */
-article > header h1 { font-weight: 700; }

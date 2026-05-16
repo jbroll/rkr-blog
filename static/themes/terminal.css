@@ -1,19 +1,20 @@
 /* terminal.css — retro-terminal theme inspired by Hugo's "terminal"
- * theme (https://github.com/panr/hugo-theme-terminal). Monospace
- * throughout, phosphor-green accent, dark background.
+ * theme (https://github.com/panr/hugo-theme-terminal). Full phosphor
+ * green body text, CRT glow, scanline overlay, monospace throughout.
  *
  * SITE_THEME=terminal. See docs/theming.md.
  */
 
 :root {
-  --rkr-bg: #1a1a1a;
-  --rkr-text: #d8d8d8;
-  --rkr-muted: #8a8a8a;
-  --rkr-rule: #2e2e2e;
-  --rkr-link: #5ad67d;           /* phosphor green */
-  --rkr-link-hover: #7af0a0;
-  --rkr-danger: #ff6b6b;
-  --rkr-shadow: rgba(0, 0, 0, 0.5);
+  /* Phosphor palette — classic P1 green phosphor monitor. */
+  --rkr-bg: #0c0f0c;
+  --rkr-text: #33ff33;
+  --rkr-muted: #29b829;
+  --rkr-rule: #0d3a0d;
+  --rkr-link: #66ff66;
+  --rkr-link-hover: #99ff99;
+  --rkr-danger: #ff4444;
+  --rkr-shadow: rgba(0, 255, 0, 0.12);
 
   --rkr-content: 56rem;
   --rkr-prose: 40rem;
@@ -33,23 +34,42 @@
 @media (prefers-color-scheme: light) {
   /* Lock dark — the terminal aesthetic doesn't translate to light bg. */
   :root {
-    --rkr-bg: #1a1a1a;
-    --rkr-text: #d8d8d8;
-    --rkr-muted: #8a8a8a;
-    --rkr-rule: #2e2e2e;
-    --rkr-link: #5ad67d;
-    --rkr-link-hover: #7af0a0;
+    --rkr-bg: #0c0f0c;
+    --rkr-text: #33ff33;
+    --rkr-muted: #29b829;
+    --rkr-rule: #0d3a0d;
+    --rkr-link: #66ff66;
+    --rkr-link-hover: #99ff99;
   }
 }
 
-body { caret-color: var(--rkr-link); }
+/* CRT phosphor glow on all body text. */
+body {
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.35);
+  caret-color: var(--rkr-link);
+}
+
+/* Subtle scanline overlay — fixed so it covers the whole viewport. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.06) 2px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
 
 /* "$ " prompt prefix on the site title — quoting the terminal feel. */
 .rkr-site-title a::before {
   content: "$ ";
   color: var(--rkr-link);
 }
-.rkr-site-title { font-weight: 700; }
 
 /* Square underline on links — looks more like a teletype cursor. */
 article a {
@@ -58,14 +78,10 @@ article a {
   text-underline-offset: 4px;
 }
 
-/* Headings: no smoothing, sharp. */
-article h2, article h3, article h4 {
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
-}
+/* Headings: sharp, no smooth kerning; markdown-style sigil prefixes. */
+article h2, article h3, article h4 { letter-spacing: 0; }
 article h2::before { content: "## "; color: var(--rkr-muted); }
 article h3::before { content: "### "; color: var(--rkr-muted); }
 
-/* Status pills: rectangular, no rounding. */
+/* Status pills: rectangular corners, no rounding. */
 .rkr-admin-posts-status { border-radius: 0; }

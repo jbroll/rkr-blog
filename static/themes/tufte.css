@@ -28,6 +28,20 @@
     "Palatino LT STD", "Book Antiqua", Georgia, serif;
   --rkr-base-size: 1.125rem;
   --rkr-line-height: 1.65;
+
+  /* Left-biased layout — main column starts at the left rail. */
+  --rkr-main-margin-left: 8%;
+
+  /* Italic, light-weight headings and title — Tufte's hallmark. */
+  --rkr-title-style: italic;
+  --rkr-title-weight: 400;
+  --rkr-h1-style: italic;
+  --rkr-h1-weight: 400;
+  --rkr-h2-style: italic;
+  --rkr-h2-weight: 400;
+
+  /* No border on blockquotes — hanging margin indentation instead. */
+  --rkr-blockquote-border: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,28 +55,16 @@
   }
 }
 
-/* Left-aligned content — Tufte's reading column starts at the
-   left rail rather than centring. */
-main { margin-left: 8%; margin-right: auto; }
+/* Left-aligned content — article and post list align to the left rail. */
 article { max-width: var(--rkr-prose); margin-left: 0; }
 .post-list { margin-left: 0; }
 .rkr-site-head .rkr-site-head-inner { margin-left: 8%; }
 
-/* Headings: italic, smaller weight, generous lead-in. */
-article > header h1 {
-  font-weight: 400;
-  font-style: italic;
-  font-size: 2.2rem;
-  line-height: 1.2;
-}
-article h2 { font-weight: 400; font-style: italic; }
-article h3 { font-weight: 400; font-style: italic; font-size: 1.1rem; }
+/* Post title: slightly larger, preserve italic from var. */
+article > header h1 { font-size: 2.2rem; line-height: 1.2; }
 
-/* Blockquotes get a hanging rule rather than the default left border. */
-article blockquote {
-  border-left: 0;
-  font-style: italic;
-  margin-left: 2rem;
-}
+/* h3 is a tick smaller than h2 in Tufte's scale. */
+article h3 { font-size: 1.1rem; }
 
-.rkr-site-title { font-style: italic; font-weight: 400; }
+/* Blockquote: hanging indentation instead of left border. */
+article blockquote { font-style: italic; margin-left: 2rem; }
