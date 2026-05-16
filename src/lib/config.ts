@@ -39,6 +39,9 @@ export interface SiteConfig {
    * defaults from image-constants.ts. Individual fields can be
    * missing; the resize helper merges them with DEFAULT_INGEST_RESIZE. */
   ingestResize?: PersistedIngestResize;
+  /** When true, the anonymous homepage features the top post as a
+   * teaser (hero figure + first paragraph). Default off. */
+  postTeaser?: boolean;
 }
 
 /** Blog-level defaults for the ingest-time downsample + re-encode
@@ -62,6 +65,8 @@ export interface PersistedSiteConfig {
   ingestResize?: PersistedIngestResize;
   /** Sidecar ID of the site-wide banner image. */
   bannerImageId?: string;
+  /** Feature the top post on the anonymous homepage as a teaser. */
+  postTeaser?: boolean;
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
@@ -95,6 +100,7 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   if (typeof r.tagline === 'string') out.tagline = r.tagline;
   if (typeof r.theme === 'string') out.theme = r.theme;
   if (typeof r.bannerImageId === 'string') out.bannerImageId = r.bannerImageId;
+  if (typeof r.postTeaser === 'boolean') out.postTeaser = r.postTeaser;
   const ingest = pickPersistedIngestResize(r.ingestResize);
   if (ingest) out.ingestResize = ingest;
   return out;
@@ -153,6 +159,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   if (tagline) out.tagline = tagline;
   if (persisted.ingestResize) out.ingestResize = persisted.ingestResize;
   if (persisted.bannerImageId) out.bannerImageId = persisted.bannerImageId;
+  if (persisted.postTeaser) out.postTeaser = true;
   return out;
 }
 

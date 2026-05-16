@@ -203,3 +203,15 @@ test('listAvailableThemes: default first, others sorted', () => {
   const sorted = [...rest].sort();
   assert.deepEqual(rest, sorted);
 });
+
+test('postTeaser round-trips true/false; siteConfig surfaces only when true', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig({ postTeaser: true }, env);
+  assert.equal(readPersistedSiteConfig(env).postTeaser, true);
+  assert.equal(siteConfig(env).postTeaser, true);
+  // Explicit false persists (it is a boolean, so it is not dropped) and
+  // siteConfig leaves postTeaser unset rather than surfacing `false`.
+  writePersistedSiteConfig({ postTeaser: false }, env);
+  assert.equal(readPersistedSiteConfig(env).postTeaser, false);
+  assert.equal(siteConfig(env).postTeaser, undefined);
+});
