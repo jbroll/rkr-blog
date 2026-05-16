@@ -729,7 +729,7 @@ top-level comment (no `parent_id` of its own).
 
 Submit → `pending` row written + `classify` job enqueued on the existing
 `jobs` table → the in-process worker's classify handler calls the Ollama
-proxy (`llama3.2:3b` at `symon.rkroll.com/ollama`, Bearer token from
+proxy (`llama3.2:3b` at `symon.rkroll.com:554/ollama`, Bearer token from
 `OLLAMA_TOKEN`) → ham auto-publishes; spam, timeout, or any failure
 leaves the comment `queued` for manual review (fail-safe: unscored
 comments never auto-publish). Retries live inside the classifier

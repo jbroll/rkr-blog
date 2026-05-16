@@ -43,6 +43,12 @@ self-service edit/delete.
 The blog VPS cannot reach the LAN Ollama directly; all access goes through symon's
 public IP with the existing apache token.
 
+**Port note:** the public entry point is `symon.rkroll.com:554`. The Fios home router
+forwards external `:554` to the GPU box's apache `<VirtualHost *:443>`; external `:443`
+hits the Fios router's own admin UI and must not be used. The `ProxyPass /ollama/` lives
+on that internal `:443` vhost and is therefore reached externally as
+`https://symon.rkroll.com:554/ollama/...`.
+
 ## 4. Architecture / components
 
 ### rkr-blog (blog VPS)
@@ -63,7 +69,7 @@ public IP with the existing apache token.
 New `secrets.env` config:
 
 ```
-OLLAMA_BASE_URL=https://symon.rkroll.com/ollama
+OLLAMA_BASE_URL=https://symon.rkroll.com:554/ollama
 OLLAMA_TOKEN=<symon apache token>
 SPAM_MODEL=llama3.2:3b
 SPAM_TIMEOUT_MS=8000

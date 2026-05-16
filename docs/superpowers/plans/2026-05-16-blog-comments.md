@@ -4,7 +4,9 @@
 
 **Goal:** Add reader comments to rkr-blog: anonymous WP-style submission, asynchronous Ollama spam triage (auto-publish ham, queue suspects), one-level threading, a server-rendered moderation page, and recovery of the 37 approved comments from `roll-along.rkroll.com`.
 
-**Architecture:** Comments live in a new `comments` SQLite table (migration `004`). Submission inserts a `pending` row and enqueues a `classify` job on the existing `jobs` table. The in-process worker (already running in `server.ts`) runs a new `classify` handler that calls `src/lib/spam-classifier.ts` (HTTP → token-auth'd Ollama proxy on `symon.rkroll.com`); `ham` → `published`, `spam`/failure → `queued`. Public post pages render published comments + a progressively-enhanced form. A separate `gpu-services` change adds one `ProxyPass` to expose Ollama behind the existing apache token auth.
+**Architecture:** Comments live in a new `comments` SQLite table (migration `004`). Submission inserts a `pending` row and enqueues a `classify` job on the existing `jobs` table. The in-process worker (already running in `server.ts`) runs a new `classify` handler that calls `src/lib/spam-classifier.ts` (HTTP → token-auth'd Ollama proxy on `symon.rkroll.com:554`); `ham` → `published`, `spam`/failure → `queued`. Public post pages render published comments + a progressively-enhanced form. A separate `gpu-services` change adds one `ProxyPass` to expose Ollama behind the existing apache token auth.
+
+> Correction (post-impl): the entry point is symon.rkroll.com:554, not :443 — see spec/secrets.env.example.
 
 **Tech Stack:** Node 22 (`--experimental-strip-types`), Fastify, `node:sqlite` via `src/lib/db.ts`, `node:test` + `node:assert/strict`, template-literal HTML, c8 coverage (≥90% lines / 75% branches / 90% functions on `src/**`, `src/admin/**` excluded).
 
@@ -575,7 +577,7 @@ export interface SpamVerdict {
 export type SpamFetcher = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface ClassifyConfig {
-  baseUrl: string; // e.g. https://symon.rkroll.com/ollama (no trailing slash needed)
+  baseUrl: string; // e.g. https://symon.rkroll.com:554/ollama (no trailing slash needed)
   token: string;
   model: string;
   timeoutMs: number;
@@ -2145,7 +2147,7 @@ Append to `secrets.env.example`:
 # Comment spam classification via the token-auth'd Ollama proxy on
 # symon (see gpu-services/home/vhost.conf). If OLLAMA_BASE_URL is unset
 # the classify job fails safe and every comment lands in moderation.
-OLLAMA_BASE_URL=https://symon.rkroll.com/ollama
+OLLAMA_BASE_URL=https://symon.rkroll.com:554/ollama
 OLLAMA_TOKEN=
 SPAM_MODEL=llama3.2:3b
 SPAM_TIMEOUT_MS=8000
