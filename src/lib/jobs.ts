@@ -10,7 +10,7 @@
 
 import { EventEmitter } from 'node:events';
 import os from 'node:os';
-
+import { envClassifier, makeClassifyHandler } from './classify-handler.ts';
 import type { Db } from './db.ts';
 import type { DerivativeArgs } from './render.ts';
 import { renderDerivative } from './render.ts';
@@ -42,7 +42,7 @@ export function liveRendersInFlight(): boolean {
   return liveInflight > 0;
 }
 
-type JobKind = 'render';
+type JobKind = 'render' | 'classify';
 
 export interface RenderPayload extends DerivativeArgs {}
 
@@ -171,7 +171,10 @@ export const renderHandler: JobHandler<RenderPayload> = async (payload, ctx) => 
   await renderDerivative({ originalId, ops, variant, output, siteRoot: ctx.siteRoot });
 };
 
-const DEFAULT_HANDLERS: JobHandlerMap = { render: renderHandler as JobHandler<unknown> };
+const DEFAULT_HANDLERS: JobHandlerMap = {
+  render: renderHandler as JobHandler<unknown>,
+  classify: makeClassifyHandler(envClassifier()) as JobHandler<unknown>
+};
 
 export interface WorkQueueArgs {
   db: Db;

@@ -210,7 +210,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       // single-machine deployment.
       const ctrl = workQueue({
         db: opts.db,
-        ctx: { siteRoot },
+        ctx: { siteRoot, db: opts.db },
         concurrency: 1
       });
       app.addHook('onClose', async () => {
