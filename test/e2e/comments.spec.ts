@@ -42,6 +42,7 @@ test('comments: submit → pending (not visible), approve via admin → visible 
   // Navigate to post; comment form must be present.
   await page.goto(`/${slug}`);
   await expect(page.locator('form[action$="/comments"]')).toBeVisible();
+  await expect(page.locator('article header a.rkr-comment-bubble[href="#respond"]')).toBeVisible();
 
   // Fill form, leave honeypot website empty, submit.
   const commentBody = `Hello from e2e test ${Date.now()}`;
