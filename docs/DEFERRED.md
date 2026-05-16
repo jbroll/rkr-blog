@@ -590,7 +590,7 @@ correct without product input.
 **Trigger.** Revisit if/when readers report newly-posted comments not appearing
 without a hard refresh, or when implementing comment-approval UX.
 
-## blog-comments spec §11 (design 2026-05-16)
+## blog-comments deferred items (design 2026-05-16)
 
 ### Email notifications on new / queued comments
 
