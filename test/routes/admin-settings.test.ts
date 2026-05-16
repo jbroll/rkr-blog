@@ -447,3 +447,21 @@ test('POST /admin/settings: absent postTeaser persists false', async (t) => {
   const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
   assert.equal(onDisk.postTeaser, false);
 });
+
+test('GET /admin/settings: postTeaser checkbox reflects persisted state', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ title: 'T', postTeaser: true })
+  );
+  const on = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(on.body, /name="postTeaser"[^>]*checked/);
+
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ title: 'T', postTeaser: false })
+  );
+  const off = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(off.body, /name="postTeaser"/);
+  assert.doesNotMatch(off.body, /name="postTeaser"[^>]*checked/);
+});
