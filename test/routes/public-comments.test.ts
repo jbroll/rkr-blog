@@ -57,7 +57,7 @@ test('honeypot filled → silent reject (no row, still 303)', async (t) => {
     payload: form({ name: 'Bot', email: 'b@e.com', url: '', body: 'spam', website: 'x', t: '0' })
   });
   assert.equal(res.statusCode, 303);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM comments').get()?.n, 0);
+  assert.equal(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM comments').get()?.n, 0);
 });
 
 test('missing required fields → 400', async (t) => {
@@ -158,4 +158,16 @@ test('too-fast submission is accepted but queued, not published-eligible', async
   assert.equal(res.statusCode, 303);
   const mod = listForModeration(db);
   assert.equal(mod[0]?.status, 'queued');
+});
+
+test('__proto__ key in body does not pollute Object.prototype', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/hello/comments',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: '__proto__[polluted]=yes&name=A&email=a%40e.com&body=hi&website=&t=0'
+  });
+  assert.ok([303, 400, 404].includes(res.statusCode));
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });
