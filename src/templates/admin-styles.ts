@@ -101,8 +101,10 @@ export const ADMIN_CSS = `
     pointer-events: none;
     z-index: 2;
   }
-  /* Visually-hidden reorder status (announced via aria-live). */
-  #rkroll-admin-article .rkr-multi-status {
+  /* Visually-hidden reorder status (announced via aria-live).
+     figure-reorder.ts appends this to <body>, NOT inside
+     #rkroll-admin-article, so the selector must be unscoped. */
+  .rkr-multi-status {
     position: absolute; width: 1px; height: 1px;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }

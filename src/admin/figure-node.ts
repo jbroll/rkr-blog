@@ -106,16 +106,11 @@ export const FigureNode = Node.create({
         contenteditable: 'false'
       }),
       ['div', { class: 'rkr-multi-thumbs', contenteditable: 'false' }, ...thumbs],
-      [
-        'div',
-        {
-          class: 'rkr-multi-status',
-          'data-reorder-status': 'true',
-          'aria-live': 'polite',
-          contenteditable: 'false'
-        },
-        ''
-      ],
+      // NOTE: the reorder aria-live status region is intentionally NOT
+      // here. ProseMirror re-runs this renderHTML on every transaction,
+      // so a status node inside the atom would have any announcement
+      // text wiped by the next re-render. figure-reorder.ts owns a
+      // single live region on <body> instead.
       [
         'div',
         { class: 'rkr-multi-actions', contenteditable: 'false' },

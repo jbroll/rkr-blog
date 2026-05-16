@@ -221,4 +221,15 @@ test('keyboard ArrowRight reorders a focused thumb and keeps focus', async ({ pa
       { timeout: 3_000 }
     )
     .toBe(before[0]);
+
+  // Code-review concern (Task 7): the aria-live status node must carry
+  // the move announcement AFTER the re-render — commitReorder writes it
+  // to the re-resolved (live) node, not the detached pre-commit one.
+  // Moved from index 0 → index 1 of 2 → "Moved to position 2 of 2".
+  await expect
+    .poll(
+      () => page.evaluate(() => document.querySelector('[data-reorder-status]')?.textContent ?? ''),
+      { timeout: 3_000 }
+    )
+    .toBe('Moved to position 2 of 2');
 });

@@ -97,15 +97,38 @@ function commitReorder(editor: Editor, placeholder: Element, from: number, to: n
     if (dispatch) dispatch(tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...next }));
     return true;
   });
+  // Announce via a JS-owned live region OUTSIDE ProseMirror's managed
+  // DOM. The figure is a custom node whose renderHTML is re-run on
+  // every transaction, so any text written into a node *inside* the
+  // atom is wiped by the next re-render (which this setNodeMarkup, plus
+  // the ensuing focus/selection change, trigger). A standalone region
+  // on the document body is never touched by PM, so the message sticks.
+  const total = next.ids.split(',').length;
+  announce(editor, `Moved to position ${to + 1} of ${total}`);
 }
 
 function thumbsOf(placeholder: Element): HTMLImageElement[] {
   return Array.from(placeholder.querySelectorAll<HTMLImageElement>('img[data-cell-index]'));
 }
 
-function announce(placeholder: Element, msg: string): void {
-  const status = placeholder.querySelector('[data-reorder-status]');
-  if (status) status.textContent = msg;
+// One shared, visually-hidden aria-live region per document, owned by
+// this module and appended to <body> — deliberately NOT a node inside
+// the figure (ProseMirror regenerates the figure's DOM on every
+// transaction, which would wipe the announcement). `.rkr-multi-status`
+// supplies the visually-hidden styling; `data-reorder-status` is the
+// stable hook the e2e asserts on.
+let liveRegion: HTMLElement | null = null;
+
+function announce(editor: Editor, msg: string): void {
+  const doc = (editor.view.dom as HTMLElement).ownerDocument;
+  if (!liveRegion?.isConnected || liveRegion.ownerDocument !== doc) {
+    liveRegion = doc.createElement('div');
+    liveRegion.className = 'rkr-multi-status';
+    liveRegion.setAttribute('data-reorder-status', '');
+    liveRegion.setAttribute('aria-live', 'polite');
+    doc.body.appendChild(liveRegion);
+  }
+  liveRegion.textContent = msg;
 }
 
 /** Install delegated reorder listeners on the editor DOM. Mirrors the
@@ -234,8 +257,9 @@ export function wireFigureReorder(editor: Editor): void {
       if (wasDragging) {
         justDragged = true; // swallow the trailing click
         if (to !== from) {
+          // commitReorder announces the new position via the live
+          // status node after the re-render (placeholder is stale here).
           commitReorder(editor, placeholder, from, to);
-          announce(placeholder, `Moved to position ${to + 1} of ${thumbs.length}`);
         }
       }
     };
@@ -296,6 +320,6 @@ export function wireFigureReorder(editor: Editor): void {
       const moved = thumbsOf(newPlaceholder)[to];
       moved?.focus();
     });
-    announce(placeholder, `Moved to position ${to + 1} of ${thumbs.length}`);
+    // commitReorder handles the aria-live announcement after re-render.
   });
 }

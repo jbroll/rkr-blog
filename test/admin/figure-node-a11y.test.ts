@@ -1,6 +1,9 @@
 // FigureNode.renderHTML must emit reorder a11y hooks: each thumb is a
-// focusable button with a positional aria-label, plus a polite
-// aria-live status node. Pure (no DOM) — calls renderHTML directly.
+// focusable button with a positional aria-label. The aria-live status
+// region is deliberately NOT in renderHTML (ProseMirror regenerates
+// this node every transaction, which would wipe the announcement) —
+// figure-reorder.ts owns a single live region on <body> instead, so
+// renderHTML must NOT emit one. Pure (no DOM) — calls renderHTML.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -23,8 +26,8 @@ test('thumbs are focusable buttons with positional aria-labels', () => {
   assert.match(s, /Image 3 of 3/);
 });
 
-test('a reorder aria-live status node is present', () => {
+test('renderHTML does NOT emit an aria-live status node (owned by figure-reorder.ts on <body>)', () => {
   const s = render('a,b');
-  assert.match(s, /"aria-live":"polite"/);
-  assert.match(s, /data-reorder-status/);
+  assert.doesNotMatch(s, /aria-live/);
+  assert.doesNotMatch(s, /data-reorder-status/);
 });
