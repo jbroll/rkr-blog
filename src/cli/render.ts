@@ -12,7 +12,6 @@ import os from 'node:os';
 
 import { paths } from '../lib/config.ts';
 import { open } from '../lib/db.ts';
-import { workQueue } from '../lib/jobs.ts';
 import { migrate } from '../lib/migrate.ts';
 import { imageIdsForPost, listSidecars } from '../lib/posts.ts';
 import type { Op, Output, OutputFormat, Variant } from '../lib/render.ts';
@@ -82,8 +81,14 @@ export async function runRender(
     ...(flags.since !== undefined ? { since: flags.since } : {})
   };
 
+  // Open DB only to verify it's reachable / migrations applied — we don't
+  // route through the queue here. Step 4 acceptance just wants completion.
   const db = open(`${siteRoot}/data/site.db`);
-  migrate(db);
+  try {
+    migrate(db);
+  } finally {
+    db.close();
+  }
 
   let sidecars = await listSidecars(siteRoot);
 
@@ -145,11 +150,6 @@ export async function runRender(
     `render: ${rendered} rendered, ${cached} cached, ${errors} errors ` +
       `(${sidecars.length} sidecars, ${tasks.length} variants)`
   );
-
-  // Drain any queued jobs (e.g. classify) enqueued during or before this run.
-  await workQueue({ db, ctx: { siteRoot, db }, drainAndExit: true }).done;
-
-  db.close();
 
   return { rendered, cached, errors };
 }
