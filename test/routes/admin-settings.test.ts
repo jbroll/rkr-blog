@@ -381,6 +381,22 @@ test('GET /admin/banner/edit: redirects without overwriting existing _site-banne
   assert.equal(fs.readFileSync(bannerPath, 'utf8'), existing, 'existing file unchanged');
 });
 
+test('GET /admin/banner/edit: seeds existing bannerImageId into new _site-banner.md', async (t) => {
+  const { root, app } = await setup(t);
+  // Write a site config that has a bannerImageId.
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ bannerImageId: 'a'.repeat(64) })
+  );
+  const bannerPath = path.join(root, 'content', 'posts', '_site-banner.md');
+
+  const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
+  assert.equal(res.statusCode, 302);
+  const content = fs.readFileSync(bannerPath, 'utf8');
+  assert.match(content, new RegExp(`ids="${'a'.repeat(64)}"`), 'figure uses bannerImageId');
+  assert.match(content, /justify=bleed/);
+});
+
 test('GET /admin/banner/edit: requires auth', async (t) => {
   const { app } = await setup(t);
   // buildApp uses no-auth in test mode — but the guard is still wired.

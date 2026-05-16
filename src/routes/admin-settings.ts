@@ -203,9 +203,11 @@ export function registerAdminSettingsRoutes(
   fastify.get('/admin/banner/edit', { ...guard }, async (_req, reply) => {
     const bannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
     if (!fs.existsSync(bannerPath)) {
+      const { bannerImageId } = siteConfig();
+      const body = bannerImageId ? `\n::figure{ids="${bannerImageId}" justify=bleed}\n` : '';
       fs.writeFileSync(
         bannerPath,
-        '---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n'
+        `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n${body}`
       );
     }
     return reply.redirect('/admin/editor?slug=_site-banner', 302);
