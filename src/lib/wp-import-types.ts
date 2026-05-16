@@ -20,6 +20,17 @@ export interface WpPost {
   featured_media?: number;
 }
 
+/** Subset of WP /wp-json/wp/v2/comments we depend on for recovery. */
+export interface WpComment {
+  id: number;
+  post: number; // WP post id
+  parent: number; // 0 = top-level
+  author_name: string;
+  author_url: string;
+  date: string; // ISO-8601, server local
+  content: { rendered: string };
+}
+
 /** Minimal hast (HTML AST) node shape we walk during import. rehype-parse
  * produces fuller nodes; we only access these fields. */
 export interface HastNode {

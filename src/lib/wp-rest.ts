@@ -6,10 +6,16 @@
 // fixture server.
 
 import { safeFetch } from './url-safety.ts';
-import type { WpPost } from './wp-import-types.ts';
+import type { WpComment, WpPost } from './wp-import-types.ts';
 
 export interface ListResult {
   posts: WpPost[];
+  total: number;
+  totalPages: number;
+}
+
+export interface CommentListResult {
+  comments: WpComment[];
   total: number;
   totalPages: number;
 }
@@ -128,4 +134,23 @@ export async function fetchPost(
   const arr = (await res.json()) as WpPost[];
   if (arr.length === 0) throw new Error(`WP fetchPost: no post with slug "${idOrSlug}"`);
   return arr[0] as WpPost;
+}
+
+/** Fetch one page of approved comments (public endpoint returns only
+ * approved). `_fields` trims the payload. */
+export async function listComments(
+  baseUrl: string,
+  opts: { page?: number; perPage?: number } = {},
+  fetcher: WpFetcher = defaultWpFetcher
+): Promise<CommentListResult> {
+  const page = opts.page ?? 1;
+  const perPage = Math.min(100, Math.max(1, opts.perPage ?? 100));
+  const fields = ['id', 'post', 'parent', 'author_name', 'author_url', 'date', 'content'].join(',');
+  const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/comments?per_page=${perPage}&page=${page}&_fields=${fields}`;
+  const res = await fetcher(url);
+  if (!res.ok) throw new Error(`WP listComments: ${res.status} ${url}`);
+  const total = Number(res.headers.get('X-WP-Total') ?? 0);
+  const totalPages = Number(res.headers.get('X-WP-TotalPages') ?? 0);
+  const comments = (await res.json()) as WpComment[];
+  return { comments, total, totalPages };
 }
