@@ -590,6 +590,82 @@ correct without product input.
 **Trigger.** Revisit if/when readers report newly-posted comments not appearing
 without a hard refresh, or when implementing comment-approval UX.
 
+## blog-comments spec §11 (design 2026-05-16)
+
+### Email notifications on new / queued comments
+
+**Source.** blog-comments spec §11 (design 2026-05-16).
+
+**What.** Notify the site author by email when a comment is submitted
+(or when a spam-flagged comment lands in the moderation queue).
+
+**Why deferred.** No email infrastructure exists (no SMTP config, no
+transactional-email provider). Adding it is a separate integration
+project.
+
+**Trigger.** When an email sender (SMTP or transactional API) is
+available and the author wants async moderation alerts.
+
+### Commenter self-service edit / delete
+
+**Source.** blog-comments spec §11 (design 2026-05-16).
+
+**What.** Allow a commenter to edit or delete their own comment after
+submission, within a time window.
+
+**Why deferred.** Requires either a session / magic-link scheme for
+anonymous commenters or a login requirement — significant auth surface
+not in v1 scope.
+
+**Trigger.** Author or commenter feedback that post-submission correction
+is needed, paired with a chosen auth strategy for anonymous users.
+
+### Importing WordPress spam / trash / pending comments
+
+**Source.** blog-comments spec §11 (design 2026-05-16).
+
+**What.** `import-wp-comments` only fetches approved comments via the
+public WP REST API. Spam, trash, and pending comments are inaccessible
+without authenticated WP credentials.
+
+**Why deferred.** Approved comments are the only ones worth recovering
+for a public-facing import. Accessing non-public comment statuses
+requires WP application passwords or cookie auth — scope creep for a
+one-time migration.
+
+**Trigger.** If recovering WP pending/spam comments becomes necessary
+and WP auth credentials are available.
+
+### Multi-level (deeper than one) comment threading
+
+**Source.** blog-comments spec §11 (design 2026-05-16).
+
+**What.** The current schema and `src/lib/comments.ts` enforce a maximum
+of one level of threading (reply to a top-level comment only). Arbitrary
+nesting is not supported.
+
+**Why deferred.** Nested threading complicates rendering, moderation
+ordering, and the flattening logic for WP import. Single-level covers the
+common case for a personal blog.
+
+**Trigger.** Sustained author or reader demand for sub-replies, or a
+comment volume that makes flat threading unwieldy.
+
+### CAPTCHA / third-party bot protection
+
+**Source.** blog-comments spec §11 (design 2026-05-16).
+
+**What.** The anti-abuse layer (honeypot, min-fill-time, rate limit) has
+no CAPTCHA or external bot-detection service.
+
+**Why deferred.** CAPTCHAs (reCAPTCHA, hCaptcha, Turnstile) require
+loading third-party scripts, which breaks the strict CSP and adds reader
+friction. The existing lightweight guards are sufficient for a low-traffic
+personal blog.
+
+**Trigger.** Sustained spam volume that bypasses the current guards, or a
+relaxation of the CSP that makes third-party script inclusion acceptable.
+
 ## Planned features
 
 ### Post teaser on the logged-out homepage

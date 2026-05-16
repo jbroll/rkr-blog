@@ -715,7 +715,49 @@ step N's signal is green.
 - [x] `storage-panel.ts` shows usage, pinned/cached lists, pending
       sync queue, manual controls.
 
-## 12. Open decisions
+## 12. Comments
+
+### Storage
+
+Migration `004_comments.sql` adds a `comments` table. Web submissions
+arrive with `status = 'pending'`; the `source` column distinguishes
+`'web'` from `'wp-import'`. One-level threading only: `src/lib/comments.ts`
+enforces that a web reply's `parent_id` must reference a `published`
+top-level comment (no `parent_id` of its own).
+
+### Spam triage (async)
+
+Submit → `pending` row written + `classify` job enqueued on the existing
+`jobs` table → the in-process worker's classify handler calls the Ollama
+proxy (`llama3.2:3b` at `symon.rkroll.com/ollama`, Bearer token from
+`OLLAMA_TOKEN`) → ham auto-publishes; spam, timeout, or any failure
+leaves the comment `queued` for manual review (fail-safe: unscored
+comments never auto-publish). Retries live inside the classifier
+(`SPAM_MAX_ATTEMPTS` attempts per job invocation) because the `jobs`
+table has no built-in auto-retry — a deliberate, faithful realization
+of the spec's "bounded retries, queue on failure". If `OLLAMA_BASE_URL`
+is unset, the handler skips classification and the comment stays `queued`.
+
+### Anti-abuse (pre-LLM)
+
+Honeypot field (hidden input; any fill → `queued`), minimum fill-time
+check (too-fast submit → `queued`), per-IP rate limit (5 submissions per
+10 minutes via `@fastify/rate-limit`), and length caps on name/body.
+
+### Moderation
+
+Server-rendered `/admin/comments` lists queued comments first, then
+published, then rejected. Approve, reject, and delete actions. Gated by
+the existing admin auth (`requireUser`).
+
+### WordPress import
+
+`site-admin import-wp-comments <wp-base-url>` fetches approved comments
+from the WP REST API and inserts them as `published` / `source='wp-import'`.
+Idempotent: `wp_comment_id` has a UNIQUE constraint. Threads deeper than
+one level are flattened to top-level.
+
+## 13. Open decisions
 
 Pinned implementation calls; revisit if real-world data contradicts.
 
@@ -730,7 +772,7 @@ Pinned implementation calls; revisit if real-world data contradicts.
 4. **Bundling vs vendoring TipTap**: bundled via esbuild. CDN-with-SRI
    was rejected in favor of an offline-capable, CSP-tight bundle.
 
-## 13. Sample fixtures
+## 14. Sample fixtures
 
 `test/fixtures/posts/2026-05-06-first-post.md`, sample sidecars, and
 small JPEG/PNG images (under 100 KB each, varied aspect ratios, one
