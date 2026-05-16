@@ -46,3 +46,12 @@ export function reorderFigureCells(
     captions: moveItem(captions, from, to).join('|')
   };
 }
+
+/** Insertion index for a pointer at coordinate `pos` (px along the
+ *  drag axis) given cell midpoints in DOM order. Equals the number of
+ *  midpoints strictly less than `pos`; result is in [0, mids.length]. */
+export function dropIndexFor(mids: number[], pos: number): number {
+  let i = 0;
+  while (i < mids.length && (mids[i] as number) < pos) i++;
+  return i;
+}

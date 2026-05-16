@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { moveItem, reorderFigureCells } from '../../src/admin/figure-reorder.ts';
+import { dropIndexFor, moveItem, reorderFigureCells } from '../../src/admin/figure-reorder.ts';
 
 test('moveItem: moves an element and returns a new array', () => {
   const a = ['a', 'b', 'c', 'd'];
@@ -39,4 +39,17 @@ test('reorderFigureCells: no-op returns the original strings', () => {
   const input = { ids: 'i1,i2', alts: 'a1,a2', captions: 'c1|c2' };
   assert.deepEqual(reorderFigureCells(input, 1, 1), input);
   assert.deepEqual(reorderFigureCells(input, 0, 9), input);
+});
+
+test('dropIndexFor: insertion index = count of midpoints before the pointer', () => {
+  // Three cells centered at x=50,150,250.
+  const mids = [50, 150, 250];
+  assert.equal(dropIndexFor(mids, 10), 0); // before all
+  assert.equal(dropIndexFor(mids, 100), 1); // between 1st and 2nd
+  assert.equal(dropIndexFor(mids, 200), 2); // between 2nd and 3rd
+  assert.equal(dropIndexFor(mids, 999), 3); // after all
+});
+
+test('dropIndexFor: empty list → 0', () => {
+  assert.equal(dropIndexFor([], 123), 0);
 });
