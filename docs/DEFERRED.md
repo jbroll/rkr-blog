@@ -518,6 +518,52 @@ quirks) rather than a code bug.
 adding a real user-facing reduced-motion preference toggle would
 benefit from clearer test coverage anyway.
 
+## Performance / reliability
+
+### Post-deploy "30s to first page" — deploy window + SW no-timeout nav
+
+**Source.** Targeted boot-path profile, 2026-05-16 (operator reported
+the login page taking 30s right after a deploy).
+
+**What.** The Node service is *not* the bottleneck — journald shows
+ExecStartPre (`site-admin init`: dirs + migrations) = ~130 ms and
+process-start → `rkr-blog listening` = ~630 ms, i.e. ≈0.8 s total
+process-down → serving, consistent across restarts, `NRestarts=0`,
+`Type=simple`. The 30 s comes from two compounding gaps *around* the
+server:
+
+1. **Deploy has no health gate.** `node_app/install.sh` does
+   `rsync -a --delete staging → app_path` over the live tree, then
+   `node_app/start.sh` does `systemctl restart` + a blind `sleep 2`
+   (no `/health` poll, no zero-downtime swap). Apache is not gracefully
+   gated against the upstream being momentarily absent.
+2. **SW navigation SWR has no network timeout / no fallback.**
+   `sw-core.ts` `staleWhileRevalidate` returns `hit ?? network` and
+   awaits `network` unbounded. `sw-register.ts` posts
+   `rkr-pages-flush` on the login/logout redirect, which empties the
+   PAGES cache — so on exactly the login navigation `hit` is
+   `undefined` and the SW blocks on a single network fetch. If that
+   fetch lands during the restart window, Apache mod_proxy
+   connect/retry holds it ~30 s before the (by-then-up) server
+   answers. After it clears, every request is sub-2 ms (journal
+   13:58–13:59).
+
+**Why deferred.** Single-author site; the blip is once per deploy and
+self-clears. Fix involves a deploy-script change (external repo,
+`/home/john/src/deploy.sh`) and/or SW semantics with auth-cache
+interactions — both want deliberate design, not a hotfix. Resolution
+options (pick one or both, design needed):
+- Deploy-side: health-gate `start.sh` (poll `/health` before
+  completing) or true zero-downtime (start new, health-check, swap).
+- SW-side: race the navigation fetch against a short timeout with a
+  lightweight loading/offline fallback so a slow upstream degrades to
+  seconds, not 30 s. Mind the login-flush interaction (login is the
+  worst case by construction).
+
+**Trigger.** If the post-deploy stall is reported again, deploys get
+more frequent, or the site moves toward multiple authors / higher
+traffic where a 30 s window is user-visible to non-operators.
+
 ## Planned features
 
 ### Post teaser on the logged-out homepage
