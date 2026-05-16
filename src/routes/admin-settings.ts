@@ -63,9 +63,7 @@ export function registerAdminSettingsRoutes(
         gdriveConnected = readToken(db, key, user.id, 'gdrive') !== null;
         onedriveConnected = readToken(db, key, user.id, 'onedrive') !== null;
       }
-      const hasBanner = fs.existsSync(
-        path.join(siteRoot, 'content', 'posts', '_site-banner.md')
-      );
+      const hasBanner = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_site-banner.md'));
       return reply.type('text/html; charset=utf-8').send(
         renderAdminSettingsPage({
           site,

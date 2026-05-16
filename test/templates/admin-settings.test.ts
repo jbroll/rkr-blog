@@ -8,7 +8,10 @@ test('renderAdminSettingsPage: form pre-fills persisted values', () => {
     site: { title: 'rkroll' },
     persisted: { title: 'My Blog', tagline: 'A subtitle', theme: 'papermod' },
     themes: ['default', 'papermod', 'terminal'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   // Title + tagline are <input value="…">.
   assert.match(html, /<input id="rkr-settings-title"[^>]*value="My Blog"/);
@@ -32,7 +35,10 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   assert.match(html, /<input id="rkr-settings-title"[^>]*value=""/);
   assert.match(html, /placeholder="rkroll"/);
@@ -43,7 +49,10 @@ test('renderAdminSettingsPage: title + tagline escape HTML', () => {
     site: { title: 'rkroll' },
     persisted: { title: '<script>x</script>', tagline: '" autofocus="' },
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   assert.ok(!html.includes('<script>x</script>'), 'title must be escaped');
   // The quote in the tagline must be entity-escaped so it doesn't
@@ -57,7 +66,10 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false,
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false,
     flash: { kind: 'ok', text: 'Settings saved.' }
   });
   assert.doesNotMatch(ok, /rkr-admin-settings-flash/);
@@ -66,7 +78,10 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false,
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false,
     flash: { kind: 'error', text: 'title too long' }
   });
   assert.match(err, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
@@ -77,7 +92,10 @@ test('renderAdminSettingsPage: save button is in the heading row with a disk ico
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   // Heading and button share a flex row.
   assert.match(html, /rkr-admin-settings-heading-row/);
@@ -92,7 +110,10 @@ test('renderAdminSettingsPage: build chip shows the short git hash with full sha
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'abc123def456789ffeed0011223344556677889a', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'abc123def456789ffeed0011223344556677889a',
+    hasBanner: false
   });
   // Short form (12 chars) is the visible text; full sha is in the
   // title attr so a hover reveals the exact commit.
@@ -106,7 +127,10 @@ test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   assert.match(html, /<code[^>]*>unknown<\/code>/);
 });
@@ -116,7 +140,10 @@ test('renderAdminSettingsPage: ingestResize fields show persisted values', () =>
     site: { title: 'rkroll' },
     persisted: { ingestResize: { maxDim: 2400, scalePct: 80, webpQuality: 70 } },
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   assert.match(html, /value="2400"/);
   assert.match(html, /value="80"/);
@@ -128,7 +155,10 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: true, onedriveConnected: false, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: true,
+    onedriveConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   assert.match(htmlGdrive, /Disconnect/);
 
@@ -136,7 +166,10 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
     site: { title: 'rkroll' },
     persisted: {},
     themes: ['default'],
-    gdriveConnected: false, onedriveConnected: true, gitHash: 'unknown', hasBanner: false
+    gdriveConnected: false,
+    onedriveConnected: true,
+    gitHash: 'unknown',
+    hasBanner: false
   });
   assert.match(htmlOnedrive, /Disconnect/);
 });

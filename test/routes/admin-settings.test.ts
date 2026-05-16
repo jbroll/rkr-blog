@@ -403,7 +403,10 @@ test('GET /admin/banner/edit: seeds bannerImageId into existing figure-less _sit
     JSON.stringify({ bannerImageId: 'b'.repeat(64) })
   );
   const bannerPath = path.join(root, 'content', 'posts', '_site-banner.md');
-  fs.writeFileSync(bannerPath, '---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n');
+  fs.writeFileSync(
+    bannerPath,
+    '---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n'
+  );
 
   const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
   assert.equal(res.statusCode, 302);

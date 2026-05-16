@@ -577,7 +577,9 @@ test('GET /admin/integrations/onedrive/files: returns items from Graph', async (
 
   const listFetcher = (async (_url: string | URL) =>
     new Response(
-      JSON.stringify({ value: [{ id: 'img1', name: 'photo.jpg', file: { mimeType: 'image/jpeg' } }] }),
+      JSON.stringify({
+        value: [{ id: 'img1', name: 'photo.jpg', file: { mimeType: 'image/jpeg' } }]
+      }),
       { headers: { 'content-type': 'application/json' } }
     )) as typeof fetch;
 
@@ -679,10 +681,9 @@ test('GET /admin/integrations/onedrive/thumbnail: returns url from Graph', async
   t.after(() => db.close());
 
   const thumbFetcher = (async (_url: string | URL) =>
-    new Response(
-      JSON.stringify({ large: { url: 'https://thumb.example.com/large.jpg' } }),
-      { headers: { 'content-type': 'application/json' } }
-    )) as typeof fetch;
+    new Response(JSON.stringify({ large: { url: 'https://thumb.example.com/large.jpg' } }), {
+      headers: { 'content-type': 'application/json' }
+    })) as typeof fetch;
 
   const app = await buildApp({
     siteRoot: root,

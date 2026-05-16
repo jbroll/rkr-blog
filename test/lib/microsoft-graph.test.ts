@@ -105,18 +105,19 @@ test('fetchOneDriveFile defaults mimeType to octet-stream when metadata lacks a 
 // ---- listOneDriveFolder --------------------------------------------------
 
 test('listOneDriveFolder happy path', async () => {
-  const fetcher = fixedFetcher(() =>
-    new Response(
-      JSON.stringify({
-        value: [
-          { id: 'f1', name: 'Photos', folder: {} },
-          { id: 'img1', name: 'cat.jpg', file: { mimeType: 'image/jpeg' } },
-          { id: 'doc1', name: 'notes.txt', file: { mimeType: 'text/plain' } }
-        ],
-        '@odata.nextLink': 'https://example.com/next'
-      }),
-      { headers: { 'content-type': 'application/json' } }
-    )
+  const fetcher = fixedFetcher(
+    () =>
+      new Response(
+        JSON.stringify({
+          value: [
+            { id: 'f1', name: 'Photos', folder: {} },
+            { id: 'img1', name: 'cat.jpg', file: { mimeType: 'image/jpeg' } },
+            { id: 'doc1', name: 'notes.txt', file: { mimeType: 'text/plain' } }
+          ],
+          '@odata.nextLink': 'https://example.com/next'
+        }),
+        { headers: { 'content-type': 'application/json' } }
+      )
   );
   const page = await listOneDriveFolder('tok', 'root', { fetcher });
   // text/plain should be filtered out; folder + jpeg remain
@@ -159,25 +160,26 @@ test('listOneDriveFolder throws on HTTP error', async () => {
 // ---- getOneDriveThumbnail ------------------------------------------------
 
 test('getOneDriveThumbnail returns large URL', async () => {
-  const fetcher = fixedFetcher(() =>
-    new Response(
-      JSON.stringify({
-        large: { url: 'https://t.example.com/large' },
-        medium: { url: 'https://t.example.com/medium' }
-      }),
-      { headers: { 'content-type': 'application/json' } }
-    )
+  const fetcher = fixedFetcher(
+    () =>
+      new Response(
+        JSON.stringify({
+          large: { url: 'https://t.example.com/large' },
+          medium: { url: 'https://t.example.com/medium' }
+        }),
+        { headers: { 'content-type': 'application/json' } }
+      )
   );
   const url = await getOneDriveThumbnail('tok', 'item1', { fetcher });
   assert.equal(url, 'https://t.example.com/large');
 });
 
 test('getOneDriveThumbnail falls back to medium when large absent', async () => {
-  const fetcher = fixedFetcher(() =>
-    new Response(
-      JSON.stringify({ medium: { url: 'https://t.example.com/medium' } }),
-      { headers: { 'content-type': 'application/json' } }
-    )
+  const fetcher = fixedFetcher(
+    () =>
+      new Response(JSON.stringify({ medium: { url: 'https://t.example.com/medium' } }), {
+        headers: { 'content-type': 'application/json' }
+      })
   );
   const url = await getOneDriveThumbnail('tok', 'item1', { fetcher });
   assert.equal(url, 'https://t.example.com/medium');

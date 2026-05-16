@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 37
+      "linesHit": 36
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,

@@ -160,7 +160,6 @@ test('GET /:slug 404s for an unknown slug with the themed not-found page', async
   assert.match(res.body, /<main[^>]*class="rkr-notfound"/);
 });
 
-
 test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking headers', async (t) => {
   // Defense-in-depth for the markdown renderer's "raw HTML passes
   // through" trust decision: a misclick or pasted HTML can't open
