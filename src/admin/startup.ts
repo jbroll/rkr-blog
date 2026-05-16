@@ -85,6 +85,12 @@ async function runStart(editor: Editor): Promise<void> {
     //                was last editing.
     //   (neither)  → restore the existing currentDraftId (default).
     const params = new URLSearchParams(location.search);
+    // ?mode=figure: single-figure editing mode (banner). Applied before
+    // any other setup so CSS can hide irrelevant chrome immediately.
+    const modeParam = params.get('mode');
+    if (modeParam && typeof document !== 'undefined') {
+      document.body.dataset.mode = modeParam;
+    }
     const newParam = params.get('new');
     if (newParam) {
       const root = await readRoot();

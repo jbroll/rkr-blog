@@ -106,7 +106,8 @@ function mount(): void {
   const syncToolbarActiveStates = mountToolbar({
     editor,
     toolbar,
-    insertImage: () => inserter.insertNew()
+    insertImage: () => inserter.insertNew(),
+    figureOnly: document.body.dataset.mode === 'figure'
   });
 
   // `populating` guards attribute writes against the feedback loop

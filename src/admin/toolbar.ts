@@ -50,6 +50,9 @@ export interface ToolbarDeps {
    * lives in main.ts so the source picker + append-mode plumbing stays
    * in one place; the toolbar only knows the entry point. */
   insertImage: () => Promise<void>;
+  /** When true, only the +Image and Save buttons are rendered; text
+   * formatting buttons (B/I/H2/H3/Link) are omitted. */
+  figureOnly?: boolean;
 }
 
 /** Build the toolbar's buttons in place and return a sync callback the
@@ -57,25 +60,30 @@ export interface ToolbarDeps {
  * `is-active` class tracks the live selection (bold inside a bold span,
  * heading inside an H2, etc.). */
 export function mountToolbar(deps: ToolbarDeps): () => void {
-  const { editor, toolbar, insertImage } = deps;
-  toolbar.replaceChildren(
-    makeButton('B', () => editor.chain().focus().toggleBold().run(), { cmd: 'bold' }),
-    makeButton('I', () => editor.chain().focus().toggleItalic().run(), { cmd: 'italic' }),
-    makeButton('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), {
-      cmd: 'h2'
-    }),
-    makeButton('H3', () => editor.chain().focus().toggleHeading({ level: 3 }).run(), {
-      cmd: 'h3'
-    }),
-    makeButton(
-      'Link',
-      () => {
-        const url = prompt('URL?');
-        if (!url) return;
-        editor.chain().focus().setLink({ href: url }).run();
-      },
-      { cmd: 'link', iconSvg: icon('link', 16) }
-    ),
+  const { editor, toolbar, insertImage, figureOnly } = deps;
+  const buttons: HTMLButtonElement[] = [];
+  if (!figureOnly) {
+    buttons.push(
+      makeButton('B', () => editor.chain().focus().toggleBold().run(), { cmd: 'bold' }),
+      makeButton('I', () => editor.chain().focus().toggleItalic().run(), { cmd: 'italic' }),
+      makeButton('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), {
+        cmd: 'h2'
+      }),
+      makeButton('H3', () => editor.chain().focus().toggleHeading({ level: 3 }).run(), {
+        cmd: 'h3'
+      }),
+      makeButton(
+        'Link',
+        () => {
+          const url = prompt('URL?');
+          if (!url) return;
+          editor.chain().focus().setLink({ href: url }).run();
+        },
+        { cmd: 'link', iconSvg: icon('link', 16) }
+      )
+    );
+  }
+  buttons.push(
     makeButton('+Image', () => void insertImage(), {
       cmd: 'image',
       iconSvg: icon('imagePlus', 16)
@@ -86,6 +94,7 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       iconSvg: icon('save', 16)
     })
   );
+  toolbar.replaceChildren(...buttons);
 
   return function syncActiveStates(): void {
     for (const b of toolbar.querySelectorAll<HTMLButtonElement>('button[data-cmd]')) {

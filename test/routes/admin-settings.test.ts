@@ -360,7 +360,7 @@ test('GET /admin/banner/edit: creates _site-banner.md when absent and redirects 
 
   const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner');
+  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner&mode=figure');
   assert.ok(fs.existsSync(bannerPath), '_site-banner.md created');
 
   const content = fs.readFileSync(bannerPath, 'utf8');
@@ -377,7 +377,7 @@ test('GET /admin/banner/edit: redirects without overwriting existing _site-banne
 
   const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner');
+  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner&mode=figure');
   assert.equal(fs.readFileSync(bannerPath, 'utf8'), existing, 'existing file unchanged');
 });
 

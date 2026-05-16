@@ -213,7 +213,7 @@ export function registerAdminSettingsRoutes(
         `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n${body}`
       );
     }
-    return reply.redirect('/admin/editor?slug=_site-banner', 302);
+    return reply.redirect('/admin/editor?slug=_site-banner&mode=figure', 302);
   });
 
   // POST /admin/settings/banner — set the site-wide banner image by ID.

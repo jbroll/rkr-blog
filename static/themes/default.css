@@ -1031,3 +1031,10 @@ nav[aria-label="pagination"] a {
 @media (max-width: 400px) {
   .rkr-figure-masonry .rkr-figure-flow { column-count: 1; }
 }
+
+/* figure-only mode (?mode=figure): hide post metadata and text-format
+   chrome so the editor shows just the image widget. */
+body[data-mode="figure"] .rkr-page-title-row,
+body[data-mode="figure"] .rkr-meta {
+  display: none;
+}
