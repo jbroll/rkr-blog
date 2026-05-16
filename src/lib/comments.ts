@@ -37,15 +37,18 @@ export interface NewWebComment {
 }
 
 /** Throw if parentId is set but does not reference a top-level
- * (parent_id IS NULL) comment on the same post. */
+ * (parent_id IS NULL), published comment on the same post. Replies
+ * may only target comments the reader can actually see; allowing a
+ * pending/queued/rejected parent would silently orphan the reply if
+ * the parent is later rejected. */
 function assertTopLevelParent(db: Db, postId: number, parentId: number): void {
   const parent = db
-    .prepare<{ parent_id: number | null; post_id: number }>(
-      'SELECT parent_id, post_id FROM comments WHERE id = ?'
+    .prepare<{ parent_id: number | null; post_id: number; status: string }>(
+      'SELECT parent_id, post_id, status FROM comments WHERE id = ?'
     )
     .get(parentId);
-  if (!parent || parent.post_id !== postId) {
-    throw new Error('parent comment not found on this post');
+  if (!parent || parent.post_id !== postId || parent.status !== 'published') {
+    throw new Error('parent comment not found or not published on this post');
   }
   if (parent.parent_id !== null) {
     throw new Error('parent must be a top-level comment');
@@ -88,7 +91,7 @@ export function insertImportedComment(db: Db, c: ImportedComment): number | null
       `INSERT INTO comments
          (post_id, parent_id, wp_comment_id, author_name, author_email,
           author_url, body, status, source, created_at)
-       VALUES (?, ?, ?, ?, 'imported@roll-along', ?, ?, 'published',
+       VALUES (?, ?, ?, ?, /* sentinel: WP public API exposes no commenter email; never displayed */ 'imported@roll-along', ?, ?, 'published',
                'wp-import', ?)`
     )
     .run(c.postId, c.parentId, c.wpCommentId, c.authorName, c.authorUrl, c.body, c.createdAt);
@@ -100,7 +103,8 @@ export function getCommentById(db: Db, id: number): CommentRow | undefined {
 }
 
 export function setCommentStatus(db: Db, id: number, status: CommentStatus): void {
-  db.prepare('UPDATE comments SET status = ? WHERE id = ?').run(status, id);
+  const r = db.prepare('UPDATE comments SET status = ? WHERE id = ?').run(status, id);
+  if (r.changes === 0) throw new Error(`comment ${id} not found`);
 }
 
 /** Persist a classifier verdict and resolve the row's status. */

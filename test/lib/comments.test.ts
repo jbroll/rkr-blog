@@ -53,6 +53,8 @@ test('insertWebComment rejects a reply to a non-top-level comment', (t) => {
     body: 'top',
     ip: null
   });
+  // top must be published so the reply is accepted (published parent check)
+  setCommentStatus(db, top, 'published');
   const reply = insertWebComment(db, {
     postId,
     parentId: top,
@@ -62,6 +64,8 @@ test('insertWebComment rejects a reply to a non-top-level comment', (t) => {
     body: 'reply',
     ip: null
   });
+  // reply must also be published so the deep insert reaches the top-level check
+  setCommentStatus(db, reply, 'published');
   assert.throws(
     () =>
       insertWebComment(db, {
@@ -163,7 +167,7 @@ test('applyClassification updates status, score, reason, and classified_at', (t)
   assert.ok(row?.classified_at !== null);
 });
 
-test('listForModeration returns queued then published rows', (t) => {
+test('listForModeration returns queued then published rows, queued FIFO', (t) => {
   const { db, postId } = setup(t);
   const a = insertWebComment(db, {
     postId,
@@ -185,10 +189,26 @@ test('listForModeration returns queued then published rows', (t) => {
     ip: null
   });
   setCommentStatus(db, b, 'queued');
+  const c = insertWebComment(db, {
+    postId,
+    parentId: null,
+    authorName: 'C',
+    authorEmail: 'c@e.com',
+    authorUrl: null,
+    body: 'c',
+    ip: null
+  });
+  setCommentStatus(db, c, 'queued');
+  // Force deterministic timestamps so ordering is stable regardless of wall-clock resolution
+  db.prepare('UPDATE comments SET created_at=? WHERE id=?').run('2026-01-01T00:00:00.000Z', b);
+  db.prepare('UPDATE comments SET created_at=? WHERE id=?').run('2026-01-02T00:00:00.000Z', c);
   const rows = listForModeration(db);
-  // queued comes first
+  // Both queued rows come before the published row
   assert.equal(rows[0]?.status, 'queued');
-  assert.equal(rows[1]?.status, 'published');
+  assert.equal(rows[1]?.status, 'queued');
+  assert.equal(rows[2]?.status, 'published');
+  // Queued rows are FIFO (oldest first)
+  assert.ok((rows[0]?.created_at as string) <= (rows[1]?.created_at as string));
 });
 
 test('getPostIdBySlug returns the post id or null', (t) => {
@@ -226,6 +246,6 @@ test('insertWebComment rejects parentId for a comment on a different post', (t) 
         body: 'cross',
         ip: null
       }),
-    /parent comment not found on this post/
+    /parent comment not found or not published on this post/
   );
 });
