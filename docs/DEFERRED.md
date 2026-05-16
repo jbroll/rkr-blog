@@ -666,6 +666,28 @@ personal blog.
 **Trigger.** Sustained spam volume that bypasses the current guards, or a
 relaxation of the CSP that makes third-party script inclusion acceptable.
 
+### Split deployed env into `config.env` (non-secret) + `secrets.env`
+
+**Source.** Blog-comments deploy (2026-05-16): `OLLAMA_BASE_URL` and other
+non-secret runtime config (`SITE_ROOT`, `PUBLIC_BASE_URL`, `SPAM_MODEL`,
+timeouts) currently live in the gitignored `secrets.env` alongside real
+credentials (`ADMIN_TOKEN`, `GOOGLE_CLIENT_SECRET`, …).
+
+**What.** Separate non-secret, reviewable configuration into a
+version-controlled `config.env` and keep only true secrets in the
+gitignored `secrets.env`, merged into the single shipped
+`/etc/rkr-blog.env` at deploy time.
+
+**Why deferred.** The `deploy.sh` `node_app` module ships exactly one env
+file (`NODE_APP_SECRETS_FILE` → `/etc/<app>.env`); a real split requires a
+change to **shared deploy infrastructure** (`deploy.sh` is consumed by
+wicketmap, gpu-services, and others) or a per-project build hook that
+concatenates both files. Cross-cutting change deserving its own design +
+cross-app testing, not a bolt-on during the comments rollout.
+
+**Trigger.** When next touching `deploy.sh` env handling, or when a
+non-secret config change needs to be reviewable in git history.
+
 ## Planned features
 
 ### Post teaser on the logged-out homepage
