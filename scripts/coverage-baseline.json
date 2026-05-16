@@ -14,8 +14,8 @@
       "linesHit": 25
     },
     "src/admin/dom.ts": {
-      "linesFound": 11,
-      "linesHit": 11
+      "linesFound": 12,
+      "linesHit": 12
     },
     "src/admin/drag-drop.ts": {
       "linesFound": 37,
@@ -30,7 +30,7 @@
       "linesHit": 49
     },
     "src/admin/integrations/gdrive.ts": {
-      "linesFound": 53,
+      "linesFound": 56,
       "linesHit": 1
     },
     "src/admin/main.ts": {
@@ -46,8 +46,8 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 45,
-      "linesHit": 36
+      "linesFound": 50,
+      "linesHit": 41
     },
     "src/admin/toolbar.ts": {
       "linesFound": 13,
@@ -78,8 +78,8 @@
       "linesHit": 30
     },
     "src/admin/startup.ts": {
-      "linesFound": 32,
-      "linesHit": 28
+      "linesFound": 36,
+      "linesHit": 33
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -110,8 +110,8 @@
       "linesHit": 11
     },
     "src/lib/outbox-types.ts": {
-      "linesFound": 8,
-      "linesHit": 8
+      "linesFound": 10,
+      "linesHit": 10
     },
     "src/lib/prose-markdown.ts": {
       "linesFound": 102,
@@ -133,9 +133,13 @@
       "linesFound": 34,
       "linesHit": 31
     },
+    "src/admin/posts-list.ts": {
+      "linesFound": 55,
+      "linesHit": 40
+    },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 36
+      "linesHit": 37
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -176,10 +180,6 @@
     "127.0.0.1-3789/static/admin/outbox-XMT7YGXK.js": {
       "linesFound": 1,
       "linesHit": 1
-    },
-    "src/admin/posts-list.ts": {
-      "linesFound": 46,
-      "linesHit": 41
     },
     "src/admin/matrix-control.ts": {
       "linesFound": 26,
@@ -240,6 +240,14 @@
     "127.0.0.1-3789/static/admin/chunk-RFBBAUMM.js": {
       "linesFound": 1,
       "linesHit": 1
+    },
+    "src/admin/integrations/onedrive.ts": {
+      "linesFound": 121,
+      "linesHit": 1
+    },
+    "src/admin/tag-input.ts": {
+      "linesFound": 8,
+      "linesHit": 6
     }
   }
 }

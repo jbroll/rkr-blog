@@ -55,7 +55,7 @@ export function renderIndexPage(data: IndexPageData): string {
   const activeTags = data.activeTags ?? [];
   // Build query suffix for pager — preserves all active tags + sort together.
   const tagSuffix = activeTags.length
-    ? '&amp;' + activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')
+    ? `&amp;${activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')}`
     : '';
   const sortSuffix = isAsc ? '&amp;sort=asc' : '';
   const pager =
@@ -242,21 +242,22 @@ function renderSortToggle(
   activeTags: string[],
   isAdmin: boolean | undefined
 ): string {
+  const sortIcon = icon('arrowUpDown', 14);
   if (isAdmin) {
     // Button sorts the table client-side without a reload.
     // data-sort-dir reflects the current server-rendered order so the
     // first click always flips to the opposite direction.
     const dir = isAsc ? 'asc' : 'desc';
-    const label = isAsc ? 'newest first' : 'oldest first';
-    return `<button class="rkr-sort-toggle" data-sort-toggle data-sort-dir="${dir}">${icon('arrowUpDown', 14)} ${label}</button>\n`;
+    const title = isAsc ? 'Newest first' : 'Oldest first';
+    return `<button class="rkr-sort-toggle" data-sort-toggle data-sort-dir="${dir}" title="${title}" aria-label="${title}">${sortIcon}</button>\n`;
   }
   const tagQS = activeTags.length
     ? activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')
     : '';
   if (isAsc) {
     const href = tagQS ? `/?${tagQS}` : '/';
-    return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}">newest first</a>\n`;
+    return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}" title="Newest first" aria-label="Newest first">${sortIcon}</a>\n`;
   }
   const prefix = tagQS ? `${tagQS}&amp;` : '';
-  return `<a class="rkr-sort-toggle" href="/?${prefix}sort=asc">oldest first</a>\n`;
+  return `<a class="rkr-sort-toggle" href="/?${prefix}sort=asc" title="Oldest first" aria-label="Oldest first">${sortIcon}</a>\n`;
 }

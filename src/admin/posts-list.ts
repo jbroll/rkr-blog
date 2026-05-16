@@ -18,8 +18,7 @@ import { icon } from '../templates/icons.ts';
 import { ensureSchema } from './opfs-schema.ts';
 import { type PinProgress, pinnedSlugs, pinPost, unpinSlug } from './pin.ts';
 
-const SORT_ASC_LABEL = `${icon('arrowUpDown', 14)} newest first`;
-const SORT_DESC_LABEL = `${icon('arrowUpDown', 14)} oldest first`;
+const SORT_ICON = icon('arrowUpDown', 14);
 
 function sortAdminTable(asc: boolean): void {
   const tbody = document.querySelector<HTMLElement>('.rkr-admin-posts tbody');
@@ -39,7 +38,9 @@ function wireSortToggle(): void {
   btn.addEventListener('click', () => {
     const isAsc = btn.dataset.sortDir !== 'asc';
     btn.dataset.sortDir = isAsc ? 'asc' : 'desc';
-    btn.innerHTML = isAsc ? SORT_ASC_LABEL : SORT_DESC_LABEL;
+    btn.innerHTML = SORT_ICON;
+    btn.title = isAsc ? 'Newest first' : 'Oldest first';
+    btn.setAttribute('aria-label', btn.title);
     sortAdminTable(isAsc);
   });
 }

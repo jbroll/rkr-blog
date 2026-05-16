@@ -142,14 +142,14 @@ test('renderIndexPage: admin date column shows publication date over updatedAt f
         slug: 'wp-post',
         title: 'WP Post',
         status: 'published',
-        date: '2024-03-15T12:00:00Z',       // original WP pub date
-        updatedAt: '2026-05-15T00:03:42Z'   // import timestamp
+        date: '2024-03-15T12:00:00Z', // original WP pub date
+        updatedAt: '2026-05-15T00:03:42Z' // import timestamp
       },
       {
         slug: 'draft-no-date',
         title: 'Draft',
         status: 'draft',
-        updatedAt: '2026-05-15T00:04:00Z'   // last save; no pub date
+        updatedAt: '2026-05-15T00:04:00Z' // last save; no pub date
       }
     ]
   });
@@ -319,13 +319,16 @@ test('renderIndexPage: pager preserves multiple ?tag= params', () => {
     page: 1,
     totalPages: 3,
     posts: [],
-    tagCounts: [{ name: 'travel', count: 30 }, { name: 'food', count: 10 }],
+    tagCounts: [
+      { name: 'travel', count: 30 },
+      { name: 'food', count: 10 }
+    ],
     activeTags: ['travel', 'food']
   });
   assert.match(html, /href="\/\?page=2&amp;tag=travel&amp;tag=food"/);
 });
 
-test('renderIndexPage: sort toggle renders asc/desc links', () => {
+test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)', () => {
   const descHtml = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
@@ -336,6 +339,8 @@ test('renderIndexPage: sort toggle renders asc/desc links', () => {
   // desc view: link to switch to asc
   assert.match(descHtml, /href="\/\?sort=asc"/);
   assert.doesNotMatch(descHtml, /href="\/\?sort=desc"/);
+  // icon only — no text label
+  assert.doesNotMatch(descHtml, /oldest first|newest first/);
 
   const ascHtml = renderIndexPage({
     site: { title: 'rkroll' },
@@ -347,6 +352,7 @@ test('renderIndexPage: sort toggle renders asc/desc links', () => {
   // asc view: link to switch to desc (or back to default)
   assert.match(ascHtml, /href="\/(\?sort=desc)?"/);
   assert.doesNotMatch(ascHtml, /href="\/\?sort=asc"/);
+  assert.doesNotMatch(ascHtml, /oldest first|newest first/);
 });
 
 test('renderIndexPage: sort toggle preserves ?tag= param', () => {
@@ -363,7 +369,7 @@ test('renderIndexPage: sort toggle preserves ?tag= param', () => {
   assert.match(html, /href="\/\?tag=travel"/);
 });
 
-test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, not a link', () => {
+test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, no text label', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
@@ -372,6 +378,7 @@ test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, not 
     posts: []
   });
   assert.match(html, /<button[^>]*data-sort-toggle/);
+  assert.doesNotMatch(html, /oldest first|newest first/);
   assert.doesNotMatch(html, /href="\/\?sort=asc"/);
 });
 
