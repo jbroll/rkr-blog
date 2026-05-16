@@ -79,7 +79,10 @@ export const FigureNode = Node.create({
         alt: '',
         class: 'rkr-image rkr-multi-thumb',
         'data-id': id,
-        'data-cell-index': String(i)
+        'data-cell-index': String(i),
+        tabindex: '0',
+        role: 'button',
+        'aria-label': `Image ${i + 1} of ${idList.length}; press arrow keys to reorder`
       }
     ]);
     // The "+" affordance sits BELOW the thumb grid (not as a grid
@@ -103,6 +106,16 @@ export const FigureNode = Node.create({
         contenteditable: 'false'
       }),
       ['div', { class: 'rkr-multi-thumbs', contenteditable: 'false' }, ...thumbs],
+      [
+        'div',
+        {
+          class: 'rkr-multi-status',
+          'data-reorder-status': 'true',
+          'aria-live': 'polite',
+          contenteditable: 'false'
+        },
+        ''
+      ],
       [
         'div',
         { class: 'rkr-multi-actions', contenteditable: 'false' },
