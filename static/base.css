@@ -120,3 +120,14 @@ main:focus-visible { outline: none; }
     grid-row: auto;
   }
 }
+
+/* Comments + form share the post's measure. The comments block is a
+   sibling of <article> in <main>, so without this it spans the full
+   width instead of aligning to the prose column. Mirrors the
+   `article { max-width: var(--rkr-prose); margin: 0 auto }` rule, using
+   the same per-theme variable so it tracks each theme's measure. */
+.rkr-comments,
+.rkr-comment-form-wrap {
+  max-width: var(--rkr-prose, 38rem);
+  margin-inline: auto;
+}
