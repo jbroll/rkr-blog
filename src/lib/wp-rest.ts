@@ -149,8 +149,8 @@ export async function listComments(
   const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/comments?per_page=${perPage}&page=${page}&_fields=${fields}`;
   const res = await fetcher(url);
   if (!res.ok) throw new Error(`WP listComments: ${res.status} ${url}`);
-  const total = Number(res.headers.get('X-WP-Total') ?? 0);
-  const totalPages = Number(res.headers.get('X-WP-TotalPages') ?? 0);
+  const total = Number(res.headers.get('X-WP-Total') ?? 0) || 0;
+  const totalPages = Number(res.headers.get('X-WP-TotalPages') ?? 0) || 0;
   const comments = (await res.json()) as WpComment[];
   return { comments, total, totalPages };
 }

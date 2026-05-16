@@ -28,6 +28,18 @@ test('listComments returns parsed comments + paging headers', async () => {
   assert.equal(r.comments[0]?.post, 2149);
 });
 
+test('listComments treats a malformed paging header as 0 (no NaN)', async () => {
+  const fetcher: WpFetcher = async () =>
+    new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'X-WP-Total': 'oops', 'X-WP-TotalPages': '' }
+    });
+  const r = await listComments('https://x.example', {}, fetcher);
+  assert.equal(r.total, 0);
+  assert.equal(r.totalPages, 0);
+  assert.equal(Number.isNaN(r.total), false);
+});
+
 test('listComments throws on non-OK', async () => {
   const fetcher: WpFetcher = async () => new Response('nope', { status: 500 });
   await assert.rejects(
