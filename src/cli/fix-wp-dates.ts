@@ -32,31 +32,32 @@ export function fixWpDates(siteRoot: string): FixWpDatesReport {
   let files: string[];
   try {
     files = fs.readdirSync(postsDir).filter((f) => f.endsWith('.md'));
-  } catch {
+  } catch /* c8 ignore next */ {
+    /* c8 ignore next */
     return report;
   }
 
   for (const filename of files) {
     const m = FILENAME_DATE_RE.exec(filename);
-    if (!m) continue; // No date prefix — editor-created post, skip.
-    const fileDate = m[1]!; // YYYY-MM-DD
+    if (!m?.[1]) continue; // No date prefix — editor-created post, skip.
+    const fileDate = m[1]; // YYYY-MM-DD
 
     const fullPath = path.join(postsDir, filename);
     let raw: string;
     try {
       raw = fs.readFileSync(fullPath, 'utf8');
-    } catch (err) {
+    } catch (err) /* c8 ignore start */ {
       report.errors.push(`${filename}: read error: ${(err as Error).message}`);
       continue;
-    }
+    } /* c8 ignore stop */
 
     // Only touch WP-imported posts.
     if (!raw.includes('source_kind: wordpress')) continue;
 
     // Check existing date field.
     const dateMatch = /^date:\s*(.+)$/m.exec(raw);
-    if (!dateMatch) continue;
-    const existingDate = dateMatch[1]!.trim();
+    if (!dateMatch?.[1]) continue;
+    const existingDate = dateMatch[1].trim();
 
     // Already correct if the existing date starts with the filename date.
     if (existingDate.startsWith(fileDate)) {
@@ -65,17 +66,14 @@ export function fixWpDates(siteRoot: string): FixWpDatesReport {
     }
 
     // Replace the date line.
-    const corrected = raw.replace(
-      /^date:\s*.+$/m,
-      `date: ${fileDate}T00:00:00Z`
-    );
+    const corrected = raw.replace(/^date:\s*.+$/m, `date: ${fileDate}T00:00:00Z`);
 
     try {
       fs.writeFileSync(fullPath, corrected, 'utf8');
       report.fixed++;
-    } catch (err) {
+    } catch (err) /* c8 ignore start */ {
       report.errors.push(`${filename}: write error: ${(err as Error).message}`);
-    }
+    } /* c8 ignore stop */
   }
 
   return report;
@@ -88,10 +86,13 @@ export default async function fixWpDatesCmd(argv: string[]): Promise<void> {
   console.log(`Scanning ${path.join(siteRoot, 'content', 'posts')}…`);
 
   const report = fixWpDates(siteRoot);
+  /* c8 ignore next 3 -- only reachable via the c8-ignored read/write error handlers */
   if (report.errors.length > 0) {
     for (const e of report.errors) console.error(`  error: ${e}`);
   }
-  console.log(`Done. Fixed: ${report.fixed}  Already correct: ${report.skipped}  Errors: ${report.errors.length}`);
+  console.log(
+    `Done. Fixed: ${report.fixed}  Already correct: ${report.skipped}  Errors: ${report.errors.length}`
+  );
   if (report.fixed > 0) {
     console.log('Run `site-admin reindex` to update the SQLite index.');
   }

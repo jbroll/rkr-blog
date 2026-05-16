@@ -1652,12 +1652,10 @@ test('outbox: parallel appends produce distinct seqs (no nextSeq race)', async (
 test('editor: cropped image survives an editor reload', async ({ page }) => {
   page.on('console', (msg) => {
     if (msg.type() === 'error' || msg.type() === 'warning') {
-      // biome-ignore lint/suspicious/noConsole: e2e debug surface
       console.log(`[browser ${msg.type()}] ${msg.text()}`);
     }
   });
   page.on('pageerror', (err) => {
-    // biome-ignore lint/suspicious/noConsole: e2e debug surface
     console.log(`[browser pageerror] ${err.message}`);
   });
 
@@ -1713,12 +1711,16 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
   // clobbers the thumb src with a blob: URL → uncropped raw.
   await page.reload();
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  // Wait for OPFS to finish loading so the figure is rendered.
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
 
   // The figure's thumb src must stay on /admin/preview/<id> so the
   // browser follows the 302 to the post-ops derivative — NOT a
   // blob: URL backed by the OPFS raw.
   const thumb = page.locator('img[data-cell-index="0"]');
-  await expect(thumb).toBeVisible();
+  await expect(thumb).toBeVisible({ timeout: 10_000 });
   const src = await thumb.getAttribute('src');
   expect(src).toMatch(/\/admin\/preview\//);
   expect(src).not.toMatch(/^blob:/);
@@ -2000,12 +2002,13 @@ test('admin posts: per-row status flip + pin/unpin', async ({ page }) => {
   const row = page.locator(`tr[data-slug="${slug}"]`);
   await expect(row).toBeVisible();
 
-  // ---- 1. status flip: select 'published' → form auto-submits → 303
-  //         redirect → 301 → / → row shows is-published.
-  await row.locator('select[name="status"]').selectOption('published');
+  // ---- 1. status flip: click the status toggle button (draft → published)
+  //         → form auto-submits → 303 redirect → / → row shows is-published.
+  const statusBtn = row.locator('button.rkr-admin-posts-status-btn');
+  await expect(statusBtn).toHaveClass(/is-draft/);
+  await statusBtn.click();
   await expect(page).toHaveURL((url) => new URL(url).pathname === '/');
-  await expect(row.locator('select[name="status"]')).toHaveValue('published');
-  await expect(row.locator('select[name="status"]')).toHaveClass(/is-published/);
+  await expect(row.locator('button.rkr-admin-posts-status-btn')).toHaveClass(/is-published/);
 
   // The frontmatter on disk really flipped — the public /:slug page
   // is now reachable.

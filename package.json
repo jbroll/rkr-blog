@@ -48,6 +48,7 @@
     "photoswipe": "^5.4.4",
     "rehype-parse": "^9.0.1",
     "remark": "^15.0.0",
+    "mdast-util-directive": "^3.0.0",
     "remark-directive": "^3.0.0",
     "remark-frontmatter": "^5.0.0",
     "sharp": "^0.33.0",
@@ -65,6 +66,7 @@
       "src/cli/import-wp.ts",
       "src/cli/reset.ts",
       "src/cli/jobs.ts",
+      "src/cli/fix-wp-dates.ts",
       "src/admin/posts-list.ts",
       "src/admin/settings-page.ts",
       "src/site/carousel.ts",
@@ -79,11 +81,14 @@
       "scripts/check-orientation.mjs",
       "test/**/*.test.ts",
       "test/e2e/**/*.spec.ts",
-      "test/playwright.config.ts"
+      "test/playwright.config.ts",
+      "bin/site-admin"
     ],
     "ignore": [
       "src/admin/css.d.ts",
-      "src/site/css.d.ts"
+      "src/site/css.d.ts",
+      ".claude/**",
+      ".claire/**"
     ],
     "ignoreDependencies": [
       "typescript-language-server"

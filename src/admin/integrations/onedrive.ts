@@ -317,7 +317,8 @@ function openOneDriveBrowser(): Promise<string[]> {
       crumbs.splice(idx + 1);
       savedCrumbs = [...crumbs];
       renderBreadcrumb();
-      void loadFolder(crumbs[crumbs.length - 1].id);
+      const cur = crumbs[crumbs.length - 1];
+      if (cur) void loadFolder(cur.id);
     });
 
     cancelBtn.addEventListener('click', () => closeDialog([]));
@@ -329,6 +330,7 @@ function openOneDriveBrowser(): Promise<string[]> {
 
     renderBreadcrumb();
     openModal(dialog);
-    void loadFolder(crumbs[crumbs.length - 1].id);
+    const cur = crumbs[crumbs.length - 1];
+    if (cur) void loadFolder(cur.id);
   });
 }

@@ -14,7 +14,9 @@
       "test/**/*.ts",
       "scripts/**/*.ts",
       "bin/server.js",
-      "bin/site-admin"
+      "bin/site-admin",
+      "!!**/.claude",
+      "!!**/.claire"
     ]
   },
   "formatter": {

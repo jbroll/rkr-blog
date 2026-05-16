@@ -33,10 +33,6 @@
       "linesFound": 53,
       "linesHit": 1
     },
-    "src/admin/integrations/onedrive.ts": {
-      "linesFound": 26,
-      "linesHit": 0
-    },
     "src/admin/main.ts": {
       "linesFound": 108,
       "linesHit": 95
@@ -240,6 +236,10 @@
     "src/admin/toast.ts": {
       "linesFound": 26,
       "linesHit": 26
+    },
+    "127.0.0.1-3789/static/admin/chunk-RFBBAUMM.js": {
+      "linesFound": 1,
+      "linesHit": 1
     }
   }
 }

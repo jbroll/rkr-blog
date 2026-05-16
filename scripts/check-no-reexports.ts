@@ -32,8 +32,12 @@ const ROOTS = ['src', 'test', 'bin', 'scripts'];
 const EXTS = ['.ts'];
 
 // Patterns intentionally allowed in specific files. Each entry must
-// carry a justification. Empty for now.
-const ALLOWLIST: ReadonlySet<string> = new Set();
+// carry a justification.
+const ALLOWLIST: ReadonlySet<string> = new Set([
+  // Re-exports `expect` from @playwright/test so e2e specs can import
+  // from a single fixture file rather than mixing fixture + library imports.
+  'test/e2e/coverage-fixtures.ts'
+]);
 
 function* walk(dir: string): Generator<string> {
   let entries: fs.Dirent[];

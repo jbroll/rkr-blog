@@ -7,10 +7,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
-import { fixWpDates } from '../../src/cli/fix-wp-dates.ts';
+import fixWpDatesCmd, { fixWpDates } from '../../src/cli/fix-wp-dates.ts';
+import { runReindex } from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
-import { runReindex } from '../../src/cli/reindex.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-fix-wp-'));
@@ -58,7 +58,10 @@ test('fixWpDates: restores corrupted date from filename prefix', (t) => {
   assert.equal(report.fixed, 1);
   assert.equal(report.skipped, 0);
 
-  const raw = fs.readFileSync(path.join(root, 'content', 'posts', '2024-03-15-test-post.md'), 'utf8');
+  const raw = fs.readFileSync(
+    path.join(root, 'content', 'posts', '2024-03-15-test-post.md'),
+    'utf8'
+  );
   assert.match(raw, /^date: 2024-03-15/m);
   assert.doesNotMatch(raw, /2026-05-14/);
 });
@@ -81,7 +84,10 @@ test('fixWpDates: ignores non-WP posts (no source_kind: wordpress)', (t) => {
   assert.equal(report.skipped, 0);
 
   // File unchanged.
-  const raw = fs.readFileSync(path.join(root, 'content', 'posts', '2024-03-15-editor-post.md'), 'utf8');
+  const raw = fs.readFileSync(
+    path.join(root, 'content', 'posts', '2024-03-15-editor-post.md'),
+    'utf8'
+  );
   assert.match(raw, /2026-05-14/);
 });
 
@@ -104,6 +110,45 @@ Body.
   assert.equal(report.fixed, 0);
 });
 
+test('fixWpDates: returns empty report when posts dir does not exist', (t) => {
+  const root = freshSiteRoot(t);
+  // Pass a siteRoot whose content/posts dir doesn't exist.
+  const report = fixWpDates(path.join(root, 'nonexistent'));
+  assert.deepEqual(report, { fixed: 0, skipped: 0, errors: [] });
+});
+
+test('fixWpDatesCmd: prints summary and exits cleanly', async (t) => {
+  const root = freshSiteRoot(t);
+  writeWpPost(root, '2024-03-15-test-post.md', '2026-05-14T00:00:00.000Z');
+
+  const lines: string[] = [];
+  const origLog = console.log;
+  console.log = (...args: unknown[]) => lines.push(args.join(' '));
+  t.after(() => {
+    console.log = origLog;
+  });
+
+  await fixWpDatesCmd([root]);
+  assert.ok(lines.some((l) => l.includes('Fixed: 1')));
+  assert.ok(lines.some((l) => l.includes('reindex')));
+});
+
+test('fixWpDatesCmd: no reindex hint when nothing fixed', async (t) => {
+  const root = freshSiteRoot(t);
+  writeWpPost(root, '2024-03-15-test-post.md', '2024-03-15T12:00:00Z');
+
+  const lines: string[] = [];
+  const origLog = console.log;
+  console.log = (...args: unknown[]) => lines.push(args.join(' '));
+  t.after(() => {
+    console.log = origLog;
+  });
+
+  await fixWpDatesCmd([root]);
+  assert.ok(lines.some((l) => l.includes('Fixed: 0')));
+  assert.ok(!lines.some((l) => l.includes('reindex')));
+});
+
 test('fixWpDates: reindex after fix reflects corrected published_at', (t) => {
   const root = freshSiteRoot(t);
   writeWpPost(root, '2024-03-15-test-post.md', '2026-05-14T00:00:00.000Z');
@@ -115,7 +160,12 @@ test('fixWpDates: reindex after fix reflects corrected published_at', (t) => {
   t.after(() => db.close());
   runReindex(root);
 
-  const row = db.prepare<{ published_at: string }>('SELECT published_at FROM posts WHERE slug = ?').get('test-post');
+  const row = db
+    .prepare<{ published_at: string }>('SELECT published_at FROM posts WHERE slug = ?')
+    .get('test-post');
   assert.ok(row, 'post row should exist');
-  assert.ok(row!.published_at.startsWith('2024-03-15'), `expected 2024-03-15, got ${row!.published_at}`);
+  assert.ok(
+    row!.published_at.startsWith('2024-03-15'),
+    `expected 2024-03-15, got ${row!.published_at}`
+  );
 });

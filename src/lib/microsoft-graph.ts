@@ -28,7 +28,7 @@ export interface OneDriveFileFetch {
   contentLength: number | null;
 }
 
-export interface OneDriveBrowseItem {
+interface OneDriveBrowseItem {
   id: string;
   name: string;
   type: 'file' | 'folder';

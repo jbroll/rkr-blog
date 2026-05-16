@@ -42,6 +42,7 @@ function resolveUncached(): string {
   const fromGitDir = readFromGitDir();
   if (fromGitDir) return fromGitDir;
 
+  /* c8 ignore next -- only reachable outside a git checkout */
   return 'unknown';
 }
 
@@ -66,9 +67,11 @@ function readHashNearModule(): string | null {
     const hash = readHashFile(candidate);
     if (hash) return hash;
     const parent = path.dirname(dir);
+    /* c8 ignore next -- only reachable at filesystem root */
     if (parent === dir) return null;
     dir = parent;
   }
+  /* c8 ignore next -- only reachable outside a git checkout */
   return null;
 }
 
@@ -86,9 +89,11 @@ function readFromGitDir(): string | null {
       return resolveGitHashIn(candidate);
     }
     const parent = path.dirname(dir);
+    /* c8 ignore next -- only reachable at filesystem root */
     if (parent === dir) return null;
     dir = parent;
   }
+  /* c8 ignore next -- only reachable outside a git checkout */
   return null;
 }
 
@@ -102,7 +107,7 @@ function resolveGitHashIn(gitDir: string): string | null {
     const refPath = path.join(gitDir, refMatch[1]);
     const sha = fs.readFileSync(refPath, 'utf8').trim();
     return SHA_RE.test(sha) ? sha : null;
-  } catch {
+  } catch /* c8 ignore start */ {
     return null;
-  }
+  } /* c8 ignore stop */
 }
