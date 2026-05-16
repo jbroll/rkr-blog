@@ -204,7 +204,7 @@ export function readIndexedPosts(
         `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
            FROM posts p
           WHERE 1=1 ${tagFilter}
-          ORDER BY p.updated_at ${dir}, p.slug ASC
+          ORDER BY COALESCE(p.published_at, p.created_at) ${dir}, p.slug ASC
           LIMIT ? OFFSET ?`
       )
       .all(...tagParams, limit, offset);
