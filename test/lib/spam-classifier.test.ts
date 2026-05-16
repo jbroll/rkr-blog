@@ -76,6 +76,22 @@ test('retries on failure up to maxAttempts then throws', async () => {
   assert.equal(calls, 3);
 });
 
+test('surfaces error.cause so transient fetch failures are diagnosable', async () => {
+  const fetcher: SpamFetcher = async () => {
+    throw Object.assign(new TypeError('fetch failed'), {
+      cause: new Error('getaddrinfo ENOTFOUND symon.rkroll.com')
+    });
+  };
+  await assert.rejects(
+    () =>
+      classifyComment(
+        { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
+        { ...cfg, fetcher, maxAttempts: 1 }
+      ),
+    /spam classify failed after 1 attempts: fetch failed \(getaddrinfo ENOTFOUND symon\.rkroll\.com\)/
+  );
+});
+
 test('unparseable model output throws', async () => {
   const fetcher: SpamFetcher = async () =>
     new Response(JSON.stringify({ response: 'not json at all' }), { status: 200 });

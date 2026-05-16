@@ -104,9 +104,17 @@ export async function classifyComment(input: SpamInput, cfg: ClassifyConfig): Pr
       lastErr = err;
     }
   }
+  // undici's `fetch failed` is opaque — the real reason (DNS, ECONNREFUSED,
+  // TLS, timeout) lives in error.cause. Surface it so transient failures
+  // are diagnosable from the stored spam_reason instead of just "fetch failed".
+  const e = lastErr as (Error & { cause?: unknown }) | undefined;
+  const causeMsg =
+    e && typeof e === 'object' && 'cause' in e && e.cause != null
+      ? ` (${(e.cause as Error)?.message ?? String(e.cause)})`
+      : '';
   throw new Error(
     `spam classify failed after ${cfg.maxAttempts} attempts: ${
-      (lastErr as Error)?.message ?? String(lastErr)
-    }`
+      e?.message ?? String(lastErr)
+    }${causeMsg}`
   );
 }
