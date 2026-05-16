@@ -705,3 +705,37 @@ cases, and test plan are in the linked doc.
 **Trigger.** When picking up the next homepage/UX work item, or on
 explicit go-ahead to implement.
 
+## User-requested follow-ups (2026-05-16)
+
+### Drag-and-drop image reordering in the figure editor
+
+**Source.** User request, 2026-05-16.
+
+**What.** In the figure editor, multi-image figures (gallery /
+carousel / diptych / triptych) have no way to reorder their images by
+dragging. Order is whatever the ids were inserted in; changing it
+means editing the `ids=` list by hand.
+
+**Why deferred.** Needs a drag-reorder interaction in the editor
+(pointer/keyboard a11y, drop-target affordances) plus write-back to
+the directive's `ids` order — non-trivial UI work, not yet scheduled.
+
+**Trigger.** When picking up figure-editor UX work, or the first time
+an author asks how to reorder gallery images.
+
+### Comment bubble floated right in the post title
+
+**Source.** User request, 2026-05-16.
+
+**What.** The "add a comment" affordance should be a bubble floated
+to the right within the post title row, matching the treatment on
+roll-along.rkroll.com (reference implementation), rather than its
+current placement.
+
+**Why deferred.** Cosmetic/layout change on the comments UI; bundle
+it with the next comments-UI or post-template pass rather than a
+one-off. Mirror the roll-along.rkroll.com markup/CSS.
+
+**Trigger.** Next comments-UI or post-title layout work, or explicit
+go-ahead.
+
