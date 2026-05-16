@@ -83,7 +83,8 @@
       "test/e2e/**/*.spec.ts",
       "test/playwright.config.ts",
       "bin/site-admin",
-      "src/lib/comments.ts"
+      "src/lib/comments.ts",
+      "src/lib/spam-classifier.ts"
     ],
     "ignore": [
       "src/admin/css.d.ts",
