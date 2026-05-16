@@ -97,17 +97,44 @@ function readFromGitDir(): string | null {
   return null;
 }
 
-function resolveGitHashIn(gitDir: string): string | null {
+/** Resolve a SHA from a `.git` location. `gitPath` is a directory in a
+ * normal checkout, or a gitlink file (`gitdir: <path>`) in a linked
+ * worktree / submodule. In a linked worktree HEAD lives in the
+ * per-worktree gitdir but branch refs live in the shared common dir
+ * (located via the `commondir` file), so a `ref:` HEAD is resolved
+ * against the worktree dir first, then the common dir. Packed refs are
+ * not consulted (parity with the original loose-ref-only behaviour).
+ * Exported for tests; production reaches it via readFromGitDir(). */
+export function resolveGitHashIn(gitPath: string): string | null {
   try {
+    let gitDir = gitPath;
+    if (fs.statSync(gitPath).isFile()) {
+      const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(gitPath, 'utf8'));
+      if (!m?.[1]) return null;
+      gitDir = path.resolve(path.dirname(gitPath), m[1].trim());
+    }
     const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
-    // HEAD is either `ref: refs/heads/<branch>` or a raw SHA (detached HEAD).
+    // HEAD is either `ref: refs/heads/<branch>` or a raw SHA (detached).
     if (SHA_RE.test(head)) return head;
     const refMatch = /^ref:\s+(.+)$/.exec(head);
     if (!refMatch?.[1]) return null;
-    const refPath = path.join(gitDir, refMatch[1]);
+    const ref = refMatch[1];
+    const fromWorktree = readRefFile(path.join(gitDir, ref));
+    if (fromWorktree) return fromWorktree;
+    const commonDirFile = path.join(gitDir, 'commondir');
+    if (!fs.existsSync(commonDirFile)) return null;
+    const commonDir = path.resolve(gitDir, fs.readFileSync(commonDirFile, 'utf8').trim());
+    return readRefFile(path.join(commonDir, ref));
+  } catch {
+    return null;
+  }
+}
+
+function readRefFile(refPath: string): string | null {
+  try {
     const sha = fs.readFileSync(refPath, 'utf8').trim();
     return SHA_RE.test(sha) ? sha : null;
-  } catch /* c8 ignore start */ {
+  } catch {
     return null;
-  } /* c8 ignore stop */
+  }
 }
