@@ -19,7 +19,7 @@ export interface PublicCommentRoutesOpts {
 // almost certainly bots. Not a hard reject (a fast human on a cached
 // form is possible) — route them to moderation instead.
 const MIN_FILL_MS = 3000;
-const MAX = { name: 80, email: 200, url: 200, body: 5000 };
+const MAX = { name: 80, email: 200, body: 5000 };
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -54,18 +54,12 @@ export function registerPublicCommentRoutes(
 
       const name = str(body.name);
       const email = str(body.email);
-      const url = str(body.url);
       const text = str(body.body);
 
       if (!name || !email || !text) {
         return reply.code(400).send({ error: 'name, email and body are required' });
       }
-      if (
-        name.length > MAX.name ||
-        email.length > MAX.email ||
-        url.length > MAX.url ||
-        text.length > MAX.body
-      ) {
+      if (name.length > MAX.name || email.length > MAX.email || text.length > MAX.body) {
         return reply.code(400).send({ error: 'a field exceeds its maximum length' });
       }
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -91,7 +85,6 @@ export function registerPublicCommentRoutes(
           parentId,
           authorName: name,
           authorEmail: email,
-          authorUrl: url || null,
           body: text,
           ip: req.ip ?? null
         });

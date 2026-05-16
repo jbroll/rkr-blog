@@ -67,7 +67,6 @@ test('published comments render on the post page; pending do not', async (t) => 
     parentId: null,
     authorName: 'Ann',
     authorEmail: 'a@e.com',
-    authorUrl: null,
     body: 'visible comment',
     ip: null
   });
@@ -77,7 +76,6 @@ test('published comments render on the post page; pending do not', async (t) => 
     parentId: null,
     authorName: 'Hidden',
     authorEmail: 'h@e.com',
-    authorUrl: null,
     body: 'pending comment',
     ip: null
   });

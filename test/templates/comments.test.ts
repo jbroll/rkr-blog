@@ -9,14 +9,12 @@ test('renderCommentList escapes author and body and nests one reply level', () =
     {
       id: 1,
       author_name: '<script>x</script>',
-      author_url: null,
       body: 'hello & <b>world</b>',
       created_at: '2026-05-01T00:00:00.000Z',
       replies: [
         {
           id: 2,
           author_name: 'Bob',
-          author_url: 'http://bob.example',
           body: 'reply',
           created_at: '2026-05-02T00:00:00.000Z',
           replies: []
@@ -28,7 +26,6 @@ test('renderCommentList escapes author and body and nests one reply level', () =
   assert.ok(!html.includes('<script>x</script>'));
   assert.ok(html.includes('&lt;script&gt;'));
   assert.ok(html.includes('hello &amp; &lt;b&gt;world&lt;/b&gt;'));
-  assert.match(html, /rel="nofollow ugc noopener"/);
   assert.match(html, /class="rkr-comment-replies"/);
 });
 
@@ -36,48 +33,34 @@ test('renderCommentList shows an empty-state when there are no comments', () => 
   assert.match(renderCommentList([]), /No comments yet/);
 });
 
-test('renderCommentForm includes honeypot + timestamp + reply target', () => {
-  const html = renderCommentForm('my-post', { replyTo: 42 });
-  assert.match(html, /action="\/my-post\/comments"/);
-  assert.match(html, /name="website"/);
-  assert.match(html, /name="t"/);
-  assert.match(html, /name="parent_id" value="42"/);
-  assert.match(html, /name="name"/);
-  assert.match(html, /name="email"/);
-  assert.match(html, /name="body"/);
-});
-
-test('renderCommentList renders author without link when author_url is null', () => {
+test('renderCommentList never renders the author name as a link', () => {
   const thread: ThreadComment[] = [
     {
       id: 3,
-      author_name: 'NoLink',
-      author_url: null,
+      author_name: 'Jane',
       body: 'text',
       created_at: '2026-05-03T00:00:00.000Z',
       replies: []
     }
   ];
   const html = renderCommentList(thread);
-  assert.ok(html.includes('NoLink'));
+  assert.ok(html.includes('Jane'));
   assert.ok(!html.includes('<a href'));
 });
 
-test('renderCommentList renders author as plain text when url is not http/https', () => {
-  const thread: ThreadComment[] = [
-    {
-      id: 4,
-      author_name: 'BadUrl',
-      author_url: 'javascript:alert(1)',
-      body: 'text',
-      created_at: '2026-05-04T00:00:00.000Z',
-      replies: []
-    }
-  ];
-  const html = renderCommentList(thread);
-  assert.ok(html.includes('BadUrl'));
-  assert.ok(!html.includes('javascript:'));
-  assert.ok(!html.includes('<a href'));
+test('renderCommentForm has only name/email/comment + hidden honeypot, no website field', () => {
+  const html = renderCommentForm('my-post', { replyTo: 42 });
+  assert.match(html, /action="\/my-post\/comments"/);
+  assert.match(html, /name="t"/);
+  assert.match(html, /name="parent_id" value="42"/);
+  assert.match(html, /name="name"/);
+  assert.match(html, /name="email"/);
+  assert.match(html, /name="body"/);
+  // honeypot retained (hidden via static/base.css .rkr-hp)
+  assert.match(html, /class="rkr-hp"/);
+  assert.match(html, /name="website"/);
+  // the real "Website" input is gone
+  assert.ok(!html.includes('name="url"'));
 });
 
 test('renderCommentForm without replyTo omits parent_id', () => {
@@ -90,20 +73,4 @@ test('renderCommentForm with notice renders notice paragraph', () => {
   const html = renderCommentForm('slug', { notice: 'Thank you & welcome!' });
   assert.match(html, /class="rkr-comment-notice"/);
   assert.ok(html.includes('Thank you &amp; welcome!'));
-});
-
-test('renderCommentList escapes quotes in author_url that would break out of href', () => {
-  const thread: ThreadComment[] = [
-    {
-      id: 5,
-      author_name: 'Eve',
-      author_url: 'http://x" onmouseover="evil',
-      body: 'hi',
-      created_at: '2026-01-01T00:00:00.000Z',
-      replies: []
-    }
-  ];
-  const html = renderCommentList(thread);
-  assert.ok(!html.includes('" onmouseover='), 'raw quote-break must not survive');
-  assert.ok(html.includes('&quot;'), 'quote must be entity-encoded');
 });

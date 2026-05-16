@@ -94,7 +94,6 @@ export async function importWpComments(
           parentId,
           wpCommentId: c.id,
           authorName: c.author_name || 'Anonymous',
-          authorUrl: c.author_url ? c.author_url : null,
           body: htmlToText(c.content.rendered),
           createdAt: c.date
         });

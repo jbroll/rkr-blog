@@ -11,9 +11,10 @@ test('migrate() applies all migrations once; second run is a no-op', () => {
   const db = open(':memory:');
   try {
     const first = migrate(db);
-    // 001 (initial) + 002 (auth refactor) + 003 (tags) + 004 (comments); update assertion as new
+    // 001 (initial) + 002 (auth refactor) + 003 (tags) + 004 (comments)
+    // + 005 (drop comments.author_url); update assertion as new
     // migrations land.
-    assert.deepEqual(first, [1, 2, 3, 4], 'first run applies all known versions');
+    assert.deepEqual(first, [1, 2, 3, 4, 5], 'first run applies all known versions');
 
     // Final-state tables (post-002): users + sessions + oauth_accounts +
     // allowed_emails + oauth_tokens + posts + jobs + schema_migrations.
@@ -55,7 +56,13 @@ test('migrate() runs against a real sqlite file', (t) => {
   try {
     migrate(db);
     const r = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    assert.deepEqual(r, [{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+    assert.deepEqual(r, [
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+      { version: 5 }
+    ]);
   } finally {
     db.close();
   }

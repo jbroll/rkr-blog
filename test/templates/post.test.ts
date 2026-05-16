@@ -8,7 +8,6 @@ function reply(id: number): ThreadComment {
   return {
     id,
     author_name: 'R',
-    author_url: null,
     body: 'r',
     created_at: '2026-01-01T00:00:00.000Z',
     replies: []
@@ -18,7 +17,6 @@ function top(id: number, replies = 0): ThreadComment {
   return {
     id,
     author_name: 'A',
-    author_url: null,
     body: 'b',
     created_at: '2026-01-01T00:00:00.000Z',
     replies: Array.from({ length: replies }, (_, i) => reply(id * 100 + i))

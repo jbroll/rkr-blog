@@ -26,7 +26,6 @@ async function setup(t: TestContext) {
     parentId: null,
     authorName: 'Sue',
     authorEmail: 's@e.com',
-    authorUrl: null,
     body: 'queued one',
     ip: null
   });
@@ -119,7 +118,6 @@ test('GET /admin/comments shows published row with Delete action and spam info',
     parentId: null,
     authorName: 'Bob',
     authorEmail: 'b@e.com',
-    authorUrl: null,
     body: 'published one',
     ip: null
   });

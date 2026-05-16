@@ -15,7 +15,6 @@ export interface CommentRow {
   wp_comment_id: number | null;
   author_name: string;
   author_email: string;
-  author_url: string | null;
   body: string;
   status: CommentStatus;
   source: CommentSource;
@@ -31,7 +30,6 @@ export interface NewWebComment {
   parentId: number | null;
   authorName: string;
   authorEmail: string;
-  authorUrl: string | null;
   body: string;
   ip: string | null;
 }
@@ -61,11 +59,11 @@ export function insertWebComment(db: Db, c: NewWebComment): number {
   const r = db
     .prepare(
       `INSERT INTO comments
-         (post_id, parent_id, author_name, author_email, author_url, body,
+         (post_id, parent_id, author_name, author_email, body,
           status, source, ip, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', 'web', ?, ?)`
+       VALUES (?, ?, ?, ?, ?, 'pending', 'web', ?, ?)`
     )
-    .run(c.postId, c.parentId, c.authorName, c.authorEmail, c.authorUrl, c.body, c.ip, now);
+    .run(c.postId, c.parentId, c.authorName, c.authorEmail, c.body, c.ip, now);
   return r.lastInsertRowid;
 }
 
@@ -74,7 +72,6 @@ export interface ImportedComment {
   parentId: number | null;
   wpCommentId: number;
   authorName: string;
-  authorUrl: string | null;
   body: string;
   createdAt: string;
 }
@@ -90,11 +87,11 @@ export function insertImportedComment(db: Db, c: ImportedComment): number | null
     .prepare(
       `INSERT INTO comments
          (post_id, parent_id, wp_comment_id, author_name, author_email,
-          author_url, body, status, source, created_at)
-       VALUES (?, ?, ?, ?, /* sentinel: WP public API exposes no commenter email; never displayed */ 'imported@roll-along', ?, ?, 'published',
+          body, status, source, created_at)
+       VALUES (?, ?, ?, ?, /* sentinel: WP public API exposes no commenter email; never displayed */ 'imported@roll-along', ?, 'published',
                'wp-import', ?)`
     )
-    .run(c.postId, c.parentId, c.wpCommentId, c.authorName, c.authorUrl, c.body, c.createdAt);
+    .run(c.postId, c.parentId, c.wpCommentId, c.authorName, c.body, c.createdAt);
   return r.lastInsertRowid;
 }
 
@@ -123,7 +120,6 @@ export function applyClassification(
 export interface ThreadComment {
   id: number;
   author_name: string;
-  author_url: string | null;
   body: string;
   created_at: string;
   replies: ThreadComment[];
@@ -144,11 +140,10 @@ export function listPublishedThread(db: Db, postId: number): ThreadComment[] {
       id: number;
       parent_id: number | null;
       author_name: string;
-      author_url: string | null;
       body: string;
       created_at: string;
     }>(
-      `SELECT id, parent_id, author_name, author_url, body, created_at
+      `SELECT id, parent_id, author_name, body, created_at
          FROM comments
         WHERE post_id = ? AND status = 'published'
         ORDER BY created_at ASC, id ASC`
@@ -162,7 +157,6 @@ export function listPublishedThread(db: Db, postId: number): ThreadComment[] {
       const node: ThreadComment = {
         id: r.id,
         author_name: r.author_name,
-        author_url: r.author_url,
         body: r.body,
         created_at: r.created_at,
         replies: []
@@ -178,7 +172,6 @@ export function listPublishedThread(db: Db, postId: number): ThreadComment[] {
         parent.replies.push({
           id: r.id,
           author_name: r.author_name,
-          author_url: r.author_url,
           body: r.body,
           created_at: r.created_at,
           replies: []

@@ -20,7 +20,6 @@ function setup(t: TestContext) {
     parentId: null,
     authorName: 'A',
     authorEmail: 'a@e.com',
-    authorUrl: null,
     body: 'hello',
     ip: null
   });

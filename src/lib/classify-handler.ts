@@ -16,7 +16,6 @@ export interface ClassifyPayload {
 export type Classifier = (input: {
   authorName: string;
   authorEmail: string;
-  authorUrl: string | null;
   body: string;
 }) => Promise<SpamVerdict>;
 
@@ -47,7 +46,6 @@ export function makeClassifyHandler(
       const v = await classifier({
         authorName: comment.author_name,
         authorEmail: comment.author_email,
-        authorUrl: comment.author_url,
         body: comment.body
       });
       applyClassification(db, payload.commentId, {

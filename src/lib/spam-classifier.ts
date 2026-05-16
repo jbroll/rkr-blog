@@ -8,7 +8,6 @@
 export interface SpamInput {
   authorName: string;
   authorEmail: string;
-  authorUrl: string | null;
   body: string;
 }
 
@@ -46,7 +45,6 @@ function buildPrompt(c: SpamInput): string {
     '',
     `Author name: ${c.authorName}`,
     `Author email: ${c.authorEmail}`,
-    `Author website: ${c.authorUrl ?? '(none)'}`,
     'Comment body:',
     c.body
   ].join('\n');

@@ -38,7 +38,6 @@ function wpFetcher(): WpFetcher {
           post: 2149,
           parent: 0,
           author_name: 'Ann',
-          author_url: '',
           date: '2026-05-01T10:00:00',
           content: { rendered: '<p>great&nbsp;post</p>' }
         },
@@ -47,7 +46,6 @@ function wpFetcher(): WpFetcher {
           post: 2149,
           parent: 10,
           author_name: 'Bo',
-          author_url: 'http://bo',
           date: '2026-05-02T10:00:00',
           content: { rendered: '<p>reply</p>' }
         },
@@ -56,7 +54,6 @@ function wpFetcher(): WpFetcher {
           post: 9999,
           parent: 0,
           author_name: 'Orphan',
-          author_url: '',
           date: '2026-05-03T10:00:00',
           content: { rendered: '<p>no post</p>' }
         },
@@ -65,7 +62,6 @@ function wpFetcher(): WpFetcher {
           post: 2149,
           parent: 11,
           author_name: 'Deep',
-          author_url: '',
           date: '2026-05-04T10:00:00',
           content: { rendered: '<p>reply to a reply</p>' }
         }
@@ -120,7 +116,7 @@ test('imports approved comments, maps parent, skips unknown post, is idempotent'
   db2.close();
 });
 
-test('author_name empty → Anonymous; author_url empty → null', async (t) => {
+test('empty WP author_name falls back to Anonymous', async (t) => {
   const { root } = setup(t);
   const fetcher: WpFetcher = async (url) => {
     if (url.includes('/wp/v2/posts')) {
@@ -136,7 +132,6 @@ test('author_name empty → Anonymous; author_url empty → null', async (t) => 
           post: 1,
           parent: 0,
           author_name: '',
-          author_url: '',
           date: '2026-05-01T10:00:00',
           content: { rendered: '<p>hi</p>' }
         }
@@ -147,12 +142,9 @@ test('author_name empty → Anonymous; author_url empty → null', async (t) => 
   await importWpComments('https://roll-along.example', root, fetcher);
   const db = open(path.join(root, 'data', 'site.db'));
   const row = db
-    .prepare<{ author_name: string; author_url: string | null }>(
-      'SELECT author_name, author_url FROM comments WHERE wp_comment_id=20'
-    )
+    .prepare<{ author_name: string }>('SELECT author_name FROM comments WHERE wp_comment_id=20')
     .get();
   assert.equal(row?.author_name, 'Anonymous');
-  assert.equal(row?.author_url, null);
   db.close();
 });
 
@@ -172,7 +164,6 @@ test('htmlToText handles &amp; &#39; <br> entities', async (t) => {
           post: 1,
           parent: 0,
           author_name: 'X',
-          author_url: '',
           date: '2026-05-01T10:00:00',
           content: { rendered: '<p>a &amp; b<br>it&#39;s &lt;great&gt;</p>' }
         }
@@ -219,7 +210,6 @@ test('multi-page paging: fetches all pages of posts and comments', async (t) => 
             post: 1,
             parent: 0,
             author_name: 'X',
-            author_url: '',
             date: '2026-05-01T10:00:00',
             content: { rendered: '<p>page1</p>' }
           }
@@ -234,7 +224,6 @@ test('multi-page paging: fetches all pages of posts and comments', async (t) => 
           post: 1,
           parent: 0,
           author_name: 'Y',
-          author_url: '',
           date: '2026-05-02T10:00:00',
           content: { rendered: '<p>page2</p>' }
         }

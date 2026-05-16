@@ -13,7 +13,6 @@ test('listComments returns parsed comments + paging headers', async () => {
           post: 2149,
           parent: 0,
           author_name: 'Linda',
-          author_url: '',
           date: '2026-05-04T17:00:45',
           content: { rendered: '<p>hi</p>' }
         }

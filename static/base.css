@@ -61,3 +61,17 @@ body {
 /* main is focusable for skip-link target — hide its outline (the focus
    ring on the post body would be more confusing than helpful). */
 main:focus-visible { outline: none; }
+
+/* Comment-form honeypot. Kept in the DOM + submittable so bots fill it,
+   but never visible/focusable for humans or screen readers. Lives in
+   base.css (always loaded, theme-independent) — a visible honeypot
+   silently rejects real comments, so it must not depend on a theme.
+   NOT display:none (some bots skip display:none inputs). */
+.rkr-hp {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

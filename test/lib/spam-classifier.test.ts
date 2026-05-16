@@ -22,7 +22,7 @@ test('ham verdict is parsed and returned', async () => {
   const fetcher: SpamFetcher = async () =>
     jsonResponse({ verdict: 'ham', score: 0.02, reason: 'normal' });
   const v = await classifyComment(
-    { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'nice post' },
+    { authorName: 'A', authorEmail: 'a@e.com', body: 'nice post' },
     { ...cfg, fetcher }
   );
   assert.equal(v.verdict, 'ham');
@@ -36,7 +36,6 @@ test('spam verdict is parsed and returned', async () => {
     {
       authorName: 'X',
       authorEmail: 'x@e.com',
-      authorUrl: 'http://x',
       body: 'buy now http://a http://b'
     },
     { ...cfg, fetcher }
@@ -55,7 +54,7 @@ test('sends bearer token and model to /api/generate', async () => {
     return jsonResponse({ verdict: 'ham', score: 0, reason: 'ok' });
   };
   await classifyComment(
-    { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+    { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
     { ...cfg, fetcher }
   );
   assert.equal(seenUrl, 'https://symon.example/ollama/api/generate');
@@ -71,10 +70,7 @@ test('retries on failure up to maxAttempts then throws', async () => {
   };
   await assert.rejects(
     () =>
-      classifyComment(
-        { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
-        { ...cfg, fetcher }
-      ),
+      classifyComment({ authorName: 'A', authorEmail: 'a@e.com', body: 'hi' }, { ...cfg, fetcher }),
     /spam classify failed after 3 attempts/
   );
   assert.equal(calls, 3);
@@ -86,7 +82,7 @@ test('unparseable model output throws', async () => {
   await assert.rejects(
     () =>
       classifyComment(
-        { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+        { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
         { ...cfg, fetcher, maxAttempts: 1 }
       ),
     /spam classify failed after 1 attempts/
@@ -98,7 +94,7 @@ test('HTTP error status throws', async () => {
   await assert.rejects(
     () =>
       classifyComment(
-        { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+        { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
         { ...cfg, fetcher, maxAttempts: 1 }
       ),
     /spam classify failed after 1 attempts/
@@ -111,7 +107,7 @@ test('missing response field throws', async () => {
   await assert.rejects(
     () =>
       classifyComment(
-        { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+        { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
         { ...cfg, fetcher, maxAttempts: 1 }
       ),
     /spam classify failed after 1 attempts/
@@ -125,7 +121,7 @@ test('verdict with no score field defaults based on verdict', async () => {
       { status: 200 }
     );
   const v = await classifyComment(
-    { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+    { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
     { ...cfg, fetcher, maxAttempts: 1 }
   );
   assert.equal(v.verdict, 'spam');
@@ -140,7 +136,7 @@ test('aborts and fails when the request exceeds timeoutMs', async () => {
   await assert.rejects(
     () =>
       classifyComment(
-        { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+        { authorName: 'A', authorEmail: 'a@e.com', body: 'hi' },
         {
           baseUrl: 'https://x/ollama',
           token: 't',

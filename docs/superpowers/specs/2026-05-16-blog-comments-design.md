@@ -113,7 +113,8 @@ CREATE TABLE comments (
   wp_comment_id  INTEGER NULL UNIQUE,            -- set for source='wp-import' dedupe
   author_name    TEXT NOT NULL,
   author_email   TEXT NOT NULL,                  -- never passed to public templates
-  author_url     TEXT NULL,
+  -- author_url removed by migration 005 (2026-05-16): the form no longer
+  -- collects a website and author names render as plain text.
   body           TEXT NOT NULL,                  -- stored raw, escaped on render
   status         TEXT NOT NULL
                    CHECK(status IN ('pending','published','queued','rejected')),
@@ -173,7 +174,7 @@ gibberish, or promotional text as spam.
 3. Map WP comment `id`/`parent` → local `parent_id`; flatten anything deeper than
    one level to top-level.
 4. Insert `status='published'`, `source='wp-import'`, `created_at`=WP `date`,
-   `author_name`/`author_url` from WP, `author_email` = sentinel
+   `author_name` from WP (author_url dropped, migration 005), `author_email` = sentinel
    (`imported@roll-along`, never displayed; the public API does not expose commenter
    emails), `wp_comment_id`=WP id.
 5. Idempotent via `wp_comment_id UNIQUE` — re-running skips already-imported
@@ -194,8 +195,8 @@ Cheap pre-filters so the GPU is not the only defense:
 
 **Public** (`src/templates/post.ts`): below the post, render `published` comments
 for that post oldest-first, replies indented one level under their parent. Each:
-author name (linked to `author_url` with `rel="nofollow ugc noopener"` if present),
-date, escaped body. Below the list: a progressively-enhanced comment form (works
+author name (plain escaped text — no website link; author_url removed
+2026-05-16), date, escaped body. Below the list: a progressively-enhanced comment form (works
 without JS via the 303 redirect; fetch-based with inline notice when JS is on). A
 "Reply" affordance sets `parent_id`. CSP stays strict — no third-party scripts;
 `author_email` is never emitted to templates.

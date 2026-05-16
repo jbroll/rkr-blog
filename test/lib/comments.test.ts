@@ -34,7 +34,6 @@ test('insertWebComment stores a pending row and getCommentById round-trips', (t)
     parentId: null,
     authorName: 'Ann',
     authorEmail: 'ann@example.com',
-    authorUrl: null,
     body: 'hi',
     ip: '203.0.113.4'
   });
@@ -51,7 +50,6 @@ test('insertWebComment rejects a reply to a non-top-level comment', (t) => {
     parentId: null,
     authorName: 'A',
     authorEmail: 'a@e.com',
-    authorUrl: null,
     body: 'top',
     ip: null
   });
@@ -62,7 +60,6 @@ test('insertWebComment rejects a reply to a non-top-level comment', (t) => {
     parentId: top,
     authorName: 'B',
     authorEmail: 'b@e.com',
-    authorUrl: null,
     body: 'reply',
     ip: null
   });
@@ -75,7 +72,6 @@ test('insertWebComment rejects a reply to a non-top-level comment', (t) => {
         parentId: reply,
         authorName: 'C',
         authorEmail: 'c@e.com',
-        authorUrl: null,
         body: 'deep',
         ip: null
       }),
@@ -90,7 +86,6 @@ test('listPublishedThread returns top-level published comments with their publis
     parentId: null,
     authorName: 'A',
     authorEmail: 'a@e.com',
-    authorUrl: null,
     body: 'top',
     ip: null
   });
@@ -100,7 +95,6 @@ test('listPublishedThread returns top-level published comments with their publis
     parentId: top,
     authorName: 'B',
     authorEmail: 'b@e.com',
-    authorUrl: null,
     body: 'reply',
     ip: null
   });
@@ -110,7 +104,6 @@ test('listPublishedThread returns top-level published comments with their publis
     parentId: null,
     authorName: 'C',
     authorEmail: 'c@e.com',
-    authorUrl: null,
     body: 'pending',
     ip: null
   });
@@ -129,7 +122,6 @@ test('insertImportedComment inserts as published and is idempotent', (t) => {
     parentId: null,
     wpCommentId: 42,
     authorName: 'WP User',
-    authorUrl: null,
     body: 'imported',
     createdAt: '2025-01-01T00:00:00.000Z'
   });
@@ -143,7 +135,6 @@ test('insertImportedComment inserts as published and is idempotent', (t) => {
     parentId: null,
     wpCommentId: 42,
     authorName: 'WP User',
-    authorUrl: null,
     body: 'imported',
     createdAt: '2025-01-01T00:00:00.000Z'
   });
@@ -157,7 +148,6 @@ test('applyClassification updates status, score, reason, and classified_at', (t)
     parentId: null,
     authorName: 'X',
     authorEmail: 'x@e.com',
-    authorUrl: null,
     body: 'test',
     ip: null
   });
@@ -176,7 +166,6 @@ test('listForModeration returns queued then published rows, queued FIFO', (t) =>
     parentId: null,
     authorName: 'A',
     authorEmail: 'a@e.com',
-    authorUrl: null,
     body: 'a',
     ip: null
   });
@@ -186,7 +175,6 @@ test('listForModeration returns queued then published rows, queued FIFO', (t) =>
     parentId: null,
     authorName: 'B',
     authorEmail: 'b@e.com',
-    authorUrl: null,
     body: 'b',
     ip: null
   });
@@ -196,7 +184,6 @@ test('listForModeration returns queued then published rows, queued FIFO', (t) =>
     parentId: null,
     authorName: 'C',
     authorEmail: 'c@e.com',
-    authorUrl: null,
     body: 'c',
     ip: null
   });
@@ -224,13 +211,11 @@ test('countThread sums top-level comments and their replies', () => {
   const mk = (id: number, replies: number): ThreadComment => ({
     id,
     author_name: 'A',
-    author_url: null,
     body: 'b',
     created_at: '2026-01-01T00:00:00.000Z',
     replies: Array.from({ length: replies }, (_, i) => ({
       id: id * 100 + i,
       author_name: 'R',
-      author_url: null,
       body: 'r',
       created_at: '2026-01-01T00:00:00.000Z',
       replies: []
@@ -255,7 +240,6 @@ test('insertWebComment rejects parentId for a comment on a different post', (t) 
     parentId: null,
     authorName: 'A',
     authorEmail: 'a@e.com',
-    authorUrl: null,
     body: 'top',
     ip: null
   });
@@ -266,7 +250,6 @@ test('insertWebComment rejects parentId for a comment on a different post', (t) 
         parentId: top,
         authorName: 'B',
         authorEmail: 'b@e.com',
-        authorUrl: null,
         body: 'cross',
         ip: null
       }),
