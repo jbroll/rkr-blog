@@ -99,7 +99,10 @@ export function siteFoot(site: SiteChrome['site'], _opts: FootOpts = {}): string
 /** FAB row rendered on the homepage when the visitor is authed:
  *  ⚙ Settings on top, + New post below. Stacked bottom-right. */
 export function indexAdminFabs(): string {
-  return `<a class="rkr-fab rkr-fab--slot-2" href="/admin/settings" aria-label="Settings" title="Settings">
+  return `<a class="rkr-fab rkr-fab--slot-3" href="/admin/comments" aria-label="Moderate comments" title="Moderate comments">
+  ${icon('comment', 22)}
+</a>
+<a class="rkr-fab rkr-fab--slot-2" href="/admin/settings" aria-label="Settings" title="Settings">
   ${icon('settings', 22)}
 </a>
 <a class="rkr-fab rkr-fab--slot-1" href="/admin/editor?new=1" aria-label="New post" title="New post">

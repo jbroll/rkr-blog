@@ -67,13 +67,17 @@ test('siteFoot: renders copyright line without auth links', () => {
   }
 });
 
-test('indexAdminFabs: renders + (New post) and ⚙ (Settings) as anchors', () => {
+test('indexAdminFabs: renders New post, Settings and Comments-moderation anchors', () => {
   const html = indexAdminFabs();
   assert.match(
     html,
     /class="rkr-fab[^"]*"[^>]*href="\/admin\/editor\?new=1"[^>]*aria-label="New post"/
   );
   assert.match(html, /class="rkr-fab[^"]*"[^>]*href="\/admin\/settings"[^>]*aria-label="Settings"/);
+  assert.match(
+    html,
+    /class="rkr-fab[^"]*"[^>]*href="\/admin\/comments"[^>]*aria-label="Moderate comments"/
+  );
 });
 
 test('postAdminFab: pencil FAB carries the URL-encoded slug', () => {
