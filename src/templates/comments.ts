@@ -6,6 +6,12 @@
 import type { ThreadComment } from '../lib/comments.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 
+// Shown after a successful submit, by both the full-page PRG redirect
+// (public.ts, ?submitted=1) and the no-flicker AJAX path
+// (public-comments.ts JSON). One source so the two stay identical.
+export const COMMENT_SUBMITTED_NOTICE =
+  'Thanks — your comment has been received and will appear shortly after review.';
+
 function commentItem(c: ThreadComment, withReplies: boolean): string {
   const replies =
     withReplies && c.replies.length > 0

@@ -65,6 +65,7 @@ import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 // EXIF that lies the image is 0×0) doesn't become a 500.
 const MIN_RENDER_DIM = 16;
 
+import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
 import { renderIndexPage } from '../templates/index.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
@@ -302,12 +303,7 @@ export default async function publicRoutes(
         ...(bannerHtml ? { bannerHtml } : {}),
         isAdmin: !!req.user,
         comments,
-        ...(req.query.submitted === '1'
-          ? {
-              commentNotice:
-                'Thanks — your comment has been received and will appear shortly after review.'
-            }
-          : {})
+        ...(req.query.submitted === '1' ? { commentNotice: COMMENT_SUBMITTED_NOTICE } : {})
       });
 
       setPublicSecurityHeaders(reply);

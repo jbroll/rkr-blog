@@ -10,6 +10,17 @@ import type { FastifyInstance } from 'fastify';
 import { getPostIdBySlug, insertWebComment, setCommentStatus } from '../lib/comments.ts';
 import type { Db } from '../lib/db.ts';
 import { enqueue } from '../lib/jobs.ts';
+import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
+
+// Both "accepted" outcomes (real success AND silent honeypot reject)
+// must be byte-identical so a fetch()-driven bot can't tell it was
+// filtered. The site script sets `x-rkr-ajax` to opt into the
+// no-flicker JSON reply; everything else gets the no-JS PRG 303.
+function accepted(reply: import('fastify').FastifyReply, slug: string, ajax: boolean) {
+  return ajax
+    ? reply.code(200).send({ ok: true, notice: COMMENT_SUBMITTED_NOTICE })
+    : reply.code(303).header('location', `/${slug}?submitted=1#respond`).send();
+}
 
 export interface PublicCommentRoutesOpts {
   db: Db;
@@ -40,11 +51,12 @@ export function registerPublicCommentRoutes(
     async (req, reply) => {
       const { slug } = req.params;
       const body = req.body ?? {};
+      const ajax = req.headers['x-rkr-ajax'] === '1';
 
       // Honeypot: a populated `website` field means a bot. Silent
-      // success (303) so the bot can't tell it was filtered.
+      // success so the bot can't tell it was filtered.
       if (str(body.website) !== '') {
-        return reply.code(303).header('location', `/${slug}?submitted=1#respond`).send();
+        return accepted(reply, slug, ajax);
       }
 
       const postId = getPostIdBySlug(db, slug);
@@ -103,7 +115,7 @@ export function registerPublicCommentRoutes(
         enqueue(db, { kind: 'classify', payload: { commentId: id } });
       }
 
-      return reply.code(303).header('location', `/${slug}?submitted=1#respond`).send();
+      return accepted(reply, slug, ajax);
     }
   );
 }

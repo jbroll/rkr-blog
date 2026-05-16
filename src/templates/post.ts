@@ -68,6 +68,7 @@ ${stylesheetLinks()}
 <script type="module" src="/static/site/lightbox.js${v}" defer></script>
 <script type="module" src="/static/site/carousel.js${v}" defer></script>
 <script type="module" src="/static/site/copy-link.js${v}" defer></script>
+<script type="module" src="/static/site/comment-form.js${v}" defer></script>
 </head>
 <body>
 ${siteHead(post.site, { isAdmin: post.isAdmin })}

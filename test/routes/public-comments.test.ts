@@ -60,6 +60,41 @@ test('honeypot filled → silent reject (no row, still 303)', async (t) => {
   assert.equal(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM comments').get()?.n, 0);
 });
 
+test('x-rkr-ajax header → 200 JSON {ok,notice}, still stores + enqueues (no flicker path)', async (t) => {
+  const { app, db } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/hello/comments',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-rkr-ajax': '1' },
+    payload: form({ name: 'Ann', email: 'ann@e.com', body: 'nice', website: '', t: '0' })
+  });
+  assert.equal(res.statusCode, 200);
+  const j = res.json() as { ok: boolean; notice: string };
+  assert.equal(j.ok, true);
+  assert.match(j.notice, /received and will appear shortly/);
+  assert.equal(res.headers.location, undefined);
+  assert.equal(
+    db.prepare<{ status: string }>('SELECT status FROM comments').get()?.status,
+    'pending'
+  );
+});
+
+test('honeypot + x-rkr-ajax → identical 200 JSON (bot cannot distinguish)', async (t) => {
+  const { app, db } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/hello/comments',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-rkr-ajax': '1' },
+    payload: form({ name: 'Bot', email: 'b@e.com', body: 'spam', website: 'x', t: '0' })
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), {
+    ok: true,
+    notice: 'Thanks — your comment has been received and will appear shortly after review.'
+  });
+  assert.equal(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM comments').get()?.n, 0);
+});
+
 test('missing required fields → 400', async (t) => {
   const { app } = await setup(t);
   const res = await app.inject({
