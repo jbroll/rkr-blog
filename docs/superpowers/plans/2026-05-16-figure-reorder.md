@@ -753,16 +753,32 @@ test('keyboard ArrowRight reorders a focused thumb', async ({ page }) => {
 Run: `npx playwright test --config test/playwright.config.ts test/e2e/figure-reorder.spec.ts`
 Expected: 2 tests PASS. (If the toolbar control names differ, align the role/name selectors with `test/e2e/editor-flow.spec.ts`'s image-insert flow — it is the authoritative example for this codebase.)
 
-- [ ] **Step 3: Run the full gate**
+- [ ] **Step 3: Remove the temporary e2e-ratchet exemption**
 
-Run: `npm run check`
-Expected: green (unit suite unaffected; e2e ratchet picks up `src/admin/figure-reorder.ts`).
+Task 1 had to add `'src/admin/figure-reorder.ts'` to the `EXEMPT` set
+in `scripts/check-e2e-coverage.ts` because the pre-commit e2e ratchet
+fails any new `src/admin/**` file that no e2e spec exercises (Case 1),
+and the e2e spec did not exist until now. Now that
+`test/e2e/figure-reorder.spec.ts` exercises it, that exemption MUST be
+removed so the ratchet enforces coverage of the pointer/keyboard wiring
+going forward. In `scripts/check-e2e-coverage.ts`, delete the
+`'src/admin/figure-reorder.ts'` entry from the `EXEMPT` set and revert
+its comment so `EXEMPT` again lists only the structurally-uninstrumentable
+service-worker files (`src/site/sw.ts`, `src/site/sw-core.ts`).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Run the full gate**
+
+Run: `npm run check` then stage everything and let the pre-commit hook
+run. Expected: green, and the e2e ratchet now reports coverage for
+`src/admin/figure-reorder.ts` (no longer exempt). If the ratchet fails
+because the e2e spec doesn't actually exercise the wiring, fix the spec
+(not by re-adding the exemption).
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add test/e2e/figure-reorder.spec.ts
-git commit -m "test(figure-reorder): e2e drag + keyboard reorder, tap-still-edits"
+git add test/e2e/figure-reorder.spec.ts scripts/check-e2e-coverage.ts
+git commit -m "test(figure-reorder): e2e drag + keyboard reorder; drop temp e2e-ratchet exemption"
 ```
 
 ---
@@ -810,3 +826,9 @@ git commit -m "docs(deferred): close within-figure reorder; record cross-figure 
 - **Type consistency:** `moveItem`, `reorderFigureCells`, `FigureCellArrays`, `dropIndexFor`, `wireFigureReorder` used with identical signatures across Tasks 1–5.
 - **No placeholders:** every code step is complete and runnable.
 - **Risk noted for executor:** e2e selector names (toolbar "Insert image", "Save") must match this codebase's editor; `test/e2e/editor-flow.spec.ts` is the authoritative reference and is called out in Task 7.
+- **Plan gap found during execution (Task 1):** the pre-commit e2e
+  coverage ratchet (`scripts/check-e2e-coverage.ts`) fails any new
+  `src/admin/**` file with no e2e spec. Tasks 1–6 therefore carry a
+  *temporary* `EXEMPT` entry for `src/admin/figure-reorder.ts`; Task 7
+  removes it once the e2e spec exists so the wiring stays gated. The
+  exemption comment must say it is temporary.
