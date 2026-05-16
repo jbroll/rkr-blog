@@ -16,7 +16,7 @@
   --rkr-shadow: rgba(0, 0, 0, 0.06);
 
   /* Narrower column than default — papermod is single-column prose first. */
-  --rkr-content: 48rem;
+  --rkr-content: 60rem;
   --rkr-prose: 36rem;
   --rkr-radius: 6px;
 

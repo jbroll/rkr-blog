@@ -18,7 +18,7 @@
   --rkr-shadow: rgba(0, 0, 0, 0.08);
 
   /* layout tokens */
-  --rkr-content: 64rem;     /* outer column for figures + galleries */
+  --rkr-content: 76rem;     /* outer column for figures + galleries */
   --rkr-prose: 38rem;       /* inner column for prose */
   --rkr-gap: 1.25rem;
   --rkr-radius: 4px;

@@ -18,7 +18,7 @@
 
   /* Tufte's narrow text column, wide left rail. We can't easily render
      marginalia inline, but the column widths preserve the feel. */
-  --rkr-content: 56rem;
+  --rkr-content: 68rem;
   --rkr-prose: 36rem;
   --rkr-radius: 0;
 
