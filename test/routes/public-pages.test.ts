@@ -415,3 +415,112 @@ test('GET / with site bannerImageId: banner rendered before <main> with bleed', 
   assert.ok(bleedIdx > 0, 'banner rendered on index');
   assert.ok(bleedIdx < mainIdx, 'banner appears before <main>');
 });
+
+// ---------------------------------------------------------------------------
+// _site-banner system post feature
+// ---------------------------------------------------------------------------
+
+test('GET /_site-banner returns 404 (system slug blocked from public)', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({ method: 'GET', url: '/_site-banner' });
+  assert.equal(res.statusCode, 404);
+});
+
+test('GET /_any-underscore-slug returns 404', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({ method: 'GET', url: '/_other-system' });
+  assert.equal(res.statusCode, 404);
+});
+
+test('GET / with _site-banner.md containing a ::figure renders banner before <main>', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const id = await ingestOne(root);
+
+  const app = await buildApp({ siteRoot: root, db, startWorker: false });
+  t.after(async () => {
+    await app.close();
+    events.removeAllListeners('enqueued');
+  });
+
+  // Write _site-banner.md with a ::figure directive.
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', '_site-banner.md'),
+    `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n\n::figure{ids="${id}" justify=bleed}\n`
+  );
+
+  writePost(
+    root,
+    'post.md',
+    { slug: 'p', title: 'P', status: 'published', date: '2026-05-14T12:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+
+  const mainIdx = res.body.indexOf('<main');
+  const bleedIdx = res.body.indexOf('rkr-justify-bleed');
+  assert.ok(bleedIdx > 0, 'banner rendered from _site-banner.md');
+  assert.ok(bleedIdx < mainIdx, 'banner appears before <main>');
+});
+
+test('GET / without _site-banner.md renders no banner (no bannerImageId)', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(
+    root,
+    'post.md',
+    { slug: 'p', title: 'P', status: 'published', date: '2026-05-14T12:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(res.body, /rkr-justify-bleed/, 'no banner when no _site-banner.md');
+});
+
+test('GET / with _site-banner.md but no ::figure: falls back to bannerImageId', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const id = await ingestOne(root);
+
+  // _site-banner.md has no ::figure — plain prose only.
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', '_site-banner.md'),
+    `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n\nJust some text, no figure.\n`
+  );
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Test Site', bannerImageId: id }
+  });
+  t.after(async () => {
+    await app.close();
+    events.removeAllListeners('enqueued');
+  });
+
+  writePost(
+    root,
+    'post.md',
+    { slug: 'p', title: 'P', status: 'published', date: '2026-05-14T12:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+
+  // Falls back to bannerImageId, so the bleed banner still appears.
+  const mainIdx = res.body.indexOf('<main');
+  const bleedIdx = res.body.indexOf('rkr-justify-bleed');
+  assert.ok(bleedIdx > 0, 'fallback bannerImageId banner rendered');
+  assert.ok(bleedIdx < mainIdx, 'banner appears before <main>');
+});

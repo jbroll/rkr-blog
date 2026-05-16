@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Root, RootContent } from 'mdast';
+import type { LeafDirective } from 'mdast-util-directive';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../cli/reindex.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
@@ -179,7 +180,33 @@ export default async function publicRoutes(
       const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });
 
       let indexBannerHtml: string | undefined;
-      if (site.bannerImageId) {
+
+      // Prefer _site-banner.md: find the first ::figure leafDirective and
+      // render it as the index banner. Falls back to bannerImageId if the
+      // file is absent or contains no ::figure.
+      const siteBannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
+      let siteBannerFigureFound = false;
+      if (fs.existsSync(siteBannerPath)) {
+        try {
+          const raw = fs.readFileSync(siteBannerPath, 'utf8');
+          const { ast } = parsePost(raw);
+          const figureNode = ast.children.find(
+            (n): n is LeafDirective =>
+              n.type === 'leafDirective' && (n as LeafDirective).name === 'figure'
+          ) as LeafDirective | undefined;
+          if (figureNode) {
+            siteBannerFigureFound = true;
+            indexBannerHtml = await widgets.dispatch('figure', figureNode as DirectiveNode, {
+              siteRoot,
+              widgets
+            });
+          }
+        } catch {
+          // Malformed _site-banner.md — fall through to bannerImageId.
+        }
+      }
+
+      if (!siteBannerFigureFound && site.bannerImageId) {
         const bannerNode: DirectiveNode = {
           type: 'leafDirective',
           name: 'figure',
@@ -221,6 +248,18 @@ export default async function publicRoutes(
   fastify.get<{ Params: { slug: string } }>('/:slug', async (req, reply) => {
     const site = getSite();
     const { slug } = req.params;
+    // _-prefixed slugs are system posts (e.g. _site-banner); they are
+    // never indexed and must never be directly accessible via the public
+    // route — return 404 unconditionally, even for authenticated users.
+    if (slug.startsWith('_')) {
+      setPublicSecurityHeaders(reply);
+      const isAdmin = !!req.user;
+      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+      return reply
+        .code(404)
+        .type('text/html; charset=utf-8')
+        .send(renderNotFoundPage({ site, isAdmin }));
+    }
     const row = readIndexedPostBySlug(db, slug);
     // Authed visitors see drafts (matches the index page, which links
     // drafts straight to /:slug from the admin table). Anonymous

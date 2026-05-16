@@ -10,6 +10,8 @@
 // foot-gun and keeps the flow indistinguishable from a server-side
 // SPA from the operator's perspective.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
@@ -61,6 +63,9 @@ export function registerAdminSettingsRoutes(
         gdriveConnected = readToken(db, key, user.id, 'gdrive') !== null;
         onedriveConnected = readToken(db, key, user.id, 'onedrive') !== null;
       }
+      const hasBanner = fs.existsSync(
+        path.join(siteRoot, 'content', 'posts', '_site-banner.md')
+      );
       return reply.type('text/html; charset=utf-8').send(
         renderAdminSettingsPage({
           site,
@@ -69,7 +74,8 @@ export function registerAdminSettingsRoutes(
           flash,
           gitHash,
           gdriveConnected,
-          onedriveConnected
+          onedriveConnected,
+          hasBanner
         })
       );
     }

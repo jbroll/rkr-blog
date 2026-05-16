@@ -321,6 +321,55 @@ test('readTagCounts returns name + count sorted by count DESC', (t) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// System post (_-prefixed slug) skip tests
+// ---------------------------------------------------------------------------
+
+test('runReindex skips _-prefixed slugs: _site-banner is not inserted', (t) => {
+  const root = freshSiteRoot(t);
+  // A normal post that should be indexed.
+  writePost(root, 'hello.md', { slug: 'hello', title: 'Hello', status: 'published' }, 'body');
+  // A system post that must be skipped.
+  writePost(
+    root,
+    '_site-banner.md',
+    { slug: '_site-banner', title: 'Site Banner', status: 'published' },
+    '::figure{ids="abc123" justify=bleed}'
+  );
+
+  const r = runReindex(root);
+  // Only the normal post is inserted; _site-banner is skipped.
+  assert.equal(r.inserted, 1, 'only normal post inserted');
+  assert.equal(r.updated, 0);
+  assert.equal(r.removed, 0);
+
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    assert.ok(readIndexedPostBySlug(db, 'hello'), 'normal post is indexed');
+    assert.equal(readIndexedPostBySlug(db, '_site-banner'), undefined, '_site-banner not in DB');
+  } finally {
+    db.close();
+  }
+});
+
+test('runReindex does not remove _-prefixed slugs in the orphan step (they were never added)', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(root, 'a.md', { slug: 'a', title: 'A', status: 'published' }, 'body');
+  writePost(
+    root,
+    '_site-banner.md',
+    { slug: '_site-banner', title: 'Site Banner', status: 'published' },
+    'banner body'
+  );
+
+  runReindex(root);
+  // Run again — should not count _site-banner as a removal.
+  const r2 = runReindex(root);
+  assert.equal(r2.removed, 0, '_site-banner not counted as orphan');
+  assert.equal(r2.inserted, 0);
+  assert.equal(r2.updated, 1, 'only a.md updated');
+});
+
 test('readIndexedPosts sort:asc returns oldest published_at first', (t) => {
   const root = freshSiteRoot(t);
   writePost(

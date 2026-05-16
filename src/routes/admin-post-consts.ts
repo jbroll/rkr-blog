@@ -11,11 +11,15 @@
 // Kept module-private — the only thing other modules need is the
 // combined predicate below.
 const MAX_SLUG_LENGTH = 100;
-const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
+// Normal slugs: alpha-numeric-leading kebab-case.
+// System slugs: underscore-prefixed, followed by a letter then alphanumeric/hyphens.
+// Examples: hello-world, _site-banner, _meta-config
+const SLUG_RE = /^(_[a-z][a-z0-9-]*|[a-z0-9][a-z0-9-]*)$/i;
 
-/** Slug must be a non-empty kebab-case identifier, at most 100
- * characters, starting with an alphanumeric. The combined check
- * replaces three drift-prone copies across the post route files. */
+/** Slug must be a non-empty kebab-case identifier (at most 100 characters,
+ * starting with an alphanumeric) OR a system slug starting with _ followed
+ * by a letter (e.g. _site-banner). The combined check replaces three
+ * drift-prone copies across the post route files. */
 export function isValidSlug(s: unknown): s is string {
   return typeof s === 'string' && s.length > 0 && s.length <= MAX_SLUG_LENGTH && SLUG_RE.test(s);
 }

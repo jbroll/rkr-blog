@@ -76,6 +76,9 @@ function doReindex(
       }
 
       const slug = frontmatter.slug;
+      // System posts (_-prefixed) are saved on disk but excluded from the
+      // posts index so they never appear in the public or admin listing.
+      if (slug.startsWith('_')) continue;
       seenSlugs.add(slug);
 
       const stat = fs.statSync(fullPath);
@@ -121,9 +124,11 @@ function doReindex(
 
   // Remove rows whose source file is gone.
   // ON DELETE CASCADE in post_tags keeps that table clean automatically.
+  // _-prefixed slugs are never added to the index, so skip them in the
+  // orphan filter too — they can never be orphans.
   const removed = db.transaction((): number => {
     const all = db.prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts').all();
-    const orphans = all.filter((row) => !seenSlugs.has(row.slug));
+    const orphans = all.filter((row) => !row.slug.startsWith('_') && !seenSlugs.has(row.slug));
     for (const o of orphans) {
       db.prepare('DELETE FROM posts WHERE id = ?').run(o.id);
     }

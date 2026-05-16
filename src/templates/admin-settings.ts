@@ -44,6 +44,8 @@ export interface AdminSettingsPageData extends SiteChrome {
   gdriveConnected: boolean;
   /** Whether the current user has a stored OneDrive OAuth token. */
   onedriveConnected: boolean;
+  /** Whether content/posts/_site-banner.md exists on disk. */
+  hasBanner: boolean;
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
@@ -87,6 +89,14 @@ ${saveBtn}
   <select id="rkr-settings-theme" name="theme">
     ${renderThemeOptions(data.themes, data.persisted.theme)}
   </select>
+
+  <h2 class="rkr-admin-settings-section">Banner</h2>
+  <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
+    ${data.hasBanner
+      ? `<a href="/admin/editor?slug=_site-banner">Edit banner →</a>`
+      : `<a href="/admin/editor">Create banner</a> — set the slug to <code>_site-banner</code>`
+    }
+  </div>
 
   <h2 class="rkr-admin-settings-section">Image uploads</h2>
 
