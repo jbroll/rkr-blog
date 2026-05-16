@@ -77,19 +77,23 @@ SPAM_MAX_ATTEMPTS=3
 Add inside the existing `:443` token-auth-wrapped vhost in `home/vhost.conf`:
 
 ```apache
-ProxyPass        /ollama/ http://localhost:11434/
-ProxyPassReverse /ollama/ http://localhost:11434/
+ProxyPass        /ollama/ http://192.168.1.169:11434/
+ProxyPassReverse /ollama/ http://192.168.1.169:11434/
 ```
 
 It inherits `Include /etc/apache-token-auth/apache/token-auth.conf`, so every
 `/ollama/*` request requires the symon token. General-purpose; the blog only calls
 `/ollama/api/generate`. Deployed via the existing gpu-services `deploy.sh` flow.
 
-**Deploy prerequisite:** Ollama currently binds `192.168.1.169:11434`. The
-`ProxyPass` targets `localhost:11434`, so deployment must ensure Ollama also listens
-on loopback (`OLLAMA_HOST` including `127.0.0.1`, or a multi-bind) **or** the
-`ProxyPass` target is changed to `http://192.168.1.169:11434/`. This is an explicit,
-verified deploy step in the implementation plan.
+**Why the LAN IP, not `localhost`:** The GPU box runs Void Linux + runit; the
+Ollama service script (`/etc/sv/ollama/run`) pins `export
+OLLAMA_HOST=192.168.1.169:11434`. Ollama binds exactly that one address (not
+`0.0.0.0`, not loopback), so `localhost:11434` answers nothing. The `ProxyPass`
+therefore targets `192.168.1.169:11434` directly — apache runs on the same box and
+reaches it fine. This deliberately leaves the Ollama service untouched so existing
+LAN consumers keep working (changing `OLLAMA_HOST` to `127.0.0.1` would break them;
+`0.0.0.0` would needlessly widen the bind). No Ollama service change is required;
+the implementation plan only verifies reachability from apache.
 
 ## 5. Data model
 
