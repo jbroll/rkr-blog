@@ -4,6 +4,8 @@
 // Reorder is one permutation applied in lockstep to the figure's
 // three parallel arrays (ids ',', alts ',', captions '|').
 
+import type { Editor } from '@tiptap/core';
+
 /** Move arr[from] to index `to`. Returns a new array on a real move;
  *  returns the input array unchanged when from===to or either index is
  *  out of [0, len) (same no-op identity contract as reorderFigureCells,
@@ -54,4 +56,227 @@ export function dropIndexFor(mids: number[], pos: number): number {
   let i = 0;
   while (i < mids.length && (mids[i] as number) < pos) i++;
   return i;
+}
+
+const DRAG_THRESHOLD_PX = 8;
+const EDGE_AUTOSCROLL_PX = 48;
+const EDGE_SCROLL_STEP = 12;
+
+/** Find the figure node position whose rendered DOM is `placeholder`.
+ *  Same robust nodeDOM match the figure-delete path uses (posAtDOM is
+ *  ambiguous on atoms). */
+function figurePosFor(editor: Editor, placeholder: Element): number | null {
+  let found: number | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (node.type.name === 'figure' && editor.view.nodeDOM(pos) === placeholder) {
+      found = pos;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+function commitReorder(editor: Editor, placeholder: Element, from: number, to: number): void {
+  const pos = figurePosFor(editor, placeholder);
+  if (pos === null) return;
+  const node = editor.state.doc.nodeAt(pos);
+  if (!node) return;
+  const next = reorderFigureCells(
+    {
+      ids: (node.attrs.ids as string | undefined) ?? '',
+      alts: (node.attrs.alts as string | undefined) ?? '',
+      captions: (node.attrs.captions as string | undefined) ?? ''
+    },
+    from,
+    to
+  );
+  if (next.ids === ((node.attrs.ids as string | undefined) ?? '')) return; // no-op
+  editor.commands.command(({ tr, dispatch }) => {
+    if (dispatch) dispatch(tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...next }));
+    return true;
+  });
+}
+
+function thumbsOf(placeholder: Element): HTMLImageElement[] {
+  return Array.from(placeholder.querySelectorAll<HTMLImageElement>('img[data-cell-index]'));
+}
+
+function announce(placeholder: Element, msg: string): void {
+  const status = placeholder.querySelector('[data-reorder-status]');
+  if (status) status.textContent = msg;
+}
+
+/** Install delegated reorder listeners on the editor DOM. Mirrors the
+ *  existing delegated click handler in main.ts (the figure is a plain
+ *  Node with no per-instance NodeView, so delegation is the only
+ *  consistent attach point). Self-contained: a capture-phase click
+ *  listener swallows the synthetic post-drag click so tap-to-edit in
+ *  main.ts is untouched. */
+export function wireFigureReorder(editor: Editor): void {
+  const root = editor.view.dom as HTMLElement;
+  let justDragged = false;
+
+  root.addEventListener(
+    'click',
+    (ev) => {
+      if (justDragged) {
+        justDragged = false;
+        ev.stopImmediatePropagation();
+        ev.preventDefault();
+      }
+    },
+    true // capture: runs before main.ts's bubble-phase click handler
+  );
+
+  root.addEventListener('pointerdown', (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target?.matches('img[data-cell-index]')) return;
+    const placeholder = target.closest('.rkr-figure-placeholder');
+    if (!placeholder) return;
+    const thumbs = thumbsOf(placeholder);
+    const from = thumbs.indexOf(target as HTMLImageElement);
+    if (from < 0 || thumbs.length < 2) return;
+
+    const startX = ev.clientX;
+    const startY = ev.clientY;
+    let dragging = false;
+    let indicator: HTMLDivElement | null = null;
+    let dropIndex = from;
+    let rafId = 0;
+
+    const horizontal = (() => {
+      if (thumbs.length < 2) return true;
+      const a = thumbs[0];
+      const b = thumbs[1];
+      if (!a || !b) return true;
+      const ra = a.getBoundingClientRect();
+      const rb = b.getBoundingClientRect();
+      return Math.abs(rb.left - ra.left) >= Math.abs(rb.top - ra.top);
+    })();
+
+    const scrollContainer = (root.closest('#rkroll-admin-article') as HTMLElement | null) ?? root;
+
+    const ensureIndicator = (): HTMLDivElement => {
+      if (indicator) return indicator;
+      const el = document.createElement('div');
+      el.className = 'rkr-multi-drop-indicator';
+      el.setAttribute('contenteditable', 'false');
+      placeholder.querySelector('.rkr-multi-thumbs')?.appendChild(el);
+      indicator = el;
+      return el;
+    };
+
+    const positionIndicator = () => {
+      const el = ensureIndicator();
+      const ref = thumbs[Math.min(dropIndex, thumbs.length - 1)];
+      if (!ref) return;
+      const r = ref.getBoundingClientRect();
+      // offsetParent is null if the grid (or an ancestor) is display:none
+      // or lacks a positioned ancestor — e.g. before Task 6's
+      // `.rkr-multi-thumbs{position:relative}` ships. Bail rather than
+      // throw; the indicator just isn't drawn until layout is sane.
+      const offsetEl = el.offsetParent as HTMLElement | null;
+      if (!offsetEl) return;
+      const pr = offsetEl.getBoundingClientRect();
+      if (horizontal) {
+        const x = (dropIndex >= thumbs.length ? r.right : r.left) - pr.left;
+        el.style.cssText = `left:${x}px;top:${r.top - pr.top}px;height:${r.height}px;width:2px;`;
+      } else {
+        const y = (dropIndex >= thumbs.length ? r.bottom : r.top) - pr.top;
+        el.style.cssText = `top:${y}px;left:${r.left - pr.left}px;width:${r.width}px;height:2px;`;
+      }
+    };
+
+    const autoscroll = () => {
+      const sc = scrollContainer.getBoundingClientRect();
+      if (lastY < sc.top + EDGE_AUTOSCROLL_PX) scrollContainer.scrollTop -= EDGE_SCROLL_STEP;
+      else if (lastY > sc.bottom - EDGE_AUTOSCROLL_PX)
+        scrollContainer.scrollTop += EDGE_SCROLL_STEP;
+      rafId = requestAnimationFrame(autoscroll);
+    };
+
+    let lastY = startY;
+
+    const onMove = (e: PointerEvent) => {
+      lastY = e.clientY;
+      if (!dragging) {
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_THRESHOLD_PX) return;
+        dragging = true;
+        target.setPointerCapture(e.pointerId);
+        target.classList.add('is-dragging');
+        rafId = requestAnimationFrame(autoscroll);
+      }
+      const mids = thumbs.map((t) => {
+        const r = t.getBoundingClientRect();
+        return horizontal ? r.left + r.width / 2 : r.top + r.height / 2;
+      });
+      dropIndex = dropIndexFor(mids, horizontal ? e.clientX : e.clientY);
+      positionIndicator();
+    };
+
+    const cleanup = () => {
+      root.removeEventListener('pointermove', onMove);
+      root.removeEventListener('pointerup', onUp);
+      root.removeEventListener('pointercancel', onCancel);
+      if (rafId) cancelAnimationFrame(rafId);
+      target.classList.remove('is-dragging');
+      indicator?.remove();
+    };
+
+    const onUp = () => {
+      const wasDragging = dragging;
+      let to = dropIndex > from ? dropIndex - 1 : dropIndex;
+      to = Math.max(0, Math.min(thumbs.length - 1, to));
+      cleanup();
+      if (wasDragging) {
+        justDragged = true; // swallow the trailing click
+        if (to !== from) {
+          commitReorder(editor, placeholder, from, to);
+          announce(placeholder, `Moved to position ${to + 1} of ${thumbs.length}`);
+        }
+      }
+    };
+
+    const onCancel = () => cleanup();
+
+    root.addEventListener('pointermove', onMove);
+    root.addEventListener('pointerup', onUp);
+    root.addEventListener('pointercancel', onCancel);
+  });
+
+  root.addEventListener('keydown', (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target?.matches('img[data-cell-index]')) return;
+    // Thumbs carry role="button" + tabindex=0, so keyboard users
+    // expect Enter/Space to activate. Activation = the same per-cell
+    // edit a tap opens: synthesize a click (justDragged is false here,
+    // so the capture-phase suppressor lets it through to main.ts's
+    // delegated click→edit handler). Keyboard parity with tap-to-edit,
+    // and it closes the role="button"-without-activation a11y gap.
+    if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+      ev.preventDefault();
+      (target as HTMLElement).click();
+      return;
+    }
+    const dir =
+      ev.key === 'ArrowLeft' || ev.key === 'ArrowUp'
+        ? -1
+        : ev.key === 'ArrowRight' || ev.key === 'ArrowDown'
+          ? 1
+          : 0;
+    if (dir === 0) return;
+    const placeholder = target.closest('.rkr-figure-placeholder');
+    if (!placeholder) return;
+    const thumbs = thumbsOf(placeholder);
+    const from = thumbs.indexOf(target as HTMLImageElement);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= thumbs.length) return;
+    ev.preventDefault();
+    commitReorder(editor, placeholder, from, to);
+    const moved = thumbsOf(placeholder)[to];
+    moved?.focus();
+    announce(placeholder, `Moved to position ${to + 1} of ${thumbs.length}`);
+  });
 }
