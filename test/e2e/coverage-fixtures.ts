@@ -8,8 +8,27 @@
 // caches the entries to disk. global-teardown.ts calls generate()
 // once at the end of the run to emit lcov + HTML reports.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { test as baseTest } from '@playwright/test';
 import { CoverageReport } from 'monocart-coverage-reports';
+
+// Read source maps directly from disk instead of fetching via HTTP.
+// The default resolver issues HTTP GETs to the running test server;
+// in global-teardown the server is already stopped, and during tests
+// the version query string on main.js and site bundles may confuse
+// URL matching. Disk reads are reliable in both phases.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sourceMapResolver = async (url: string, defaultResolver: any): Promise<unknown> => {
+  const match = url.match(/\/(static\/(?:admin|site)\/.+\.map)$/);
+  if (match) {
+    const localPath = path.join(process.cwd(), match[1]!);
+    if (fs.existsSync(localPath)) {
+      return JSON.parse(fs.readFileSync(localPath, 'utf8')) as unknown;
+    }
+  }
+  return defaultResolver(url);
+};
 
 // Single mcr per worker process. resetOnNavigation:false on the
 // page.coverage calls means we keep accumulating across navigations
@@ -31,6 +50,18 @@ const mcr = new CoverageReport({
     sourcePath.includes('src/admin/') ||
     sourcePath.includes('src/site/') ||
     sourcePath.includes('src/lib/'),
+  sourceMapResolver,
+  // esbuild stores source paths relative to the bundle (e.g.
+  // '../../src/admin/toast.ts' relative to static/admin/main.js).
+  // monocart resolves these from process.cwd(), producing '../admin/toast.ts'
+  // which fails the sourceFilter. Re-resolve against the dist dir instead.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sourcePath: (sp: string, info: { distFile?: string; [key: string]: any }) => {
+    const url: string | undefined = info.url;
+    if (!url?.startsWith('../') || !info.distFile) return sp;
+    const distDir = path.dirname(info.distFile.replace(/^[^/]+\//, ''));
+    return path.normalize(path.join(distDir, url));
+  },
   // Defer cache cleanup to global-teardown so the cache persists
   // across spec files (Playwright runs each .spec.ts in a fresh test
   // process when configured to fork; we use workers:1 today, but
