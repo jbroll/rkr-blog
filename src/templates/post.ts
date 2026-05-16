@@ -1,6 +1,6 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
-import type { ThreadComment } from '../lib/comments.ts';
+import { countThread, type ThreadComment } from '../lib/comments.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { renderCommentForm, renderCommentList } from './comments.ts';
 import { icon } from './icons.ts';
@@ -40,6 +40,17 @@ export function renderPostPage(post: PostPageData): string {
     ? `<p class="rkr-post-subtitle">${escapeText(post.subtitle)}</p>`
     : '';
 
+  const commentCount = countThread(post.comments ?? []);
+  const bubbleLabel =
+    commentCount === 0
+      ? 'Leave a comment — jump to comment form'
+      : `${commentCount} comment${commentCount === 1 ? '' : 's'} — jump to comment form`;
+  const commentBubble = `<a class="rkr-comment-bubble" href="#respond" aria-label="${escapeAttr(
+    bubbleLabel
+  )}">${icon('comment', 18)}<span class="rkr-comment-bubble-count">${
+    commentCount > 0 ? commentCount : ''
+  }</span></a>`;
+
   const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug, post.commentNotice ? { notice: post.commentNotice } : {})}`;
   const v = bundleVersion();
   return `<!DOCTYPE html>
@@ -66,6 +77,7 @@ ${post.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>
 ${subtitleBlock}
 ${dateBlock}
+${commentBubble}
 </header>
 ${post.bodyHtml}
 </article>
