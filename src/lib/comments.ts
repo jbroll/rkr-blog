@@ -129,6 +129,13 @@ export interface ThreadComment {
   replies: ThreadComment[];
 }
 
+/** Total comments in a published thread (top-level + their one-level
+ * replies). Replies never nest deeper (one-level threading invariant),
+ * so a single pass suffices. */
+export function countThread(thread: ThreadComment[]): number {
+  return thread.reduce((n, c) => n + 1 + c.replies.length, 0);
+}
+
 /** Published comments for a post: top-level oldest-first, each with its
  * published replies oldest-first. */
 export function listPublishedThread(db: Db, postId: number): ThreadComment[] {

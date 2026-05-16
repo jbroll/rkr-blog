@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import { type TestContext, test } from 'node:test';
 import {
   applyClassification,
+  countThread,
   getCommentById,
   getPostIdBySlug,
   insertImportedComment,
   insertWebComment,
   listForModeration,
   listPublishedThread,
-  setCommentStatus
+  setCommentStatus,
+  type ThreadComment
 } from '../../src/lib/comments.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
@@ -215,6 +217,28 @@ test('getPostIdBySlug returns the post id or null', (t) => {
   const { db, postId } = setup(t);
   assert.equal(getPostIdBySlug(db, 'p'), postId);
   assert.equal(getPostIdBySlug(db, 'nope'), null);
+});
+
+test('countThread sums top-level comments and their replies', () => {
+  assert.equal(countThread([]), 0);
+  const mk = (id: number, replies: number): ThreadComment => ({
+    id,
+    author_name: 'A',
+    author_url: null,
+    body: 'b',
+    created_at: '2026-01-01T00:00:00.000Z',
+    replies: Array.from({ length: replies }, (_, i) => ({
+      id: id * 100 + i,
+      author_name: 'R',
+      author_url: null,
+      body: 'r',
+      created_at: '2026-01-01T00:00:00.000Z',
+      replies: []
+    }))
+  });
+  assert.equal(countThread([mk(1, 0)]), 1);
+  assert.equal(countThread([mk(1, 2)]), 3);
+  assert.equal(countThread([mk(1, 2), mk(2, 0), mk(3, 1)]), 3 + 1 + 2);
 });
 
 test('insertWebComment rejects parentId for a comment on a different post', (t) => {
