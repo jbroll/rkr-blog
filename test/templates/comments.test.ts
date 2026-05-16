@@ -61,6 +61,11 @@ test('renderCommentForm has only name/email/comment + hidden honeypot, no websit
   assert.match(html, /name="website"/);
   // the real "Website" input is gone
   assert.ok(!html.includes('name="url"'));
+  // layout hooks (Name | Email | Post on one row, Comment full-width)
+  assert.match(html, /<label class="rkr-cf-name">/);
+  assert.match(html, /<label class="rkr-cf-email">/);
+  assert.match(html, /<label class="rkr-cf-comment">/);
+  assert.match(html, /<button class="rkr-cf-submit" type="submit">Post<\/button>/);
 });
 
 test('renderCommentForm without replyTo omits parent_id', () => {

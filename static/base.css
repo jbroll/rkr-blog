@@ -75,3 +75,53 @@ main:focus-visible { outline: none; }
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Comment form: structural layout only (theme-independent so the form
+   is usable under every theme). Row 1 = Name | Email | Post button;
+   row 2 = Comment spanning the full width. Hidden inputs (t, parent_id)
+   are display:none and the honeypot is absolutely positioned, so none
+   become grid items. */
+.rkr-comment-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+.rkr-comment-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.rkr-comment-form input,
+.rkr-comment-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.rkr-cf-name {
+  grid-column: 1;
+  grid-row: 1;
+}
+.rkr-cf-email {
+  grid-column: 2;
+  grid-row: 1;
+}
+.rkr-cf-submit {
+  grid-column: 3;
+  grid-row: 1;
+}
+.rkr-cf-comment {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+@media (max-width: 32rem) {
+  .rkr-comment-form {
+    grid-template-columns: 1fr;
+  }
+  .rkr-cf-name,
+  .rkr-cf-email,
+  .rkr-cf-submit,
+  .rkr-cf-comment {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

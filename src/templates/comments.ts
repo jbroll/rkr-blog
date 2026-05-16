@@ -59,10 +59,10 @@ ${parent}
 <div class="rkr-hp" aria-hidden="true">
   <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"/></label>
 </div>
-<label>Name<input type="text" name="name" required maxlength="80"/></label>
-<label>Email (never shown)<input type="email" name="email" required maxlength="200"/></label>
-<label>Comment<textarea name="body" required rows="5" maxlength="5000"></textarea></label>
-<button type="submit">Post comment</button>
+<label class="rkr-cf-name">Name<input type="text" name="name" required maxlength="80"/></label>
+<label class="rkr-cf-email">Email (never shown)<input type="email" name="email" required maxlength="200"/></label>
+<label class="rkr-cf-comment">Comment<textarea name="body" required rows="5" maxlength="5000"></textarea></label>
+<button class="rkr-cf-submit" type="submit">Post</button>
 </form>
 </section>`;
 }
