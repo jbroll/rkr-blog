@@ -103,12 +103,15 @@ export function registerAdminSettingsRoutes(
       ingestMaxDim?: unknown;
       ingestScalePct?: unknown;
       ingestWebpQuality?: unknown;
+      postTeaser?: unknown;
     };
   }>('/admin/settings', { ...guard }, async (request, reply) => {
     const body = request.body ?? {};
     const titleRaw = typeof body.title === 'string' ? body.title.trim() : '';
     const taglineRaw = typeof body.tagline === 'string' ? body.tagline.trim() : '';
     const themeRaw = typeof body.theme === 'string' ? body.theme.trim() : '';
+    // Unchecked HTML checkboxes send nothing; presence === enabled.
+    const postTeaser = body.postTeaser !== undefined;
 
     if (titleRaw.length > MAX_TITLE) {
       return reply.redirect(`/admin/settings?err=${encodeURIComponent('title too long')}`, 303);
@@ -167,6 +170,7 @@ export function registerAdminSettingsRoutes(
       title: titleRaw,
       tagline: taglineRaw,
       theme: themeRaw,
+      postTeaser,
       ...(ingestResize ? { ingestResize } : {})
     });
 

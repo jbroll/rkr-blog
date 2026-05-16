@@ -422,3 +422,28 @@ test('GET /admin/banner/edit: requires auth', async (t) => {
   const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
   assert.ok(res.statusCode === 302 || res.statusCode === 401);
 });
+
+test('POST /admin/settings: checked postTeaser persists true', async (t) => {
+  const { root, app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default&postTeaser=on'
+  });
+  assert.equal(res.statusCode, 303);
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.postTeaser, true);
+});
+
+test('POST /admin/settings: absent postTeaser persists false', async (t) => {
+  const { root, app } = await setup(t);
+  await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default'
+  });
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.postTeaser, false);
+});
