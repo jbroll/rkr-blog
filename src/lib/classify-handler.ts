@@ -34,7 +34,7 @@ export function envClassifier(): Classifier {
 }
 
 /** Create a classify handler around a Classifier. The handler reads
- * `ctx.db` (server.ts + cli/render.ts both put the Db in ctx). */
+ * `ctx.db`, which `server.ts`'s worker populates. */
 export function makeClassifyHandler(
   classifier: Classifier
 ): (payload: ClassifyPayload, ctx: { siteRoot: string; [k: string]: unknown }) => Promise<void> {
@@ -59,6 +59,7 @@ export function makeClassifyHandler(
       applyClassification(db, payload.commentId, {
         status: 'queued',
         score: null,
+        // cap the stored reason at a tweet-ish length (audit only)
         reason: `classify failed: ${(err as Error).message}`.slice(0, 280)
       });
     }
