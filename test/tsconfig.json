@@ -1,0 +1,28 @@
+// Editor/LSP-only TypeScript project for the test tree.
+//
+// The root tsconfig.json's `include` is "test/*.ts" (top-level test
+// helpers only) — unit/integration tests under test/lib, test/routes,
+// test/cli, test/templates, test/admin, test/helpers are intentionally
+// NOT type-checked by `npm run typecheck` (they run via
+// `node --experimental-strip-types`). Without a tsconfig that covers
+// them, the TypeScript language server opens each test file as an
+// inferred project with default compiler options, producing spurious
+// editor diagnostics: missing node types (node:test / node:assert),
+// unresolved `.ts` import specifiers, and implicit-any on test params.
+//
+// This config exists ONLY so the editor/LSP resolves those files
+// correctly. It is deliberately NOT wired into `npm run typecheck`,
+// `npm run check`, or the pre-commit gauntlet — CI behavior is
+// unchanged. Tests remain executed (not tsc-built) by node.
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // Test files exercise both node libs and browser DOM code
+    // (e.g. test/admin/*), so expose both to the language server.
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["../node_modules"]
+}
