@@ -518,3 +518,20 @@ quirks) rather than a code bug.
 adding a real user-facing reduced-motion preference toggle would
 benefit from clearer test coverage anyway.
 
+## Planned features
+
+### Post teaser on the logged-out homepage
+
+**Source.** Feature request; design captured in
+[`docs/teaser-feature.md`](teaser-feature.md).
+
+**What.** Feature the top post of the anonymous homepage list as a
+teaser (hero image + first paragraph), gated behind a `postTeaser`
+blog-global config toggle (default off). Full design, file list, edge
+cases, and test plan are in the linked doc.
+
+**Why deferred.** Design approved; implementation not yet scheduled.
+
+**Trigger.** When picking up the next homepage/UX work item, or on
+explicit go-ahead to implement.
+
