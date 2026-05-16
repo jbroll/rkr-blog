@@ -509,6 +509,17 @@ export function wireFigureReorder(editor: Editor): void {
   root.addEventListener('keydown', (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target || !target.matches('img[data-cell-index]')) return;
+    // Thumbs carry role="button" + tabindex=0, so keyboard users
+    // expect Enter/Space to activate. Activation = the same per-cell
+    // edit a tap opens: synthesize a click (justDragged is false here,
+    // so the capture-phase suppressor lets it through to main.ts's
+    // delegated click→edit handler). Keyboard parity with tap-to-edit,
+    // and it closes the role="button"-without-activation a11y gap.
+    if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+      ev.preventDefault();
+      (target as HTMLElement).click();
+      return;
+    }
     const dir =
       ev.key === 'ArrowLeft' || ev.key === 'ArrowUp'
         ? -1
