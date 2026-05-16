@@ -690,21 +690,26 @@ non-secret config change needs to be reviewable in git history.
 
 ## User-requested follow-ups (2026-05-16)
 
-### Drag-and-drop image reordering in the figure editor
+### Cross-figure image move (drag an image between figures)
 
-**Source.** User request, 2026-05-16.
+**Source.** User request, 2026-05-16. Within-figure reorder shipped
+2026-05-16 (spec `docs/superpowers/specs/2026-05-16-figure-reorder-design.md`,
+plan `docs/superpowers/plans/2026-05-16-figure-reorder.md`): pointer-drag
++ keyboard reorder of images *within* a single figure, with a JS-owned
+aria-live announcement and the `figure-reorder.ts` drag substrate.
 
-**What.** In the figure editor, multi-image figures (gallery /
-carousel / diptych / triptych) have no way to reorder their images by
-dragging. Order is whatever the ids were inserted in; changing it
-means editing the `ids=` list by hand.
+**What.** Drag an image out of one figure and into another, reusing
+the existing pointer-drag substrate (`wireFigureReorder`).
 
-**Why deferred.** Needs a drag-reorder interaction in the editor
-(pointer/keyboard a11y, drop-target affordances) plus write-back to
-the directive's `ids` order — non-trivial UI work, not yet scheduled.
+**Why deferred.** Adds a single ProseMirror transaction patching *two*
+figure nodes (`setNodeMarkup` on source + target), deletion of an
+emptied source figure (today's code leaves `ids=''` rather than
+removing the node), a fixed-slot capacity rule for diptych (2) /
+triptych (3) drop targets, and cross-figure pointer hit-testing. To be
+specced separately on top of the within-figure work.
 
-**Trigger.** When picking up figure-editor UX work, or the first time
-an author asks how to reorder gallery images.
+**Trigger.** The first time an author wants an image moved between two
+existing figures.
 
 ### Comment bubble floated right in the post title
 
