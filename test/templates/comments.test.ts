@@ -91,3 +91,19 @@ test('renderCommentForm with notice renders notice paragraph', () => {
   assert.match(html, /class="rkr-comment-notice"/);
   assert.ok(html.includes('Thank you &amp; welcome!'));
 });
+
+test('renderCommentList escapes quotes in author_url that would break out of href', () => {
+  const thread: ThreadComment[] = [
+    {
+      id: 5,
+      author_name: 'Eve',
+      author_url: 'http://x" onmouseover="evil',
+      body: 'hi',
+      created_at: '2026-01-01T00:00:00.000Z',
+      replies: []
+    }
+  ];
+  const html = renderCommentList(thread);
+  assert.ok(!html.includes('" onmouseover='), 'raw quote-break must not survive');
+  assert.ok(html.includes('&quot;'), 'quote must be entity-encoded');
+});
