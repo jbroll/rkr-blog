@@ -49,7 +49,7 @@ test('comments: submit → pending (not visible), approve via admin → visible 
   await page.locator('form[action$="/comments"] input[name="email"]').fill('e2e@example.com');
   await page.locator('form[action$="/comments"] textarea[name="body"]').fill(commentBody);
   // Leave website (honeypot) empty — already empty, just confirm.
-  await expect(page.locator('form[action$="/comments"] input[name="website"]')).toHaveValue('');
+  await expect(page.locator('form[action$="/comments"] input[name="website"]')).toHaveValue(''); // name="website" is the hidden honeypot (NOT the real URL field, which is name="url")
 
   await Promise.all([
     page.waitForURL((url) => {
@@ -79,8 +79,8 @@ test('comments: submit → pending (not visible), approve via admin → visible 
 
   // Approve it.
   const approveResp = await page.request.post(`/admin/comments/${commentId}/approve`);
-  // 303 redirect — fetch follows redirects, so final status is 200.
-  expect([200, 303]).toContain(approveResp.status());
+  // page.request.post follows redirects, so the final status is always 200.
+  expect(approveResp.status()).toBe(200);
 
   // Reload the post page and assert the comment body is now visible.
   await page.goto(`/${slug}`);
@@ -101,7 +101,7 @@ test('comments: honeypot filled → silent 303, spam text absent from post', asy
   await page.locator('form[action$="/comments"] textarea[name="body"]').fill(spamBody);
   // Fill the honeypot website field to trigger bot detection.
   await page
-    .locator('form[action$="/comments"] input[name="website"]')
+    .locator('form[action$="/comments"] input[name="website"]') // name="website" is the hidden honeypot (NOT the real URL field, which is name="url")
     .fill('http://spam.example.com');
 
   await Promise.all([
