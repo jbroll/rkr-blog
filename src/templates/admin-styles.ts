@@ -81,6 +81,31 @@ export const ADMIN_CSS = `
     -moz-user-select: none; -ms-user-select: none;
     -webkit-touch-callout: none; touch-action: pan-y;
   }
+  /* Reorder: thumb must claim the gesture (pan-y above would let the
+     page scroll instead of letting the finger drag). */
+  #rkroll-admin-article .rkr-multi-thumb { touch-action: none; }
+  #rkroll-admin-article .rkr-multi-thumb:focus-visible {
+    outline: 2px solid var(--rkr-link);
+    outline-offset: 2px;
+  }
+  #rkroll-admin-article .rkr-multi-thumb.is-dragging {
+    opacity: .4;
+  }
+  /* Insertion indicator: absolutely positioned inside the thumb grid
+     (which must be a positioned ancestor for left/top to resolve). */
+  #rkroll-admin-article .rkr-multi-thumbs { position: relative; }
+  #rkroll-admin-article .rkr-multi-drop-indicator {
+    position: absolute;
+    background: var(--rkr-link);
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* Visually-hidden reorder status (announced via aria-live). */
+  #rkroll-admin-article .rkr-multi-status {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
   /* Mode label + flush-right View link on the same baseline. */
   .rkr-page-title-row {
     display: flex; align-items: baseline; justify-content: space-between;
