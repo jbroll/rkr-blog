@@ -156,16 +156,11 @@ export default async function publicRoutes(
     async (req, reply) => {
       const site = getSite();
       const isAdmin = !!req.user;
-      // Normalise ?tag= to a deduplicated string array (Fastify may deliver
-      // a string for a single value or string[] for repeated params).
+      // Only one tag at a time (OR/replace logic). Fastify may deliver a
+      // string or string[] for repeated params; take the first non-empty value.
       const rawTag = req.query.tag;
-      const activeTags = Array.from(
-        new Set(
-          (Array.isArray(rawTag) ? rawTag : rawTag ? [rawTag] : [])
-            .map((t) => t.trim())
-            .filter(Boolean)
-        )
-      );
+      const firstTag = (Array.isArray(rawTag) ? rawTag[0] : rawTag)?.trim();
+      const activeTags = firstTag ? [firstTag] : [];
       const sort: 'asc' | 'desc' = req.query.sort === 'asc' ? 'asc' : 'desc';
       // Authed visitors see drafts + published (the homepage doubles as
       // the admin posts list). Anonymous visitors keep the published-
@@ -174,7 +169,13 @@ export default async function publicRoutes(
 
       const total = countPosts(db, status, activeTags);
 
-      const rows = readIndexedPosts(db, { limit: total, offset: 0, status, tags: activeTags, sort });
+      const rows = readIndexedPosts(db, {
+        limit: total,
+        offset: 0,
+        status,
+        tags: activeTags,
+        sort
+      });
 
       // Tag rail: all posts for admin (drafts count too); published-only for anonymous.
       const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });

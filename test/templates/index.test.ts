@@ -287,7 +287,7 @@ test('renderIndexPage: pager preserves ?tag= when active', () => {
   assert.match(html, /href="\/\?page=2&amp;tag=travel"/);
 });
 
-test('renderIndexPage: multi-tag AND — active pills toggle off individually', () => {
+test('renderIndexPage: clicking inactive tag replaces active tag (OR/replace, not AND)', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
@@ -295,37 +295,13 @@ test('renderIndexPage: multi-tag AND — active pills toggle off individually', 
     posts: [],
     tagCounts: [
       { name: 'travel', count: 12 },
-      { name: 'food', count: 3 },
-      { name: 'hiking', count: 5 }
+      { name: 'food', count: 3 }
     ],
-    activeTags: ['travel', 'food']
+    activeTags: ['travel']
   });
-  // Both travel and food pills are active (aria-current).
-  assert.match(html, /href="\/\?tag=food"[^>]*aria-current="page"/);
-  assert.match(html, /href="\/\?tag=travel"[^>]*aria-current="page"/);
-  // Clicking 'travel' (to deselect) → links to /?tag=food (keeps food).
-  assert.match(html, /href="\/\?tag=food"[^>]*aria-current="page"/);
-  // Clicking 'food' (to deselect) → links to /?tag=travel (keeps travel).
-  assert.match(html, /href="\/\?tag=travel"[^>]*aria-current="page"/);
-  // Inactive tag 'hiking' links to add it to the selection.
-  assert.match(html, /href="\/\?tag=travel&amp;tag=food&amp;tag=hiking"/);
-  // No aria-current on hiking.
-  assert.doesNotMatch(html, /href="\/\?tag=travel&amp;tag=food&amp;tag=hiking"[^>]*aria-current/);
-});
-
-test('renderIndexPage: pager preserves multiple ?tag= params', () => {
-  const html = renderIndexPage({
-    site: { title: 'rkroll' },
-    page: 1,
-    totalPages: 3,
-    posts: [],
-    tagCounts: [
-      { name: 'travel', count: 30 },
-      { name: 'food', count: 10 }
-    ],
-    activeTags: ['travel', 'food']
-  });
-  assert.match(html, /href="\/\?page=2&amp;tag=travel&amp;tag=food"/);
+  // Clicking inactive 'food' → /?tag=food only (replaces travel)
+  assert.match(html, /href="\/\?tag=food"/);
+  assert.doesNotMatch(html, /href="\/\?tag=travel&(amp;)?tag=food"/);
 });
 
 test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)', () => {

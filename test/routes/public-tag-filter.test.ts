@@ -146,7 +146,7 @@ test('GET /?sort=asc: sort toggle link present', async (t) => {
 
 // --- Draft vs published visibility -------------------------------------------
 
-test('GET /?tag=travel&tag=food: AND filter returns only posts with both tags', async (t) => {
+test('GET /?tag=travel&tag=food: OR/replace — only first tag is used', async (t) => {
   const root = freshSiteRoot(t);
   writePost(root, 'both', 'Both Tags', ['travel', 'food']);
   writePost(root, 'travel-only', 'Travel Only', ['travel']);
@@ -158,12 +158,13 @@ test('GET /?tag=travel&tag=food: AND filter returns only posts with both tags', 
   const app = await buildApp({ siteRoot: root, db, startWorker: false });
   t.after(() => app.close());
 
+  // Multiple ?tag= params: only the first ('travel') is applied.
   const res = await app.inject({ method: 'GET', url: '/?tag=travel&tag=food' });
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Both Tags/);
-  assert.doesNotMatch(res.body, /Travel Only/);
+  assert.match(res.body, /Travel Only/);
   assert.doesNotMatch(res.body, /Food Only/);
-  // Both pills active
+  // Only 'travel' pill is active
   assert.match(res.body, /aria-current="page"/);
 });
 
@@ -183,7 +184,11 @@ test('GET /: anonymous view shows no tag rail when all tagged posts are drafts',
 
   const res = await app.inject({ method: 'GET', url: '/' });
   assert.equal(res.statusCode, 200);
-  assert.doesNotMatch(res.body, /rkr-tag-rail/, 'no tag rail for draft-only posts on anonymous view');
+  assert.doesNotMatch(
+    res.body,
+    /rkr-tag-rail/,
+    'no tag rail for draft-only posts on anonymous view'
+  );
 });
 
 test('GET /: anonymous view shows tag rail once a tagged draft is published', async (t) => {

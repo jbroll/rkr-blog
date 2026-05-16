@@ -41,8 +41,8 @@ export interface IndexPageData extends SiteChrome {
   /** Tag counts for the tag rail sidebar. When absent or empty, the
    * rail is not rendered. */
   tagCounts?: { name: string; count: number }[];
-  /** The currently-active tag filters. Multiple tags = AND logic (post must
-   * have all of them). Replaces the former single-string activeTag field. */
+  /** The currently-active tag filter. At most one element — clicking another
+   * tag replaces the selection (OR/replace, not AND). */
   activeTags?: string[];
   /** Current sort direction. 'desc' (default) = newest first; 'asc' = oldest first. */
   sort?: 'asc' | 'desc';
@@ -212,19 +212,9 @@ function renderTagRail(
   const pills = tagCounts
     .map((t) => {
       const isActive = activeTags.includes(t.name);
-      // Active pill: clicking removes this tag from the selection.
-      // Inactive pill: clicking adds this tag to the selection.
-      let href: string;
-      if (isActive) {
-        const remaining = activeTags.filter((a) => a !== t.name);
-        href =
-          remaining.length === 0
-            ? '/'
-            : `/?${remaining.map((a) => `tag=${encodeURIComponent(a)}`).join('&')}`;
-      } else {
-        const next = [...activeTags, t.name];
-        href = `/?${next.map((a) => `tag=${encodeURIComponent(a)}`).join('&')}`;
-      }
+      // OR/replace: clicking the active tag clears the filter; clicking any
+      // other tag switches to it exclusively (no multi-tag AND).
+      const href = isActive ? '/' : `/?tag=${encodeURIComponent(t.name)}`;
       const current = isActive ? ' aria-current="page"' : '';
       return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
     })

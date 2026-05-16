@@ -173,7 +173,7 @@ export function readIndexedPosts(
     limit?: number;
     offset?: number;
     status?: 'draft' | 'published' | null;
-    /** Multi-tag AND filter: post must carry every listed tag. */
+    /** Optional tag filter (at most one element; OR/replace logic at the UI layer). */
     tags?: string[];
     /** 'desc' (default) = newest first; 'asc' = oldest first. */
     sort?: 'asc' | 'desc';
@@ -184,8 +184,6 @@ export function readIndexedPosts(
   const tags = opts.tags && opts.tags.length > 0 ? opts.tags : null;
   const dir = opts.sort === 'asc' ? 'ASC' : 'DESC';
 
-  // Build optional multi-tag AND sub-query.
-  // Post must appear in post_tags for every requested tag (HAVING COUNT = n).
   const tagFilter = tags
     ? `AND p.id IN (
          SELECT pt.post_id FROM post_tags pt
