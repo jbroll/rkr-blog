@@ -162,7 +162,7 @@ function renderAdminTable(posts: IndexEntry[]): string {
   </tbody>
 </table></div>`;
   }
-  const dayCounts = countByDay(posts, (p) => p.updatedAt ?? p.date);
+  const dayCounts = countByDay(posts, (p) => p.date ?? p.updatedAt);
   // No <thead>: title + date + icon controls speak for themselves;
   // a header row of "Title / Updated / Status / Pin / Delete" is
   // visual noise. Each control's aria-label carries the equivalent
@@ -175,7 +175,7 @@ ${posts.map((p) => renderAdminRow(p, dayCounts)).join('\n')}
 }
 
 function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
-  const iso = p.updatedAt ?? p.date ?? '';
+  const iso = p.date ?? p.updatedAt ?? '';
   const label = iso ? formatListDate(iso, dayCounts.get(iso.slice(0, 10)) ?? 0) : '';
   const slugUri = encodeURIComponent(p.slug);
   const status = p.status ?? 'draft';

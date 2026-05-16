@@ -127,6 +127,39 @@ test('renderIndexPage: dates show date-only when one post per day, date+time whe
   assert.doesNotMatch(html, />2026-05-01T09:15:00Z</);
 });
 
+test('renderIndexPage: admin date column shows publication date over updatedAt for published posts', () => {
+  // WP-imported posts have a correct `date` (original publication) but
+  // `updatedAt` reflects the import time (which may be much later).
+  // The date column should show `date` so published posts display their
+  // real publication date, not the import/deploy timestamp.
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    isAdmin: true,
+    posts: [
+      {
+        slug: 'wp-post',
+        title: 'WP Post',
+        status: 'published',
+        date: '2024-03-15T12:00:00Z',       // original WP pub date
+        updatedAt: '2026-05-15T00:03:42Z'   // import timestamp
+      },
+      {
+        slug: 'draft-no-date',
+        title: 'Draft',
+        status: 'draft',
+        updatedAt: '2026-05-15T00:04:00Z'   // last save; no pub date
+      }
+    ]
+  });
+  // Published post shows its publication date, not the import timestamp.
+  assert.match(html, /<time datetime="2024-03-15T12:00:00Z">2024-03-15<\/time>/);
+  assert.doesNotMatch(html, /2026-05-15T00:03:42/);
+  // Draft with no date falls back to updatedAt.
+  assert.match(html, /<time datetime="2026-05-15T00:04:00Z">2026-05-15<\/time>/);
+});
+
 test('renderIndexPage: admin Updated column also disambiguates same-day rows', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
