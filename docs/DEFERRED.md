@@ -564,6 +564,32 @@ options (pick one or both, design needed):
 more frequent, or the site moves toward multiple authors / higher
 traffic where a 30 s window is user-visible to non-operators.
 
+## Task 6 code-quality review (blog-comments implementation, 2026-05-16)
+
+### SW stale-while-revalidate vs. freshly-published comments
+
+**Source.** Task 6 code-quality review, blog-comments implementation (2026-05-16).
+
+**What.** Anonymous public post pages (`GET /:slug`) are cached by the service
+worker with a stale-while-revalidate strategy (`sw-core.ts`); there is no
+`Cache-Control: no-store` on anonymous responses. Task 6 added per-request
+comment HTML to those pages. Consequence: after a comment is approved/published
+(or a new ham comment auto-publishes), a returning reader holding a SW-cached
+copy will not see the new comment until the SW background revalidation completes
+and they navigate again; an explicit reload bypasses this via the revalidation
+path. Pre-Task 6 this did not matter because post pages carried no dynamic
+per-request content.
+
+**Why deferred.** The fix options have real trade-offs and warrant a deliberate
+decision, not an ad-hoc choice: (a) send `Cache-Control: no-store` on post pages
+— always fresh but loses offline reading and repeat-visit speed; (b) shorten the
+SWR cache TTL; (c) post a `rkr-pages` cache-flush `postMessage` (or bump cache
+version) when a comment is approved in the admin moderation route. None is clearly
+correct without product input.
+
+**Trigger.** Revisit if/when readers report newly-posted comments not appearing
+without a hard refresh, or when implementing comment-approval UX.
+
 ## Planned features
 
 ### Post teaser on the logged-out homepage
