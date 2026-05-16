@@ -31,10 +31,18 @@ const base = {
   bodyHtml: '<p>x</p>'
 } as const;
 
+/** The comment bubble lives in the ARTICLE's <header>; the page also
+ * has a site masthead <header>. Anchor on <article> so we inspect the
+ * right header regardless of the masthead element/landmark. */
+function articleHeader(html: string): string {
+  const article = html.slice(html.indexOf('<article>'), html.indexOf('</article>'));
+  return article.slice(article.indexOf('<header>'), article.indexOf('</header>'));
+}
+
 test('post header has a comment bubble linking to the form with the count', () => {
   const html = renderPostPage({ ...base, comments: [top(1, 2), top(2, 0)] });
-  const header = html.slice(html.indexOf('<header>'), html.indexOf('</header>'));
-  assert.ok(header.includes('class="rkr-comment-bubble"'), 'bubble in <header>');
+  const header = articleHeader(html);
+  assert.ok(header.includes('class="rkr-comment-bubble"'), 'bubble in article <header>');
   assert.match(header, /href="#respond"/);
   assert.match(header, /aria-label="4 comments — jump to comment form"/);
   assert.match(header, /class="rkr-comment-bubble-count">4</);

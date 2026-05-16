@@ -74,7 +74,7 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
   </form>`
     : `<a class="rkr-site-head-auth-btn" href="/login" rel="nofollow">Login</a>`;
   return `<a class="rkr-skip" href="#main">Skip to content</a>
-<nav class="rkr-site-head" aria-label="Site navigation">
+<header class="rkr-site-head">
   <div class="rkr-site-head-inner">
     <div class="rkr-site-head-brand">
       <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
@@ -82,7 +82,7 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
     </div>
     <div class="rkr-site-head-auth">${auth}</div>
   </div>
-</nav>`;
+</header>`;
 }
 
 export interface FootOpts {
