@@ -383,7 +383,6 @@ test('GET /admin/banner/edit: redirects without overwriting existing _site-banne
 
 test('GET /admin/banner/edit: seeds existing bannerImageId into new _site-banner.md', async (t) => {
   const { root, app } = await setup(t);
-  // Write a site config that has a bannerImageId.
   fs.writeFileSync(
     path.join(root, 'config', 'site.json'),
     JSON.stringify({ bannerImageId: 'a'.repeat(64) })
@@ -395,6 +394,21 @@ test('GET /admin/banner/edit: seeds existing bannerImageId into new _site-banner
   const content = fs.readFileSync(bannerPath, 'utf8');
   assert.match(content, new RegExp(`ids="${'a'.repeat(64)}"`), 'figure uses bannerImageId');
   assert.match(content, /justify=bleed/);
+});
+
+test('GET /admin/banner/edit: seeds bannerImageId into existing figure-less _site-banner.md', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ bannerImageId: 'b'.repeat(64) })
+  );
+  const bannerPath = path.join(root, 'content', 'posts', '_site-banner.md');
+  fs.writeFileSync(bannerPath, '---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n');
+
+  const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
+  assert.equal(res.statusCode, 302);
+  const content = fs.readFileSync(bannerPath, 'utf8');
+  assert.match(content, new RegExp(`ids="${'b'.repeat(64)}"`), 'bannerImageId seeded');
 });
 
 test('GET /admin/banner/edit: requires auth', async (t) => {

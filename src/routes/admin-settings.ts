@@ -202,7 +202,10 @@ export function registerAdminSettingsRoutes(
   // in the editor. Hides the _site-banner slug from the settings UI.
   fastify.get('/admin/banner/edit', { ...guard }, async (_req, reply) => {
     const bannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
-    if (!fs.existsSync(bannerPath)) {
+    const exists = fs.existsSync(bannerPath);
+    const raw = exists ? fs.readFileSync(bannerPath, 'utf8') : '';
+    const hasFigure = raw.includes('::figure');
+    if (!exists || (!hasFigure && siteConfig().bannerImageId)) {
       const { bannerImageId } = siteConfig();
       const body = bannerImageId ? `\n::figure{ids="${bannerImageId}" justify=bleed}\n` : '';
       fs.writeFileSync(
