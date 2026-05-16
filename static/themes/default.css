@@ -1039,6 +1039,40 @@ span.rkr-justify-inline img {
   color: var(--rkr-link);
 }
 
+/* ---- teaser (anonymous index, postTeaser on) ---------------------- */
+.rkr-teaser {
+  max-width: var(--rkr-content);
+  margin: 0 auto 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--rkr-rule);
+}
+.rkr-teaser .rkr-figure { margin-bottom: 1.25rem; }
+.rkr-teaser-body { max-width: var(--rkr-prose); margin: 0 auto; }
+.rkr-teaser-title {
+  font-family: var(--rkr-display-font);
+  font-size: 1.75rem;
+  line-height: 1.2;
+  margin: 0 0 0.35rem;
+}
+.rkr-teaser-title a { color: var(--rkr-text); text-decoration: none; }
+.rkr-teaser-title a:hover { color: var(--rkr-link); }
+.rkr-teaser time {
+  display: block;
+  color: var(--rkr-muted);
+  font-family: var(--rkr-display-font);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.rkr-teaser-excerpt { font-family: var(--rkr-prose-font); color: var(--rkr-text); }
+.rkr-teaser-excerpt p { margin: 0 0 0.75rem; }
+.rkr-teaser-more {
+  font-family: var(--rkr-display-font);
+  font-size: 0.9rem;
+  color: var(--rkr-link);
+  text-decoration: none;
+}
+.rkr-teaser-more:hover { text-decoration: underline; }
+
 /* pager */
 nav[aria-label="pagination"] {
   margin: 2.5rem auto;

@@ -58,6 +58,7 @@
 /* Left-aligned content — article and post list align to the left rail. */
 article { max-width: var(--rkr-prose); margin-left: 0; }
 .post-list { margin-left: 0; }
+.rkr-teaser-body { margin-left: 0; }
 .rkr-site-head .rkr-site-head-inner { margin-left: 8%; }
 
 /* Post title: slightly larger, preserve italic from var. */
