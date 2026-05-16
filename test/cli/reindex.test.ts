@@ -275,13 +275,16 @@ test('readIndexedPosts tag filter returns only matching posts', (t) => {
 
     // Multi-tag AND: only post B has both travel + food
     const andPosts = readIndexedPosts(db, { tags: ['travel', 'food'] });
-    assert.deepEqual(andPosts.map((p) => p.slug), ['b']);
+    assert.deepEqual(
+      andPosts.map((p) => p.slug),
+      ['b']
+    );
   } finally {
     db.close();
   }
 });
 
-test('readTagCounts returns name + count sorted by count DESC', (t) => {
+test('readTagCounts returns name + count sorted by name DESC', (t) => {
   const root = freshSiteRoot(t);
   writePostWithTags(
     root,
@@ -305,11 +308,11 @@ test('readTagCounts returns name + count sorted by count DESC', (t) => {
 
   const db = open(path.join(root, 'data', 'site.db'));
   try {
-    // Anonymous view: only published
+    // Anonymous view: only published — reverse alphabetical order
     const counts = readTagCounts(db, { status: 'published' });
-    assert.equal(counts[0]?.name, 'travel'); // 2 published posts
+    assert.equal(counts[0]?.name, 'travel'); // 't' > 'f'
     assert.equal(counts[0]?.count, 2);
-    assert.equal(counts[1]?.name, 'food'); // 1 published post (b)
+    assert.equal(counts[1]?.name, 'food');
     assert.equal(counts[1]?.count, 1);
 
     // Admin view: all statuses

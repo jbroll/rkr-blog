@@ -340,9 +340,9 @@ body {
   max-width: var(--rkr-content);
   margin: 0 auto;
 }
-.rkr-index-posts { flex: 17; min-width: 0; }
+.rkr-index-posts { flex: 4; min-width: 0; }
 .rkr-tag-rail {
-  flex: 3;
+  flex: 1;
   padding-top: 0.25rem;
   position: sticky;
   top: 1rem;
@@ -360,6 +360,7 @@ body {
   border-radius: 999px;
   border: 1px solid var(--rkr-rule);
   color: var(--rkr-text); text-decoration: none;
+  white-space: nowrap;
 }
 .rkr-tag-pill:hover { border-color: var(--rkr-link); color: var(--rkr-link); }
 .rkr-tag-pill[aria-current="page"] {

@@ -233,7 +233,7 @@ export function readTagCounts(db: Db, opts: { status: 'published' | null }): Tag
            FROM tags t
            JOIN post_tags pt ON pt.tag_id = t.id
           GROUP BY t.id
-          ORDER BY count DESC, t.name ASC`
+          ORDER BY t.name DESC`
       )
       .all();
   }
@@ -244,7 +244,7 @@ export function readTagCounts(db: Db, opts: { status: 'published' | null }): Tag
          JOIN post_tags pt ON pt.tag_id = t.id
          JOIN posts p ON p.id = pt.post_id AND p.status = ?
         GROUP BY t.id
-        ORDER BY count DESC, t.name ASC`
+        ORDER BY t.name DESC`
     )
     .all(opts.status);
 }
