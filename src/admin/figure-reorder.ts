@@ -217,9 +217,10 @@ export function wireFigureReorder(editor: Editor): void {
     };
 
     const cleanup = () => {
-      root.removeEventListener('pointermove', onMove);
-      root.removeEventListener('pointerup', onUp);
-      root.removeEventListener('pointercancel', onCancel);
+      // Use window + capture so removal is symmetric with the add below.
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onCancel, true);
       if (rafId) cancelAnimationFrame(rafId);
       target.classList.remove('is-dragging');
       indicator?.remove();
@@ -241,9 +242,15 @@ export function wireFigureReorder(editor: Editor): void {
 
     const onCancel = () => cleanup();
 
-    root.addEventListener('pointermove', onMove);
-    root.addEventListener('pointerup', onUp);
-    root.addEventListener('pointercancel', onCancel);
+    // Capture phase on window so ProseMirror's own pointermove / pointerup
+    // handlers (which may call stopPropagation on the root element) cannot
+    // prevent these from firing. After setPointerCapture the browser directs
+    // all subsequent events to the capturing element; bubbling then carries
+    // them up through the DOM. A capture-phase window listener sees them
+    // before any stopPropagation call on a descendant can block them.
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onCancel, true);
   });
 
   root.addEventListener('keydown', (ev) => {
@@ -274,9 +281,21 @@ export function wireFigureReorder(editor: Editor): void {
     const to = from + dir;
     if (from < 0 || to < 0 || to >= thumbs.length) return;
     ev.preventDefault();
+    // Capture the figure's doc position BEFORE committing the reorder,
+    // while `placeholder` still matches what nodeDOM returns.
+    const figPos = figurePosFor(editor, placeholder);
     commitReorder(editor, placeholder, from, to);
-    const moved = thumbsOf(placeholder)[to];
-    moved?.focus();
+    // ProseMirror replaces the atom's DOM on setNodeMarkup; both
+    // `placeholder` and any pre-captured thumb refs are stale the
+    // instant the transaction commits. Re-resolve via nodeDOM after
+    // the browser has settled the re-render (one rAF).
+    requestAnimationFrame(() => {
+      if (figPos === null) return;
+      const newPlaceholder = editor.view.nodeDOM(figPos) as Element | null;
+      if (!newPlaceholder) return;
+      const moved = thumbsOf(newPlaceholder)[to];
+      moved?.focus();
+    });
     announce(placeholder, `Moved to position ${to + 1} of ${thumbs.length}`);
   });
 }

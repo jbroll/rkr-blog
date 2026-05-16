@@ -33,19 +33,7 @@ const BASELINE_PATH = 'scripts/coverage-baseline.json';
 // the e2e suite is structurally unable to exercise these files. They
 // are covered by unit tests under test/site/ instead (e.g. sw-core.ts
 // at 100% lines via test/site/sw-core.test.ts).
-//
-// TEMPORARY (figure-reorder plan, Tasks 1-6): figure-reorder.ts lands
-// as pure helpers first (unit-tested) and only gains DOM wiring in a
-// later task; until the e2e spec exists it cannot satisfy the new-file
-// gate. This entry MUST be removed in Task 7 once
-// test/e2e/figure-reorder.spec.ts exercises the wiring, so the ratchet
-// keeps gating the pointer/keyboard code. It is NOT a structural
-// exemption like the service-worker files above.
-const EXEMPT: ReadonlySet<string> = new Set([
-  'src/site/sw.ts',
-  'src/site/sw-core.ts',
-  'src/admin/figure-reorder.ts' // TEMPORARY — remove in figure-reorder Task 7
-]);
+const EXEMPT: ReadonlySet<string> = new Set(['src/site/sw.ts', 'src/site/sw-core.ts']);
 
 interface FileMetric {
   linesFound: number;
