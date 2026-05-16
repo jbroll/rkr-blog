@@ -1,0 +1,214 @@
+// Comment persistence. The only module that issues SQL against the
+// `comments` table (migration 004). One-level threading is enforced
+// here: a reply's parent must itself be top-level (SQLite can't express
+// that as a CHECK). Imported WP comments use insertImportedComment.
+
+import type { Db } from './db.ts';
+
+export type CommentStatus = 'pending' | 'published' | 'queued' | 'rejected';
+export type CommentSource = 'web' | 'wp-import';
+
+export interface CommentRow {
+  id: number;
+  post_id: number;
+  parent_id: number | null;
+  wp_comment_id: number | null;
+  author_name: string;
+  author_email: string;
+  author_url: string | null;
+  body: string;
+  status: CommentStatus;
+  source: CommentSource;
+  spam_score: number | null;
+  spam_reason: string | null;
+  ip: string | null;
+  created_at: string;
+  classified_at: string | null;
+}
+
+export interface NewWebComment {
+  postId: number;
+  parentId: number | null;
+  authorName: string;
+  authorEmail: string;
+  authorUrl: string | null;
+  body: string;
+  ip: string | null;
+}
+
+/** Throw if parentId is set but does not reference a top-level
+ * (parent_id IS NULL) comment on the same post. */
+function assertTopLevelParent(db: Db, postId: number, parentId: number): void {
+  const parent = db
+    .prepare<{ parent_id: number | null; post_id: number }>(
+      'SELECT parent_id, post_id FROM comments WHERE id = ?'
+    )
+    .get(parentId);
+  if (!parent || parent.post_id !== postId) {
+    throw new Error('parent comment not found on this post');
+  }
+  if (parent.parent_id !== null) {
+    throw new Error('parent must be a top-level comment');
+  }
+}
+
+export function insertWebComment(db: Db, c: NewWebComment): number {
+  if (c.parentId !== null) assertTopLevelParent(db, c.postId, c.parentId);
+  const now = new Date().toISOString();
+  const r = db
+    .prepare(
+      `INSERT INTO comments
+         (post_id, parent_id, author_name, author_email, author_url, body,
+          status, source, ip, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', 'web', ?, ?)`
+    )
+    .run(c.postId, c.parentId, c.authorName, c.authorEmail, c.authorUrl, c.body, c.ip, now);
+  return r.lastInsertRowid;
+}
+
+export interface ImportedComment {
+  postId: number;
+  parentId: number | null;
+  wpCommentId: number;
+  authorName: string;
+  authorUrl: string | null;
+  body: string;
+  createdAt: string;
+}
+
+/** Insert an already-approved WP comment as published. Idempotent:
+ * a duplicate wp_comment_id is ignored (returns null). */
+export function insertImportedComment(db: Db, c: ImportedComment): number | null {
+  const existing = db
+    .prepare<{ id: number }>('SELECT id FROM comments WHERE wp_comment_id = ?')
+    .get(c.wpCommentId);
+  if (existing) return null;
+  const r = db
+    .prepare(
+      `INSERT INTO comments
+         (post_id, parent_id, wp_comment_id, author_name, author_email,
+          author_url, body, status, source, created_at)
+       VALUES (?, ?, ?, ?, 'imported@roll-along', ?, ?, 'published',
+               'wp-import', ?)`
+    )
+    .run(c.postId, c.parentId, c.wpCommentId, c.authorName, c.authorUrl, c.body, c.createdAt);
+  return r.lastInsertRowid;
+}
+
+export function getCommentById(db: Db, id: number): CommentRow | undefined {
+  return db.prepare<CommentRow>('SELECT * FROM comments WHERE id = ?').get(id);
+}
+
+export function setCommentStatus(db: Db, id: number, status: CommentStatus): void {
+  db.prepare('UPDATE comments SET status = ? WHERE id = ?').run(status, id);
+}
+
+/** Persist a classifier verdict and resolve the row's status. */
+export function applyClassification(
+  db: Db,
+  id: number,
+  v: { status: 'published' | 'queued'; score: number | null; reason: string | null }
+): void {
+  db.prepare(
+    `UPDATE comments
+       SET status = ?, spam_score = ?, spam_reason = ?, classified_at = ?
+     WHERE id = ?`
+  ).run(v.status, v.score, v.reason, new Date().toISOString(), id);
+}
+
+export interface ThreadComment {
+  id: number;
+  author_name: string;
+  author_url: string | null;
+  body: string;
+  created_at: string;
+  replies: ThreadComment[];
+}
+
+/** Published comments for a post: top-level oldest-first, each with its
+ * published replies oldest-first. */
+export function listPublishedThread(db: Db, postId: number): ThreadComment[] {
+  const rows = db
+    .prepare<{
+      id: number;
+      parent_id: number | null;
+      author_name: string;
+      author_url: string | null;
+      body: string;
+      created_at: string;
+    }>(
+      `SELECT id, parent_id, author_name, author_url, body, created_at
+         FROM comments
+        WHERE post_id = ? AND status = 'published'
+        ORDER BY created_at ASC, id ASC`
+    )
+    .all(postId);
+
+  const top: ThreadComment[] = [];
+  const byId = new Map<number, ThreadComment>();
+  for (const r of rows) {
+    if (r.parent_id === null) {
+      const node: ThreadComment = {
+        id: r.id,
+        author_name: r.author_name,
+        author_url: r.author_url,
+        body: r.body,
+        created_at: r.created_at,
+        replies: []
+      };
+      byId.set(r.id, node);
+      top.push(node);
+    }
+  }
+  for (const r of rows) {
+    if (r.parent_id !== null) {
+      const parent = byId.get(r.parent_id);
+      if (parent) {
+        parent.replies.push({
+          id: r.id,
+          author_name: r.author_name,
+          author_url: r.author_url,
+          body: r.body,
+          created_at: r.created_at,
+          replies: []
+        });
+      }
+    }
+  }
+  return top;
+}
+
+export interface ModerationRow {
+  id: number;
+  post_slug: string;
+  author_name: string;
+  body: string;
+  status: CommentStatus;
+  spam_score: number | null;
+  spam_reason: string | null;
+  created_at: string;
+}
+
+/** Moderation list: queued first (oldest-first so the backlog drains
+ * FIFO), then the most recent published, capped. */
+export function listForModeration(db: Db, limit = 100): ModerationRow[] {
+  return db
+    .prepare<ModerationRow>(
+      `SELECT c.id, p.slug AS post_slug, c.author_name, c.body, c.status,
+              c.spam_score, c.spam_reason, c.created_at
+         FROM comments c
+         JOIN posts p ON p.id = c.post_id
+        WHERE c.status IN ('queued','published')
+        ORDER BY (c.status = 'queued') DESC,
+                 CASE WHEN c.status = 'queued' THEN c.created_at END ASC,
+                 c.created_at DESC
+        LIMIT ?`
+    )
+    .all(limit);
+}
+
+/** SELECT id FROM posts WHERE slug — comments need the numeric post id
+ * which the reindex IndexedPost shape doesn't expose. */
+export function getPostIdBySlug(db: Db, slug: string): number | null {
+  return db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug)?.id ?? null;
+}
