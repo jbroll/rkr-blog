@@ -56,6 +56,7 @@ export async function importWpComments(
   try {
     const idToSlug = await buildWpIdToSlug(baseUrl, fetcher as WpFetcher);
     const wpToLocal = new Map<number, number>();
+    const wpTopLevel = new Set<number>(); // WP ids inserted as top-level local comments
 
     let page = 1;
     let totalPages = 1;
@@ -74,8 +75,11 @@ export async function importWpComments(
           skipped++;
           continue;
         }
+        // One-level threading (spec §7): only attach to a parent that is
+        // itself a TOP-LEVEL local comment. A reply whose WP parent is
+        // itself a reply (or was skipped) is flattened to top-level.
         let parentId: number | null = null;
-        if (c.parent && wpToLocal.has(c.parent)) {
+        if (c.parent && wpTopLevel.has(c.parent)) {
           parentId = wpToLocal.get(c.parent) as number;
         }
         const localId = insertImportedComment(db, {
@@ -91,6 +95,7 @@ export async function importWpComments(
           skipped++;
         } else {
           wpToLocal.set(c.id, localId);
+          if (parentId === null) wpTopLevel.add(c.id);
           inserted++;
         }
       }

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 import importWpCommentsCmd, { importWpComments } from '../../src/cli/import-wp-comments.ts';
+import { getPostIdBySlug, listPublishedThread } from '../../src/lib/comments.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import type { WpFetcher } from '../../src/lib/wp-rest.ts';
@@ -58,9 +59,18 @@ function wpFetcher(): WpFetcher {
           author_url: '',
           date: '2026-05-03T10:00:00',
           content: { rendered: '<p>no post</p>' }
+        },
+        {
+          id: 13,
+          post: 2149,
+          parent: 11,
+          author_name: 'Deep',
+          author_url: '',
+          date: '2026-05-04T10:00:00',
+          content: { rendered: '<p>reply to a reply</p>' }
         }
       ]),
-      { status: 200, headers: { 'X-WP-Total': '3', 'X-WP-TotalPages': '1' } }
+      { status: 200, headers: { 'X-WP-Total': '4', 'X-WP-TotalPages': '1' } }
     );
   };
 }
@@ -68,7 +78,7 @@ function wpFetcher(): WpFetcher {
 test('imports approved comments, maps parent, skips unknown post, is idempotent', async (t) => {
   const { root } = setup(t);
   const r1 = await importWpComments('https://roll-along.example', root, wpFetcher());
-  assert.equal(r1.inserted, 2);
+  assert.equal(r1.inserted, 3);
   assert.equal(r1.skipped, 1);
 
   const db = open(path.join(root, 'data', 'site.db'));
@@ -77,21 +87,36 @@ test('imports approved comments, maps parent, skips unknown post, is idempotent'
       'SELECT wp_comment_id,parent_id,body,status FROM comments ORDER BY wp_comment_id'
     )
     .all();
-  assert.equal(rows.length, 2);
+  assert.equal(rows.length, 3);
   assert.equal(rows[0]?.status, 'published');
   assert.ok(rows[0]?.body.includes('great'));
   assert.ok(!rows[0]?.body.includes('<p>'));
+
+  // wp 11 (reply to top-level 10) should have parent_id = local id of wp 10
   const reply = rows.find((x) => x.wp_comment_id === 11);
   assert.equal(
     reply?.parent_id,
     db.prepare<{ id: number }>('SELECT id FROM comments WHERE wp_comment_id=10').get()?.id
   );
+
+  // wp 13 (reply-to-reply: parent wp 11 is itself a reply) must be flattened
+  // to top-level (parent_id null), not attached to wp 11's local id
+  const deep = rows.find((x) => x.wp_comment_id === 13);
+  assert.equal(deep?.parent_id, null, 'depth-2 WP comment must be flattened to top-level');
+
+  // listPublishedThread must reach all 3 inserted comments (no orphans)
+  const postId = getPostIdBySlug(db, 'hello');
+  assert.ok(postId !== null);
+  const thread = listPublishedThread(db, postId);
+  const reachable = thread.reduce((n, top) => n + 1 + top.replies.length, 0);
+  assert.equal(reachable, 3, 'all 3 imported comments must be reachable in rendered thread');
+
   db.close();
 
   const r2 = await importWpComments('https://roll-along.example', root, wpFetcher());
   assert.equal(r2.inserted, 0);
   const db2 = open(path.join(root, 'data', 'site.db'));
-  assert.equal(db2.prepare('SELECT COUNT(*) AS n FROM comments').get()?.n, 2);
+  assert.equal(db2.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM comments').get()?.n, 3);
   db2.close();
 });
 
