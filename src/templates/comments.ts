@@ -59,9 +59,9 @@ ${parent}
 <div class="rkr-hp" aria-hidden="true">
   <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"/></label>
 </div>
-<label class="rkr-cf-name">Name<input type="text" name="name" required maxlength="80"/></label>
-<label class="rkr-cf-email">Email (never shown)<input type="email" name="email" required maxlength="200"/></label>
-<label class="rkr-cf-comment">Comment<textarea name="body" required rows="5" maxlength="5000"></textarea></label>
+<input class="rkr-cf-name" type="text" name="name" required maxlength="80" placeholder="Name" aria-label="Name"/>
+<input class="rkr-cf-email" type="email" name="email" required maxlength="200" placeholder="Email (never shown)" aria-label="Email (never shown)"/>
+<textarea class="rkr-cf-comment" name="body" required rows="5" maxlength="5000" placeholder="Comment" aria-label="Comment"></textarea>
 <button class="rkr-cf-submit" type="submit">Post</button>
 </form>
 </section>`;
