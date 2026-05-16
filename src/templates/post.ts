@@ -47,7 +47,7 @@ export function renderPostPage(post: PostPageData): string {
       : `${commentCount} comment${commentCount === 1 ? '' : 's'} — jump to comment form`;
   const commentBubble = `<a class="rkr-comment-bubble" href="#respond" aria-label="${escapeAttr(
     bubbleLabel
-  )}">${icon('comment', 18)}<span class="rkr-comment-bubble-count">${
+  )}">${icon('comment', 36)}<span class="rkr-comment-bubble-count">${
     commentCount > 0 ? commentCount : ''
   }</span></a>`;
 

@@ -46,6 +46,8 @@ test('post header has a comment bubble linking to the form with the count', () =
   assert.match(header, /href="#respond"/);
   assert.match(header, /aria-label="4 comments — jump to comment form"/);
   assert.match(header, /class="rkr-comment-bubble-count">4</);
+  // bubble icon rendered at the enlarged 36px size
+  assert.match(header, /class="rkr-comment-bubble"[\s\S]*?<svg[^>]*width="36"[^>]*height="36"/);
   assert.ok(html.includes('id="respond"'));
 });
 
