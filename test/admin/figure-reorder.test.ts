@@ -30,6 +30,11 @@ test('reorderFigureCells: pads short alts/captions to ids length before moving',
   assert.deepEqual(out, { ids: 'i3,i1,i2', alts: ',a1,', captions: '|c1|' });
 });
 
+test('reorderFigureCells: trims ids/alts on split (captions kept verbatim)', () => {
+  const out = reorderFigureCells({ ids: 'i1, i2', alts: ' a1 , a2 ', captions: 'c 1|c 2' }, 0, 1);
+  assert.deepEqual(out, { ids: 'i2,i1', alts: 'a2,a1', captions: 'c 2|c 1' });
+});
+
 test('reorderFigureCells: no-op returns the original strings', () => {
   const input = { ids: 'i1,i2', alts: 'a1,a2', captions: 'c1|c2' };
   assert.deepEqual(reorderFigureCells(input, 1, 1), input);

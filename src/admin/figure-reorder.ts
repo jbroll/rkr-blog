@@ -4,11 +4,13 @@
 // Reorder is one permutation applied in lockstep to the figure's
 // three parallel arrays (ids ',', alts ',', captions '|').
 
-/** Move arr[from] to index `to`, returning a NEW array. Clamps /
- *  no-ops when from===to or either index is out of [0, len). */
+/** Move arr[from] to index `to`. Returns a new array on a real move;
+ *  returns the input array unchanged when from===to or either index is
+ *  out of [0, len) (same no-op identity contract as reorderFigureCells,
+ *  so callers can skip work on reference equality). Never mutates. */
 export function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const n = arr.length;
-  if (from < 0 || from >= n || to < 0 || to >= n || from === to) return arr.slice();
+  if (from < 0 || from >= n || to < 0 || to >= n || from === to) return arr;
   const copy = arr.slice();
   const [item] = copy.splice(from, 1);
   copy.splice(to, 0, item as T);

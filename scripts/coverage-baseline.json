@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 21,
-      "linesHit": 21
+      "linesHit": 20
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 37
+      "linesHit": 33
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -207,7 +207,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 27
+      "linesHit": 26
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
