@@ -131,3 +131,25 @@ test('verdict with no score field defaults based on verdict', async () => {
   assert.equal(v.verdict, 'spam');
   assert.equal(v.score, 1);
 });
+
+test('aborts and fails when the request exceeds timeoutMs', async () => {
+  const fetcher: SpamFetcher = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    });
+  await assert.rejects(
+    () =>
+      classifyComment(
+        { authorName: 'A', authorEmail: 'a@e.com', authorUrl: null, body: 'hi' },
+        {
+          baseUrl: 'https://x/ollama',
+          token: 't',
+          model: 'm',
+          timeoutMs: 20,
+          maxAttempts: 2,
+          fetcher
+        }
+      ),
+    /spam classify failed after 2 attempts/
+  );
+});

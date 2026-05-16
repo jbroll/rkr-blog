@@ -54,6 +54,7 @@ function buildPrompt(c: SpamInput): string {
 
 function parseVerdict(modelText: string): SpamVerdict {
   // The model may wrap JSON in stray text; grab the first {...} block.
+  // Greedy match is safe because format:'json' pins one object; removing format:'json' or enabling streaming would break this.
   const m = modelText.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('no JSON object in model output');
   const parsed = JSON.parse(m[0]) as Record<string, unknown>;
@@ -66,6 +67,7 @@ function parseVerdict(modelText: string): SpamVerdict {
 }
 
 async function callOnce(input: SpamInput, cfg: ClassifyConfig): Promise<SpamVerdict> {
+  /* c8 ignore next */
   const fetcher = cfg.fetcher ?? (globalThis.fetch as SpamFetcher);
   const url = `${cfg.baseUrl.replace(/\/$/, '')}/api/generate`;
   const ac = new AbortController();
