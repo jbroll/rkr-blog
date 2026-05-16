@@ -536,7 +536,12 @@ test('GET /: postTeaser on + anonymous + top post has figure → teaser, post re
   writePost(
     root,
     'second.md',
-    { slug: 'second-post', title: 'Second Post', status: 'published', date: '2026-05-14T10:00:00Z' },
+    {
+      slug: 'second-post',
+      title: 'Second Post',
+      status: 'published',
+      date: '2026-05-14T10:00:00Z'
+    },
     'Second body.'
   );
   runReindex(root);
@@ -586,7 +591,46 @@ test('GET /: postTeaser on but top post has no figure → no teaser, full list',
 });
 
 test('GET /: postTeaser on but admin view → never a teaser', async (t) => {
-  const { root, db } = await setup(t);
+  // Admin gate needs a real authenticated request; setup() skips auth
+  // middleware, so build a one-off app with the auth opt (mirrors the
+  // "GET / authed" test above).
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-teaser-admin-'));
+  for (const sub of ['sidecars', 'originals', 'content/posts', 'data', 'cache/img']) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+  }
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const prevToken = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'test-public-admin-token';
+  t.after(() => {
+    if (prevToken === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = prevToken;
+  });
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true },
+    auth: {
+      exchange: {
+        authorizationUrl: () => new URL('https://example.com/'),
+        exchange: async () => {
+          throw new Error('not used');
+        }
+      },
+      secureCookies: false,
+      skipGate: true
+    }
+  });
+  t.after(async () => {
+    await app.close();
+    events.removeAllListeners('enqueued');
+  });
+
   const id = await ingestOne(root);
   writePost(
     root,
@@ -595,19 +639,21 @@ test('GET /: postTeaser on but admin view → never a teaser', async (t) => {
     `::figure{ids="${id}" justify=bleed}\n\nLede.`
   );
   runReindex(root);
-  const app = await buildApp({
-    siteRoot: root,
-    db,
-    startWorker: false,
-    site: { title: 'Teaser Site', postTeaser: true }
-  });
-  t.after(() => app.close());
 
-  // The admin posts table is gated behind an authenticated request;
-  // an anonymous GET / never renders it. Assert the anonymous render
-  // produced the teaser, and that the admin table markup is absent
-  // (proves the teaser path did not leak into / replace the table).
-  const res = await app.inject({ method: 'GET', url: '/' });
-  assert.match(res.body, /class="rkr-teaser"/);
-  assert.doesNotMatch(res.body, /class="rkr-admin-posts"/);
+  // Authenticated GET / → admin posts table, and NO teaser even though
+  // postTeaser is on (the teaser is anonymous-only).
+  const authed = await app.inject({
+    method: 'GET',
+    url: '/',
+    headers: { authorization: 'Bearer test-public-admin-token' }
+  });
+  assert.equal(authed.statusCode, 200);
+  assert.match(authed.body, /<table class="rkr-admin-posts">/);
+  assert.doesNotMatch(authed.body, /class="rkr-teaser"/);
+
+  // Sanity: the SAME app, anonymous, DOES render the teaser — proves
+  // the absence above is the admin gate, not a misconfigured fixture.
+  const anon = await app.inject({ method: 'GET', url: '/' });
+  assert.match(anon.body, /class="rkr-teaser"/);
+  assert.doesNotMatch(anon.body, /class="rkr-admin-posts"/);
 });
