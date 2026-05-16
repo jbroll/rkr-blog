@@ -11,6 +11,7 @@ import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
 import { makeCommitFigureAttr, wireDebouncedAttrInput } from './figure-attr-panel';
 import { type FigureAttrs, FigureNode } from './figure-node';
+import { wireFigureReorder } from './figure-reorder';
 import { dirtyImageStates } from './image-edit';
 import { wireImageEditPanel } from './image-edit-panel';
 import { createImageInserter } from './image-insert';
@@ -306,6 +307,11 @@ function mount(): void {
     syncScopeVisibility(idList);
     populateImageEditForActiveCell(idList);
   });
+
+  // Delegated pointer/keyboard reorder of figure thumbs. Self-contained:
+  // a capture-phase click listener swallows the post-drag synthetic
+  // click so the tap-to-edit handler above is unaffected.
+  wireFigureReorder(editor);
 
   // Any close path (✕, ESC, backdrop, Save, Delete) clears the
   // active cell so the next figure-level edit isn't stale.
