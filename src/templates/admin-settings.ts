@@ -92,10 +92,7 @@ ${saveBtn}
 
   <h2 class="rkr-admin-settings-section">Banner</h2>
   <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
-    ${data.hasBanner
-      ? `<a href="/admin/editor?slug=_site-banner">Edit banner →</a>`
-      : `<a href="/admin/editor">Create banner</a> — set the slug to <code>_site-banner</code>`
-    }
+    <a href="/admin/banner/edit">${data.hasBanner ? 'Edit banner →' : 'Create banner'}</a>
   </div>
 
   <h2 class="rkr-admin-settings-section">Image uploads</h2>

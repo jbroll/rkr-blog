@@ -145,7 +145,7 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
 // Banner section
 // ---------------------------------------------------------------------------
 
-test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/editor?slug=_site-banner', () => {
+test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/banner/edit', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
     persisted: {},
@@ -155,11 +155,12 @@ test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/editor?s
     gitHash: 'unknown',
     hasBanner: true
   });
-  assert.match(html, /href="\/admin\/editor\?slug=_site-banner"/);
+  assert.match(html, /href="\/admin\/banner\/edit"/);
   assert.match(html, /Edit banner/);
+  assert.doesNotMatch(html, /_site-banner/, 'slug not exposed in UI');
 });
 
-test('renderAdminSettingsPage: hasBanner=false shows create link to /admin/editor', () => {
+test('renderAdminSettingsPage: hasBanner=false shows create link to /admin/banner/edit', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
     persisted: {},
@@ -169,10 +170,9 @@ test('renderAdminSettingsPage: hasBanner=false shows create link to /admin/edito
     gitHash: 'unknown',
     hasBanner: false
   });
-  assert.match(html, /href="\/admin\/editor"/);
+  assert.match(html, /href="\/admin\/banner\/edit"/);
   assert.match(html, /Create banner/);
-  // Should not have the slug pre-set when hasBanner=false.
-  assert.doesNotMatch(html, /href="\/admin\/editor\?slug=_site-banner"/);
+  assert.doesNotMatch(html, /_site-banner/, 'slug not exposed in UI');
 });
 
 test('renderAdminSettingsPage: banner section heading present in both states', () => {

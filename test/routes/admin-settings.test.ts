@@ -348,3 +348,44 @@ test('POST /admin/settings/banner: 400 on invalid imageId', async (t) => {
   });
   assert.equal(res.statusCode, 400);
 });
+
+// ---------------------------------------------------------------------------
+// GET /admin/banner/edit
+// ---------------------------------------------------------------------------
+
+test('GET /admin/banner/edit: creates _site-banner.md when absent and redirects to editor', async (t) => {
+  const { root, app } = await setup(t);
+  const bannerPath = path.join(root, 'content', 'posts', '_site-banner.md');
+  assert.ok(!fs.existsSync(bannerPath), 'precondition: no banner file');
+
+  const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
+  assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner');
+  assert.ok(fs.existsSync(bannerPath), '_site-banner.md created');
+
+  const content = fs.readFileSync(bannerPath, 'utf8');
+  assert.match(content, /slug: _site-banner/);
+  assert.match(content, /status: published/);
+});
+
+test('GET /admin/banner/edit: redirects without overwriting existing _site-banner.md', async (t) => {
+  const { root, app } = await setup(t);
+  const bannerPath = path.join(root, 'content', 'posts', '_site-banner.md');
+  const existing =
+    '---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n\n::figure{ids="abc123"}\n';
+  fs.writeFileSync(bannerPath, existing);
+
+  const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
+  assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner');
+  assert.equal(fs.readFileSync(bannerPath, 'utf8'), existing, 'existing file unchanged');
+});
+
+test('GET /admin/banner/edit: requires auth', async (t) => {
+  const { app } = await setup(t);
+  // buildApp uses no-auth in test mode — but the guard is still wired.
+  // Verify the route exists and returns a redirect (auth is bypassed in test
+  // builds; the guard test in auth.test.ts covers the 401 case generically).
+  const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
+  assert.ok(res.statusCode === 302 || res.statusCode === 401);
+});

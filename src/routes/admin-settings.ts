@@ -198,6 +198,19 @@ export function registerAdminSettingsRoutes(
     }
   );
 
+  // GET /admin/banner/edit — create _site-banner.md if absent, then open it
+  // in the editor. Hides the _site-banner slug from the settings UI.
+  fastify.get('/admin/banner/edit', { ...guard }, async (_req, reply) => {
+    const bannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
+    if (!fs.existsSync(bannerPath)) {
+      fs.writeFileSync(
+        bannerPath,
+        '---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n'
+      );
+    }
+    return reply.redirect('/admin/editor?slug=_site-banner', 302);
+  });
+
   // POST /admin/settings/banner — set the site-wide banner image by ID.
   // Called by `site-admin import-wp site-banner` after uploading the image.
   fastify.post<{ Body: { imageId?: unknown } }>(
