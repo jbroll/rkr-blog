@@ -1,6 +1,6 @@
 # Post teaser — design / implementation plan
 
-Status: **planned, not implemented**. Tracked from `DEFERRED.md`.
+Status: **implemented** (2026-05-16). See `docs/superpowers/plans/2026-05-16-teaser.md`. Note: the on-disk read path is `siteRoot/<post.path>` (path already includes `content/posts/`), not `siteRoot/content/<post.path>` as drafted in §3.
 
 ## Summary
 

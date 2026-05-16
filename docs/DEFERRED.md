@@ -688,23 +688,6 @@ cross-app testing, not a bolt-on during the comments rollout.
 **Trigger.** When next touching `deploy.sh` env handling, or when a
 non-secret config change needs to be reviewable in git history.
 
-## Planned features
-
-### Post teaser on the logged-out homepage
-
-**Source.** Feature request; design captured in
-[`docs/teaser-feature.md`](teaser-feature.md).
-
-**What.** Feature the top post of the anonymous homepage list as a
-teaser (hero image + first paragraph), gated behind a `postTeaser`
-blog-global config toggle (default off). Full design, file list, edge
-cases, and test plan are in the linked doc.
-
-**Why deferred.** Design approved; implementation not yet scheduled.
-
-**Trigger.** When picking up the next homepage/UX work item, or on
-explicit go-ahead to implement.
-
 ## User-requested follow-ups (2026-05-16)
 
 ### Drag-and-drop image reordering in the figure editor
@@ -739,3 +722,23 @@ one-off. Mirror the roll-along.rkroll.com markup/CSS.
 **Trigger.** Next comments-UI or post-title layout work, or explicit
 go-ahead.
 
+### Teaser top-post read uses sync fs.readFileSync
+
+**Source.** Code review of the teaser route (Task 4,
+`docs/superpowers/plans/2026-05-16-teaser.md`), 2026-05-16.
+
+**What.** The anonymous `GET /` teaser block reads the top post with
+blocking `fs.readFileSync` + `parsePost` + figure render on every
+anonymous index hit when `postTeaser` is on. The sibling `GET /:slug`
+handler uses `await fs.promises.readFile`; the teaser path (and the
+adjacent `_site-banner.md` block it mirrors) does not.
+
+**Why deferred.** Consistent with the pre-existing `_site-banner.md`
+read in the same handler; negligible at single-author scale. Switching
+only the teaser read to async would make it inconsistent with the
+adjacent banner read — a coordinated change of both reads is the right
+fix, not a one-off.
+
+**Trigger.** When the homepage sees bot/cache-miss-heavy traffic, or
+when the `_site-banner.md` read is converted to async (do both
+together).
