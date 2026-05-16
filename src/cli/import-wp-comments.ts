@@ -28,15 +28,19 @@ function htmlToText(html: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&#0?39;|&#x27;|&apos;/gi, "'")
     .trim();
 }
 
-async function buildWpIdToSlug(baseUrl: string, fetcher: WpFetcher): Promise<Map<number, string>> {
+async function buildWpIdToSlug(baseUrl: string, fetcher?: WpFetcher): Promise<Map<number, string>> {
   const map = new Map<number, string>();
   let page = 1;
   for (;;) {
-    const r = await listPosts(baseUrl, { page, perPage: 100, status: 'publish' }, fetcher);
+    const r = await listPosts(
+      baseUrl,
+      { page, perPage: 100, status: 'publish' },
+      ...(fetcher ? [fetcher] : [])
+    );
     for (const p of r.posts) map.set(p.id, p.slug);
     if (page >= r.totalPages || r.posts.length === 0) break;
     page++;
@@ -54,14 +58,14 @@ export async function importWpComments(
   let inserted = 0;
   let skipped = 0;
   try {
-    const idToSlug = await buildWpIdToSlug(baseUrl, fetcher as WpFetcher);
+    const idToSlug = await buildWpIdToSlug(baseUrl, fetcher);
     const wpToLocal = new Map<number, number>();
     const wpTopLevel = new Set<number>(); // WP ids inserted as top-level local comments
 
     let page = 1;
     let totalPages = 1;
     do {
-      const r = await listComments(baseUrl, { page, perPage: 100 }, fetcher as WpFetcher);
+      const r = await listComments(baseUrl, { page, perPage: 100 }, ...(fetcher ? [fetcher] : []));
       totalPages = r.totalPages || 1;
       const sorted = [...r.comments].sort((a, b) => Number(a.parent) - Number(b.parent));
       for (const c of sorted) {
@@ -112,7 +116,9 @@ export default async function importWpCommentsCmd(argv: string[]): Promise<void>
   if (!baseUrl) {
     throw new Error('usage: site-admin import-wp-comments <wp-base-url>');
   }
+  /* c8 ignore start -- success path makes real HTTP calls; covered by importWpComments tests */
   const { paths } = await import('../lib/config.ts');
   const r = await importWpComments(baseUrl, paths().root);
   console.log(`imported ${r.inserted} comment(s), skipped ${r.skipped}`);
+  /* c8 ignore stop */
 }

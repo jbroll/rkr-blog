@@ -23,9 +23,9 @@ const COMMANDS = {
   user:              () => import('../src/cli/user.ts'),
   server:            () => import('../src/cli/server.ts'),
   jobs:              () => import('../src/cli/jobs.ts'),
-  'import-wp':       () => import('../src/cli/import-wp.ts'),
-  'fix-wp-dates':         () => import('../src/cli/fix-wp-dates.ts'),
-  'import-wp-comments':  () => import('../src/cli/import-wp-comments.ts')
+  'import-wp':          () => import('../src/cli/import-wp.ts'),
+  'fix-wp-dates':       () => import('../src/cli/fix-wp-dates.ts'),
+  'import-wp-comments': () => import('../src/cli/import-wp-comments.ts')
 };
 
 const KNOWN = Object.keys(COMMANDS);
