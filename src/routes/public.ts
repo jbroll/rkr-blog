@@ -68,6 +68,7 @@ import { renderIndexPage } from '../templates/index.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
 import figureWidget from '../widgets/figure.ts';
+import { registerPublicCommentRoutes } from './public-comments.ts';
 
 const FILENAME_RE = /^([0-9a-f]{64})\.([0-9a-f]{12})\.(webp|avif|jpeg|jpg|png)$/;
 
@@ -148,6 +149,7 @@ export default async function publicRoutes(
   // ::diptych / ::triptych on disk renders as a `<!-- unknown widget -->`
   // placeholder; the WP importer emits ::figure directly.
   widgets.register(figureWidget);
+  registerPublicCommentRoutes(fastify, { db });
 
   // ---- index: GET / -----------------------------------------------------
 

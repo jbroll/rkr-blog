@@ -217,19 +217,24 @@ export default async function authRoutes(
   // The bearer-header path (auth-middleware.ts) remains for stateless
   // CLI clients; this is the addition for human browser use.
 
-  fastify.addContentTypeParser(
-    'application/x-www-form-urlencoded',
-    { parseAs: 'string' },
-    (_req, body, done) => {
-      try {
-        const params = new URLSearchParams(body as string);
-        done(null, Object.fromEntries(params));
-      } catch (err) {
-        /* c8 ignore next 2 -- URLSearchParams accepts almost any string */
-        done(err as Error, undefined);
+  // Root-level server.ts registers this parser globally; only add it
+  // here when auth routes are mounted standalone (e.g. unit tests that
+  // call register(authRoutes) without going through buildApp).
+  if (!fastify.hasContentTypeParser('application/x-www-form-urlencoded')) {
+    fastify.addContentTypeParser(
+      'application/x-www-form-urlencoded',
+      { parseAs: 'string' },
+      (_req, body, done) => {
+        try {
+          const params = new URLSearchParams(body as string);
+          done(null, Object.fromEntries(params));
+        } catch (err) {
+          /* c8 ignore next 2 -- URLSearchParams accepts almost any string */
+          done(err as Error, undefined);
+        }
       }
-    }
-  );
+    );
+  }
 
   // Login page sits at /login (NOT /admin/login) so it falls under
   // the public SW handler like every other anonymous page — no

@@ -115,6 +115,21 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     }
   });
 
+  // Native HTML comment form posts application/x-www-form-urlencoded.
+  // Parse it with the URL/URLSearchParams API rather than adding a
+  // dependency. JSON bodies (the rest of the API) keep Fastify's parser.
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      try {
+        done(null, Object.fromEntries(new URLSearchParams(body as string)));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    }
+  );
+
   // Rate limiter: register globally with no default, individual routes
   // opt in via `config.rateLimit`. /img/:filename is gated to defend
   // against derivative-render DoS (sharp pipelines are expensive even
