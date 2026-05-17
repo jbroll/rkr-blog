@@ -62,6 +62,13 @@ export type OutboxEntry =
   | (OutboxEntryBase & { op: 'commitImageEdit'; payload: CommitImageEditPayload })
   | (OutboxEntryBase & { op: 'savePost'; payload: SavePostPayload });
 
+function savePostKey(e: Extract<OutboxEntry, { op: 'savePost' }>): string {
+  // New, never-synced posts share slug '' — keying those by slug
+  // collapses distinct posts into one and drops all but the latest.
+  // Distinguish them by draftId. Existing posts key by their slug.
+  return e.payload.slug !== '' ? `slug:${e.payload.slug}` : `draft:${e.draftId ?? `seq:${e.seq}`}`;
+}
+
 /** Keep only the latest savePost per slug, commitImageEdit per id,
  * and upload per id. The upload blob lives in originals/<id>.<ext>
  * (written once at ingest time), so draining N uploads of the same
@@ -72,9 +79,10 @@ export function coalescePending(entries: readonly OutboxEntry[]): OutboxEntry[] 
   const latestUpload = new Map<string, number>();
   for (const e of entries) {
     if (e.op === 'savePost') {
-      const prev = latestSavePost.get(e.payload.slug);
+      const key = savePostKey(e);
+      const prev = latestSavePost.get(key);
       if (prev === undefined || e.seq > prev) {
-        latestSavePost.set(e.payload.slug, e.seq);
+        latestSavePost.set(key, e.seq);
       }
     } else if (e.op === 'commitImageEdit') {
       const prev = latestCommit.get(e.payload.id);
@@ -89,7 +97,7 @@ export function coalescePending(entries: readonly OutboxEntry[]): OutboxEntry[] 
     }
   }
   return entries.filter((e) => {
-    if (e.op === 'savePost') return latestSavePost.get(e.payload.slug) === e.seq;
+    if (e.op === 'savePost') return latestSavePost.get(savePostKey(e)) === e.seq;
     if (e.op === 'commitImageEdit') return latestCommit.get(e.payload.id) === e.seq;
     if (e.op === 'upload') return latestUpload.get(e.payload.id) === e.seq;
     return true;

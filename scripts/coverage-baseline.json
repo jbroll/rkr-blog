@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 21,
-      "linesHit": 20
+      "linesHit": 21
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -110,8 +110,8 @@
       "linesHit": 11
     },
     "src/lib/outbox-types.ts": {
-      "linesFound": 10,
-      "linesHit": 10
+      "linesFound": 13,
+      "linesHit": 13
     },
     "src/lib/prose-markdown.ts": {
       "linesFound": 102,
@@ -139,7 +139,7 @@
     },
     "src/admin/eviction.ts": {
       "linesFound": 39,
-      "linesHit": 37
+      "linesHit": 36
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -207,7 +207,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 26
+      "linesHit": 27
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,

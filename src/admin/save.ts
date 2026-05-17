@@ -143,11 +143,18 @@ export async function handleSave(editor: Editor): Promise<void> {
       // same 409 on drain and surface it via DrainStatus 'conflict'.
     }
   }
-  await queueSavePost(payload, uploadsStillPending ? referencedIds.length : 0);
+  await queueSavePost(payload, uploadsStillPending ? referencedIds.length : 0, draftId);
 }
 
-async function queueSavePost(payload: SavePostPayload, pendingImages: number): Promise<void> {
-  await outboxAppend({ op: 'savePost', payload });
+async function queueSavePost(
+  payload: SavePostPayload,
+  pendingImages: number,
+  draftId: string
+): Promise<void> {
+  // draftId distinguishes brand-new posts (slug:'') in coalescePending:
+  // without it, two offline-composed posts both queue savePost with
+  // slug:'' and the drain drops all but the highest seq.
+  await outboxAppend({ op: 'savePost', payload, draftId });
   // Distinguish the "you're offline" case from the "online but an
   // upload is still draining" case — the second one points at a
   // partial drain (some referenced image's upload halted), which

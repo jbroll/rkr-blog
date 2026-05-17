@@ -51,6 +51,54 @@ test('coalescePending: savePost entries for different slugs both kept', () => {
   );
 });
 
+test('coalescePending: two new posts (slug:""), distinct draftId → both kept', () => {
+  // Brand-new posts both queue savePost with slug:'' (server
+  // slugifies later). Keying on slug alone collapses them and the
+  // drain DELETES all but the highest seq → silent data loss.
+  const a = entry(2, 'savePost', {
+    draftId: 'A',
+    payload: { slug: '', title: 'First', markdown: 'one' }
+  });
+  const b = entry(4, 'savePost', {
+    draftId: 'B',
+    payload: { slug: '', title: 'Second', markdown: 'two' }
+  });
+  assert.deepEqual(
+    coalescePending([a, b]).map((e) => e.seq),
+    [2, 4]
+  );
+});
+
+test('coalescePending: two saves of one new post (same draftId) → keep latest', () => {
+  const earlier = entry(1, 'savePost', {
+    draftId: 'A',
+    payload: { slug: '', title: 'Draft', markdown: 'v1' }
+  });
+  const later = entry(3, 'savePost', {
+    draftId: 'A',
+    payload: { slug: '', title: 'Draft', markdown: 'v2' }
+  });
+  const result = coalescePending([earlier, later]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.seq, 3);
+});
+
+test('coalescePending: new posts (slug:"") with NO draftId never coalesce', () => {
+  // Safe degradation: a missing draftId falls back to a per-seq key
+  // so two no-draftId new posts are never merged → no data loss,
+  // only a redundant drain.
+  const a = entry(2, 'savePost', {
+    payload: { slug: '', title: 'First', markdown: 'one' }
+  });
+  const b = entry(4, 'savePost', {
+    payload: { slug: '', title: 'Second', markdown: 'two' }
+  });
+  assert.deepEqual(
+    coalescePending([a, b]).map((e) => e.seq),
+    [2, 4]
+  );
+});
+
 test('coalescePending: commitImageEdit coalesces by id, latest seq wins', () => {
   const earlier = entry(2, 'commitImageEdit', {
     payload: { id: 'abc', ops: [], redoStack: [], hasBake: false }
