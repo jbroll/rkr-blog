@@ -86,10 +86,11 @@ export function parsePost(raw: string): ParsedPost {
   if (typeof frontmatter.title !== 'string' || typeof frontmatter.slug !== 'string') {
     throw new Error('parsePost: frontmatter must declare title and slug as strings');
   }
-  frontmatter.title = decodeHtmlEntities(frontmatter.title);
-  if (typeof frontmatter.subtitle === 'string') {
-    frontmatter.subtitle = decodeHtmlEntities(frontmatter.subtitle);
-  }
+  // Frontmatter scalars are literal post-YAML-parse. We deliberately do
+  // NOT HTML-entity-decode title/subtitle here: decoding would put live
+  // `<`/`>`/`"` into the in-memory title, turning any future raw-title
+  // sink (meta/OpenGraph/RSS/JSON-LD) into an injection point. WP imports
+  // arrive entity-encoded and are decoded once, in the WP importer.
 
   return { frontmatter, ast };
 }
@@ -202,19 +203,6 @@ const HTML_ESCAPES: Record<string, string> = {
   '"': '&quot;',
   "'": '&#39;'
 };
-
-/** Decode the small set of HTML entities that WP stores in `title.rendered`
- * and `content.rendered`. Handles numeric codepoints and the six named
- * entities most likely to appear in prose (&amp; &lt; &gt; &quot; &#039; &#8220; &#8221; &#8230; etc). */
-export function decodeHtmlEntities(s: string): string {
-  return s
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(parseInt(n, 10)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'");
-}
 
 export function escapeText(s: string): string {
   return s.replace(/[&<>]/g, (c) => HTML_ESCAPES[c] ?? c);

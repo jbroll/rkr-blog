@@ -347,6 +347,28 @@ test('importPost: imported markdown round-trips through parsePost', async (t) =>
   assert.equal((directives[0] as unknown as { name: string }).name, 'figure');
 });
 
+// WP REST returns entity-encoded title.rendered; the importer is the
+// legitimate place to decode it (so imported frontmatter holds the real
+// characters, not literal `&amp;`/`&#8217;`).
+test('importPost: decodes ordinary HTML entities in title.rendered', async (t) => {
+  const root = freshSiteRoot(t);
+  const post = makePost(POST_HTML_SINGLE, 'entity-title');
+  post.title.rendered = 'Tom &amp; Jerry&#8217;s &#8220;Trip&#8221;';
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  const parsed = parsePost(result.markdown);
+  assert.equal(parsed.frontmatter.title, 'Tom & Jerry’s “Trip”');
+});
+
+test('importPost: out-of-range numeric entity in title does not throw', async (t) => {
+  const root = freshSiteRoot(t);
+  const post = makePost(POST_HTML_SINGLE, 'oob-title');
+  post.title.rendered = 'Bad &#1114112; and hex &#xZZ; entity';
+  await assert.doesNotReject(() => importPost(post, { siteRoot: root, fetchImage: stubFetcher() }));
+});
+
 test('importPost: image fetch failures are reported, post still imports', async (t) => {
   const root = freshSiteRoot(t);
   const failingFetcher = async (_url: string): Promise<Readable> => {
@@ -818,4 +840,45 @@ test('importPost: fetchTagNames failure is non-fatal, post imports without tags'
   // Post still imports successfully, just no tags block
   assert.match(result.markdown, /Fail tags/);
   assert.doesNotMatch(result.markdown, /^tags:/m);
+});
+
+// ---- Fix 1: surrogate codepoints in numeric entities must not throw ------
+
+test('importPost: lone surrogate entities (&#xD800;, &#55296;) do not throw and are preserved literally', async (t) => {
+  const root = freshSiteRoot(t);
+  // &#xD800; = 0xD800 (lone high surrogate, hex)
+  // &#55296; = 55296 = 0xD800 (lone high surrogate, decimal)
+  // String.fromCodePoint throws RangeError for surrogates 0xD800..0xDFFF
+  const post = makePost(POST_HTML_SINGLE, 'surrogate-title');
+  post.title.rendered = 'Hello &#xD800; and &#55296; world';
+  await assert.doesNotReject(
+    () => importPost(post, { siteRoot: root, fetchImage: stubFetcher() }),
+    'importPost must not throw for lone surrogate entities'
+  );
+  const result = await importPost(post, { siteRoot: root, fetchImage: stubFetcher() });
+  // Surrogate entities must be left as literal text, not decoded
+  assert.match(result.markdown, /&#xD800;/, 'hex surrogate entity should remain literal');
+  assert.match(result.markdown, /&#55296;/, 'decimal surrogate entity should remain literal');
+  assert.match(result.markdown, /Hello/, 'surrounding text should be intact');
+  assert.match(result.markdown, /world/, 'surrounding text should be intact');
+});
+
+// ---- Fix 2: backslash in title must produce valid YAML that round-trips --
+
+test('importPost: backslash and quote in title produce valid round-trippable YAML', async (t) => {
+  const root = freshSiteRoot(t);
+  // A title with backslash followed by n (looks like \n), a Windows path
+  // backslash, and a double quote.  WP might serve this as-is in title.rendered.
+  const rawTitle = 'Fix the \\n bug C:\\path and "quote"';
+  const post = makePost(POST_HTML_SINGLE, 'backslash-title');
+  post.title.rendered = rawTitle;
+  const result = await importPost(post, { siteRoot: root, fetchImage: stubFetcher() });
+  // parsePost must not throw (invalid YAML would throw or garble the title)
+  const parsed = parsePost(result.markdown);
+  // The round-tripped title must exactly equal the raw title
+  assert.equal(
+    parsed.frontmatter.title,
+    rawTitle,
+    'backslash+quote title must survive YAML round-trip intact'
+  );
 });

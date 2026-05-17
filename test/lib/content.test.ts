@@ -164,7 +164,11 @@ test('safeLinkUrl: a colon inside the path is not a scheme', () => {
   assert.equal(safeLinkUrl('a:b'), '#');
 });
 
-test('parsePost decodes HTML entities in title and subtitle', () => {
+// Frontmatter scalars are literal post-YAML-parse. parsePost must NOT
+// HTML-entity-decode them: doing so would let a future raw-title sink
+// (meta/OpenGraph/RSS/JSON-LD) be injected via `&#60;`/`&quot;`.
+// (HTML-entity decoding of WP imports lives in the WP importer instead.)
+test('parsePost does not decode entities in title/subtitle (literal)', () => {
   const raw = `---
 title: "Picking Up the Scamp at the &#8220;Nest&#8221;"
 subtitle: "Heading home&#8230;"
@@ -174,6 +178,31 @@ slug: nest-trip
 Body.
 `;
   const { frontmatter } = parsePost(raw);
-  assert.equal(frontmatter.title, 'Picking Up the Scamp at the “Nest”');
-  assert.equal(frontmatter.subtitle, 'Heading home…');
+  assert.equal(frontmatter.title, 'Picking Up the Scamp at the &#8220;Nest&#8221;');
+  assert.equal(frontmatter.subtitle, 'Heading home&#8230;');
+});
+
+test('parsePost never decodes markup-significant entities into live markup', () => {
+  const raw = `---
+title: "&#60;img src=x onerror=alert(1)&#62; &lt;b&gt; &quot;q&quot; &#39;a&#39;"
+slug: xss
+---
+
+Body.
+`;
+  const { frontmatter } = parsePost(raw);
+  assert.ok(!frontmatter.title.includes('<'));
+  assert.ok(!frontmatter.title.includes('>'));
+  assert.ok(!frontmatter.title.includes('"'));
+});
+
+test('parsePost does not throw on a malformed/out-of-range numeric entity', () => {
+  const raw = `---
+title: "Bad &#1114112; entity"
+slug: oob
+---
+
+Body.
+`;
+  assert.doesNotThrow(() => parsePost(raw));
 });

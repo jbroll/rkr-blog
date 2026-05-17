@@ -16,7 +16,6 @@ import { Readable } from 'node:stream';
 import rehypeParse from 'rehype-parse';
 import { unified } from 'unified';
 
-import { decodeHtmlEntities } from './content.ts';
 import { ingestStream } from './originals.ts';
 import { safeFetch } from './url-safety.ts';
 import { collectText, emitMarkdown, findFirst } from './wp-import-emit.ts';
@@ -205,10 +204,33 @@ function defaultTagFetcher(): (tagIds: number[], postLink: string) => Promise<st
 }
 /* c8 ignore stop */
 
+/** Decode the small set of HTML entities WP stores in `title.rendered`.
+ * Handles numeric (decimal + hex) codepoints and the named entities most
+ * likely to appear in prose. An out-of-range or malformed numeric entity
+ * is left literal rather than throwing (a bad WP import must not 500). */
+function decodeHtmlEntities(s: string): string {
+  const fromCp = (literal: string, raw: string, radix: number): string => {
+    const cp = parseInt(raw, radix);
+    if (!Number.isInteger(cp) || cp < 0 || (cp >= 0xd800 && cp <= 0xdfff) || cp > 0x10ffff)
+      return literal;
+    return String.fromCodePoint(cp);
+  };
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (m: string, n: string) => fromCp(m, n, 16))
+    .replace(/&#(\d+);/g, (m: string, n: string) => fromCp(m, n, 10))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
+}
+
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
 function renderFrontmatter(post: WpPost, tagNames: string[] = []): string {
-  const titleEsc = decodeHtmlEntities(post.title.rendered).replace(/"/g, '\\"');
+  const titleEsc = decodeHtmlEntities(post.title.rendered)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"');
   const lines = [
     '---',
     `title: "${titleEsc}"`,
