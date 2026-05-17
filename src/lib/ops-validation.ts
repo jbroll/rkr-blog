@@ -9,6 +9,8 @@
 // (subpixel float coords) systematically 409s even single-tab.
 // Shared module = same normalization = matching hashes by construction.
 
+import { type Point, perspectiveOutputSize } from './canvas-math.ts';
+import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import type { SidecarOp } from './sidecar-types.ts';
 
 /** Maximum ops in a sidecar. Caps the chain depth a single editor save
@@ -180,6 +182,19 @@ export function validateOps(
           };
         }
         normCorners.push([Math.round(x), Math.round(y)]);
+      }
+      const [pc0, pc1, pc2, pc3] = normCorners;
+      const { w: outW, h: outH } = perspectiveOutputSize([pc0, pc1, pc2, pc3] as [
+        Point,
+        Point,
+        Point,
+        Point
+      ]);
+      if (outW * outH > SHARP_PIXEL_LIMIT) {
+        return {
+          ok: false,
+          error: `ops[${i}] perspective output ${outW}x${outH} exceeds the ${SHARP_PIXEL_LIMIT / 1_000_000} Mpx area limit`
+        };
       }
       out.push({ type: 'perspective', corners: normCorners });
     } else {

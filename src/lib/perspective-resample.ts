@@ -19,6 +19,7 @@
 //      corners are always within bounds at op-emit time.
 
 import { computeHomography, invertMatrix3, perspectiveOutputSize } from './canvas-math.ts';
+import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 
 export interface PerspectiveResult {
   buffer: Buffer;
@@ -38,6 +39,10 @@ export function resamplePerspective(
   const corners = parseCorners(op);
   if (!corners) return null;
   const { w: outW, h: outH } = perspectiveOutputSize(corners);
+  // Defense in depth: a sidecar written before the pixel-area limit
+  // was enforced (or a future code path) must never make us allocate
+  // an unbounded RGBA buffer. Bail to "no bake" rather than OOM.
+  if (outW * outH > SHARP_PIXEL_LIMIT) return null;
   // Map the user-picked source corners to the output rectangle
   // (0,0)-(outW,outH). H goes src→dst; sampling wants dst→src.
   const H = computeHomography(corners, [

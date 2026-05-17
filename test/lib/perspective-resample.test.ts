@@ -78,6 +78,19 @@ test('resamplePerspective: degenerate quad (three colinear corners) → null', (
   assert.equal(result, null);
 });
 
+test('resamplePerspective returns null when output area exceeds the limit', () => {
+  const src = Buffer.alloc(4);
+  const r = resamplePerspective(src, 1, 1, {
+    corners: [
+      [0, 0],
+      [99999, 0],
+      [99999, 99999],
+      [0, 99999]
+    ]
+  });
+  assert.equal(r, null);
+});
+
 test('resamplePerspective: half-image quad → output is the cropped + rectified region', () => {
   // 8×8 input with the left half red and right half blue. Picking
   // the left half as the source quad rectifies it into a square
