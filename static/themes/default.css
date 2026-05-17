@@ -34,11 +34,11 @@
   /* structural tokens — themes override these to reshape chrome without
      writing raw class overrides against default.css selectors */
   --rkr-head-border: 1px solid var(--rkr-rule); /* border-bottom on .rkr-site-head */
-  --rkr-head-padding: 1.5rem 1.5rem 1rem;
+  --rkr-head-padding: 1.25rem 1.5rem 0.85rem;
   --rkr-header-direction: row;       /* flex-direction on .rkr-site-head-inner */
   --rkr-header-text-align: left;     /* text-align on .rkr-site-head */
   --rkr-foot-border: 1px solid var(--rkr-rule);
-  --rkr-title-size: 1.25rem;
+  --rkr-title-size: 1.45rem;
   --rkr-title-weight: 700;
   --rkr-title-style: normal;
   --rkr-title-transform: none;
@@ -51,6 +51,10 @@
   --rkr-list-cols: max-content 1fr;  /* grid-template-columns on .post-list li */
   --rkr-blockquote-border: 3px solid var(--rkr-rule);
   --rkr-main-margin-left: auto;      /* override for asymmetric layouts (e.g. tufte) */
+  --rkr-main-pad: 1.25rem 1.5rem;    /* padding on <main> */
+  --rkr-figure-margin: 2rem;         /* vertical margin on .rkr-figure (horizontal stays auto) */
+  --rkr-list-row-pad: 0.6rem;        /* vertical padding on .post-list li */
+  --rkr-teaser-gap: 1.5rem;          /* teaser margin-bottom + padding-bottom */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -513,7 +517,7 @@ main {
   max-width: var(--rkr-content);
   margin: 0 auto;
   margin-left: var(--rkr-main-margin-left);
-  padding: 2rem 1.5rem;
+  padding: var(--rkr-main-pad);
 }
 
 /* ---- prose -------------------------------------------------------- */
@@ -690,7 +694,13 @@ article hr {
 
 .rkr-figure {
   display: block;
-  margin: 2rem auto;
+  margin: var(--rkr-figure-margin) auto;
+}
+/* When the banner/hero is the page-leading element (bannerAboveHeader),
+   it is a direct body child before the header — kill its top margin so
+   it sits flush to the viewport top. Positional, so not a token. */
+body > .rkr-figure:first-child {
+  margin-top: 0;
 }
 .rkr-figure-grid {
   display: grid;
@@ -1032,7 +1042,7 @@ span.rkr-justify-inline img {
   grid-template-columns: var(--rkr-list-cols);
   gap: 1.25rem;
   align-items: baseline;
-  padding: 1rem 0;
+  padding: var(--rkr-list-row-pad) 0;
   border-bottom: 1px solid var(--rkr-rule);
 }
 .post-list li:last-child {
@@ -1058,8 +1068,8 @@ span.rkr-justify-inline img {
 /* ---- teaser (anonymous index, postTeaser on) ---------------------- */
 .rkr-teaser {
   max-width: var(--rkr-content);
-  margin: 0 auto 2.5rem;
-  padding-bottom: 2rem;
+  margin: 0 auto var(--rkr-teaser-gap);
+  padding-bottom: var(--rkr-teaser-gap);
   border-bottom: 1px solid var(--rkr-rule);
 }
 .rkr-teaser .rkr-figure { margin-bottom: 1.25rem; }

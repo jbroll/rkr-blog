@@ -132,11 +132,11 @@ these over writing `.rkr-site-head { text-align: center }` in theme CSS.
 | Property                  | Default                       | Controls                                            |
 | ------------------------- | ----------------------------- | --------------------------------------------------- |
 | `--rkr-head-border`       | `1px solid var(--rkr-rule)`   | `border-bottom` on `.rkr-site-head`.                |
-| `--rkr-head-padding`      | `1.5rem 1.5rem 1rem`          | `padding` on `.rkr-site-head`.                      |
+| `--rkr-head-padding`      | `1.25rem 1.5rem 0.85rem`      | `padding` on `.rkr-site-head`.                      |
 | `--rkr-header-direction`  | `row`                         | `flex-direction` on `.rkr-site-head-inner`.         |
 | `--rkr-header-text-align` | `left`                        | `text-align` on `.rkr-site-head`.                   |
 | `--rkr-foot-border`       | `1px solid var(--rkr-rule)`   | `border-top` on `.rkr-site-foot`.                   |
-| `--rkr-title-size`        | `1.25rem`                     | Site title font size.                               |
+| `--rkr-title-size`        | `1.45rem`                     | Site title font size.                               |
 | `--rkr-title-weight`      | `700`                         | Site title font weight.                             |
 | `--rkr-title-style`       | `normal`                      | Site title font style.                              |
 | `--rkr-title-transform`   | `none`                        | Site title `text-transform`.                        |
@@ -149,6 +149,10 @@ these over writing `.rkr-site-head { text-align: center }` in theme CSS.
 | `--rkr-list-cols`         | `max-content 1fr`             | `grid-template-columns` on `.post-list li`.         |
 | `--rkr-blockquote-border` | `3px solid var(--rkr-rule)`   | `border-left` on `article blockquote`.              |
 | `--rkr-main-margin-left`  | `auto`                        | `margin-left` on `main` (use `8%` for left-biased). |
+| `--rkr-main-pad`          | `1.25rem 1.5rem`              | `padding` on `main`.                                |
+| `--rkr-figure-margin`     | `2rem`                        | Vertical `margin` on `.rkr-figure` (horizontal stays `auto`). |
+| `--rkr-list-row-pad`      | `0.6rem`                      | Vertical `padding` on `.post-list li`.              |
+| `--rkr-teaser-gap`        | `1.5rem`                      | `.rkr-teaser` `margin-bottom` + `padding-bottom`.   |
 
 ## Stable class hooks
 
