@@ -268,6 +268,86 @@ test('round-trip: ::figure matrix=1x2 / matrix=1x3 preserve ids + caption', () =
   assert.equal(proseToMarkdown(markdownToProse(tri)).trim(), tri.trim());
 });
 
+// ---- figure caption/alt directive-safety round-trip --------------------
+// quote() serializes caption/alt into the ::figure{...} directive. A
+// caption containing `}` `"` `\` `&` or a newline must NOT split or
+// corrupt the directive on editor save (prose → markdown → prose). The
+// scheme is a symmetric percent-encode on emit + decode on parse-back;
+// in-memory caption/alt text must be byte-identical after a round trip.
+
+const HOSTILE_CASES: Record<string, string> = {
+  brace: 'cap with } a brace',
+  dquote: 'cap with " a dquote',
+  backslash: 'cap with \\ a backslash',
+  ampersand: 'cap with & amp; and &#65; entityish',
+  newline: 'cap with\na newline',
+  carriageReturn: 'cap with\r a CR',
+  percent: 'cap with %7D literal percent-hex and 50% off',
+  combined: 'a } b " c \\ d & e\nf %25 g'
+};
+
+for (const [name, text] of Object.entries(HOSTILE_CASES)) {
+  test(`round-trip (editor save): figure caption survives hostile char — ${name}`, () => {
+    const doc: ProseDoc = {
+      type: 'doc',
+      content: [{ type: 'figure', attrs: { ids: 'abcdef', caption: text } }]
+    };
+    const md = proseToMarkdown(doc);
+    const back = markdownToProse(md);
+    const fig = back.content[0];
+    assert.equal(
+      fig?.type,
+      'figure',
+      `directive split / dropped for ${name}: ${JSON.stringify(md)}`
+    );
+    assert.equal(fig?.attrs?.caption, text, `caption corrupted for ${name}: ${JSON.stringify(md)}`);
+  });
+
+  test(`round-trip (editor save): figure alt survives hostile char — ${name}`, () => {
+    const doc: ProseDoc = {
+      type: 'doc',
+      content: [{ type: 'figure', attrs: { ids: 'abcdef', alts: text } }]
+    };
+    const md = proseToMarkdown(doc);
+    const back = markdownToProse(md);
+    const fig = back.content[0];
+    assert.equal(
+      fig?.type,
+      'figure',
+      `directive split / dropped for ${name}: ${JSON.stringify(md)}`
+    );
+    assert.equal(fig?.attrs?.alts, text, `alts corrupted for ${name}: ${JSON.stringify(md)}`);
+  });
+}
+
+test('round-trip (editor save): per-image captions list with hostile chars', () => {
+  const captions = 'first } cap|second " cap|third \\ & \n cap';
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'figure', attrs: { ids: 'a,b,c', captions } }]
+  };
+  const md = proseToMarkdown(doc);
+  const fig = markdownToProse(md).content[0];
+  assert.equal(fig?.type, 'figure');
+  // split/trim normalizes surrounding whitespace per segment, but every
+  // segment's hostile chars must survive intact.
+  assert.deepEqual(
+    String(fig?.attrs?.captions).split('|'),
+    captions.split('|').map((s) => s.trim())
+  );
+});
+
+test('round-trip (editor save): plain caption stays readable and unchanged in the .md', () => {
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [{ type: 'figure', attrs: { ids: 'abcdef', caption: 'Workbench at dusk' } }]
+  };
+  const md = proseToMarkdown(doc);
+  // No encoding noise for ordinary text — emitted verbatim.
+  assert.match(md, /caption="Workbench at dusk"/);
+  assert.equal(markdownToProse(md).content[0]?.attrs?.caption, 'Workbench at dusk');
+});
+
 test('proseToMarkdown: figure timer capped at 60 on emit', () => {
   // The editor's UI clamps the timer input, but defense-in-depth:
   // emitFigure also caps at 60 so a forged ProseMirror JSON body
