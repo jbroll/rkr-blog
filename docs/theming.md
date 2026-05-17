@@ -146,7 +146,7 @@ these over writing `.rkr-site-head { text-align: center }` in theme CSS.
 | `--rkr-h1-weight`         | `bold`                        | Post article h1 font weight.                        |
 | `--rkr-h2-style`          | `normal`                      | Article h2/h3/h4 font style.                        |
 | `--rkr-h2-weight`         | `bold`                        | Article h2/h3/h4 font weight.                       |
-| `--rkr-list-cols`         | `1fr max-content`             | `grid-template-columns` on `.post-list li` (title \| date). |
+| `--rkr-list-cols`         | `1fr 8rem`                    | `grid-template-columns` on `.post-list li` (title \| fixed date col). |
 | `--rkr-blockquote-border` | `3px solid var(--rkr-rule)`   | `border-left` on `article blockquote`.              |
 | `--rkr-main-margin-left`  | `auto`                        | `margin-left` on `main` (use `8%` for left-biased). |
 | `--rkr-main-pad`          | `1.25rem 1.5rem`              | `padding` on `main`.                                |

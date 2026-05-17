@@ -48,7 +48,7 @@
   --rkr-h1-weight: bold;
   --rkr-h2-style: normal;
   --rkr-h2-weight: bold;
-  --rkr-list-cols: 1fr max-content;  /* grid-template-columns on .post-list li (title | date) */
+  --rkr-list-cols: 1fr 8rem;         /* grid-template-columns on .post-list li (title | fixed date col) */
   --rkr-blockquote-border: 3px solid var(--rkr-rule);
   --rkr-main-margin-left: auto;      /* override for asymmetric layouts (e.g. tufte) */
   --rkr-main-pad: 1.25rem 1.5rem;    /* padding on <main> */
@@ -1056,9 +1056,11 @@ span.rkr-justify-inline img {
   border-bottom: 0;
 }
 .post-list time {
-  /* Flush-right in the date column so date-only and date+time labels
-     align on the same right edge regardless of length. */
-  justify-self: end;
+  /* Left-justified within the fixed-width date column so date-only
+     and date+time labels share the same left edge regardless of
+     length. (A max-content column collapses under the 1fr title and
+     defeats this — hence the fixed track in --rkr-list-cols.) */
+  text-align: left;
   color: var(--rkr-muted);
   font-size: 0.85rem;
   font-family: var(--rkr-display-font);

@@ -35,9 +35,6 @@
   --rkr-title-size: 1.15rem;
   --rkr-title-weight: 600;
   --rkr-title-tracking: 0;
-
-  /* Single-column post list (date stacks above title). */
-  --rkr-list-cols: 1fr;
 }
 
 @media (prefers-color-scheme: dark) {
