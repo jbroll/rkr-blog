@@ -12,6 +12,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 import { cacheKey } from './hash.ts';
+import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, imageInfo } from './originals.ts';
 import { resamplePerspective } from './perspective-resample.ts';
 import { listSidecarIds } from './posts.ts';
@@ -325,7 +326,10 @@ async function ensureBake(
  * resampled buffer. Multiple perspective ops in a row work fine,
  * just with one materialization per op. */
 async function applyOpsWithPerspective(srcPath: string, ops: readonly Op[]): Promise<sharp.Sharp> {
-  let pipeline: sharp.Sharp = sharp(srcPath, { failOn: 'error' });
+  let pipeline: sharp.Sharp = sharp(srcPath, {
+    failOn: 'error',
+    limitInputPixels: SHARP_PIXEL_LIMIT
+  });
   for (const op of ops) {
     if (op.type === 'perspective') {
       const { data, info } = await pipeline
@@ -337,7 +341,8 @@ async function applyOpsWithPerspective(srcPath: string, ops: readonly Op[]): Pro
         throw new Error(`widget-helpers: malformed perspective op (corners or homography)`);
       }
       pipeline = sharp(result.buffer, {
-        raw: { width: result.width, height: result.height, channels: 4 }
+        raw: { width: result.width, height: result.height, channels: 4 },
+        limitInputPixels: SHARP_PIXEL_LIMIT
       });
     } else {
       pipeline = applyOp(pipeline, op);
