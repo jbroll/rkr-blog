@@ -2,18 +2,20 @@
 // tap still opens per-cell edit; keyboard arrows reorder and keep focus
 // on the moved image. Harness mirrors editor-flow.spec.ts.
 
+import sharp from 'sharp';
 import { expect, test } from './coverage-fixtures.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
-// 1×1 PNGs distinct from each other and from those used in
-// editor-flow.spec.ts (content-hash uniqueness prevents id collisions).
-const PNG_BLACK =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-const PNG_RED =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
-const PNG_BLUE =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC';
+// Distinct solid-colour PNGs with REAL dimensions. 1×1 fixtures render
+// the figure thumbnails at 0 width in the editor grid, which makes the
+// drag geometry degenerate (all midpoints collapse → dropIndexFor can't
+// resolve a target) and silently masks reorder bugs. 60×40 gives the
+// thumbs a real hit area, mirroring production photos.
+const png = (r: number, g: number, b: number): Promise<Buffer> =>
+  sharp({ create: { width: 60, height: 40, channels: 3, background: { r, g, b } } })
+    .png()
+    .toBuffer();
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/login');
@@ -31,7 +33,7 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 async function openPickerAndUpload(
   page: import('@playwright/test').Page,
   triggerLocator: import('@playwright/test').Locator,
-  b64: string,
+  buf: Buffer,
   filename: string
 ): Promise<void> {
   const picker = page.locator('#rkr-source-picker');
@@ -42,7 +44,7 @@ async function openPickerAndUpload(
   await page.locator('#rkr-image-input').setInputFiles({
     name: filename,
     mimeType: 'image/png',
-    buffer: Buffer.from(b64, 'base64')
+    buffer: buf
   });
 }
 
@@ -66,7 +68,7 @@ test('drag reorder moves a thumb and survives save; tap still edits', async ({ p
   await openPickerAndUpload(
     page,
     page.getByRole('button', { name: '+Image', exact: true }),
-    PNG_BLACK,
+    await png(0, 0, 0),
     'reorder-a.png'
   );
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded reorder-a\.png/, {
@@ -75,7 +77,12 @@ test('drag reorder moves a thumb and survives save; tap still edits', async ({ p
   await expect(page.locator('img[data-cell-index="0"]')).toBeVisible();
 
   // Image 2: figure's + button → picker local → upload
-  await openPickerAndUpload(page, page.locator('button[data-add-image]'), PNG_RED, 'reorder-b.png');
+  await openPickerAndUpload(
+    page,
+    page.locator('button[data-add-image]'),
+    await png(200, 40, 40),
+    'reorder-b.png'
+  );
   await expect(page.locator('#rkroll-admin-status')).toContainText(
     /^appended 1 image\(s\) to figure/,
     { timeout: 10_000 }
@@ -86,7 +93,7 @@ test('drag reorder moves a thumb and survives save; tap still edits', async ({ p
   await openPickerAndUpload(
     page,
     page.locator('button[data-add-image]'),
-    PNG_BLUE,
+    await png(40, 60, 200),
     'reorder-c.png'
   );
   await expect(page.locator('#rkroll-admin-status')).toContainText(
@@ -98,45 +105,34 @@ test('drag reorder moves a thumb and survives save; tap still edits', async ({ p
   const before = await ids(page);
   expect(before).toHaveLength(3);
 
-  // ---- Drag thumb 0 past thumb 2 via synthetic Pointer Events ----------
-  // page.mouse.move({steps}) does not reliably deliver intermediate
-  // pointermove events to the page in Playwright's CDP implementation —
-  // only the final position is dispatched. Synthetic PointerEvents from
-  // evaluate() are fully delivered and tested the correct code path.
+  // ---- Drag thumb 0 past thumb 2 with REAL mouse input ----------------
+  // Use real page.mouse events (not synthetic dispatchEvent): only real
+  // OS-level input exercises native <img> drag-and-drop and ProseMirror's
+  // node-drag, which are exactly what can preempt our pointermove stream.
+  // A synthetic-PointerEvent test passes in a vacuum while real drag is
+  // broken (this is the regression that shipped). Issue many discrete
+  // page.mouse.move() calls — each is a distinct real pointermove (the
+  // {steps} option coalesces; separate calls do not).
   const a = await page.locator('img[data-cell-index="0"]').boundingBox();
   const c = await page.locator('img[data-cell-index="2"]').boundingBox();
   if (!a || !c) throw new Error('thumbs missing');
 
-  // Move from the centre of thumb 0 to just past the right edge of thumb 2
-  // so dropIndexFor returns 3 → to = 3-1 = 2 (cell 0 goes to the end).
-  await page.evaluate(
-    ({ startX, startY, endX, endY }) => {
-      const img = document.querySelector('img[data-cell-index="0"]') as HTMLElement | null;
-      if (!img) throw new Error('img[data-cell-index="0"] not found');
-      const pid = 1;
-      const base = { bubbles: true, cancelable: true, pointerId: pid, pointerType: 'mouse' };
-      img.dispatchEvent(
-        new PointerEvent('pointerdown', { ...base, buttons: 1, clientX: startX, clientY: startY })
-      );
-      const steps = 20;
-      for (let i = 1; i <= steps; i++) {
-        const x = startX + ((endX - startX) * i) / steps;
-        const y = startY + ((endY - startY) * i) / steps;
-        img.dispatchEvent(
-          new PointerEvent('pointermove', { ...base, buttons: 1, clientX: x, clientY: y })
-        );
-      }
-      img.dispatchEvent(
-        new PointerEvent('pointerup', { ...base, buttons: 0, clientX: endX, clientY: endY })
-      );
-    },
-    {
-      startX: a.x + a.width / 2,
-      startY: a.y + a.height / 2,
-      endX: c.x + c.width + 12,
-      endY: c.y + c.height / 2
-    }
-  );
+  const startX = a.x + a.width / 2;
+  const startY = a.y + a.height / 2;
+  // Just past the right edge of thumb 2 so dropIndexFor returns 3 →
+  // to = 3-1 = 2 (cell 0 goes to the end).
+  const endX = c.x + c.width + 12;
+  const endY = c.y + c.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  const steps = 20;
+  for (let i = 1; i <= steps; i++) {
+    await page.mouse.move(
+      startX + ((endX - startX) * i) / steps,
+      startY + ((endY - startY) * i) / steps
+    );
+  }
+  await page.mouse.up();
 
   // After the drag the ids must have changed.
   await expect.poll(() => ids(page)).not.toEqual(before);
@@ -184,7 +180,7 @@ test('keyboard ArrowRight reorders a focused thumb and keeps focus', async ({ pa
   await openPickerAndUpload(
     page,
     page.getByRole('button', { name: '+Image', exact: true }),
-    PNG_BLACK,
+    await png(0, 0, 0),
     'kb-a.png'
   );
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded kb-a\.png/, {
@@ -192,7 +188,12 @@ test('keyboard ArrowRight reorders a focused thumb and keeps focus', async ({ pa
   });
   await expect(page.locator('img[data-cell-index="0"]')).toBeVisible();
 
-  await openPickerAndUpload(page, page.locator('button[data-add-image]'), PNG_RED, 'kb-b.png');
+  await openPickerAndUpload(
+    page,
+    page.locator('button[data-add-image]'),
+    await png(200, 40, 40),
+    'kb-b.png'
+  );
   await expect(page.locator('#rkroll-admin-status')).toContainText(
     /^appended 1 image\(s\) to figure/,
     { timeout: 10_000 }

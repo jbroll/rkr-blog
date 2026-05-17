@@ -153,6 +153,25 @@ export function wireFigureReorder(editor: Editor): void {
     true // capture: runs before main.ts's bubble-phase click handler
   );
 
+  // A real mouse press-drag on a thumb would otherwise start native
+  // image drag-and-drop AND ProseMirror's node-drag (the figure node is
+  // draggable:true) — either preempts the pointermove stream, so the
+  // reorder silently never engages. Cancel dragstart at the source.
+  // Capture phase + window so it beats PM's own dragstart handling.
+  window.addEventListener(
+    'dragstart',
+    (ev) => {
+      // Any dragstart originating inside a figure placeholder must be
+      // cancelled: ProseMirror's node-drag (figure is draggable:true)
+      // fires dragstart on the node wrapper, not the <img>, so scoping
+      // to the thumb misses it and native/PM DnD eats the pointer
+      // stream (pointermove/up stop firing → reorder never engages).
+      const t = ev.target as HTMLElement | null;
+      if (t?.closest('.rkr-figure-placeholder')) ev.preventDefault();
+    },
+    true
+  );
+
   root.addEventListener('pointerdown', (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target?.matches('img[data-cell-index]')) return;

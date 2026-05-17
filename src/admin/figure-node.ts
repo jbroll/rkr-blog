@@ -80,6 +80,10 @@ export const FigureNode = Node.create({
         class: 'rkr-image rkr-multi-thumb',
         'data-id': id,
         'data-cell-index': String(i),
+        // <img> is a native drag source by default; without this a real
+        // mouse press-drag starts the browser's image drag-and-drop and
+        // the pointermove stream our reorder needs never arrives.
+        draggable: 'false',
         tabindex: '0',
         role: 'button',
         'aria-label': `Image ${i + 1} of ${idList.length}; press arrow keys to reorder`
