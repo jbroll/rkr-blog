@@ -1,28 +1,41 @@
 # Comment Email Notifications — Design
 
 **Date:** 2026-05-17
-**Status:** Approved (pending spec review)
+**Status:** Revised 2026-05-17 — notification level is now an
+operator-selectable Settings value (was hardcoded ham-only).
+
+> Line/path anchors below (`server.ts:228/:245`,
+> `classify-handler.ts:42/44`) were written against an older `main`
+> and have since drifted (~32 commits; e.g. reindex moved to
+> `lib/post-index.ts`). The approach holds; re-verify exact anchors
+> at plan time.
 
 ## Goal
 
-Email the site owner when a reader comment is successfully posted —
-specifically, when the spam classifier verdicts a comment as **ham**
-and it auto-publishes. Manual admin-approve does **not** notify (that
-is the owner's own action). Spam / moderation-queued comments do not
-notify.
+Email the site owner about reader comments, at a verbosity the
+operator chooses in Settings. The classifier flips a submitted
+comment `pending → published` (ham) or `pending → queued` (spam /
+classifier failure / too-fast fill). The owner picks which of those
+transitions generate mail:
 
-Single known recipient (the owner). No reply-to-commenter
-notifications.
+- **off** — never email (explicit disable, independent of SMTP).
+- **ham** — only when a comment auto-publishes (ham). *Default.*
+- **queued** — only when a comment lands in the moderation queue
+  (the items actually needing the owner's action).
+- **all** — both transitions.
+
+Manual admin-approve never notifies (the owner's own action). Single
+known recipient (the owner). No reply-to-commenter notifications.
 
 ## Non-goals (YAGNI)
 
 - HTML email (plain text only — no escaping/injection surface)
 - Unsubscribe handling
-- Per-post or per-author notification toggles
+- Per-post or per-author notification toggles (one global level)
 - Batching / digest
 - Notification on manual admin-approve of a queued comment
-- Notification on submission (pending) — only on the ham→published
-  transition
+- Notification on submission while still `pending` (only the
+  resolved `published` / `queued` transitions notify)
 
 ## Architecture & components
 
@@ -49,8 +62,11 @@ Thin nodemailer wrapper.
   `server.ts:228`). Throws if `ctx.db` is missing (same shape as
   `classify-handler.ts:42`).
 - Loads the comment via `getCommentById`. If missing, or status is
-  not `published`, return quietly (defensive, mirrors
-  `classify-handler.ts:44`).
+  neither `published` nor `queued`, return quietly (defensive,
+  mirrors `classify-handler.ts:44`). The level gate already happened
+  at enqueue time (see classify-handler) — the handler trusts the
+  job exists and just sends; it branches subject/body on the
+  comment's status (`published` vs `queued`).
 - Loads the post slug + title (join `posts` on `comment.post_id`; add
   a small helper to `comments.ts`, e.g. `getPostMetaById`, alongside
   the existing `getPostIdBySlug`).
@@ -67,16 +83,49 @@ Thin nodemailer wrapper.
   lives with the transport it configures), following the
   `envClassifier()` precedent in `classify-handler.ts`.
 
+### Notification level (Settings) — `config.ts` + admin-settings (modify)
+
+Persisted, operator-edited, **not a secret**. Mirrors the existing
+`postTeaser` / `teaserWords` / `bannerAboveHeader` plumbing added
+this session:
+
+- `SiteConfig` + `PersistedSiteConfig`: add
+  `commentNotify?: 'off' | 'ham' | 'queued' | 'all'`.
+- `pickPersistedFields`: accept only that enum (unknown/missing →
+  treated as the default).
+- `siteConfig()`: surface it; **default `'ham'`** (preserves the
+  original spec's behavior; only matters once SMTP is configured).
+- `src/templates/admin-settings.ts`: a `<select name="commentNotify">`
+  in the Comments/Posts section — options Off / Ham (auto-published) /
+  Queued (needs moderation) / Any — pre-selected from persisted.
+- `src/routes/admin-settings.ts`: parse `commentNotify` (validate
+  against the enum, else ignore), include in `writePersistedSiteConfig`.
+
 ### `src/lib/classify-handler.ts` (modify)
 
-On the **ham branch only**, after
-`applyClassification(db, id, { status: 'published', ... })`:
+Read the level via `siteConfig().commentNotify` (default `'ham'`).
+Gate the enqueue at the transition so no dead `notify` jobs are
+created:
 
 ```
-enqueue(db, { kind: 'notify', payload: { commentId: payload.commentId } });
+const lvl = siteConfig().commentNotify ?? 'ham';
+// ham branch, after applyClassification(..., status:'published'):
+if (lvl === 'ham' || lvl === 'all')
+  enqueue(db, { kind: 'notify', payload: { commentId } });
+// queued branch (spam / classifier error), after status:'queued':
+if (lvl === 'queued' || lvl === 'all')
+  enqueue(db, { kind: 'notify', payload: { commentId } });
 ```
 
-No notify on the `queued` (spam / classifier-error) branch.
+`lvl === 'off'` enqueues nothing on either branch.
+
+### `src/routes/public-comments.ts` (modify)
+
+The too-fast-fill path inserts straight to `queued`, skipping the
+classify job. Apply the same gate there: if
+`lvl === 'queued' || lvl === 'all'`, `enqueue` a `notify` job for the
+new comment id (so honeypot/timing rejections still alert when the
+operator wants queued notifications).
 
 ### `package.json` (modify)
 
@@ -88,19 +137,39 @@ devDependencies if not bundled.)
 ```
 POST /:slug/comments
   → insertWebComment (pending)
-  → enqueue classify job
-       → classify-handler: verdict ham
-            → applyClassification(published)
-            → enqueue notify job
-                 → notify-handler: load comment + post
-                      → mailer.sendMail → SMTP
+  ├─ too-fast fill → status=queued
+  │     → if level∈{queued,all}: enqueue notify
+  └─ enqueue classify job
+        → classify-handler (reads siteConfig().commentNotify):
+            ham   → applyClassification(published)
+                     → if level∈{ham,all}:    enqueue notify
+            spam/ → applyClassification(queued)
+            error    → if level∈{queued,all}: enqueue notify
+                          → notify-handler: load comment + post
+                               → subject/body per status
+                               → mailer.sendMail → SMTP
 ```
 
 The notify job is a separate queue unit. SMTP latency/failure never
 touches classification, and the single-worker loop serializes sends
-naturally.
+naturally. The level is read at enqueue time, so changing it in
+Settings affects only subsequent comments (already-enqueued jobs
+still send).
 
-## Configuration (secrets.env)
+## Configuration
+
+Two independent layers:
+
+1. **Transport** — SMTP creds in `secrets.env` (below). Secret.
+   Unset → mailer no-ops regardless of level.
+2. **Level** — `commentNotify` in the persisted site config
+   (`config/site.json`), edited at `/admin/settings`. **Not** a
+   secret. `off` → no mail even when SMTP is fully configured.
+
+Both gates must pass for an email to send: a configured transport
+**and** a level that includes the comment's transition.
+
+### SMTP transport (`secrets.env`)
 
 New environment variables, added to `secrets.env.example` with
 explanatory comments:
@@ -119,7 +188,9 @@ not an error. The site runs normally without mail configured.
 
 ## Email content (plain text)
 
-- **Subject:** `New comment on "<post title>" by <author name>`
+- **Subject** (varies by status):
+  - published: `New comment on "<post title>" by <author name>`
+  - queued: `[moderation] Held comment on "<post title>" by <author name>`
 - **Body** (plain text, no HTML):
   - Author name and email
   - Post title
@@ -149,13 +220,23 @@ crashed site is not.
 - **`mailer.ts`**: no-op-when-unconfigured path; configured path with
   an injected fake transport asserting the message payload. No real
   SMTP.
-- **`notify-handler.ts`**: seed comment + post, run with a fake
-  mailer, assert `to` / `subject` / `text` content (including the
-  comment + admin links). Assert silent return on missing comment and
-  on non-`published` status.
-- **`classify-handler.ts`**: extend the existing test — assert a
-  `notify` job is enqueued on the ham verdict and **not** on the spam
-  verdict.
+- **`notify-handler.ts`**: seed comment + post, fake mailer; assert
+  `to` / `subject` / `text` for **both** a `published` and a
+  `queued` comment (subject differs). Assert silent return on
+  missing comment and on a status that is neither.
+- **`config.ts`**: `commentNotify` round-trips through
+  `writePersistedSiteConfig` / `pickPersistedFields`; unknown value
+  falls back to the `'ham'` default; mirrors the existing
+  `teaserWords` config test.
+- **`classify-handler.ts`**: extend the existing test — for each
+  level (`off`/`ham`/`queued`/`all`) assert `notify` is enqueued on
+  the ham branch and/or the spam branch exactly per the matrix
+  (e.g. `queued` → notify on spam, none on ham; `off` → never).
+- **`public-comments.ts`**: the too-fast-fill path enqueues `notify`
+  iff level ∈ {queued, all}.
+- **admin-settings**: the `<select>` renders the persisted value
+  selected; POST persists a valid enum and ignores an invalid one
+  (mirrors the `teaserWords` route test).
 
 ## Conventions
 
