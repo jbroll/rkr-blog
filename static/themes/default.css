@@ -128,10 +128,8 @@ body {
 .rkr-site-head-auth-btn:hover { color: var(--rkr-link); text-decoration: underline; }
 
 /* Posts-list rail controls: sort toggle + search at the top of the
-   tag rail. The search field overlays the sort toggle when focused.
-   Pure CSS; the form is a no-JS GET form. */
+   tag rail, side by side. Pure CSS; the form is a no-JS GET form. */
 .rkr-rail-controls {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -152,16 +150,10 @@ body {
   transition: border-color 160ms ease;
 }
 .rkr-site-search input::placeholder { color: var(--rkr-muted); }
-/* On focus the field covers the whole controls row, hiding the sort
-   toggle beneath it. */
+/* Static on focus — just a subtle underline accent, no expand/overlay. */
 .rkr-site-search input:focus {
-  position: absolute;
-  inset: 0;
-  width: 100%;
   outline: none;
-  background: var(--rkr-bg);
   border-bottom-color: var(--rkr-link);
-  z-index: 2;
 }
 .rkr-tag-pills { display: block; }
 
