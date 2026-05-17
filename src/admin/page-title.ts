@@ -43,7 +43,9 @@ function render(): void {
   // brand-new draft doesn't show a dead "View" affordance.
   const view = $<HTMLAnchorElement>('rkr-page-view');
   if (slug) {
-    view.href = `/${slug}`;
+    // `_about` is a system post served at the clean /about URL
+    // (`_`-slugs 404 via /:slug by design); other slugs map 1:1.
+    view.href = slug === '_about' ? '/about' : `/${slug}`;
     view.hidden = false;
   } else {
     view.removeAttribute('href');
