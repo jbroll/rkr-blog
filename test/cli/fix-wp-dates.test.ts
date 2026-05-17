@@ -8,9 +8,9 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import fixWpDatesCmd, { fixWpDates } from '../../src/cli/fix-wp-dates.ts';
-import { runReindex } from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-fix-wp-'));

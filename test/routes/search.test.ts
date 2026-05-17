@@ -3,9 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
-
-import { runReindex } from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
 function seed(

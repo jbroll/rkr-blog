@@ -5,12 +5,11 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
-
-import { runReindex } from '../../src/cli/reindex.ts';
 import { open } from '../../src/lib/db.ts';
 import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {

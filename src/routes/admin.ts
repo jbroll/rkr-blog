@@ -15,7 +15,6 @@ import { fileURLToPath } from 'node:url';
 
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
-import { runReindex } from '../cli/reindex.ts';
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
@@ -24,6 +23,7 @@ import { paths, siteConfig } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { ingestStream } from '../lib/originals.ts';
+import { runReindex } from '../lib/post-index.ts';
 import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';

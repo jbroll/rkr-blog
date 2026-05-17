@@ -9,9 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-
-import { runReindex } from '../cli/reindex.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
+import { runReindex } from '../lib/post-index.ts';
 import { isValidSlug } from './admin-post-consts.ts';
 
 export interface AdminPostsRoutesOpts {

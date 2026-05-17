@@ -13,7 +13,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { runReindex } from '../cli/reindex.ts';
 import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
@@ -27,6 +26,7 @@ import {
 import type { Db } from '../lib/db.ts';
 import { INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
+import { runReindex } from '../lib/post-index.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 

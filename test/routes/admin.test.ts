@@ -146,7 +146,7 @@ test('GET /admin/posts → 301 redirect to /; POST /:slug/delete still works', a
     await app.close();
     db.close();
   });
-  const { runReindex } = await import('../../src/cli/reindex.ts');
+  const { runReindex } = await import('../../src/lib/post-index.ts');
   runReindex(root);
 
   const redirect = await app.inject({ method: 'GET', url: '/admin/posts' });
