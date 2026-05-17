@@ -33,3 +33,6 @@ secrets.env
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# agent worktrees (harness-managed, never tracked)
+.claude/worktrees/
