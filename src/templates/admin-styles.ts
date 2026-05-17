@@ -85,12 +85,15 @@ export const ADMIN_CSS = `
      page scroll instead of letting the finger drag). */
   #rkroll-admin-article .rkr-multi-thumb { touch-action: none; }
   #rkroll-admin-article .rkr-multi-thumb:focus-visible {
-    outline: 2px solid var(--rkr-link);
+    /* Fallback required: the admin editor does not define --rkr-link,
+       so a bare var() resolves to nothing (invisible). base.css uses
+       the same #1a4f7f fallback convention. */
+    outline: 2px solid var(--rkr-link, #1a4f7f);
     outline-offset: 2px;
   }
   #rkroll-admin-article .rkr-multi-thumb.is-dragging {
     opacity: .3;
-    outline: 2px dashed var(--rkr-link);
+    outline: 2px dashed var(--rkr-link, #1a4f7f);
     outline-offset: -2px;
   }
   /* Bold insertion bar at the drop slot — absolutely positioned in the
@@ -102,9 +105,16 @@ export const ADMIN_CSS = `
     position: absolute;
     width: 5px;
     margin-left: -2px;
-    background: var(--rkr-link);
+    background: var(--rkr-link, #1a4f7f);
     border-radius: 3px;
-    box-shadow: 0 0 0 1px #fff, 0 0 6px var(--rkr-link);
+    /* Dual ring — light inner + dark outer — so the bar keeps contrast
+       on both a white and a dark editor background, plus a coloured
+       glow. (The old single #fff ring was the only thing rendering
+       because the bar background var had no fallback → transparent.) */
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, .9),
+      0 0 0 2px rgba(0, 0, 0, .55),
+      0 0 6px var(--rkr-link, #1a4f7f);
     pointer-events: none;
     z-index: 3;
   }

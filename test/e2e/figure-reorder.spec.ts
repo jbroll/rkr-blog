@@ -135,7 +135,15 @@ test('drag reorder moves a thumb and survives save; tap still edits', async ({ p
       // Mid-drag: the floating clone follows the pointer and the bold
       // insertion bar is shown (the visible-feedback fix).
       await expect(page.locator('.rkr-multi-drag-clone')).toBeVisible();
-      await expect(page.locator('.rkr-multi-drop-indicator')).toBeVisible();
+      const ind = page.locator('.rkr-multi-drop-indicator');
+      await expect(ind).toBeVisible();
+      // Guard the contrast root cause: the bar background must resolve
+      // to a real opaque colour, not transparent (which is what a
+      // var(--rkr-link) with no fallback produced — only a faint white
+      // shadow ring showed).
+      const bg = await ind.evaluate((el) => getComputedStyle(el).backgroundColor);
+      expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+      expect(bg).not.toBe('transparent');
     }
   }
   await page.mouse.up();
