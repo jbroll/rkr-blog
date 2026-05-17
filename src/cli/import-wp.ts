@@ -7,10 +7,10 @@ import path from 'node:path';
 
 import { paths } from '../lib/config.ts';
 import { importPost } from '../lib/wp-import.ts';
-import { pushPost } from '../lib/wp-push.ts';
+import { pushPage, pushPost } from '../lib/wp-push.ts';
 import { fetchPost, fetchWpSiteBannerUrl, fetchWpSiteInfo, listPosts } from '../lib/wp-rest.ts';
 
-const SUBCOMMANDS = ['list', 'post', 'push', 'site-banner'] as const;
+const SUBCOMMANDS = ['about', 'list', 'post', 'push', 'site-banner'] as const;
 type ImportWpSub = (typeof SUBCOMMANDS)[number];
 
 export default async function importWpCmd(argv: string[]): Promise<void> {
@@ -18,11 +18,13 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
   if (!sub || !(SUBCOMMANDS as readonly string[]).includes(sub)) {
     throw new Error(
       `usage:
+  site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN]
   site-admin import-wp list <base-url> [--page N] [--per-page N] [--status STATUS]
   site-admin import-wp post <base-url> <id-or-slug> [--force]
   site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]`
     );
   }
+  if ((sub as ImportWpSub) === 'about') return about(argv.slice(1));
   if ((sub as ImportWpSub) === 'list') return list(argv.slice(1));
   if ((sub as ImportWpSub) === 'push') return push(argv.slice(1));
   if ((sub as ImportWpSub) === 'site-banner') return siteBanner(argv.slice(1));
@@ -114,6 +116,35 @@ async function push(args: string[]): Promise<void> {
     `${result.inserted ? 'created' : 'overwrote'} /${result.slug}: ${result.imagesUploaded} image(s)${
       result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
     }, status=${result.status}`
+  );
+  /* c8 ignore stop */
+}
+
+async function about(args: string[]): Promise<void> {
+  const wpBaseUrl = args[0];
+  if (!wpBaseUrl) {
+    throw new Error(
+      'usage: site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN]'
+    );
+  }
+  const toUrl = stringFlag(args, '--to');
+  if (!toUrl) throw new Error('--to <target-url> is required');
+  const token = stringFlag(args, '--token') ?? process.env.ADMIN_TOKEN;
+  if (!token) throw new Error('bearer token required: pass --token or set ADMIN_TOKEN env');
+
+  /* c8 ignore start -- success path makes real HTTP calls */
+  console.log(`==> fetching About page from ${wpBaseUrl}`);
+  const result = await pushPage({
+    wpBaseUrl,
+    slug: 'about',
+    toUrl,
+    token,
+    status: 'published'
+  });
+  console.log(
+    `${result.inserted ? 'created' : 'overwrote'} /_about: ${result.imagesUploaded} image(s)${
+      result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
+    }`
   );
   /* c8 ignore stop */
 }
