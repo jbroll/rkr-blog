@@ -127,6 +127,31 @@ body {
 }
 .rkr-site-head-auth-btn:hover { color: var(--rkr-link); text-decoration: underline; }
 
+/* Header search: collapsed by default, widens on focus. Pure CSS;
+   the form is a no-JS GET form. */
+.rkr-site-search { display: inline-flex; margin: 0; }
+.rkr-site-search input {
+  width: 9rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--rkr-text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rkr-rule);
+  padding: 0.15rem 0.25rem;
+  transition: width 160ms ease, border-color 160ms ease;
+}
+.rkr-site-search input::placeholder { color: var(--rkr-muted); }
+.rkr-site-search input:focus {
+  width: 18rem;
+  outline: none;
+  border-bottom-color: var(--rkr-link);
+}
+@media (max-width: 640px) {
+  .rkr-site-search input { width: 7rem; }
+  .rkr-site-search input:focus { width: 11rem; }
+}
+
 /* ---- 404 (/not-found) -------------------------------------------- */
 .rkr-notfound {
   max-width: var(--rkr-prose);
