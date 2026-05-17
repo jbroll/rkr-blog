@@ -1,6 +1,8 @@
 // E2E coverage for the tag rail on the public index:
-//   1. No tag rail when no published posts have tags.
-//   2. Tag rail appears after saving a published post with tags.
+//   1. No tag PILLS when no published posts have tags (the rail itself
+//      is always present — it now also holds the sort + search
+//      controls, d4e8de9).
+//   2. Tag pills appear after saving a published post with tags.
 //   3. Clicking a tag pill filters the list.
 //
 // Uses POST /admin/posts directly (skips the TipTap editor) to keep
@@ -21,9 +23,14 @@ async function loginAndGetPage(page: Page) {
   ]);
 }
 
-test('tag rail: absent when no published posts have tags', async ({ page }) => {
+test('tag rail: no pills when no published posts have tags', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.rkr-tag-rail')).toHaveCount(0);
+  // The rail itself is always rendered (it carries the sort + search
+  // controls); only the tag pills are conditional on tagged posts.
+  await expect(page.locator('.rkr-tag-rail')).toBeVisible();
+  await expect(page.locator('.rkr-tag-rail .rkr-rail-controls')).toBeVisible();
+  await expect(page.locator('.rkr-tag-pills')).toHaveCount(0);
+  await expect(page.locator('.rkr-tag-pill')).toHaveCount(0);
 });
 
 test('tag rail: appears after saving a published post with tags', async ({ page }) => {
