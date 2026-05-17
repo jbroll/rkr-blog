@@ -38,9 +38,23 @@ export interface PostPageData extends SiteChrome {
   showComments?: boolean;
 }
 
+// ISO timestamp → "May 10, 2026". UTC-pinned so a midnight-Z date
+// doesn't slip to the previous day in western timezones. Falls back
+// to the raw string if it isn't a parseable date.
+function formatPostDate(iso: string): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  return new Date(ms).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC'
+  });
+}
+
 export function renderPostPage(post: PostPageData): string {
   const dateBlock = post.date
-    ? `<time datetime="${escapeAttr(post.date)}">${escapeText(post.date)}</time>`
+    ? `<time datetime="${escapeAttr(post.date)}">${escapeText(formatPostDate(post.date))}</time>`
     : /* c8 ignore next -- runReindex always supplies published_at */ '';
   const subtitleBlock = post.subtitle
     ? `<p class="rkr-post-subtitle">${escapeText(post.subtitle)}</p>`
