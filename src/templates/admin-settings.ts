@@ -142,6 +142,13 @@ ${saveBtn}
     value="${data.persisted.ingestResize?.webpQuality ?? ''}"
     placeholder="${DEFAULT_INGEST_RESIZE.webpQuality}"/>
 </form>
+<form method="post" action="/admin/reindex" class="rkr-admin-settings-reindex">
+  <h2 class="rkr-admin-settings-section">Search</h2>
+  <p class="rkr-admin-settings-reindex-note">
+    Rebuild the posts + full-text search index from the markdown files.
+  </p>
+  <button type="submit" class="rkr-admin-settings-submit">Rebuild search index</button>
+</form>
 ${renderIntegrations(data.gdriveConnected, data.onedriveConnected)}
 <p class="rkr-admin-settings-build">
   Build: <code title="${escapeAttr(data.gitHash)}">${escapeText(shortHash(data.gitHash))}</code>

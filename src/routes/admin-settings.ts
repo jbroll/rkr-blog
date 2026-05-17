@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { runReindex } from '../cli/reindex.ts';
 import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
@@ -190,6 +191,15 @@ export function registerAdminSettingsRoutes(
     return reply.redirect('/admin/settings?flash=saved', 303);
   });
 
+  // POST /admin/reindex — rebuild the posts table + search FTS index
+  // from the markdown files. Admin-guarded; idempotent (the same
+  // rebuild runs on every post save). Covers the one-time FTS
+  // population without shell access.
+  fastify.post('/admin/reindex', { ...guard }, async (_req, reply) => {
+    runReindex(siteRoot);
+    return reply.redirect('/admin/settings?flash=reindexed', 303);
+  });
+
   // POST /admin/settings/site — set title and tagline via JSON API.
   // Called by `site-admin import-wp site-banner` to push WP site metadata.
   fastify.post<{ Body: { title?: unknown; tagline?: unknown } }>(
@@ -306,6 +316,9 @@ function decodeFlash(query: {
   }
   if (query.flash === 'saved') {
     return { kind: 'ok', text: 'Settings saved.' };
+  }
+  if (query.flash === 'reindexed') {
+    return { kind: 'ok', text: 'Search index rebuilt.' };
   }
   return undefined;
 }

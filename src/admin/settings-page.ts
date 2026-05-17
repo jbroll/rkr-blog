@@ -1,12 +1,19 @@
 // Client-side behaviour for /admin/settings:
-//   1. On load with ?flash=saved: fire a toast and clean the URL.
+//   1. On load with a recognised ?flash=…: fire a toast, clean the URL.
 //   2. Mark the save button .is-dirty when any field changes.
 
 import { showToast } from './toast.ts';
 
+const FLASH_TOASTS: Record<string, string> = {
+  saved: 'Settings saved.',
+  reindexed: 'Search index rebuilt.'
+};
+
 const params = new URLSearchParams(location.search);
-if (params.get('flash') === 'saved') {
-  showToast({ kind: 'success', text: 'Settings saved.' });
+const flash = params.get('flash');
+const flashMsg = flash ? FLASH_TOASTS[flash] : undefined;
+if (flashMsg) {
+  showToast({ kind: 'success', text: flashMsg });
   params.delete('flash');
   const next = params.size > 0 ? `${location.pathname}?${params}` : location.pathname;
   history.replaceState(null, '', next);

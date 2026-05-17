@@ -567,3 +567,33 @@ test('settings page shows Create/Edit About by file presence', async (t) => {
   res = await app.inject({ method: 'GET', url: '/admin/settings' });
   assert.match(res.body, /Edit About →/);
 });
+
+test('POST /admin/reindex rebuilds the index (incl. posts_fts) and flashes', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', 'p.md'),
+    '---\nslug: p\ntitle: Hello\nstatus: published\ndate: 2026-05-01\n---\n\nsearchable body kiwi\n'
+  );
+  const res = await app.inject({ method: 'POST', url: '/admin/reindex' });
+  assert.equal(res.statusCode, 303);
+  assert.equal(res.headers.location, '/admin/settings?flash=reindexed');
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const hit = db
+      .prepare<{ slug: string }>("SELECT slug FROM posts_fts WHERE posts_fts MATCH 'kiwi'")
+      .get();
+    assert.equal(hit?.slug, 'p');
+  } finally {
+    db.close();
+  }
+});
+
+test('GET /admin/settings renders the reindex form (feedback is a client toast)', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /<form[^>]*method="post"[^>]*action="\/admin\/reindex"/);
+  assert.match(res.body, /Rebuild search index/);
+  // Success feedback is the settings-page.ts toast on ?flash=reindexed
+  // (same as ?flash=saved); no inline ok-flash is rendered server-side.
+  assert.doesNotMatch(res.body, /rkr-admin-settings-flash is-ok/);
+});
