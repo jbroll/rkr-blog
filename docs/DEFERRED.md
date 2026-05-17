@@ -14,16 +14,11 @@ Format: **item** — _revisit when:_ trigger.
   in-process `@fastify/rate-limit`), in-process PKCE state, no
   auth-write logging. _Revisit when:_ any shared/team/multi-tenant
   pivot.
+- **Provider media fetches follow redirects without per-hop SSRF re-validation** — trusted single-author model; `url-safety.ts` guards the initial URL only. _Revisit when:_ opening authoring to untrusted/multi-author posters.
 
 ## Editor & figures
 
-- **`src/admin/main.ts` over the 500-line gate (507)** — the
-  now-enforced pre-commit size gate **blocks any commit that stages
-  `main.ts`** until it is split (per-panel `mountX(deps)` extraction:
-  figure-attrs / image-edit / cell-selection). A real, active blocker
-  for editor changes that touch it (e.g. per-cell persistence below).
-  _Revisit when:_ the next change that must edit `main.ts` — it
-  already blocks.
+- **`src/admin/main.ts` next size-split unit** — per-cell caption/alt wiring + `spliceCellSlot` gated by deferred per-cell-caption/alt e2e coverage (DEFERRED 9a). _Revisit when:_ DEFERRED 9a (per-cell caption/alt) ships — split alongside its e2e.
 - **parseHTML doesn't recover attrs** (9b) — rendered-HTML/clipboard
   round-trip drops figure attrs. _Revisit when:_ a "duplicate post" /
   "paste from preview" feature lands, or authors lose data via
@@ -53,6 +48,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Local-first / sync
 
+- **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — a concurrent other-device edit between the conflict and the force can be overwritten (explicit user action; server idempotency covers replays, not this). _Revisit when:_ multi-device editing becomes common.
 - **HEIC upload: probe-decode → convert or reject** — non-Safari
   browsers can't decode HEIC at all (`createImageBitmap` *and* `<img>`
   both fail), so the elaborate "coord divergence" scenario is largely
@@ -105,12 +101,17 @@ Format: **item** — _revisit when:_ trigger.
   anon `GET /` teaser path (mirrors the `_site-banner.md` read).
   _Revisit when:_ the homepage sees bot/cache-miss traffic, or the
   banner read is converted to async (do both together).
+- **Module-level mutable singletons** — `liveInflight` + `events` emitter in `src/lib/jobs.ts`, resolved-theme cache in `config.ts` are process-singletons (fine for single-instance deploy). _Revisit when:_ moving to multi-process/multi-instance.
+- **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
+- **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
+- **`startServer` skips `migrate(db)` before `buildApp`** — FTS/search relies on a lazy self-healing probe rather than a guaranteed migrate-at-boot contract. _Revisit when:_ formalizing the boot/deploy migration contract.
 
 ## Code quality
 
 - **gdrive ↔ onedrive structural duplication** — ~150 cloned LOC; two
   parallel modules vs one Provider interface. _Revisit when:_ a third
   integration (Dropbox/iCloud) lands.
+- **`draft.ts refIdsFromDoc` hand-rolls id comma-split** — duplicates what `src/lib/figure-ids.ts splitIds` canonicalizes. _Revisit when:_ next touching `draft.ts`/`figure-ids`.
 
 ## Comments (blog-comments spec §11)
 
@@ -137,7 +138,4 @@ Format: **item** — _revisit when:_ trigger.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
-- **Flake: `editor-flow.spec.ts:442`** — crop-save thumb occasionally
-  falls back to `/admin/preview` under suite load. _Revisit when:_ a
-  "crops disappear after save" report, or an instrumented
-  console.error run.
+- **Gauntlet `tsc include` misses test subdirs** — `test/admin`, `test/routes`, `test/site` are NOT type-checked by pre-commit (tests run via `--experimental-strip-types`). _Revisit when:_ next test-infra/tsconfig touch — widen include or add a `tsconfig.test.json`.
