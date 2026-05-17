@@ -20,6 +20,7 @@ import {
   type PersistedIngestResize,
   readPersistedSiteConfig,
   siteConfig,
+  TEASER_WORDS_BOUNDS,
   writePersistedSiteConfig
 } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
@@ -108,6 +109,7 @@ export function registerAdminSettingsRoutes(
       ingestWebpQuality?: unknown;
       postTeaser?: unknown;
       bannerAboveHeader?: unknown;
+      teaserWords?: unknown;
     };
   }>('/admin/settings', { ...guard }, async (request, reply) => {
     const body = request.body ?? {};
@@ -158,6 +160,10 @@ export function registerAdminSettingsRoutes(
     if ('error' in webpQuality) {
       return reply.redirect(`/admin/settings?err=${encodeURIComponent(webpQuality.error)}`, 303);
     }
+    const teaserWords = parseIngestField(body.teaserWords, 'teaser words');
+    if ('error' in teaserWords) {
+      return reply.redirect(`/admin/settings?err=${encodeURIComponent(teaserWords.error)}`, 303);
+    }
     const ingestResize = buildIngestResize({
       maxDim: maxDim.value,
       scalePct: scalePct.value,
@@ -177,6 +183,7 @@ export function registerAdminSettingsRoutes(
       theme: themeRaw,
       postTeaser,
       bannerAboveHeader,
+      teaserWords: teaserWords.value ?? 0,
       ...(ingestResize ? { ingestResize } : {})
     });
 
@@ -272,6 +279,7 @@ function parseIngestField(
 }
 
 function boundsForLabel(label: string): { min: number; max: number } {
+  if (label === 'teaser words') return TEASER_WORDS_BOUNDS;
   if (label === 'max image dimension') return INGEST_RESIZE_BOUNDS.maxDim;
   if (label === 'scale percentage') return INGEST_RESIZE_BOUNDS.scalePct;
   return INGEST_RESIZE_BOUNDS.webpQuality;

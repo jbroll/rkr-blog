@@ -7,6 +7,11 @@ import { fileURLToPath } from 'node:url';
 import { writeFileAtomicSync } from './atomic-write.ts';
 import { INGEST_RESIZE_BOUNDS } from './image-constants.ts';
 
+/** Bounds for the teaser word-limit setting. 0 disables truncation;
+ * the upper bound is a sanity cap (a lede longer than this is not a
+ * teaser). Mirrors the INGEST_RESIZE_BOUNDS clamp-at-read pattern. */
+export const TEASER_WORDS_BOUNDS = { min: 0, max: 200 } as const;
+
 export interface Paths {
   root: string;
   originals: string;
@@ -46,6 +51,9 @@ export interface SiteConfig {
   /** When true, the full-bleed banner/hero image renders above the
    * site header instead of between the header and <main>. Default off. */
   bannerAboveHeader?: boolean;
+  /** Max words in the teaser excerpt. Surfaced only when > 0; absent /
+   * 0 means no truncation (full first paragraph). */
+  teaserWords?: number;
 }
 
 /** Blog-level defaults for the ingest-time downsample + re-encode
@@ -73,6 +81,8 @@ export interface PersistedSiteConfig {
   postTeaser?: boolean;
   /** Render the banner/hero above the site header. */
   bannerAboveHeader?: boolean;
+  /** Max words in the teaser excerpt (0 / absent = no truncation). */
+  teaserWords?: number;
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
@@ -108,6 +118,8 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   if (typeof r.bannerImageId === 'string') out.bannerImageId = r.bannerImageId;
   if (typeof r.postTeaser === 'boolean') out.postTeaser = r.postTeaser;
   if (typeof r.bannerAboveHeader === 'boolean') out.bannerAboveHeader = r.bannerAboveHeader;
+  const tw = clampInt(r.teaserWords, TEASER_WORDS_BOUNDS);
+  if (tw !== undefined) out.teaserWords = tw;
   const ingest = pickPersistedIngestResize(r.ingestResize);
   if (ingest) out.ingestResize = ingest;
   return out;
@@ -168,6 +180,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   if (persisted.bannerImageId) out.bannerImageId = persisted.bannerImageId;
   if (persisted.postTeaser) out.postTeaser = true;
   if (persisted.bannerAboveHeader) out.bannerAboveHeader = true;
+  if (persisted.teaserWords && persisted.teaserWords > 0) out.teaserWords = persisted.teaserWords;
   return out;
 }
 

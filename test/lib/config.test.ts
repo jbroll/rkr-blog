@@ -225,3 +225,17 @@ test('bannerAboveHeader round-trips true/false; siteConfig surfaces only when tr
   assert.equal(readPersistedSiteConfig(env).bannerAboveHeader, false);
   assert.equal(siteConfig(env).bannerAboveHeader, undefined);
 });
+
+test('teaserWords round-trips, clamps to bounds, surfaces only when > 0', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig({ teaserWords: 40 }, env);
+  assert.equal(readPersistedSiteConfig(env).teaserWords, 40);
+  assert.equal(siteConfig(env).teaserWords, 40);
+  // 0 persists but siteConfig leaves it unset (no truncation).
+  writePersistedSiteConfig({ teaserWords: 0 }, env);
+  assert.equal(readPersistedSiteConfig(env).teaserWords, 0);
+  assert.equal(siteConfig(env).teaserWords, undefined);
+  // Out-of-range snaps to the nearest bound at read time.
+  writePersistedSiteConfig({ teaserWords: 9999 }, env);
+  assert.equal(readPersistedSiteConfig(env).teaserWords, 200);
+});

@@ -9,6 +9,7 @@
 // admin strip is rendered (isAdmin: true) because the page is gated
 // behind requireUser.
 
+import { TEASER_WORDS_BOUNDS } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { icon } from './icons.ts';
@@ -25,6 +26,7 @@ export interface AdminSettingsPageData extends SiteChrome {
     theme?: string;
     postTeaser?: boolean;
     bannerAboveHeader?: boolean;
+    teaserWords?: number;
     ingestResize?: {
       maxDim?: number;
       scalePct?: number;
@@ -113,6 +115,12 @@ ${saveBtn}
   <input id="rkr-settings-post-teaser" name="postTeaser" type="checkbox"${
     data.persisted.postTeaser ? ' checked' : ''
   }/>
+
+  <label for="rkr-settings-teaser-words">Teaser excerpt words (0 = no limit)</label>
+  <input id="rkr-settings-teaser-words" name="teaserWords" type="number"
+    min="${TEASER_WORDS_BOUNDS.min}" max="${TEASER_WORDS_BOUNDS.max}" step="1"
+    value="${data.persisted.teaserWords ?? ''}"
+    placeholder="0"/>
 
   <h2 class="rkr-admin-settings-section">Image uploads</h2>
 

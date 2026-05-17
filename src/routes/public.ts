@@ -36,7 +36,7 @@ function setPublicSecurityHeaders(reply: import('fastify').FastifyReply): void {
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { Root, RootContent } from 'mdast';
+import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../cli/reindex.ts';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
@@ -55,6 +55,7 @@ import {
 import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
+import { truncateParagraph } from '../lib/teaser-truncate.ts';
 import { imageDimensions } from '../lib/widget-helpers.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 
@@ -119,14 +120,18 @@ async function extractPostBanner(
 
 /** First remaining top-level paragraph rendered to inline HTML (links /
  * emphasis preserved). Call AFTER extractPostBanner has spliced the hero
- * figure out, so "first paragraph" is the lede. Null when none. */
+ * figure out, so "first paragraph" is the lede. Null when none. When
+ * `maxWords > 0` the paragraph is word-truncated at the mdast layer
+ * (markup-preserving) before rendering. */
 async function extractFirstParagraph(
   ast: Root,
-  ctx: { siteRoot: string; widgets: WidgetRegistry }
+  ctx: { siteRoot: string; widgets: WidgetRegistry },
+  maxWords: number
 ): Promise<string | null> {
   const para = ast.children.find((n) => n.type === 'paragraph');
   if (!para) return null;
-  return renderPostHtml({ type: 'root', children: [para] }, ctx);
+  const trimmed = truncateParagraph(para as Paragraph, maxWords);
+  return renderPostHtml({ type: 'root', children: [trimmed] }, ctx);
 }
 
 export default async function publicRoutes(
@@ -248,7 +253,9 @@ export default async function publicRoutes(
           const { ast } = parsePost(rawTop);
           const ctx = { siteRoot, widgets };
           const bannerHtml = await extractPostBanner(ast, ctx);
-          const excerptHtml = bannerHtml ? await extractFirstParagraph(ast, ctx) : null;
+          const excerptHtml = bannerHtml
+            ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
+            : null;
           if (bannerHtml && excerptHtml) {
             teaser = {
               slug: top.slug,

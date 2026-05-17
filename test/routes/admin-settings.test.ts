@@ -498,6 +498,47 @@ test('GET /admin/settings: bannerAboveHeader checkbox reflects persisted state',
   assert.match(on.body, /name="bannerAboveHeader"[^>]*checked/);
 });
 
+test('POST /admin/settings: teaserWords persists, blank clears to 0, out-of-range errors', async (t) => {
+  const { root, app } = await setup(t);
+  const set = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default&teaserWords=45'
+  });
+  assert.equal(set.statusCode, 303);
+  let onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.teaserWords, 45);
+
+  await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default'
+  });
+  onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.teaserWords, 0);
+
+  const bad = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default&teaserWords=99999'
+  });
+  assert.equal(bad.statusCode, 303);
+  assert.match(bad.headers.location as string, /err=/);
+});
+
+test('GET /admin/settings: teaserWords input reflects persisted value', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ title: 'T', teaserWords: 60 })
+  );
+  const res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /name="teaserWords"[^>]*value="60"/);
+});
+
 test('GET /admin/about/edit creates _about.md when absent and 302s to the editor', async (t) => {
   const { root, app } = await setup(t);
   const aboutPath = path.join(root, 'content', 'posts', '_about.md');
