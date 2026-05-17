@@ -4,7 +4,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { dropIndexFor, moveItem, reorderFigureCells } from '../../src/admin/figure-reorder.ts';
+import {
+  type CellRect,
+  dropIndexFor2D,
+  moveItem,
+  reorderFigureCells
+} from '../../src/admin/figure-reorder.ts';
 
 test('moveItem: moves an element and returns a new array', () => {
   const a = ['a', 'b', 'c', 'd'];
@@ -41,15 +46,38 @@ test('reorderFigureCells: no-op returns the original strings', () => {
   assert.deepEqual(reorderFigureCells(input, 0, 9), input);
 });
 
-test('dropIndexFor: insertion index = count of midpoints before the pointer', () => {
-  // Three cells centered at x=50,150,250.
-  const mids = [50, 150, 250];
-  assert.equal(dropIndexFor(mids, 10), 0); // before all
-  assert.equal(dropIndexFor(mids, 100), 1); // between 1st and 2nd
-  assert.equal(dropIndexFor(mids, 200), 2); // between 2nd and 3rd
-  assert.equal(dropIndexFor(mids, 999), 3); // after all
+// Single row of 3 cells, 100 wide / 80 tall, at x = 0,100,200 (y=0).
+const ROW: CellRect[] = [
+  { left: 0, top: 0, width: 100, height: 80 },
+  { left: 100, top: 0, width: 100, height: 80 },
+  { left: 200, top: 0, width: 100, height: 80 }
+];
+// 2×2 grid wrapping onto a second row: 0,1 on row 1 (y=0); 2,3 on
+// row 2 (y=80). This is the case the old 1-D scan got wrong.
+const GRID: CellRect[] = [
+  { left: 0, top: 0, width: 100, height: 80 },
+  { left: 100, top: 0, width: 100, height: 80 },
+  { left: 0, top: 80, width: 100, height: 80 },
+  { left: 100, top: 80, width: 100, height: 80 }
+];
+
+test('dropIndexFor2D: single row — before/between/after by x', () => {
+  assert.equal(dropIndexFor2D(ROW, -20, 40), 0); // left of all
+  assert.equal(dropIndexFor2D(ROW, 30, 40), 0); // left half of cell 0
+  assert.equal(dropIndexFor2D(ROW, 70, 40), 1); // right half of cell 0
+  assert.equal(dropIndexFor2D(ROW, 270, 40), 3); // right of all
 });
 
-test('dropIndexFor: empty list → 0', () => {
-  assert.equal(dropIndexFor([], 123), 0);
+test('dropIndexFor2D: wrapped grid — second-row pointer maps past row 1', () => {
+  // Pointer over the left half of the row-2 first cell (index 2):
+  // must insert at 2, NOT collapse to a first-row index.
+  assert.equal(dropIndexFor2D(GRID, 30, 120), 2);
+  // Right half of the last cell (row 2) → after everything.
+  assert.equal(dropIndexFor2D(GRID, 170, 120), 4);
+  // Row 1, right half of cell 1 → between 1 and 2.
+  assert.equal(dropIndexFor2D(GRID, 170, 40), 2);
+});
+
+test('dropIndexFor2D: empty list → 0', () => {
+  assert.equal(dropIndexFor2D([], 123, 45), 0);
 });

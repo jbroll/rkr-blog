@@ -49,13 +49,42 @@ export function reorderFigureCells(
   };
 }
 
-/** Insertion index for a pointer at coordinate `pos` (px along the
- *  drag axis) given cell midpoints in DOM order. Equals the number of
- *  midpoints strictly less than `pos`; result is in [0, mids.length]. */
-export function dropIndexFor(mids: number[], pos: number): number {
-  let i = 0;
-  while (i < mids.length && (mids[i] as number) < pos) i++;
-  return i;
+export interface CellRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Reading-order (row-major, left→right, top→bottom) insertion index
+ *  for a pointer at (px,py) given each cell's viewport rect in DOM
+ *  order. Works for ANY layout — single row, single column, wrapped
+ *  grid, masonry — because it anchors on the nearest cell centre and
+ *  then decides before/after by reading order, instead of projecting
+ *  onto one fixed axis (the old 1-D scan only handled the first row).
+ *  Result is in [0, rects.length]. */
+export function dropIndexFor2D(rects: CellRect[], px: number, py: number): number {
+  const n = rects.length;
+  if (n === 0) return 0;
+  let nearest = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < n; i++) {
+    const r = rects[i] as CellRect;
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const d = (px - cx) ** 2 + (py - cy) ** 2;
+    if (d < best) {
+      best = d;
+      nearest = i;
+    }
+  }
+  const r = rects[nearest] as CellRect;
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  // Below the anchor's row → after; above → before; same row → which
+  // side of its centre the pointer is on.
+  const after = py > cy + r.height / 2 ? true : py < cy - r.height / 2 ? false : px > cx;
+  return Math.max(0, Math.min(n, after ? nearest + 1 : nearest));
 }
 
 const DRAG_THRESHOLD_PX = 8;
@@ -140,6 +169,11 @@ function announce(editor: Editor, msg: string): void {
 export function wireFigureReorder(editor: Editor): void {
   const root = editor.view.dom as HTMLElement;
   let justDragged = false;
+  // True only between a pointerdown that landed on a reorderable thumb
+  // and the matching pointerup/cancel. dragstart is suppressed ONLY in
+  // that window — so a press-drag elsewhere on the figure still starts
+  // ProseMirror's whole-figure node-drag (the figure stays draggable).
+  let reorderActive = false;
 
   root.addEventListener(
     'click',
@@ -161,11 +195,13 @@ export function wireFigureReorder(editor: Editor): void {
   window.addEventListener(
     'dragstart',
     (ev) => {
-      // Any dragstart originating inside a figure placeholder must be
-      // cancelled: ProseMirror's node-drag (figure is draggable:true)
-      // fires dragstart on the node wrapper, not the <img>, so scoping
-      // to the thumb misses it and native/PM DnD eats the pointer
-      // stream (pointermove/up stop firing → reorder never engages).
+      // Suppress dragstart ONLY during an in-progress thumb-reorder
+      // gesture. Both native <img> DnD and ProseMirror's node-drag fire
+      // dragstart on the placeholder DIV (not the <img>), so the target
+      // can't disambiguate reorder-vs-figure-move — the pointerdown
+      // origin can. Outside a reorder gesture we let dragstart through
+      // so PM's whole-figure node-drag still works (figure draggable).
+      if (!reorderActive) return;
       const t = ev.target as HTMLElement | null;
       if (t?.closest('.rkr-figure-placeholder')) ev.preventDefault();
     },
@@ -180,23 +216,19 @@ export function wireFigureReorder(editor: Editor): void {
     const thumbs = thumbsOf(placeholder);
     const from = thumbs.indexOf(target as HTMLImageElement);
     if (from < 0 || thumbs.length < 2) return;
+    // This press is on a reorderable thumb: suppress dragstart for the
+    // life of the gesture (cleared in cleanup) so native/PM DnD can't
+    // eat the pointer stream. Presses elsewhere leave reorderActive
+    // false → PM whole-figure node-drag still works.
+    reorderActive = true;
 
     const startX = ev.clientX;
     const startY = ev.clientY;
     let dragging = false;
     let indicator: HTMLDivElement | null = null;
+    let clone: HTMLElement | null = null;
     let dropIndex = from;
     let rafId = 0;
-
-    const horizontal = (() => {
-      if (thumbs.length < 2) return true;
-      const a = thumbs[0];
-      const b = thumbs[1];
-      if (!a || !b) return true;
-      const ra = a.getBoundingClientRect();
-      const rb = b.getBoundingClientRect();
-      return Math.abs(rb.left - ra.left) >= Math.abs(rb.top - ra.top);
-    })();
 
     const scrollContainer = (root.closest('#rkroll-admin-article') as HTMLElement | null) ?? root;
 
@@ -210,25 +242,41 @@ export function wireFigureReorder(editor: Editor): void {
       return el;
     };
 
+    // Vertical insertion bar at the drop slot. Anchored on the specific
+    // thumb at dropIndex (its own row), so it lands correctly in any
+    // row of a wrapped grid; width/colour come from CSS so it can be
+    // made boldly visible without touching JS.
     const positionIndicator = () => {
       const el = ensureIndicator();
-      const ref = thumbs[Math.min(dropIndex, thumbs.length - 1)];
+      const atEnd = dropIndex >= thumbs.length;
+      const ref = thumbs[atEnd ? thumbs.length - 1 : dropIndex];
       if (!ref) return;
       const r = ref.getBoundingClientRect();
       // offsetParent is null if the grid (or an ancestor) is display:none
-      // or lacks a positioned ancestor — e.g. before Task 6's
-      // `.rkr-multi-thumbs{position:relative}` ships. Bail rather than
-      // throw; the indicator just isn't drawn until layout is sane.
+      // or lacks a positioned ancestor. Bail rather than throw.
       const offsetEl = el.offsetParent as HTMLElement | null;
       if (!offsetEl) return;
       const pr = offsetEl.getBoundingClientRect();
-      if (horizontal) {
-        const x = (dropIndex >= thumbs.length ? r.right : r.left) - pr.left;
-        el.style.cssText = `left:${x}px;top:${r.top - pr.top}px;height:${r.height}px;width:2px;`;
-      } else {
-        const y = (dropIndex >= thumbs.length ? r.bottom : r.top) - pr.top;
-        el.style.cssText = `top:${y}px;left:${r.left - pr.left}px;width:${r.width}px;height:2px;`;
-      }
+      const x = (atEnd ? r.right : r.left) - pr.left;
+      el.style.left = `${x}px`;
+      el.style.top = `${r.top - pr.top}px`;
+      el.style.height = `${r.height}px`;
+    };
+
+    let cloneDX = 0;
+    let cloneDY = 0;
+    const makeClone = () => {
+      const r = target.getBoundingClientRect();
+      const el = target.cloneNode(true) as HTMLElement;
+      el.className = 'rkr-multi-drag-clone';
+      el.removeAttribute('data-cell-index');
+      el.removeAttribute('tabindex');
+      el.style.width = `${r.width}px`;
+      el.style.height = `${r.height}px`;
+      document.body.appendChild(el);
+      clone = el;
+      cloneDX = startX - r.left;
+      cloneDY = startY - r.top;
     };
 
     const autoscroll = () => {
@@ -248,13 +296,18 @@ export function wireFigureReorder(editor: Editor): void {
         dragging = true;
         target.setPointerCapture(e.pointerId);
         target.classList.add('is-dragging');
+        makeClone();
         rafId = requestAnimationFrame(autoscroll);
       }
-      const mids = thumbs.map((t) => {
+      if (clone) {
+        clone.style.left = `${e.clientX - cloneDX}px`;
+        clone.style.top = `${e.clientY - cloneDY}px`;
+      }
+      const rects = thumbs.map((t) => {
         const r = t.getBoundingClientRect();
-        return horizontal ? r.left + r.width / 2 : r.top + r.height / 2;
+        return { left: r.left, top: r.top, width: r.width, height: r.height };
       });
-      dropIndex = dropIndexFor(mids, horizontal ? e.clientX : e.clientY);
+      dropIndex = dropIndexFor2D(rects, e.clientX, e.clientY);
       positionIndicator();
     };
 
@@ -266,6 +319,9 @@ export function wireFigureReorder(editor: Editor): void {
       if (rafId) cancelAnimationFrame(rafId);
       target.classList.remove('is-dragging');
       indicator?.remove();
+      clone?.remove();
+      // End of gesture: let dragstart through again so PM node-drag works.
+      reorderActive = false;
     };
 
     const onUp = () => {

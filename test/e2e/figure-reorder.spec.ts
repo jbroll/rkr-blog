@@ -131,8 +131,16 @@ test('drag reorder moves a thumb and survives save; tap still edits', async ({ p
       startX + ((endX - startX) * i) / steps,
       startY + ((endY - startY) * i) / steps
     );
+    if (i === 10) {
+      // Mid-drag: the floating clone follows the pointer and the bold
+      // insertion bar is shown (the visible-feedback fix).
+      await expect(page.locator('.rkr-multi-drag-clone')).toBeVisible();
+      await expect(page.locator('.rkr-multi-drop-indicator')).toBeVisible();
+    }
   }
   await page.mouse.up();
+  // Clone is cleaned up on drop.
+  await expect(page.locator('.rkr-multi-drag-clone')).toHaveCount(0);
 
   // After the drag the ids must have changed.
   await expect.poll(() => ids(page)).not.toEqual(before);

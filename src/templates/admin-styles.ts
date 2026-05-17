@@ -89,17 +89,39 @@ export const ADMIN_CSS = `
     outline-offset: 2px;
   }
   #rkroll-admin-article .rkr-multi-thumb.is-dragging {
-    opacity: .4;
+    opacity: .3;
+    outline: 2px dashed var(--rkr-link);
+    outline-offset: -2px;
   }
-  /* Insertion indicator: absolutely positioned inside the thumb grid
-     (which must be a positioned ancestor for left/top to resolve). */
+  /* Bold insertion bar at the drop slot — absolutely positioned in the
+     thumb grid (which must be a positioned ancestor). Deliberately
+     prominent: the dragged image is a separate floating clone, so this
+     is the user's primary "where will it land" cue. */
   #rkroll-admin-article .rkr-multi-thumbs { position: relative; }
   #rkroll-admin-article .rkr-multi-drop-indicator {
     position: absolute;
+    width: 5px;
+    margin-left: -2px;
     background: var(--rkr-link);
-    border-radius: 1px;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px #fff, 0 0 6px var(--rkr-link);
     pointer-events: none;
-    z-index: 2;
+    z-index: 3;
+  }
+  /* Floating drag clone: a copy of the thumbnail that tracks the
+     pointer. Appended to <body> (outside the editor), so the selector
+     is unscoped, like .rkr-multi-status. */
+  .rkr-multi-drag-clone {
+    position: fixed;
+    top: 0;
+    left: 0;
+    margin: 0;
+    object-fit: cover;
+    pointer-events: none;
+    opacity: .85;
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    z-index: 2147483647;
   }
   /* Visually-hidden reorder status (announced via aria-live).
      figure-reorder.ts appends this to <body>, NOT inside
