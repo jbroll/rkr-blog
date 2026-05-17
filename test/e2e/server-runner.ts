@@ -16,6 +16,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { ensureSecretKey } from '../../src/lib/secrets.ts';
 import { buildApp } from '../../src/server.ts';
 
 const root = process.env.SITE_ROOT;
@@ -23,6 +24,7 @@ if (!root) throw new Error('SITE_ROOT required');
 for (const sub of ['sidecars', 'originals', 'cache/img', 'data', 'content/posts']) {
   fs.mkdirSync(path.join(root, sub), { recursive: true });
 }
+ensureSecretKey(root);
 
 // Dummy OAuth wiring so makeGoogleExchange() doesn't throw at route
 // registration. The e2e suite hits /admin/auth/token-login, not the
