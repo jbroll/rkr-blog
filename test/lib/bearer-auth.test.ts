@@ -244,6 +244,41 @@ test('bearer: a valid token still works and is not throttled after prior failure
   assert.equal(stillOk.statusCode, 303, stillOk.body);
 });
 
+test('a correct bearer token is NEVER throttled even after the IP hit the failure ceiling', async (t) => {
+  const { app } = await setup(t, { adminToken: 'correct-horse-battery-staple-very-long' });
+  for (let i = 0; i < 12; i++) {
+    await app.inject({
+      method: 'POST',
+      url: '/admin/reindex',
+      headers: { authorization: `Bearer wrong-${i}` }
+    });
+  }
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/reindex',
+    headers: { authorization: 'Bearer correct-horse-battery-staple-very-long' }
+  });
+  assert.notEqual(res.statusCode, 429);
+  assert.ok(res.statusCode < 500);
+});
+
+test('wrong bearer tokens still eventually 429 (brute-force defense intact)', async (t) => {
+  const { app } = await setup(t, { adminToken: 'correct-horse-battery-staple-very-long' });
+  let saw429 = false;
+  for (let i = 0; i < 40; i++) {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/admin/reindex',
+      headers: { authorization: `Bearer wrong-${i}` }
+    });
+    if (r.statusCode === 429) {
+      saw429 = true;
+      break;
+    }
+  }
+  assert.equal(saw429, true);
+});
+
 test('csrf: cookie-style POST with mismatched Origin still 403s (regression guard)', async (t) => {
   // Without the bearer header, the CSRF guard must remain in force —
   // the new "skip when Authorization: header is present" branch must

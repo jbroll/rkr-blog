@@ -55,11 +55,16 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
     // typical case is a script that doesn't carry cookies anyway).
     const bearer = bearerTokenFromHeader(req);
     if (bearer !== undefined) {
-      // The bearer path is CSRF-exempt and otherwise unthrottled, so
-      // without this an attacker could brute-force ADMIN_TOKEN against
-      // any /admin/* mutating route. Share the per-IP failed-credential
-      // tally with the browser token-login route so the ceiling can't
-      // be sidestepped by switching entry points.
+      // Validate the token FIRST. A correct ADMIN_TOKEN must never be
+      // throttled — gating success on a per-IP failure tally lets an
+      // attacker (or a shared NAT) lock the sole operator out (the
+      // per-IP key rides on X-Forwarded-For; see login-throttle).
+      // The throttle only ever gates the WRONG-token path.
+      if (adminTokenMatchesEnv(bearer)) {
+        req.user = BEARER_USER;
+        clearFailures(req.ip);
+        return;
+      }
       if (isThrottled(req.ip)) {
         reply
           .code(429)
@@ -67,21 +72,13 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
           .send({ error: 'too many failed login attempts' });
         return;
       }
-      if (adminTokenMatchesEnv(bearer)) {
-        req.user = BEARER_USER;
-        // Clean success — drop any prior failure tally for this IP.
-        clearFailures(req.ip);
-      } else {
-        // Wrong token is the brute-force signal; record it. The user
-        // stays null and requireUser issues the existing 401 — only
-        // the Nth+ miss within the window flips to 429 above.
-        recordFailure(req.ip);
-      }
-      // Either the bearer matched (user attached) or it didn't (user
-      // stays null and requireUser will 401). In both cases skip the
-      // cookie path — a request that explicitly authenticates with a
-      // bearer header should not silently fall through to a cookie
-      // session, which would mask token-rotation bugs.
+      // req.ip is a non-empty string here (Fastify + trustProxy:'loopback');
+      // the null-guard in the token-login route exists only because that
+      // path historically used req.ip ?? '' — same effective key.
+      recordFailure(req.ip);
+      // Wrong token: user stays null and requireUser will 401. Skip the
+      // cookie path regardless — a request that explicitly presents a
+      // bearer header must not silently fall through to a cookie session.
       return;
     }
 

@@ -271,16 +271,7 @@ export default async function authRoutes(
   const tokenLoginMax = opts.tokenLoginRateMax ?? DEFAULT_MAX;
 
   fastify.post<{ Body: { token?: string } }>('/admin/auth/token-login', async (req, reply) => {
-    const ip = req.ip ?? '';
-    if (isThrottled(ip, tokenLoginMax)) {
-      const retryAfterSec = Math.ceil(WINDOW_MS / 1000);
-      req.log.warn({ ip, retryAfter: retryAfterSec }, 'token-login: rate-limited');
-      return reply
-        .code(429)
-        .header('retry-after', String(retryAfterSec))
-        .send({ error: 'too many failed login attempts' });
-    }
-
+    const ip = typeof req.ip === 'string' && req.ip !== '' ? req.ip : null;
     const provided = typeof req.body?.token === 'string' ? req.body.token : '';
     if (!provided) {
       req.log.warn({ ip, ua: req.headers['user-agent'] }, 'token-login: empty token');
@@ -291,14 +282,20 @@ export default async function authRoutes(
       return reply.code(503).send({ error: 'token login not configured' });
     }
     if (!adminTokenMatchesEnv(provided)) {
-      recordFailure(ip);
+      if (ip && isThrottled(ip, tokenLoginMax)) {
+        const retryAfterSec = Math.ceil(WINDOW_MS / 1000);
+        req.log.warn({ ip, retryAfter: retryAfterSec }, 'token-login: rate-limited');
+        return reply
+          .code(429)
+          .header('retry-after', String(retryAfterSec))
+          .send({ error: 'too many failed login attempts' });
+      }
+      if (ip) recordFailure(ip);
       req.log.warn({ ip, ua: req.headers['user-agent'] }, 'token-login: token mismatch');
       return reply.code(401).send({ error: 'invalid token' });
     }
-
-    // Clean success — drop any prior failure tally for this IP
-    // so they don't carry over into the next session.
-    clearFailures(ip);
+    // Correct token: NEVER throttled. Clear any prior tally.
+    if (ip) clearFailures(ip);
 
     const user = findOrCreateTokenAdmin(db);
     const userAgent = req.headers['user-agent'] ?? null;

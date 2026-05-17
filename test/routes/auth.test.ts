@@ -630,6 +630,22 @@ test('POST /admin/auth/token-login: second login is idempotent (one synthetic ad
   assert.equal(count, 1, 'one synthetic admin row across multiple logins');
 });
 
+test('token-login with the correct token succeeds even when the IP is over the ceiling', async (t) => {
+  const orig = process.env.ADMIN_TOKEN;
+  process.env.ADMIN_TOKEN = 'right-token-very-long-value';
+  t.after(() => {
+    if (orig === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = orig;
+  });
+  const { app } = await setup(t, { idTokenPayload: {} });
+  for (let i = 0; i < 12; i++) {
+    await postTokenLogin(app, 'nope');
+  }
+  const res = await postTokenLogin(app, 'right-token-very-long-value');
+  assert.notEqual(res.statusCode, 429);
+  assert.ok(res.statusCode < 400);
+});
+
 test('token-login session lets user reach /admin/editor', async (t) => {
   const orig = process.env.ADMIN_TOKEN;
   process.env.ADMIN_TOKEN = 'right-token';
