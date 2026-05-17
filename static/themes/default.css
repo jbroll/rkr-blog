@@ -802,6 +802,10 @@ body > .rkr-figure:first-child {
   margin-right: calc(50% - 50vw);
   max-width: none;
 }
+/* A full-bleed figure runs edge-to-edge against the viewport — rounded
+   corners there read as a mistake. Square the cell (the cell carries the
+   radius + overflow:hidden; the inner img is already radius 0). */
+.rkr-justify-bleed .rkr-figure-cell { border-radius: 0; }
 /* Anon posts-list teaser hero: never break out of the posts column
    (a bleed/full banner otherwise spans 100vw and overlaps the sticky
    tag rail). Force the centered, column-contained treatment. The
