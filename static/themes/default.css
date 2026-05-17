@@ -1102,6 +1102,9 @@ span.rkr-justify-inline img {
 .rkr-teaser-excerpt { font-family: var(--rkr-prose-font); color: var(--rkr-text); }
 .rkr-teaser-excerpt p { margin: 0 0 0.75rem; }
 .rkr-teaser-more {
+  display: block;
+  width: fit-content;
+  margin-left: auto;
   font-family: var(--rkr-display-font);
   font-size: 0.9rem;
   color: var(--rkr-link);
