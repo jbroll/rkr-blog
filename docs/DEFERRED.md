@@ -53,10 +53,18 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Local-first / sync
 
-- **Pre-resize coord divergence (HEIC on non-Safari)** — client can't
-  decode HEIC outside Safari, so offline edits can diverge. _Revisit
-  when:_ a user reports wrong edits after editing a HEIC photo offline
-  in Chrome/Firefox.
+- **HEIC upload: probe-decode → convert or reject** — non-Safari
+  browsers can't decode HEIC at all (`createImageBitmap` *and* `<img>`
+  both fail), so the elaborate "coord divergence" scenario is largely
+  unreachable there; the real defect is the silent raw-upload
+  fallback. Fix: capability-probe the upload (try to decode it — not
+  UA sniffing). Decodes → the existing client-resize path already
+  re-encodes it to WebP/JPEG with client/server coords consistent by
+  construction. Doesn't → reject with "export to JPEG/PNG first"
+  instead of the silent raw fallback. _Revisit when:_ ready to close
+  the raw-HEIC fallback — small, deterministic, ends the divergence
+  outright (verify the resize client re-encodes rather than passing
+  original bytes when decodable).
 
 ## UI / UX
 
