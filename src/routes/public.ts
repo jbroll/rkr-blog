@@ -33,6 +33,16 @@ function setPublicSecurityHeaders(reply: import('fastify').FastifyReply): void {
   reply.header('X-Frame-Options', 'DENY');
 }
 
+// snippet() wraps matches in sentinel chars (from the SQL char(1) /
+// char(2) args = U+0001 / U+0002). Escape the whole string FIRST,
+// THEN swap the (escaping-untouched) sentinels for <mark> — a literal
+// "<mark>" in body text cannot be injected.
+const SNIP_OPEN = String.fromCharCode(1);
+const SNIP_CLOSE = String.fromCharCode(2);
+function highlightSnippet(snip: string): string {
+  return escapeText(snip).split(SNIP_OPEN).join('<mark>').split(SNIP_CLOSE).join('</mark>');
+}
+
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -41,7 +51,7 @@ import type { LeafDirective } from 'mdast-util-directive';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../cli/reindex.ts';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
-import { parsePost, renderPostHtml } from '../lib/content.ts';
+import { escapeText, parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { enqueue, noteLiveRender } from '../lib/jobs.ts';
@@ -52,6 +62,7 @@ import {
   type RenderResult,
   renderDerivative
 } from '../lib/render.ts';
+import { buildFtsMatch } from '../lib/search-query.ts';
 import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
@@ -70,6 +81,7 @@ import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
 import { type IndexTeaser, renderIndexPage } from '../templates/index.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
+import { renderSearchPage, type SearchHit } from '../templates/search.ts';
 import figureWidget from '../widgets/figure.ts';
 import { registerPublicCommentRoutes } from './public-comments.ts';
 
@@ -341,6 +353,54 @@ export default async function publicRoutes(
         ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {})
       })
     );
+  });
+
+  // ---- search: GET /search ---------------------------------------------
+
+  fastify.get<{ Querystring: { q?: string } }>('/search', async (req, reply) => {
+    const site = getSite();
+    const isAdmin = !!req.user;
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const match = buildFtsMatch(q);
+
+    let results: SearchHit[] = [];
+    if (match) {
+      try {
+        const rows = db
+          .prepare<{
+            slug: string;
+            title: string;
+            published_at: string | null;
+            snip: string;
+          }>(
+            `SELECT p.slug AS slug, p.title AS title, p.published_at AS published_at,
+                    snippet(posts_fts, 3, char(1), char(2), '…', 12) AS snip
+               FROM posts_fts
+               JOIN posts p ON p.slug = posts_fts.slug
+              WHERE posts_fts MATCH ?
+                AND (p.status = 'published' OR ? = 1)
+              ORDER BY bm25(posts_fts, 0.0, 10.0, 5.0, 1.0)
+              LIMIT 50`
+          )
+          .all(match, isAdmin ? 1 : 0);
+        results = rows.map((r) => ({
+          slug: r.slug,
+          title: r.title,
+          ...(r.published_at ? { date: r.published_at.slice(0, 10) } : {}),
+          snippetHtml: highlightSnippet(r.snip)
+        }));
+      } catch {
+        // posts_fts absent (DB not migrated in this process) → degrade
+        // to empty results rather than 500.
+        results = [];
+      }
+    }
+
+    setPublicSecurityHeaders(reply);
+    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+    return reply
+      .type('text/html; charset=utf-8')
+      .send(renderSearchPage({ site, q, results, isAdmin }));
   });
 
   // ---- post: GET /:slug -------------------------------------------------
