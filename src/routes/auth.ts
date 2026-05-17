@@ -17,6 +17,13 @@ import {
   type IdTokenVerifier,
   makeGoogleVerifier
 } from '../lib/google-jwt.ts';
+import {
+  clearFailures,
+  DEFAULT_MAX,
+  isThrottled,
+  recordFailure,
+  WINDOW_MS
+} from '../lib/login-throttle.ts';
 import { createSession, deleteSession } from '../lib/sessions.ts';
 import {
   EmailLinkedError,
@@ -134,6 +141,12 @@ export default async function authRoutes(
 
   fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     '/admin/auth/google/callback',
+    {
+      // The callback is unauthenticated and drives an outbound token
+      // exchange — cap it the same as /start so it can't be used to
+      // hammer Google or churn the in-process PKCE map.
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+    },
     async (req, reply) => {
       if (req.query.error) {
         return reply.code(400).send({ error: `provider error: ${req.query.error}` });
@@ -251,21 +264,19 @@ export default async function authRoutes(
   // in / out a couple of times burns through their budget for
   // legitimate use. The threshold here only ticks on wrong-token
   // submissions (the brute-force signal) and resets on a clean
-  // success. State lives on the fastify instance so each test
-  // app gets its own tally (the previous plugin-based limiter
-  // also had per-instance state, so we keep that property).
-  const tokenLoginMax = opts.tokenLoginRateMax ?? 5;
-  const tokenLoginWindowMs = 5 * 60 * 1000;
-  const loginFailures = new Map<string, FailureWindow>();
+  // success. The tally lives in the shared login-throttle module so
+  // the bearer-header path (auth-middleware.ts) can't be brute-forced
+  // around this ceiling by an attacker switching entry points.
+  const tokenLoginMax = opts.tokenLoginRateMax ?? DEFAULT_MAX;
 
   fastify.post<{ Body: { token?: string } }>('/admin/auth/token-login', async (req, reply) => {
     const ip = req.ip ?? '';
-    const limit = checkLoginRate(loginFailures, ip, tokenLoginMax);
-    if (!limit.allowed) {
-      req.log.warn({ ip, retryAfter: limit.retryAfterSec }, 'token-login: rate-limited');
+    if (isThrottled(ip, tokenLoginMax)) {
+      const retryAfterSec = Math.ceil(WINDOW_MS / 1000);
+      req.log.warn({ ip, retryAfter: retryAfterSec }, 'token-login: rate-limited');
       return reply
         .code(429)
-        .header('retry-after', String(limit.retryAfterSec))
+        .header('retry-after', String(retryAfterSec))
         .send({ error: 'too many failed login attempts' });
     }
 
@@ -279,14 +290,14 @@ export default async function authRoutes(
       return reply.code(503).send({ error: 'token login not configured' });
     }
     if (!adminTokenMatchesEnv(provided)) {
-      recordLoginFailure(loginFailures, ip, tokenLoginWindowMs);
+      recordFailure(ip);
       req.log.warn({ ip, ua: req.headers['user-agent'] }, 'token-login: token mismatch');
       return reply.code(401).send({ error: 'invalid token' });
     }
 
     // Clean success — drop any prior failure tally for this IP
     // so they don't carry over into the next session.
-    loginFailures.delete(ip);
+    clearFailures(ip);
 
     const user = findOrCreateTokenAdmin(db);
     const userAgent = req.headers['user-agent'] ?? null;
@@ -305,48 +316,6 @@ export default async function authRoutes(
     clearCookie(reply, SESSION_COOKIE, { secure: secureCookies });
     return reply.redirect(authBust('/', 'logout'), 302);
   });
-}
-
-// Per-IP failure tally for token-login. The brute-force concern is
-// "an attacker guesses ADMIN_TOKEN", and only WRONG tokens give them
-// a guess — correct submissions, empty bodies, and 503-the-server-
-// isn't-configured responses don't shrink the search space and
-// shouldn't burn the budget. The map is per-fastify-instance so
-// tests (which spin a fresh app per case) don't bleed state into
-// each other; the previous plugin-based limiter had the same
-// property.
-interface FailureWindow {
-  count: number;
-  resetAt: number;
-}
-
-function checkLoginRate(
-  store: Map<string, FailureWindow>,
-  ip: string,
-  max: number
-): { allowed: boolean; retryAfterSec: number } {
-  const now = Date.now();
-  const window = store.get(ip);
-  if (!window || window.resetAt <= now) {
-    if (window) store.delete(ip);
-    return { allowed: true, retryAfterSec: 0 };
-  }
-  if (window.count < max) return { allowed: true, retryAfterSec: 0 };
-  return { allowed: false, retryAfterSec: Math.ceil((window.resetAt - now) / 1000) };
-}
-
-function recordLoginFailure(store: Map<string, FailureWindow>, ip: string, windowMs: number): void {
-  const now = Date.now();
-  let window = store.get(ip);
-  if (window && window.resetAt <= now) {
-    store.delete(ip);
-    window = undefined;
-  }
-  if (!window) {
-    window = { count: 0, resetAt: now + windowMs };
-    store.set(ip, window);
-  }
-  window.count += 1;
 }
 
 /** Append a `_rkr=login|logout` query param to an auth redirect

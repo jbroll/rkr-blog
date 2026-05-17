@@ -10,6 +10,7 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { open } from '../../src/lib/db.ts';
+import { _resetLoginThrottle } from '../../src/lib/login-throttle.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
@@ -37,6 +38,9 @@ async function setup(
   t: TestContext,
   opts: { adminToken?: string; allowedOrigins?: string[] } = {}
 ) {
+  // Bearer failures now feed the shared process-wide throttle; reset
+  // it per test so a wrong-token case doesn't poison the next one.
+  _resetLoginThrottle();
   const root = freshSiteRoot(t);
   const db = open(path.join(root, 'data', 'site.db'));
   t.after(() => db.close());
@@ -181,6 +185,63 @@ test('csrf: bearer-authed POST is not subject to the Origin allow-list', async (
     payload: { ...POST_PAYLOAD, slug: 'cross-origin-bearer' }
   });
   assert.equal(res.statusCode, 200, res.body);
+});
+
+test('bearer: repeated wrong tokens against a mutating route eventually 429 (not unlimited 401s)', async (t) => {
+  // Before this fix the bearer path was CSRF-exempt AND unthrottled,
+  // so ADMIN_TOKEN was brute-forceable with unlimited 401s. Now the
+  // shared per-IP tally flips to 429 once the ceiling is hit.
+  const { app } = await setup(t, { adminToken: 'super-secret-123' });
+
+  let saw429 = false;
+  for (let i = 0; i < 40; i++) {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/reindex',
+      headers: { authorization: 'Bearer wrong-guess' }
+    });
+    if (res.statusCode === 429) {
+      saw429 = true;
+      assert.match((res.json() as { error: string }).error, /too many/);
+      break;
+    }
+    assert.equal(res.statusCode, 401, `attempt ${i} expected 401, got ${res.statusCode}`);
+  }
+  assert.ok(saw429, 'expected a 429 within 40 wrong-token attempts');
+});
+
+test('bearer: a valid token still works and is not throttled after prior failures', async (t) => {
+  // clearFailures on a clean success means an operator whose script
+  // had a few stale-token retries isn't locked out once it picks up
+  // the right token.
+  const { app } = await setup(t, { adminToken: 'super-secret-123' });
+
+  // Three wrong attempts (below the ceiling), then the right token.
+  for (let i = 0; i < 3; i++) {
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/admin/reindex',
+      headers: { authorization: 'Bearer nope' }
+    });
+    assert.equal(bad.statusCode, 401);
+  }
+  // /admin/reindex redirects (303) on success — the point is it's
+  // authorized, not 401/429.
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/admin/reindex',
+    headers: { authorization: 'Bearer super-secret-123' }
+  });
+  assert.equal(ok.statusCode, 303, ok.body);
+
+  // The success cleared the tally — a full run of wrong attempts is
+  // available again rather than the next miss tripping the limiter.
+  const stillOk = await app.inject({
+    method: 'POST',
+    url: '/admin/reindex',
+    headers: { authorization: 'Bearer super-secret-123' }
+  });
+  assert.equal(stillOk.statusCode, 303, stillOk.body);
 });
 
 test('csrf: cookie-style POST with mismatched Origin still 403s (regression guard)', async (t) => {

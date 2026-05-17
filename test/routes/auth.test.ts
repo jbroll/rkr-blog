@@ -6,6 +6,7 @@ import { type TestContext, test } from 'node:test';
 
 import { open } from '../../src/lib/db.ts';
 import type { GoogleIdPayload, IdTokenVerifier } from '../../src/lib/google-jwt.ts';
+import { _resetLoginThrottle } from '../../src/lib/login-throttle.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { findUserByEmail, inviteEmail } from '../../src/lib/users.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
@@ -104,6 +105,10 @@ async function setup(
   db: ReturnType<typeof open>;
   app: Awaited<ReturnType<typeof buildApp>>;
 }> {
+  // The failed-credential tally is now process-wide (shared with the
+  // bearer path), not per-fastify-instance. Reset it per test so the
+  // token-login rate-limit cases don't bleed each other's failures.
+  _resetLoginThrottle();
   const root = freshSiteRoot(t);
   const db = open(path.join(root, 'data', 'site.db'));
   migrate(db);

@@ -14,6 +14,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { SESSION_COOKIE_NAME } from '../routes/auth.ts';
 import { adminTokenMatchesEnv } from './admin-token.ts';
 import type { Db } from './db.ts';
+import { clearFailures, isThrottled, recordFailure } from './login-throttle.ts';
 import { readSessionUser, touchSession } from './sessions.ts';
 import { touchLastSeen, type User } from './users.ts';
 
@@ -48,14 +49,30 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
 
   app.decorateRequest('user', null);
 
-  app.addHook('onRequest', async (req, _reply) => {
+  app.addHook('onRequest', async (req, reply) => {
     // Bearer-token path takes precedence over the cookie path. A
     // request that supplies both is treated as a bearer client (the
     // typical case is a script that doesn't carry cookies anyway).
     const bearer = bearerTokenFromHeader(req);
     if (bearer !== undefined) {
+      // The bearer path is CSRF-exempt and otherwise unthrottled, so
+      // without this an attacker could brute-force ADMIN_TOKEN against
+      // any /admin/* mutating route. Share the per-IP failed-credential
+      // tally with the browser token-login route so the ceiling can't
+      // be sidestepped by switching entry points.
+      if (isThrottled(req.ip)) {
+        reply.code(429).send({ error: 'too many failed login attempts' });
+        return;
+      }
       if (adminTokenMatchesEnv(bearer)) {
         req.user = BEARER_USER;
+        // Clean success — drop any prior failure tally for this IP.
+        clearFailures(req.ip);
+      } else {
+        // Wrong token is the brute-force signal; record it. The user
+        // stays null and requireUser issues the existing 401 — only
+        // the Nth+ miss within the window flips to 429 above.
+        recordFailure(req.ip);
       }
       // Either the bearer matched (user attached) or it didn't (user
       // stays null and requireUser will 401). In both cases skip the
