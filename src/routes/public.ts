@@ -6,33 +6,6 @@
 // Apache rewrites /img/* directly to the cache file when present
 // (implementation.md §7); only on miss does it fall through here.
 
-// Public-page security headers. CSP is intentionally tight: posts
-// don't need third-party scripts, images, or styles. The site-wide
-// JS (lightbox + carousel) is bundled and served from /static. The
-// markdown renderer passes through raw HTML in posts (single-author
-// trust); CSP+nosniff narrow the blast radius if a content mistake
-// or future external-import path lets something through.
-const PUBLIC_CSP = [
-  "default-src 'self'",
-  "img-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  "script-src 'self'",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'none'",
-  "form-action 'self'"
-].join('; ');
-
-function setPublicSecurityHeaders(reply: import('fastify').FastifyReply): void {
-  reply.header('Content-Security-Policy', PUBLIC_CSP);
-  reply.header('X-Content-Type-Options', 'nosniff');
-  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  // X-Frame-Options is redundant with frame-ancestors for modern
-  // browsers but cheap insurance for old crawlers + WAF heuristics.
-  reply.header('X-Frame-Options', 'DENY');
-}
-
 // snippet() wraps matches in sentinel chars (from the SQL char(1) /
 // char(2) args = U+0001 / U+0002). Escape the whole string FIRST,
 // THEN swap the (escaping-untouched) sentinels for <mark> — a literal
@@ -54,6 +27,7 @@ import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { escapeText, parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildFtsMatch } from '../lib/search-query.ts';
+import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { truncateParagraph } from '../lib/teaser-truncate.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';

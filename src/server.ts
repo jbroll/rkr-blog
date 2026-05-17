@@ -3,7 +3,13 @@
 
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyInstance, FastifyServerOptions } from 'fastify';
+import type {
+  FastifyError,
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+  FastifyServerOptions
+} from 'fastify';
 import Fastify from 'fastify';
 import sharp from 'sharp';
 
@@ -14,11 +20,12 @@ sharp.concurrency(1);
 
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
-import { paths, type SiteConfig, serverConfig } from './lib/config.ts';
+import { paths, type SiteConfig, serverConfig, siteConfig } from './lib/config.ts';
 import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
+import { setPublicSecurityHeaders } from './lib/security-headers.ts';
 import adminRoutes from './routes/admin.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
@@ -27,6 +34,7 @@ import integrationsOnedriveRoutes, {
   type OneDriveTokenExchange
 } from './routes/integrations-onedrive.ts';
 import publicRoutes from './routes/public.ts';
+import { renderNotFoundPage } from './templates/not-found.ts';
 
 const UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MiB cap on a single file
 
@@ -143,6 +151,42 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       gitHash,
       gitHashShort: gitHash === 'unknown' ? gitHash : gitHash.slice(0, 12)
     };
+  });
+
+  // Single chokepoint for unmatched routes and uncaught route errors.
+  // Both apply the public security headers (defense-in-depth: a 404 or
+  // a normal FS-vs-index race must not slip out without CSP/nosniff)
+  // and a sanitized HTML body. The 5xx body NEVER carries
+  // err.message/stack — a missing post file would otherwise leak the
+  // absolute path. Registered BEFORE the route plugins: those register
+  // as encapsulated (non-fastify-plugin) children, which inherit the
+  // parent's error/not-found handlers at registration time — a handler
+  // set after app.register(publicRoutes) would NOT cover its routes.
+  const getSite = (): SiteConfig => opts.site ?? siteConfig();
+  const SANITIZED_5XX = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<title>Something went wrong</title></head>
+<body><main><h1>Something went wrong</h1>
+<p>The server hit an unexpected error. Please try again.</p>
+<p><a href="/">← Back home</a></p></main></body></html>
+`;
+
+  app.setNotFoundHandler((_request, reply) => {
+    setPublicSecurityHeaders(reply);
+    reply
+      .code(404)
+      .type('text/html; charset=utf-8')
+      .send(renderNotFoundPage({ site: getSite() }));
+  });
+
+  app.setErrorHandler((err: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
+    request.log.error({ err }, 'unhandled route error');
+    setPublicSecurityHeaders(reply);
+    const status =
+      typeof err.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 600
+        ? err.statusCode
+        : 500;
+    reply.code(status).type('text/html; charset=utf-8').send(SANITIZED_5XX);
   });
 
   // Auth wiring (when db + auth opts are provided): register the

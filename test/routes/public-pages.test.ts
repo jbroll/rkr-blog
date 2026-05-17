@@ -190,6 +190,60 @@ test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking he
   }
 });
 
+test('unknown route 404: carries public security headers + sanitized body', async (t) => {
+  // A truly unmatched route falls to the global setNotFoundHandler,
+  // which must apply the same public security headers as the post/index
+  // routes (defense-in-depth) and a sanitized HTML body — never a raw
+  // framework error / stack trace. (`/x` is caught by the `/:slug`
+  // catch-all; a method Fastify has no route for is a true miss.)
+  const { app } = await setup(t);
+  const res = await app.inject({ method: 'DELETE', url: '/__no_such_route__zzz' });
+  assert.equal(res.statusCode, 404);
+
+  const csp = res.headers['content-security-policy'] as string;
+  assert.match(csp, /default-src 'self'/, 'csp default-src');
+  assert.match(csp, /frame-ancestors 'none'/, 'csp frame-ancestors');
+  assert.equal(res.headers['x-content-type-options'], 'nosniff', 'nosniff');
+  assert.equal(res.headers['x-frame-options'], 'DENY', 'x-frame-options');
+  assert.match(res.headers['content-type'] as string, /text\/html/);
+
+  // Sanitized: themed not-found body, no raw stack frames.
+  assert.match(res.body, /Page not found/);
+  assert.doesNotMatch(res.body, /\bat .*\(.*:\d+:\d+\)/, 'no raw stack trace');
+});
+
+test('FS-vs-index race 500: security headers + sanitized body (no leaked path)', async (t) => {
+  // An indexed post whose backing file vanishes (normal FS-vs-index
+  // race) throws past the handler. The global setErrorHandler must
+  // apply the public security headers and a sanitized HTML body —
+  // never the framework JSON with the absolute filesystem path /
+  // ENOENT message / stack trace.
+  const { root, app } = await setup(t);
+  writePost(
+    root,
+    'race.md',
+    { slug: 'race', title: 'Race', status: 'published', date: '2026-05-06T14:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+  fs.rmSync(path.join(root, 'content', 'posts', 'race.md'));
+
+  const res = await app.inject({ method: 'GET', url: '/race' });
+  assert.equal(res.statusCode, 500);
+
+  const csp = res.headers['content-security-policy'] as string;
+  assert.match(csp, /default-src 'self'/, 'csp default-src');
+  assert.match(csp, /frame-ancestors 'none'/, 'csp frame-ancestors');
+  assert.equal(res.headers['x-content-type-options'], 'nosniff', 'nosniff');
+  assert.equal(res.headers['x-frame-options'], 'DENY', 'x-frame-options');
+  assert.match(res.headers['content-type'] as string, /text\/html/);
+
+  // Sanitized: no ENOENT, no absolute path, no stack frames.
+  assert.doesNotMatch(res.body, /ENOENT/, 'no ENOENT in body');
+  assert.doesNotMatch(res.body, /content\/posts\/race\.md/, 'no leaked file path');
+  assert.doesNotMatch(res.body, /\bat .*\(.*:\d+:\d+\)/, 'no raw stack trace');
+});
+
 // Auth-gated branch of the GET / handler: when the request carries
 // a bearer token matching ADMIN_TOKEN, the response includes drafts
 // (alongside published) in the admin-table render, AND sets

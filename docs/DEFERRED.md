@@ -10,9 +10,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Security
 
-- **Sliding-session lookup timing** (M3) — _revisit when:_ session
-  ids get exposed via headers/logs, or the service faces many
-  concurrent unauthenticated clients.
 - **Multi-tenant deployability gaps** — no infra rate-limit (only
   in-process `@fastify/rate-limit`), in-process PKCE state, no
   auth-write logging. _Revisit when:_ any shared/team/multi-tenant
@@ -59,9 +56,6 @@ Format: **item** — _revisit when:_ trigger.
   decode HEIC outside Safari, so offline edits can diverge. _Revisit
   when:_ a user reports wrong edits after editing a HEIC photo offline
   in Chrome/Firefox.
-- **Persisted retry budget across reload** — `sync.ts` keeps
-  `attempts` in memory; reload grants a fresh budget. _Revisit when:_
-  a user reports a stuck drain a reload won't shake.
 
 ## UI / UX
 
@@ -109,13 +103,6 @@ Format: **item** — _revisit when:_ trigger.
 - **Import WP spam/trash/pending comments** — public WP REST gives
   approved only. _Revisit when:_ recovering them is needed and WP
   auth credentials are available.
-- **Multi-level comment threading** — schema enforces one level.
-  _Revisit when:_ sustained demand for sub-replies or volume makes
-  flat threading unwieldy.
-- **CAPTCHA / third-party bot protection** — only honeypot +
-  min-fill-time + rate-limit today. _Revisit when:_ spam bypasses the
-  current guards, or the CSP is relaxed.
-
 ## Deploy / config
 
 - **Split deployed env into `config.env` + `secrets.env`** — one
@@ -128,8 +115,6 @@ Format: **item** — _revisit when:_ trigger.
 
 - **Playwright: perspective-rectify + Google OAuth callback** —
   _revisit when:_ fixture infra grows, or a UI bug ships uncaught.
-- **e2e-uncovered: `src/admin/pick.ts`** (OS file picker) — _revisit
-  when:_ an upload-flow refactor makes pick.ts the unique entry point.
 - **e2e-uncovered: gdrive/onedrive pickers** — need creds + provider
   SDKs. _Revisit when:_ picker-SDK fixtures or a credentialed staging
   env exist.
@@ -140,6 +125,3 @@ Format: **item** — _revisit when:_ trigger.
   falls back to `/admin/preview` under suite load. _Revisit when:_ a
   "crops disappear after save" report, or an instrumented
   console.error run.
-- **Flake: `public-figures.spec.ts:134`** — carousel autoplay
-  occasionally not started headless. _Revisit when:_ failure rate
-  climbs above ~1/6, or a reduced-motion toggle lands.
