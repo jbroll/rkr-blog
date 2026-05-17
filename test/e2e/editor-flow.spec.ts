@@ -1683,6 +1683,11 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded crop-persist/, {
     timeout: 10_000
   });
+  // Capture the uploaded figure id (mirror populated on
+  // selection-update after the upload round-trip). Used below as the
+  // deterministic OPFS-draft-persisted signal before the reload.
+  await expect(page.locator('#rkr-figure-ids')).not.toHaveValue('');
+  const figureId = await page.locator('#rkr-figure-ids').inputValue();
 
   // Open the image-edit panel, drive the cropper to save a full-
   // extent crop (autoCropArea: 1 → the entire image is selected).
@@ -1707,6 +1712,18 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
     timeout: 10_000
   });
 
+  // The figure node is debounce-persisted (500ms) to
+  // drafts/<id>.json on the editor `update` event. The crop +
+  // "saved edits" round-trips above complete server-side well
+  // inside that debounce, so reloading before the draft flush
+  // races: loadDraft() returns a draft WITHOUT the figure and the
+  // post-reload thumb is never rendered (`element(s) not found`).
+  // Poll OPFS until the debounced flush has written the figure id
+  // into drafts/<id>.json — the same deterministic signal the
+  // adjacent draft/image-state persistence tests use — so the
+  // reload restores the figure deterministically.
+  await waitForOpfsContains(page, 'drafts', figureId);
+
   // Reload the editor. Without the fix, mount-time hydration
   // clobbers the thumb src with a blob: URL → uncropped raw.
   await page.reload();
@@ -1718,12 +1735,13 @@ test('editor: cropped image survives an editor reload', async ({ page }) => {
 
   // The figure's thumb src must stay on /admin/preview/<id> so the
   // browser follows the 302 to the post-ops derivative — NOT a
-  // blob: URL backed by the OPFS raw.
+  // blob: URL backed by the OPFS raw. Asserted via retrying
+  // web-first matchers so the hydrateLocalThumbs() pass (fired but
+  // not awaited by runStart) can't race a snapshot read.
   const thumb = page.locator('img[data-cell-index="0"]');
   await expect(thumb).toBeVisible({ timeout: 10_000 });
-  const src = await thumb.getAttribute('src');
-  expect(src).toMatch(/\/admin\/preview\//);
-  expect(src).not.toMatch(/^blob:/);
+  await expect(thumb).toHaveAttribute('src', /\/admin\/preview\//, { timeout: 10_000 });
+  await expect(thumb).not.toHaveAttribute('src', /^blob:/);
 });
 
 // DEFERRED 9a: figure-caption / per-cell-caption / per-cell-alt
