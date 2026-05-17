@@ -8,6 +8,18 @@ import { test } from 'node:test';
 
 import { renderIndexPage } from '../../src/templates/index.ts';
 
+test('renderIndexPage header has both sort toggle and search form', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: []
+  });
+  assert.match(html, /class="rkr-sort-toggle"/);
+  assert.match(html, /<form[^>]*action="\/search"/);
+  assert.ok(html.indexOf('action="/search"') < html.indexOf('href="/">Home'));
+});
+
 test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },

@@ -12,6 +12,7 @@ import { icon } from './icons.ts';
 import {
   bundleVersion,
   indexAdminFabs,
+  renderSearchForm,
   type SiteChrome,
   siteFoot,
   siteHead,
@@ -91,7 +92,10 @@ export function renderIndexPage(data: IndexPageData): string {
   const postsListScript = data.isAdmin
     ? `<script type="module" src="/static/admin/posts-list.js${bundleVersion()}"></script>`
     : '';
-  const head = siteHead(data.site, { isAdmin: data.isAdmin, sortControl: sortToggle });
+  const head = siteHead(data.site, {
+    isAdmin: data.isAdmin,
+    listControls: `${sortToggle}${renderSearchForm()}`
+  });
   const banner = data.bannerHtml ?? '';
   const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   return `<!DOCTYPE html>

@@ -62,10 +62,16 @@ export interface HeadOpts {
   /** Controls the Login/Logout affordance in the header top-right.
    * When true, renders a Logout POST form; when false/omitted, a Login link. */
   isAdmin?: boolean;
-  /** Trusted HTML injected at the start of the header nav. Used by the
-   * index/posts-list page for the sort toggle; omitted everywhere else
-   * so the control stays posts-list-only. */
-  sortControl?: string;
+  /** Trusted HTML injected at the start of the header nav on
+   * post-listing pages (sort toggle and/or search form). Omitted
+   * everywhere else so these controls stay listing-only. */
+  listControls?: string;
+}
+
+/** No-JS site search form for the header nav (post-listing pages).
+ * GET so it works without JavaScript; the focus-expand is pure CSS. */
+export function renderSearchForm(q = ''): string {
+  return `<form class="rkr-site-search" method="get" action="/search" role="search"><input type="search" name="q" value="${escapeAttr(q)}" placeholder="Search…" aria-label="Search posts"/></form>`;
 }
 
 export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string {
@@ -85,7 +91,7 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
       ${tagline}
     </div>
     <nav class="rkr-site-head-nav" aria-label="Site">
-      ${opts.sortControl ?? ''}<a class="rkr-site-head-auth-btn" href="/">Home</a>
+      ${opts.listControls ?? ''}<a class="rkr-site-head-auth-btn" href="/">Home</a>
       <a class="rkr-site-head-auth-btn" href="/about">About</a>
       <div class="rkr-site-head-auth">${auth}</div>
     </nav>

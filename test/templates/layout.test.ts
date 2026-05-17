@@ -7,10 +7,23 @@ import {
   bundleVersion,
   indexAdminFabs,
   postAdminFab,
+  renderSearchForm,
   siteFoot,
   siteHead,
   stylesheetLinks
 } from '../../src/templates/layout.ts';
+
+test('renderSearchForm is a no-JS GET form with escaped, prefilled q', () => {
+  const html = renderSearchForm('a "b" <x>');
+  assert.match(html, /<form[^>]*action="\/search"/);
+  assert.match(html, /method="get"/);
+  assert.match(html, /name="q"/);
+  assert.match(html, /value="a &quot;b&quot; &lt;x&gt;"/);
+});
+
+test('renderSearchForm value is empty when no query given', () => {
+  assert.match(renderSearchForm(), /value=""/);
+});
 
 // resolveGitHash() + themeName() are process-cached; reset between
 // tests that probe env-driven branches.
