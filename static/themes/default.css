@@ -518,8 +518,12 @@ main {
 
 /* ---- prose -------------------------------------------------------- */
 
+/* Post page matches the posts-list page width: both are bounded by
+   --rkr-content (the list has no prose clamp; main caps it there).
+   Deliberately wider than --rkr-prose per request — parity with the
+   list is preferred over the narrower prose measure. */
 article {
-  max-width: var(--rkr-prose);
+  max-width: var(--rkr-content);
   margin: 0 auto;
 }
 
