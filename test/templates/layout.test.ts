@@ -148,3 +148,9 @@ test('siteHead: emits Home + About nav and the correct auth control', () => {
   assert.match(admin, /href="\/about"[^>]*>About</);
   assert.match(admin, /action="\/admin\/logout"/);
 });
+
+test('siteHead: hideHomeLink omits the Home link but keeps About', () => {
+  const html = siteHead({ title: 'S' }, { hideHomeLink: true });
+  assert.doesNotMatch(html, /href="\/"[^>]*>Home</);
+  assert.match(html, /href="\/about"[^>]*>About</);
+});

@@ -62,6 +62,8 @@ export interface HeadOpts {
   /** Controls the Login/Logout affordance in the header top-right.
    * When true, renders a Logout POST form; when false/omitted, a Login link. */
   isAdmin?: boolean;
+  /** Omit the "Home" nav link (the index page links to itself). */
+  hideHomeLink?: boolean;
 }
 
 /** No-JS site search form for the header nav (post-listing pages).
@@ -87,7 +89,7 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
       ${tagline}
     </div>
     <nav class="rkr-site-head-nav" aria-label="Site">
-      <a class="rkr-site-head-auth-btn" href="/">Home</a>
+      ${opts.hideHomeLink ? '' : '<a class="rkr-site-head-auth-btn" href="/">Home</a>'}
       <a class="rkr-site-head-auth-btn" href="/about">About</a>
       <div class="rkr-site-head-auth">${auth}</div>
     </nav>

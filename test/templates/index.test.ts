@@ -25,6 +25,9 @@ test('rail-controls hold the sort toggle + search form; rail renders even with n
   // No longer in the header nav.
   const nav = html.slice(html.indexOf('rkr-site-head-nav'), html.indexOf('</nav>'));
   assert.doesNotMatch(nav, /action="\/search"/);
+  // Home link is omitted on the home page; About stays.
+  assert.doesNotMatch(nav, />Home</);
+  assert.match(nav, />About</);
 });
 
 test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
