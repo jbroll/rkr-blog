@@ -30,6 +30,9 @@ export interface PostPageData extends SiteChrome {
   comments?: ThreadComment[];
   /** Notice shown above the comment form (e.g. after a no-JS submit redirect). */
   commentNotice?: string;
+  /** When false, render the page with no comment bubble, list, or
+   * form (used by the static /about page). Default true. */
+  showComments?: boolean;
 }
 
 export function renderPostPage(post: PostPageData): string {
@@ -52,6 +55,7 @@ export function renderPostPage(post: PostPageData): string {
   }</span></a>`;
 
   const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug, post.commentNotice ? { notice: post.commentNotice } : {})}`;
+  const showComments = post.showComments !== false;
   const v = bundleVersion();
   return `<!DOCTYPE html>
 <html lang="en">
@@ -78,11 +82,11 @@ ${post.bannerHtml ?? ''}<main id="main" tabindex="-1">
 <h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>
 ${subtitleBlock}
 ${dateBlock}
-${commentBubble}
+${showComments ? commentBubble : ''}
 </header>
 ${post.bodyHtml}
 </article>
-${commentsBlock}
+${showComments ? commentsBlock : ''}
 </main>
 ${siteFoot(post.site, { isAdmin: post.isAdmin })}
 ${post.isAdmin ? postAdminFab(post.slug) : ''}

@@ -63,3 +63,21 @@ test('bubble renders even when comments is undefined', () => {
   assert.match(html, /class="rkr-comment-bubble"[^>]*href="#respond"/);
   assert.match(html, /aria-label="Leave a comment — jump to comment form"/);
 });
+
+test('renderPostPage: showComments:false omits the comment bubble + form/list', () => {
+  const base = {
+    site: { title: 'S' },
+    title: 'About',
+    slug: '_about',
+    bodyHtml: '<p>hi</p>'
+  };
+  const withC = renderPostPage({ ...base });
+  assert.match(withC, /rkr-comment-bubble/);
+  assert.match(withC, /rkr-comment-form/);
+
+  const noC = renderPostPage({ ...base, showComments: false });
+  assert.doesNotMatch(noC, /rkr-comment-bubble/);
+  assert.doesNotMatch(noC, /rkr-comment-form/);
+  assert.doesNotMatch(noC, /id="comments"/);
+  assert.match(noC, /<p>hi<\/p>/);
+});
