@@ -1072,7 +1072,10 @@ span.rkr-justify-inline img {
   padding-bottom: var(--rkr-teaser-gap);
   border-bottom: 1px solid var(--rkr-rule);
 }
-.rkr-teaser .rkr-figure { margin-bottom: 1.25rem; }
+/* Teaser hero leads the page (first element in the first .rkr-teaser),
+   so kill its inherited --rkr-figure-margin top — main's padding already
+   sets the header gap. Mirrors body > .rkr-figure:first-child. */
+.rkr-teaser .rkr-figure { margin-top: 0; margin-bottom: 1.25rem; }
 .rkr-teaser-body { max-width: var(--rkr-prose); margin: 0 auto; }
 .rkr-teaser-title {
   font-family: var(--rkr-display-font);
