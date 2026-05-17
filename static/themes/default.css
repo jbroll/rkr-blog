@@ -48,7 +48,7 @@
   --rkr-h1-weight: bold;
   --rkr-h2-style: normal;
   --rkr-h2-weight: bold;
-  --rkr-list-cols: max-content 1fr;  /* grid-template-columns on .post-list li */
+  --rkr-list-cols: 1fr max-content;  /* grid-template-columns on .post-list li (title | date) */
   --rkr-blockquote-border: 3px solid var(--rkr-rule);
   --rkr-main-margin-left: auto;      /* override for asymmetric layouts (e.g. tufte) */
   --rkr-main-pad: 1.25rem 1.5rem;    /* padding on <main> */
@@ -1056,6 +1056,9 @@ span.rkr-justify-inline img {
   border-bottom: 0;
 }
 .post-list time {
+  /* Flush-right in the date column so date-only and date+time labels
+     align on the same right edge regardless of length. */
+  justify-self: end;
   color: var(--rkr-muted);
   font-size: 0.85rem;
   font-family: var(--rkr-display-font);

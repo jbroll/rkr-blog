@@ -131,7 +131,7 @@ function renderAnonymousList(posts: IndexEntry[]): string {
       const dateBlock = p.date
         ? `<time datetime="${escapeAttr(p.date)}">${escapeText(formatListDate(p.date, dayCounts.get(p.date.slice(0, 10)) ?? 0))}</time>`
         : /* c8 ignore next -- runReindex always supplies published_at on listed posts */ '';
-      return `  <li>${dateBlock}<a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></li>`;
+      return `  <li><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a>${dateBlock}</li>`;
     })
     .join('\n');
   return `<ul class="post-list">

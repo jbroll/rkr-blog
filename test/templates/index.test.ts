@@ -21,6 +21,8 @@ test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
   assert.match(html, /<ul class="post-list">/);
   assert.match(html, /<a href="\/hello">Hello<\/a>/);
   assert.match(html, /<a href="\/older">Older<\/a>/);
+  // Title precedes the date within each <li> (swapped order).
+  assert.match(html, /<li><a href="\/hello">Hello<\/a><time /);
   // No admin-only chrome.
   assert.doesNotMatch(html, /rkr-admin-posts-status/);
   assert.doesNotMatch(html, /data-pin-toggle/);
