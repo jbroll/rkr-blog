@@ -24,6 +24,7 @@ import {
   recordFailure,
   WINDOW_MS
 } from '../lib/login-throttle.ts';
+import { SESSION_COOKIE_NAME as SESSION_COOKIE } from '../lib/session-constants.ts';
 import { createSession, deleteSession } from '../lib/sessions.ts';
 import {
   EmailLinkedError,
@@ -33,7 +34,6 @@ import {
   type User
 } from '../lib/users.ts';
 
-const SESSION_COOKIE = 'rkr_session';
 const OAUTH_STATE_COOKIE = 'rkr_oauth_state';
 const OAUTH_STATE_TTL_S = 600;
 
@@ -444,5 +444,3 @@ function makeGoogleExchange(): TokenExchange {
   };
 }
 /* c8 ignore stop */
-
-export const SESSION_COOKIE_NAME = SESSION_COOKIE;

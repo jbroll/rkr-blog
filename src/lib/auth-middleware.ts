@@ -11,10 +11,10 @@
 
 import cookiePlugin from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { SESSION_COOKIE_NAME } from '../routes/auth.ts';
 import { adminTokenMatchesEnv } from './admin-token.ts';
 import type { Db } from './db.ts';
 import { clearFailures, isThrottled, recordFailure, WINDOW_MS } from './login-throttle.ts';
+import { SESSION_COOKIE_NAME } from './session-constants.ts';
 import { readSessionUser, touchSession } from './sessions.ts';
 import { touchLastSeen, type User } from './users.ts';
 

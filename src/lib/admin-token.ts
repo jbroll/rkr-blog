@@ -4,8 +4,8 @@
 //
 // Lives in its own module to keep src/routes/auth.ts and
 // src/lib/auth-middleware.ts on a one-way import edge — middleware
-// already imports SESSION_COOKIE_NAME from routes/auth.ts, so adding a
-// reverse edge would create a cycle.
+// already imports SESSION_COOKIE_NAME from src/lib/session-constants.ts,
+// so adding a reverse edge would create a cycle.
 
 import { timingSafeEqual } from 'node:crypto';
 
