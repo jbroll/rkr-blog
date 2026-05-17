@@ -51,6 +51,41 @@ async function uploadJpeg(page: import('@playwright/test').Page, seed: number): 
   return body.id;
 }
 
+// The carousel scrolls via `track.scrollTo({ behavior: 'smooth' })` and
+// only moves the active dot when its IntersectionObserver reports the new
+// slide. `toHaveAttribute('aria-current')` passes on the first poll that
+// matches — which can be an *intermediate* IO fire while the smooth scroll
+// is still in flight. Issuing the next prev/next/keyboard interaction at
+// that point starts a competing `scrollTo` that Chromium merges with the
+// unfinished one, so the track never cleanly reaches the target slide and
+// the subsequent assertion times out (observed flakiness at the prev /
+// keyboard steps). Gate each interaction on the track actually being at
+// rest on the active slide: `setupCarousel` scrolls to `slide.offsetLeft`,
+// so at rest `track.scrollLeft === slides[current].offsetLeft`. expect.poll
+// is a retrying primitive (no fixed sleep) over real, production-set DOM
+// state, so coverage and behaviour under test are unchanged.
+async function expectActiveDotSettled(
+  carousel: import('@playwright/test').Locator,
+  index: number
+): Promise<void> {
+  const dots = carousel.locator('.rkr-carousel-dot');
+  await expect(dots.nth(index)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expect
+    .poll(
+      () =>
+        carousel.evaluate((root, idx) => {
+          const track = root.querySelector<HTMLElement>('.rkr-carousel-track');
+          const slide = root.querySelectorAll<HTMLElement>('.rkr-carousel-slide')[idx];
+          if (!track || !slide) return -1;
+          // Rounded: sub-pixel layout / fractional scroll offsets must
+          // still count as "arrived".
+          return Math.abs(Math.round(track.scrollLeft) - Math.round(slide.offsetLeft));
+        }, index),
+      { timeout: 5_000 }
+    )
+    .toBeLessThanOrEqual(1);
+}
+
 test('site: carousel prev/next/dot/keyboard nav updates the active dot', async ({ page }) => {
   test.setTimeout(60_000);
   await login(page);
@@ -68,31 +103,35 @@ test('site: carousel prev/next/dot/keyboard nav updates the active dot', async (
   const carousel = page.locator('.rkr-carousel').first();
   await expect(carousel).toBeVisible();
 
-  // Three dots, one per slide. Initially the first is active.
+  // Three dots, one per slide. Initially the first is active. Waiting
+  // for aria-current here also gates on carousel JS having wired up
+  // (setActive(0) is the last statement of setupCarousel, after every
+  // addEventListener), so the prev/next clicks below land on a live
+  // controller.
   const dots = carousel.locator('.rkr-carousel-dot');
   await expect(dots).toHaveCount(3);
-  await expect(dots.nth(0)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expectActiveDotSettled(carousel, 0);
 
   // Click Next → IntersectionObserver picks up the new visible slide
   // → active dot moves. The track scrolls via scroll-snap, so the
   // observer fires after the smooth scroll settles.
   await carousel.locator('.rkr-carousel-next').click();
-  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expectActiveDotSettled(carousel, 1);
 
   // Click a specific dot → jump.
   await dots.nth(2).click();
-  await expect(dots.nth(2)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expectActiveDotSettled(carousel, 2);
 
   // Prev wraps back from the last to the middle.
   await carousel.locator('.rkr-carousel-prev').click();
-  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expectActiveDotSettled(carousel, 1);
 
   // Keyboard nav: ArrowLeft / ArrowRight move on the focused carousel.
   await carousel.focus();
   await page.keyboard.press('ArrowLeft');
-  await expect(dots.nth(0)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expectActiveDotSettled(carousel, 0);
   await page.keyboard.press('ArrowRight');
-  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true', { timeout: 5_000 });
+  await expectActiveDotSettled(carousel, 1);
 });
 
 test('site: figure cell opens the PhotoSwipe lightbox', async ({ page }) => {
