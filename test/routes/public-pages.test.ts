@@ -590,6 +590,34 @@ test('GET /: postTeaser on but top post has no figure → no teaser, full list',
   assert.match(res.body.slice(listStart), /\/plain-post"/);
 });
 
+test('GET /about renders _about.md without comments; 404 when absent', async (t) => {
+  const { root, app } = await setup(t);
+
+  let res = await app.inject({ method: 'GET', url: '/about' });
+  assert.equal(res.statusCode, 404); // no _about.md yet
+
+  fs.mkdirSync(path.join(root, 'content', 'posts'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', '_about.md'),
+    '---\nslug: _about\ntitle: About Us\nstatus: published\n---\nHello from about.\n'
+  );
+
+  res = await app.inject({ method: 'GET', url: '/about' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /About Us/);
+  assert.match(res.body, /Hello from about\./);
+  assert.doesNotMatch(res.body, /rkr-comment-form/);
+  assert.doesNotMatch(res.body, /rkr-comment-bubble/);
+
+  const sys = await app.inject({ method: 'GET', url: '/_about' });
+  assert.equal(sys.statusCode, 404);
+
+  // Malformed _about.md must 404, never 500 (route requirement).
+  fs.writeFileSync(path.join(root, 'content', 'posts', '_about.md'), '---\n[bad: yaml\n');
+  const bad = await app.inject({ method: 'GET', url: '/about' });
+  assert.equal(bad.statusCode, 404);
+});
+
 test('GET /: postTeaser on but admin view → never a teaser', async (t) => {
   // Admin gate needs a real authenticated request; setup() skips auth
   // middleware, so build a one-off app with the auth opt (mirrors the

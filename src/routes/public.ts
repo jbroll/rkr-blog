@@ -292,6 +292,48 @@ export default async function publicRoutes(
     }
   );
 
+  // ---- about: GET /about -----------------------------------------------
+
+  // GET /about — the _about system post rendered as a standalone page.
+  // _-slugs are 404 via /:slug by design, so this reads the file
+  // directly and renders without comments.
+  fastify.get('/about', async (req, reply) => {
+    const site = getSite();
+    const isAdmin = !!req.user;
+    const filePath = path.join(siteRoot, 'content', 'posts', '_about.md');
+    const send404 = () => {
+      setPublicSecurityHeaders(reply);
+      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+      return reply
+        .code(404)
+        .type('text/html; charset=utf-8')
+        .send(renderNotFoundPage({ site, isAdmin }));
+    };
+    let parsed: ReturnType<typeof parsePost>;
+    try {
+      const raw = await fs.promises.readFile(filePath, 'utf8');
+      parsed = parsePost(raw);
+    } catch {
+      return send404();
+    }
+    const ctx = { siteRoot, widgets };
+    const bannerHtml = await extractPostBanner(parsed.ast, ctx);
+    const bodyHtml = await renderPostHtml(parsed.ast, ctx);
+    setPublicSecurityHeaders(reply);
+    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+    return reply.type('text/html; charset=utf-8').send(
+      renderPostPage({
+        site,
+        title: parsed.frontmatter.title,
+        slug: '_about',
+        bodyHtml,
+        isAdmin,
+        showComments: false,
+        ...(bannerHtml ? { bannerHtml } : {})
+      })
+    );
+  });
+
   // ---- post: GET /:slug -------------------------------------------------
 
   fastify.get<{ Params: { slug: string }; Querystring: { submitted?: string } }>(
