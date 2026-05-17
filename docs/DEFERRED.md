@@ -68,9 +68,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## UI / UX
 
-- **Public-side offline status indicator** — no reader signal when a
-  cached copy is served. _Revisit when:_ a reader "is this cached?"
-  bug, or a push to full offline-first PWA.
 - **"Save & view" combined editor button** — currently a permalink in
   the status line. _Revisit when:_ author friction with the
   save→click pattern.
@@ -84,14 +81,26 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Performance / reliability
 
-- **Post-deploy "30s to first page"** — no deploy health-gate; SW
-  navigation SWR has no network timeout (worst case = login flush).
-  _Revisit when:_ reported again, deploys get more frequent, or
-  multi-author/higher traffic.
-- **SW stale-while-revalidate vs fresh comments** — a SW-cached post
-  page hides a newly-approved comment until revalidation. _Revisit
-  when:_ readers report missing comments without a hard refresh, or
-  comment-approval UX work.
+- **Drop public/anon offline; keep authoring offline; make the editor
+  installable** — delete the public service worker + page/image cache
+  (`src/site/sw.ts` / `sw-core.ts` / `sw-register.ts` ≈285 LOC, the
+  `manifest` + `sw-register` refs in index/post/search/404, the
+  public-scoped manifest, `test/site/sw-core.test.ts`). Authoring
+  offline is OPFS/outbox and SW-independent — **untouched**. Then add
+  PWA installability for the **authoring** SPA (currently absent):
+  an `/admin`-scoped `manifest` (start_url `/admin/editor`, scope
+  `/admin`, icons, `display: standalone`) linked from `admin.ts`;
+  decide whether a minimal `/admin` SW is needed for cross-browser
+  install or modern manifest-only install suffices (the editor keeps
+  working offline via OPFS either way). Closes outright: the
+  post-deploy "30s to first page" SW-nav stall, SW
+  stale-vs-fresh-comments, and the public-offline indicator. _Revisit
+  when:_ ready — a decided simplification; needs a spec/plan.
+- **Post-deploy deploy-gate (non-SW half)** — independent of the
+  above: `node_app/start.sh` does `systemctl restart` + a blind
+  `sleep 2`, no `/health` poll. Minor once the SW stall is gone.
+  _Revisit when:_ deploys get frequent enough that the ~1s restart
+  window matters, or when touching `deploy.sh`.
 - **Teaser top-post sync `fs.readFileSync`** — blocking read on the
   anon `GET /` teaser path (mirrors the `_site-banner.md` read).
   _Revisit when:_ the homepage sees bot/cache-miss traffic, or the
