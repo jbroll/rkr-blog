@@ -288,23 +288,51 @@ export default async function publicRoutes(
 
   // ---- search: GET /search ---------------------------------------------
 
+  // Probe once at registration time: is the FTS table present?
+  // If migration 006 has not run, posts_fts doesn't exist and the probe
+  // throws — we set ftsAvailable=false and skip the query entirely (graceful
+  // empty results, no error). If the table exists but a later query fails
+  // (corrupt index, etc.) that error propagates to the global error handler.
+  //
+  // Self-healing: when cached false, re-probe inside the request handler so a
+  // runtime runReindex (admin reindex) that creates posts_fts on the same db
+  // is picked up without a process restart. Once true, never probe again.
+  let ftsAvailable = false;
+  try {
+    db.prepare('SELECT 1 FROM posts_fts LIMIT 0').all();
+    ftsAvailable = true;
+  } catch {
+    // posts_fts not yet migrated — degrade to no-results silently.
+  }
+
   fastify.get<{ Querystring: { q?: string } }>('/search', async (req, reply) => {
     const site = getSite();
     const isAdmin = !!req.user;
     const q = typeof req.query.q === 'string' ? req.query.q : '';
     const match = buildFtsMatch(q);
 
-    let results: SearchHit[] = [];
-    if (match) {
+    // Lazy re-probe: if cached false, check once per request whether FTS has
+    // since been created (e.g. by a runtime runReindex). On success flip the
+    // cache to true so subsequent requests skip the probe entirely.
+    if (!ftsAvailable) {
       try {
-        const rows = db
-          .prepare<{
-            slug: string;
-            title: string;
-            published_at: string | null;
-            snip: string;
-          }>(
-            `SELECT p.slug AS slug, p.title AS title, p.published_at AS published_at,
+        db.prepare('SELECT 1 FROM posts_fts LIMIT 0').all();
+        ftsAvailable = true;
+      } catch {
+        // Still not migrated — stay false and return graceful empty below.
+      }
+    }
+
+    let results: SearchHit[] = [];
+    if (ftsAvailable && match) {
+      const rows = db
+        .prepare<{
+          slug: string;
+          title: string;
+          published_at: string | null;
+          snip: string;
+        }>(
+          `SELECT p.slug AS slug, p.title AS title, p.published_at AS published_at,
                     snippet(posts_fts, 3, char(1), char(2), '…', 12) AS snip
                FROM posts_fts
                JOIN posts p ON p.slug = posts_fts.slug
@@ -312,19 +340,14 @@ export default async function publicRoutes(
                 AND (p.status = 'published' OR ? = 1)
               ORDER BY bm25(posts_fts, 0.0, 10.0, 5.0, 1.0)
               LIMIT 50`
-          )
-          .all(match, isAdmin ? 1 : 0);
-        results = rows.map((r) => ({
-          slug: r.slug,
-          title: r.title,
-          ...(r.published_at ? { date: r.published_at.slice(0, 10) } : {}),
-          snippetHtml: highlightSnippet(r.snip)
-        }));
-      } catch {
-        // posts_fts absent (DB not migrated in this process) → degrade
-        // to empty results rather than 500.
-        results = [];
-      }
+        )
+        .all(match, isAdmin ? 1 : 0);
+      results = rows.map((r) => ({
+        slug: r.slug,
+        title: r.title,
+        ...(r.published_at ? { date: r.published_at.slice(0, 10) } : {}),
+        snippetHtml: highlightSnippet(r.snip)
+      }));
     }
 
     setPublicSecurityHeaders(reply);
