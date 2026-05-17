@@ -63,6 +63,33 @@ export async function listPosts(
   return { posts, total, totalPages };
 }
 
+/** Fetch a single WP *page* by slug (the /pages endpoint, not /posts).
+ * Used by `import-wp about`. Returns the page in WpPost shape (the
+ * fields importPost consumes are identical). Throws if none match. */
+export async function fetchWpPage(
+  baseUrl: string,
+  slug: string,
+  fetcher: WpFetcher = defaultWpFetcher
+): Promise<WpPost> {
+  const fields = [
+    'id',
+    'date',
+    'modified',
+    'slug',
+    'status',
+    'title',
+    'content',
+    'featured_media'
+  ].join(',');
+  const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/pages?slug=${encodeURIComponent(slug)}&_fields=${fields}`;
+  const res = await fetcher(url);
+  if (!res.ok) throw new Error(`WP fetchWpPage: ${res.status} ${url}`);
+  const pages = (await res.json()) as WpPost[];
+  const first = pages[0];
+  if (!first) throw new Error(`no page slug=${slug} on ${stripTrailingSlash(baseUrl)}`);
+  return first;
+}
+
 /** Fetch the site-wide banner/header image URL from a WP home page.
  * Looks for an <img> whose src contains "cropped-" — the WP convention
  * for custom header images. Returns null if none is found. */
