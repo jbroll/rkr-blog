@@ -17,6 +17,13 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Editor & figures
 
+- **`src/admin/main.ts` over the 500-line gate (507)** — the
+  now-enforced pre-commit size gate **blocks any commit that stages
+  `main.ts`** until it is split (per-panel `mountX(deps)` extraction:
+  figure-attrs / image-edit / cell-selection). A real, active blocker
+  for editor changes that touch it (e.g. per-cell persistence below).
+  _Revisit when:_ the next change that must edit `main.ts` — it
+  already blocks.
 - **parseHTML doesn't recover attrs** (9b) — rendered-HTML/clipboard
   round-trip drops figure attrs. _Revisit when:_ a "duplicate post" /
   "paste from preview" feature lands, or authors lose data via
@@ -43,12 +50,6 @@ Format: **item** — _revisit when:_ trigger.
 - **Cross-figure image move** — drag an image from one figure into
   another (two-node PM transaction + emptied-source deletion).
   _Revisit when:_ an author wants an image moved between two figures.
-
-## Routing & content
-
-- **Slug renaming with URL redirects** — no rename flow; needs a
-  redirects store + admin flow + 301 handler. _Revisit when:_ an
-  author needs to rename a published post.
 
 ## Local-first / sync
 
@@ -100,9 +101,7 @@ Format: **item** — _revisit when:_ trigger.
   email sender exists and the author wants async moderation alerts.
 - **Commenter self-service edit/delete** — needs an anon-auth scheme.
   _Revisit when:_ feedback it's needed + a chosen auth strategy.
-- **Import WP spam/trash/pending comments** — public WP REST gives
-  approved only. _Revisit when:_ recovering them is needed and WP
-  auth credentials are available.
+
 ## Deploy / config
 
 - **Split deployed env into `config.env` + `secrets.env`** — one

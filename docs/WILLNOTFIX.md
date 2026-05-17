@@ -30,3 +30,15 @@ and we don't re-litigate. Reopen only if the stated assumption breaks.
   environmental headless tab-visibility quirk, not a code bug. Tracked
   as a known low-rate flake; "fixing" it means chasing the browser,
   not the app. Reopen only if the rate climbs materially.
+- **Import WP spam/trash/pending comments** — the one-time WordPress
+  comment migration is done; it recovered approved comments via the
+  public REST API. Reaching spam/trash/pending needs WP
+  app-password/cookie auth for a migration that is already complete —
+  scope not worth it. Reopen only if a full re-import with
+  non-approved statuses is ever actually required.
+- **Slug renaming with URL redirects** — published-post slugs are
+  immutable by convention for this single-author blog. The full
+  rename+301-redirects feature (redirects store + admin flow + public
+  handler) is real work deliberately not taken. Reopen only when an
+  author genuinely must rename a published post (then it becomes a
+  real feature, not a deferred line).

@@ -16,6 +16,10 @@
 // process-wide (the brute-force concern is per-IP across the whole
 // process, not per-fastify-instance); tests reset it via
 // _resetLoginThrottle in their setup helpers.
+//
+// Per-IP integrity depends on trustProxy:'loopback' plus a single
+// trusted loopback proxy hop; if Fastify is bound without that,
+// req.ip becomes client-controlled and the per-IP control degrades.
 
 /** Default per-IP failed-attempt ceiling. `isThrottled` is true once
  * the recorded count reaches this within the window. Matches the old
@@ -32,16 +36,34 @@ interface FailureWindow {
 
 const failures = new Map<string, FailureWindow>();
 
+/** True when a window has passed its expiry time. Single source of
+ * truth for the expiry condition used by both activeWindow and
+ * sweepExpired. */
+function isExpired(w: FailureWindow, now: number): boolean {
+  return w.resetAt <= now;
+}
+
 /** Returns the live window for `ip`, dropping it first if it has
  * expired so a stale window never counts against a new attempt. */
 function activeWindow(ip: string): FailureWindow | undefined {
   const w = failures.get(ip);
   if (!w) return undefined;
-  if (w.resetAt <= Date.now()) {
+  if (isExpired(w, Date.now())) {
     failures.delete(ip);
     return undefined;
   }
   return w;
+}
+
+/** O(n) sweep: remove every entry whose window has expired. Called
+ * opportunistically in recordFailure when opening a new window, so
+ * IPs an attacker never revisits don't accumulate indefinitely.
+ * Mirrors the sweepExpiredFlows pattern in src/routes/auth.ts. */
+function sweepExpired(): void {
+  const now = Date.now();
+  for (const [k, v] of failures) {
+    if (isExpired(v, now)) failures.delete(k);
+  }
 }
 
 /** Record one failed credential attempt for `ip`. Starts a fresh
@@ -52,6 +74,9 @@ export function recordFailure(ip: string): void {
     w.count += 1;
     return;
   }
+  // New window: opportunistically purge expired entries for other IPs
+  // so rotating-IP attackers can't grow the Map without bound.
+  sweepExpired();
   failures.set(ip, { count: 1, resetAt: Date.now() + WINDOW_MS });
 }
 
@@ -72,4 +97,11 @@ export function clearFailures(ip: string): void {
 /** Test-only: wipe every tally. Production code never calls this. */
 export function _resetLoginThrottle(): void {
   failures.clear();
+}
+
+/** Test-only: number of entries currently in the failures Map.
+ * Lets tests verify the sweep removed stale entries without
+ * exposing Map internals to production callers. */
+export function _loginThrottleSize(): number {
+  return failures.size;
 }

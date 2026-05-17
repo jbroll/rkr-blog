@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
 import {
+  _loginThrottleSize,
   _resetLoginThrottle,
   clearFailures,
   DEFAULT_MAX,
@@ -100,4 +101,32 @@ test('_resetLoginThrottle wipes all ip tallies', () => {
   _resetLoginThrottle();
   assert.equal(isThrottled('a'), false);
   assert.equal(isThrottled('b'), false);
+});
+
+test('recordFailure sweeps expired entries when opening a new window', () => {
+  // IP-A records failures to create a window entry.
+  const realNow = Date.now;
+  try {
+    let t = 3_000_000;
+    Date.now = () => t;
+    recordFailure('ip-a');
+    assert.equal(_loginThrottleSize(), 1);
+
+    // Advance past the window so IP-A's entry is expired.
+    t += WINDOW_MS + 1;
+
+    // IP-B recording a failure opens a new window, triggering the sweep.
+    recordFailure('ip-b');
+
+    // Sweep must have removed the expired IP-A entry; only IP-B remains.
+    assert.equal(_loginThrottleSize(), 1);
+
+    // IP-A is no longer throttled and starts fresh (count 0, no window).
+    assert.equal(isThrottled('ip-a'), false);
+    // One more failure for IP-A starts a brand-new window at count 1.
+    recordFailure('ip-a');
+    assert.equal(isThrottled('ip-a'), false); // count 1, below ceiling
+  } finally {
+    Date.now = realNow;
+  }
 });

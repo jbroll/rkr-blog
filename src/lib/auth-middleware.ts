@@ -14,7 +14,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { SESSION_COOKIE_NAME } from '../routes/auth.ts';
 import { adminTokenMatchesEnv } from './admin-token.ts';
 import type { Db } from './db.ts';
-import { clearFailures, isThrottled, recordFailure } from './login-throttle.ts';
+import { clearFailures, isThrottled, recordFailure, WINDOW_MS } from './login-throttle.ts';
 import { readSessionUser, touchSession } from './sessions.ts';
 import { touchLastSeen, type User } from './users.ts';
 
@@ -61,7 +61,10 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
       // tally with the browser token-login route so the ceiling can't
       // be sidestepped by switching entry points.
       if (isThrottled(req.ip)) {
-        reply.code(429).send({ error: 'too many failed login attempts' });
+        reply
+          .code(429)
+          .header('retry-after', String(Math.ceil(WINDOW_MS / 1000)))
+          .send({ error: 'too many failed login attempts' });
         return;
       }
       if (adminTokenMatchesEnv(bearer)) {
