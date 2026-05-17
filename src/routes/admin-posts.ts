@@ -11,6 +11,7 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { runReindex } from '../cli/reindex.ts';
+import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { isValidSlug } from './admin-post-consts.ts';
 
 export interface AdminPostsRoutesOpts {
@@ -104,7 +105,7 @@ export function registerAdminPostsRoutes(
         return reply.code(400).send({ error: 'post missing frontmatter' });
       }
       if (updated !== raw) {
-        await fs.promises.writeFile(filePath, updated, 'utf8');
+        await writeFileAtomic(filePath, updated);
         runReindex(siteRoot);
       }
       return reply.redirect('/', 303);

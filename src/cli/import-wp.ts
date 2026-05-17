@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { paths } from '../lib/config.ts';
 import { importPost } from '../lib/wp-import.ts';
 import { pushPage, pushPost } from '../lib/wp-push.ts';
@@ -74,7 +75,7 @@ async function post(args: string[]): Promise<void> {
   const result = await importPost(post, { siteRoot: p.root });
 
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, result.markdown);
+  writeFileAtomicSync(dest, result.markdown);
 
   const ok = result.imagesIngested.length;
   const fail = result.imageErrors.length;

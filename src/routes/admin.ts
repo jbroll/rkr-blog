@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { runReindex } from '../cli/reindex.ts';
+import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import { paths, siteConfig } from '../lib/config.ts';
@@ -273,7 +274,7 @@ export default async function adminRoutes(
       }
     }
 
-    await fs.promises.writeFile(finalPath, file, 'utf8');
+    await writeFileAtomic(finalPath, file);
 
     runReindex(siteRoot);
 

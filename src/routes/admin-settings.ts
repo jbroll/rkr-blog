@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
   listAvailableThemes,
@@ -212,7 +213,7 @@ export function registerAdminSettingsRoutes(
     if (!exists || (!hasFigure && siteConfig().bannerImageId)) {
       const { bannerImageId } = siteConfig();
       const body = bannerImageId ? `\n::figure{ids="${bannerImageId}" justify=bleed}\n` : '';
-      fs.writeFileSync(
+      writeFileAtomicSync(
         bannerPath,
         `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n${body}`
       );
@@ -227,7 +228,7 @@ export function registerAdminSettingsRoutes(
     const aboutPath = path.join(siteRoot, 'content', 'posts', '_about.md');
     if (!fs.existsSync(aboutPath)) {
       fs.mkdirSync(path.dirname(aboutPath), { recursive: true });
-      fs.writeFileSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\n');
+      writeFileAtomicSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\n');
     }
     return reply.redirect('/admin/editor?slug=_about', 302);
   });

@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { paths } from '../lib/config.ts';
 
 export interface FixWpDatesReport {
@@ -69,7 +70,7 @@ export function fixWpDates(siteRoot: string): FixWpDatesReport {
     const corrected = raw.replace(/^date:\s*.+$/m, `date: ${fileDate}T00:00:00Z`);
 
     try {
-      fs.writeFileSync(fullPath, corrected, 'utf8');
+      writeFileAtomicSync(fullPath, corrected);
       report.fixed++;
     } catch (err) /* c8 ignore start */ {
       report.errors.push(`${filename}: write error: ${(err as Error).message}`);

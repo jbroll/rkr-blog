@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { writeFileAtomicSync } from './atomic-write.ts';
 import { INGEST_RESIZE_BOUNDS } from './image-constants.ts';
 
 export interface Paths {
@@ -145,7 +146,7 @@ export function writePersistedSiteConfig(
   }
   const p = paths(env).siteConfigFile;
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  writeFileAtomicSync(p, `${JSON.stringify(next, null, 2)}\n`);
   // Drop the theme-name memoisation so the next call sees the new value.
   resolvedThemeName = null;
   return next;
