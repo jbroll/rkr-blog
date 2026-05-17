@@ -81,3 +81,17 @@ test('renderPostPage: showComments:false omits the comment bubble + form/list', 
   assert.doesNotMatch(noC, /id="comments"/);
   assert.match(noC, /<p>hi<\/p>/);
 });
+
+test('renderPostPage: bannerHtml renders below the site header by default', () => {
+  const html = renderPostPage({ ...base, bannerHtml: '<div id="BANNER"></div>' });
+  assert.ok(html.indexOf('rkr-site-head') < html.indexOf('id="BANNER"'));
+});
+
+test('renderPostPage: bannerAboveHeader moves the banner above the site header', () => {
+  const html = renderPostPage({
+    ...base,
+    bannerHtml: '<div id="BANNER"></div>',
+    bannerAboveHeader: true
+  });
+  assert.ok(html.indexOf('id="BANNER"') < html.indexOf('rkr-site-head'));
+});

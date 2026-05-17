@@ -45,6 +45,9 @@ export interface IndexPageData extends SiteChrome {
   /** Full-bleed site banner rendered between site header and <main>.
    * Populated when the site config has a bannerImageId. */
   bannerHtml?: string;
+  /** When true, bannerHtml renders above the site header instead of
+   * between the header and <main>. */
+  bannerAboveHeader?: boolean;
   /** Anonymous view only. When set, the top post is featured above the
    * list and is expected to have been removed from `posts` by the route. */
   teaser?: IndexTeaser;
@@ -88,6 +91,9 @@ export function renderIndexPage(data: IndexPageData): string {
   const postsListScript = data.isAdmin
     ? `<script type="module" src="/static/admin/posts-list.js${bundleVersion()}"></script>`
     : '';
+  const head = siteHead(data.site, { isAdmin: data.isAdmin });
+  const banner = data.bannerHtml ?? '';
+  const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,8 +106,7 @@ ${stylesheetLinks()}
 <script type="module" src="/static/site/sw-register.js${v}" defer></script>
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin })}
-${data.bannerHtml ?? ''}<main id="main" tabindex="-1">
+${siteChrome}<main id="main" tabindex="-1">
 <div class="rkr-index-layout${tagRail ? ' rkr-index-layout--has-rail' : ''}">
 <div class="rkr-index-posts">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>

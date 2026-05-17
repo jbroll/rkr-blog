@@ -466,6 +466,38 @@ test('GET /admin/settings: postTeaser checkbox reflects persisted state', async 
   assert.doesNotMatch(off.body, /name="postTeaser"[^>]*checked/);
 });
 
+test('POST /admin/settings: checked bannerAboveHeader persists true, absent persists false', async (t) => {
+  const { root, app } = await setup(t);
+  const on = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default&bannerAboveHeader=on'
+  });
+  assert.equal(on.statusCode, 303);
+  let onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.bannerAboveHeader, true);
+
+  await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=T&tagline=&theme=default'
+  });
+  onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.bannerAboveHeader, false);
+});
+
+test('GET /admin/settings: bannerAboveHeader checkbox reflects persisted state', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ title: 'T', bannerAboveHeader: true })
+  );
+  const on = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(on.body, /name="bannerAboveHeader"[^>]*checked/);
+});
+
 test('GET /admin/about/edit creates _about.md when absent and 302s to the editor', async (t) => {
   const { root, app } = await setup(t);
   const aboutPath = path.join(root, 'content', 'posts', '_about.md');

@@ -24,6 +24,7 @@ export interface AdminSettingsPageData extends SiteChrome {
     tagline?: string;
     theme?: string;
     postTeaser?: boolean;
+    bannerAboveHeader?: boolean;
     ingestResize?: {
       maxDim?: number;
       scalePct?: number;
@@ -97,6 +98,11 @@ ${saveBtn}
   <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
     <a href="/admin/banner/edit">${data.hasBanner ? 'Edit banner →' : 'Create banner'}</a>
   </div>
+  <label for="rkr-settings-banner-above-header">Show banner/hero above the header</label>
+  <input id="rkr-settings-banner-above-header" name="bannerAboveHeader" type="checkbox"${
+    data.persisted.bannerAboveHeader ? ' checked' : ''
+  }/>
+
   <h2 class="rkr-admin-settings-section">About page</h2>
   <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
     <a href="/admin/about/edit">${data.hasAbout ? 'Edit About →' : 'Create About'}</a>

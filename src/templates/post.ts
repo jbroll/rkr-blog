@@ -23,6 +23,9 @@ export interface PostPageData extends SiteChrome {
   /** Full-bleed banner rendered between the site header and <main>.
    * Populated when the post's first element is a ::figure directive. */
   bannerHtml?: string;
+  /** When true, bannerHtml renders above the site header instead of
+   * between the header and <main>. */
+  bannerAboveHeader?: boolean;
   /** Logged-in admin → render admin strip with an "Edit this post"
    * link in siteHead. */
   isAdmin?: boolean;
@@ -57,6 +60,9 @@ export function renderPostPage(post: PostPageData): string {
   const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug, post.commentNotice ? { notice: post.commentNotice } : {})}`;
   const showComments = post.showComments !== false;
   const v = bundleVersion();
+  const head = siteHead(post.site, { isAdmin: post.isAdmin });
+  const banner = post.bannerHtml ?? '';
+  const siteChrome = post.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -75,8 +81,7 @@ ${stylesheetLinks()}
 <script type="module" src="/static/site/comment-form.js${v}" defer></script>
 </head>
 <body>
-${siteHead(post.site, { isAdmin: post.isAdmin })}
-${post.bannerHtml ?? ''}<main id="main" tabindex="-1">
+${siteChrome}<main id="main" tabindex="-1">
 <article>
 <header>
 <h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>

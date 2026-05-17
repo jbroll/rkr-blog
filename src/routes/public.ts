@@ -275,6 +275,7 @@ export default async function publicRoutes(
           ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
         })),
         ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
+        ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
         ...(teaser ? { teaser } : {}),
         isAdmin,
         ...(tagCounts.length > 0 ? { tagCounts } : {}),
@@ -329,7 +330,8 @@ export default async function publicRoutes(
         bodyHtml,
         isAdmin,
         showComments: false,
-        ...(bannerHtml ? { bannerHtml } : {})
+        ...(bannerHtml ? { bannerHtml } : {}),
+        ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {})
       })
     );
   });
@@ -387,6 +389,7 @@ export default async function publicRoutes(
         ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
         bodyHtml,
         ...(bannerHtml ? { bannerHtml } : {}),
+        ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
         isAdmin: !!req.user,
         comments,
         ...(req.query.submitted === '1' ? { commentNotice: COMMENT_SUBMITTED_NOTICE } : {})

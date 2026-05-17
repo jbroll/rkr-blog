@@ -107,6 +107,7 @@ export function registerAdminSettingsRoutes(
       ingestScalePct?: unknown;
       ingestWebpQuality?: unknown;
       postTeaser?: unknown;
+      bannerAboveHeader?: unknown;
     };
   }>('/admin/settings', { ...guard }, async (request, reply) => {
     const body = request.body ?? {};
@@ -115,6 +116,7 @@ export function registerAdminSettingsRoutes(
     const themeRaw = typeof body.theme === 'string' ? body.theme.trim() : '';
     // Unchecked HTML checkboxes send nothing; presence === enabled.
     const postTeaser = body.postTeaser !== undefined;
+    const bannerAboveHeader = body.bannerAboveHeader !== undefined;
 
     if (titleRaw.length > MAX_TITLE) {
       return reply.redirect(`/admin/settings?err=${encodeURIComponent('title too long')}`, 303);
@@ -174,6 +176,7 @@ export function registerAdminSettingsRoutes(
       tagline: taglineRaw,
       theme: themeRaw,
       postTeaser,
+      bannerAboveHeader,
       ...(ingestResize ? { ingestResize } : {})
     });
 

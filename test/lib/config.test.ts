@@ -215,3 +215,13 @@ test('postTeaser round-trips true/false; siteConfig surfaces only when true', (t
   assert.equal(readPersistedSiteConfig(env).postTeaser, false);
   assert.equal(siteConfig(env).postTeaser, undefined);
 });
+
+test('bannerAboveHeader round-trips true/false; siteConfig surfaces only when true', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig({ bannerAboveHeader: true }, env);
+  assert.equal(readPersistedSiteConfig(env).bannerAboveHeader, true);
+  assert.equal(siteConfig(env).bannerAboveHeader, true);
+  writePersistedSiteConfig({ bannerAboveHeader: false }, env);
+  assert.equal(readPersistedSiteConfig(env).bannerAboveHeader, false);
+  assert.equal(siteConfig(env).bannerAboveHeader, undefined);
+});

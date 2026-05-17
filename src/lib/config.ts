@@ -43,6 +43,9 @@ export interface SiteConfig {
   /** When true, the anonymous homepage features the top post as a
    * teaser (hero figure + first paragraph). Default off. */
   postTeaser?: boolean;
+  /** When true, the full-bleed banner/hero image renders above the
+   * site header instead of between the header and <main>. Default off. */
+  bannerAboveHeader?: boolean;
 }
 
 /** Blog-level defaults for the ingest-time downsample + re-encode
@@ -68,6 +71,8 @@ export interface PersistedSiteConfig {
   bannerImageId?: string;
   /** Feature the top post on the anonymous homepage as a teaser. */
   postTeaser?: boolean;
+  /** Render the banner/hero above the site header. */
+  bannerAboveHeader?: boolean;
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
@@ -102,6 +107,7 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   if (typeof r.theme === 'string') out.theme = r.theme;
   if (typeof r.bannerImageId === 'string') out.bannerImageId = r.bannerImageId;
   if (typeof r.postTeaser === 'boolean') out.postTeaser = r.postTeaser;
+  if (typeof r.bannerAboveHeader === 'boolean') out.bannerAboveHeader = r.bannerAboveHeader;
   const ingest = pickPersistedIngestResize(r.ingestResize);
   if (ingest) out.ingestResize = ingest;
   return out;
@@ -161,6 +167,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   if (persisted.ingestResize) out.ingestResize = persisted.ingestResize;
   if (persisted.bannerImageId) out.bannerImageId = persisted.bannerImageId;
   if (persisted.postTeaser) out.postTeaser = true;
+  if (persisted.bannerAboveHeader) out.bannerAboveHeader = true;
   return out;
 }
 

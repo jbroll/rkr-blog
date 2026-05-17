@@ -368,3 +368,26 @@ test('renderIndexPage: pager preserves ?sort= when asc', () => {
   });
   assert.match(html, /href="\/\?page=2&amp;sort=asc"/);
 });
+
+test('renderIndexPage: bannerHtml renders below the site header by default', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    bannerHtml: '<div id="BANNER"></div>'
+  });
+  assert.ok(html.indexOf('rkr-site-head') < html.indexOf('id="BANNER"'));
+});
+
+test('renderIndexPage: bannerAboveHeader moves the banner above the site header', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    bannerHtml: '<div id="BANNER"></div>',
+    bannerAboveHeader: true
+  });
+  assert.ok(html.indexOf('id="BANNER"') < html.indexOf('rkr-site-head'));
+});
