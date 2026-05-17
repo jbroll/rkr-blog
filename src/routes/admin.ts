@@ -28,6 +28,7 @@ import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
 import { registerAdminCommentsRoutes } from './admin-comments.ts';
+import { buildAdminEditorCsp, makeCspNonce } from './admin-csp.ts';
 import {
   looksLikeFrontmatterDelimiter,
   resolveSavedDate,
@@ -107,15 +108,19 @@ export default async function adminRoutes(
   }
 
   fastify.get('/admin/editor', { ...guard }, async (_req, reply) => {
+    // Per-RESPONSE nonce: binds the template's inline <style> block so
+    // the CSP can drop script-src 'unsafe-inline' (see admin-csp.ts).
+    const nonce = makeCspNonce();
     return reply
       .type('text/html; charset=utf-8')
-      .header('Content-Security-Policy', ADMIN_EDITOR_CSP)
+      .header('Content-Security-Policy', buildAdminEditorCsp(nonce))
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(
         renderAdminPage({
           site: siteConfig(),
-          bundleUrl: `/static/admin/main.js?v=${resolveGitHash().slice(0, 12)}`
+          bundleUrl: `/static/admin/main.js?v=${resolveGitHash().slice(0, 12)}`,
+          cspNonce: nonce
         })
       );
   });
@@ -467,33 +472,3 @@ function cleanTagList(raw: unknown): string[] {
   }
   return out;
 }
-
-/**
- * CSP for /admin/editor. TipTap is bundled by esbuild so the editor
- * itself has no third-party script dependency at runtime. The Google
- * Drive picker integration is an exception: it dynamically injects
- * https://apis.google.com/js/api.js (the Picker SDK), loads its UI
- * inside an iframe served from https://docs.google.com, and pulls
- * thumbnails from https://*.googleusercontent.com. Each Google host is
- * narrowly listed below — same trust we already extend to Google for
- * OAuth (verifying ID tokens via JWKS, exchanging codes).
- *
- * Inline styles still need `'unsafe-inline'` for the template's <style>
- * block (move to a nonce when we drop template-literal HTML).
- */
-const ADMIN_EDITOR_CSP = [
-  "default-src 'self'",
-  "script-src 'self' https://apis.google.com 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.googleusercontent.com https://*.1drv.com https://*.onedrive.live.com https://*.svc.ms",
-  "connect-src 'self' https://apis.google.com https://*.googleapis.com https://accounts.google.com https://login.microsoftonline.com",
-  'frame-src https://docs.google.com https://accounts.google.com',
-  // OneDrive picker opens as a popup (window.open), not an iframe, so
-  // frame-src is not needed. popup-src is not a standard CSP directive;
-  // popups inherit the opener's settings only for navigate-to / form-action.
-  "form-action 'self' https://onedrive.live.com https://*.sharepoint.com",
-  "font-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'"
-].join('; ');

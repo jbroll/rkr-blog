@@ -14,6 +14,12 @@ import { type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 export interface AdminPageData extends SiteChrome {
   /** Where the compiled admin bundle is mounted on the URL space. */
   bundleUrl: string;
+  /**
+   * Per-response CSP nonce. Stamped onto the inline <style> block so
+   * the editor's CSP can drop script-src 'unsafe-inline' (the script
+   * is an external self-hosted module; see routes/admin-csp.ts).
+   */
+  cspNonce: string;
 }
 
 export function renderAdminPage(data: AdminPageData): string {
@@ -30,7 +36,7 @@ export function renderAdminPage(data: AdminPageData): string {
 ${stylesheetLinks()}
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
 <link rel="stylesheet" href="/static/admin/main.css"/>
-<style>
+<style nonce="${data.cspNonce}">
 ${ADMIN_CSS_CORE}
 ${ADMIN_CSS_DIALOGS}
 </style>

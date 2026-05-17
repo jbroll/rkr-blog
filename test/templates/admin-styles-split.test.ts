@@ -32,10 +32,12 @@ test('admin CSS split: core + "\\n" + dialogs is byte-identical to the pre-split
 test('renderAdminPage embeds the full admin CSS verbatim inside the inline <style>', () => {
   const html = renderAdminPage({
     site: { title: 'rkroll' },
-    bundleUrl: '/static/admin/main.js'
+    bundleUrl: '/static/admin/main.js',
+    cspNonce: 'test-nonce'
   });
   // The page still ships the CSS inline (not as a linked asset), so
-  // CSP / caching are unchanged. The exact original CSS text must be
-  // present between the <style> tags.
-  assert.ok(html.includes(`<style>\n${ORIGINAL_CSS}\n</style>`));
+  // caching is unchanged. The inline <style> now carries the
+  // per-response CSP nonce (Task 19); the exact original CSS text must
+  // still be present verbatim between the <style> tags.
+  assert.ok(html.includes(`<style nonce="test-nonce">\n${ORIGINAL_CSS}\n</style>`));
 });
