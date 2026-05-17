@@ -242,3 +242,174 @@ test('commitImageEdit: replayed (device,seq) short-circuits to the original 2xx'
     .get('dev-C', 9) as { status: number } | undefined;
   assert.equal(row?.status, 200);
 });
+
+function sidecarUpdatedAt(root: string, id: string): string {
+  return new Date(fs.statSync(path.join(root, 'sidecars', `${id}.json`)).mtimeMs).toISOString();
+}
+
+test('commitImageEdit meta echoes the sidecar updatedAt for the edit-start baseline', async (t) => {
+  const { root, app } = await setupNoDb(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'x.jpg' }
+  });
+  const meta = await app.inject({ method: 'GET', url: `/admin/sidecar/${ingest.id}/meta` });
+  assert.equal(meta.statusCode, 200);
+  const body = meta.json();
+  assert.equal(typeof body.updatedAt, 'string', 'meta must expose a sidecar updatedAt');
+  assert.equal(body.updatedAt, sidecarUpdatedAt(root, ingest.id));
+});
+
+test('commitImageEdit: STALE replay past an advanced sidecar → 409 sidecar-superseded, newer edit preserved', async (t) => {
+  // Core data-loss regression. Device goes offline with a queued
+  // commitImageEdit (old ops). Its applied_outbox row is pruned
+  // (offline > retention). Meanwhile a NEWER edit to the SAME image
+  // lands. The stale replay arrives last: it must be REJECTED (409),
+  // NOT silently revert the image to the old ops + bake.
+  const { root, app, db } = await setupWithDb(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'x.jpg' }
+  });
+
+  // Edit-start baseline the offline client honestly observed.
+  const editStartBase = sidecarUpdatedAt(root, ingest.id);
+
+  const staleOps = { ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }], redoStack: [] };
+
+  // A NEWER edit to the same image lands while the device is offline.
+  await new Promise((r) => setTimeout(r, 20));
+  const newerOps = { ops: [{ type: 'crop', x: 10, y: 10, w: 500, h: 400 }], redoStack: [] };
+  const newer = await commit(app, ingest.id, newerOps, {}, await makeWebp(500, 400));
+  assert.equal(newer.statusCode, 200, `body: ${newer.body}`);
+  const newerSidecar = JSON.parse(
+    fs.readFileSync(path.join(root, 'sidecars', `${ingest.id}.json`), 'utf8')
+  );
+  assert.deepEqual(newerSidecar.ops, newerOps.ops, 'newer ops on disk');
+  // Read whatever the newer commit wrote so we can prove it survives
+  // the stale replay.
+  const { bakePath } = await import('../../src/lib/originals.ts');
+  const newerBake = fs.readFileSync(bakePath(root, ingest.id));
+
+  // The STALE replay: the offline client's queued entry, replayed
+  // after its applied_outbox row was pruned. It carries the
+  // edit-start baseline (older than the newer edit's mtime) and
+  // DIFFERENT ops → genuine stale clobber → must 409.
+  const replay = await commit(
+    app,
+    ingest.id,
+    staleOps,
+    {
+      'x-rkr-device-id': 'dev-stale',
+      'x-rkr-outbox-seq': '42',
+      'x-rkr-sidecar-base': editStartBase
+    },
+    await makeWebp(400, 300)
+  );
+  assert.equal(
+    replay.statusCode,
+    409,
+    `stale replay must 409, got ${replay.statusCode}: ${replay.body}`
+  );
+  assert.equal(replay.json().error, 'sidecar-superseded');
+
+  // The newer edit SURVIVED — no silent revert.
+  const afterSidecar = JSON.parse(
+    fs.readFileSync(path.join(root, 'sidecars', `${ingest.id}.json`), 'utf8')
+  );
+  assert.deepEqual(afterSidecar.ops, newerOps.ops, 'newer ops must be preserved (no revert)');
+  assert.deepEqual(fs.readFileSync(bakePath(root, ingest.id)), newerBake, 'newer bake preserved');
+
+  // No applied_outbox row recorded for the rejected stale replay.
+  const row = db
+    .prepare('SELECT status FROM applied_outbox WHERE device_id = ? AND seq = ?')
+    .get('dev-stale', 42) as { status: number } | undefined;
+  assert.equal(row, undefined, 'a rejected 409 must not be recorded as applied');
+});
+
+test('commitImageEdit: pure replay with NO table row + identical on-disk ops/bake → 2xx no-op, not 409', async (t) => {
+  const { root, app } = await setupNoDb(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'x.jpg' }
+  });
+
+  const ops = { ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }], redoStack: [] };
+  const first = await commit(app, ingest.id, ops, {}, await makeWebp(400, 300));
+  assert.equal(first.statusCode, 200, `body: ${first.body}`);
+  const baseAfterFirst = sidecarUpdatedAt(root, ingest.id);
+  const { bakePath } = await import('../../src/lib/originals.ts');
+  const bakeBefore = fs.readFileSync(bakePath(root, ingest.id));
+
+  // Lost-ACK replay across a client restart: no db (no table row).
+  // The queued entry carries a STALE base (the pre-first edit-start
+  // value would be older), but the on-disk ops are byte-identical to
+  // what it's replaying → pure replay → 2xx no-op, NOT a 409, and no
+  // re-clobber. Use a clearly-stale base to prove the cheap no-op
+  // precedes the 409 guard.
+  const replay = await commit(app, ingest.id, ops, {
+    'x-rkr-device-id': 'dev-D',
+    'x-rkr-outbox-seq': '7',
+    'x-rkr-sidecar-base': '2000-01-01T00:00:00.000Z'
+  });
+  assert.equal(replay.statusCode, 200, `pure replay must not 409: ${replay.body}`);
+  assert.equal(sidecarUpdatedAt(root, ingest.id), baseAfterFirst, 'sidecar not rewritten');
+  assert.deepEqual(fs.readFileSync(bakePath(root, ingest.id)), bakeBefore, 'bake unchanged');
+});
+
+test('commitImageEdit: first commit with a fresh matching baseline → 200, ops applied', async (t) => {
+  const { root, app } = await setupNoDb(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'x.jpg' }
+  });
+  const base = sidecarUpdatedAt(root, ingest.id);
+  const ops = { ops: [{ type: 'crop', x: 5, y: 5, w: 300, h: 200 }], redoStack: [] };
+  const res = await commit(
+    app,
+    ingest.id,
+    ops,
+    { 'x-rkr-device-id': 'dev-E', 'x-rkr-outbox-seq': '3', 'x-rkr-sidecar-base': base },
+    await makeWebp(300, 200)
+  );
+  assert.equal(res.statusCode, 200, `first commit must apply: ${res.body}`);
+  const sidecar = JSON.parse(
+    fs.readFileSync(path.join(root, 'sidecars', `${ingest.id}.json`), 'utf8')
+  );
+  assert.deepEqual(sidecar.ops, ops.ops, 'ops applied');
+});
+
+test('commitImageEdit: absent baseline header (legacy entry) → no spurious 409', async (t) => {
+  const { root, app } = await setupNoDb(t);
+  const ingest = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'x.jpg' }
+  });
+
+  // A newer edit lands first, advancing the sidecar.
+  await new Promise((r) => setTimeout(r, 20));
+  const newerOps = { ops: [{ type: 'crop', x: 1, y: 1, w: 600, h: 400 }], redoStack: [] };
+  const newer = await commit(app, ingest.id, newerOps, {}, await makeWebp(600, 400));
+  assert.equal(newer.statusCode, 200);
+
+  // A legacy queued entry (no x-rkr-sidecar-base) with different ops:
+  // backward compatible → applied (no 409), last-write-wins as before.
+  const legacyOps = { ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }], redoStack: [] };
+  const legacy = await commit(
+    app,
+    ingest.id,
+    legacyOps,
+    { 'x-rkr-device-id': 'dev-F', 'x-rkr-outbox-seq': '8' },
+    await makeWebp(400, 300)
+  );
+  assert.equal(legacy.statusCode, 200, `absent-baseline must not 409: ${legacy.body}`);
+  const sidecar = JSON.parse(
+    fs.readFileSync(path.join(root, 'sidecars', `${ingest.id}.json`), 'utf8')
+  );
+  assert.deepEqual(sidecar.ops, legacyOps.ops, 'legacy entry applied (backward compatible)');
+});

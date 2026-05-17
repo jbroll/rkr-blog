@@ -39,6 +39,13 @@ export interface CommitImageEditPayload {
    * opfs://outbox-blobs/<seq>.bin. False when ops is empty (clear-
    * edits save) — the server unlinks any existing bake instead. */
   hasBake: boolean;
+  /** Server-side sidecar updated_at the client saw at edit-start
+   * (from GET /admin/sidecar/:id/meta). Sent as x-rkr-sidecar-base so
+   * a stale drained replay arriving after a newer same-image edit is
+   * rejected (409 sidecar-superseded) instead of silently reverting.
+   * Omitted for entries queued before this field existed → server
+   * preserves legacy (no-409) behavior. */
+  sidecarBase?: string;
 }
 
 /** @public */

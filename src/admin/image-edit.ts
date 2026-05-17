@@ -22,6 +22,9 @@ interface PersistedImageState {
   baseline: { ops: SidecarOp[]; redoStack: SidecarOp[] };
   sourceWidth: number | null;
   sourceHeight: number | null;
+  /** Edit-start sidecar updated_at for the commit guard. Optional so
+   * snapshots written before this field still load. */
+  sidecarBase?: string;
 }
 
 /** Fire-and-forget persist so a tab reload restores unsaved edits.
@@ -37,7 +40,8 @@ export function persistImageState(id: string, s: LocalEditState): void {
       redoStack: [...s.baseline.redoStack]
     },
     sourceWidth: s.sourceWidth,
-    sourceHeight: s.sourceHeight
+    sourceHeight: s.sourceHeight,
+    sidecarBase: s.sidecarBase
   };
   void writeJson(`${IMAGE_STATE_DIR}/${id}.json`, snapshot).catch((err) => {
     /* v8 ignore next 2 -- best-effort write */
@@ -54,7 +58,8 @@ async function loadImageState(id: string): Promise<LocalEditState | null> {
     redoStack: raw.redoStack,
     baseline: raw.baseline,
     sourceWidth: raw.sourceWidth,
-    sourceHeight: raw.sourceHeight
+    sourceHeight: raw.sourceHeight,
+    sidecarBase: raw.sidecarBase
   };
 }
 
@@ -64,6 +69,8 @@ interface SidecarMeta {
   format: string | null;
   ops: SidecarOp[];
   redoStack: SidecarOp[];
+  /** Sidecar updated_at; adopted as the edit-start guard baseline. */
+  updatedAt: string | null;
 }
 
 async function fetchSidecarMeta(id: string): Promise<SidecarMeta> {
@@ -109,7 +116,10 @@ export async function ensureLocalState(id: string): Promise<LocalEditState> {
     redoStack: [...meta.redoStack],
     baseline: { ops: [...meta.ops], redoStack: [...meta.redoStack] },
     sourceWidth: meta.width,
-    sourceHeight: meta.height
+    sourceHeight: meta.height,
+    // Edit-start baseline for the commit optimistic-concurrency
+    // guard (mirrors save.ts seeding lastSyncedAt from meta).
+    sidecarBase: meta.updatedAt ?? undefined
   };
   localEditState.set(id, fresh);
   persistImageState(id, fresh);
@@ -126,13 +136,17 @@ async function postCommit(
   ops: SidecarOp[],
   redoStack: SidecarOp[],
   bake: Blob | null
-): Promise<{ ops: SidecarOp[]; redoStack: SidecarOp[] }> {
+): Promise<{ ops: SidecarOp[]; redoStack: SidecarOp[]; updatedAt: string | null }> {
   const fd = new FormData();
   fd.append('ops', JSON.stringify({ ops, redoStack }));
   if (bake) fd.append('bake', bake, `${id}.webp`);
   const res = await fetch(`/admin/sidecar/${id}/commit`, { method: 'POST', body: fd });
   if (!res.ok) throw new Error(`commit: ${res.status} ${await res.text()}`);
-  return (await res.json()) as { ops: SidecarOp[]; redoStack: SidecarOp[] };
+  return (await res.json()) as {
+    ops: SidecarOp[];
+    redoStack: SidecarOp[];
+    updatedAt: string | null;
+  };
 }
 
 export async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
@@ -153,6 +167,11 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
       s.ops = normalized.ops;
       s.redoStack = normalized.redoStack;
       s.baseline = { ops: [...s.ops], redoStack: [...s.redoStack] };
+      // Re-anchor the guard baseline to the sidecar's new
+      // updated_at so the next edit's commit compares against this
+      // write, not a stale pre-edit value (mirrors save.ts adopting
+      // result.updatedAt as the next lastSyncedAt).
+      if (normalized.updatedAt) s.sidecarBase = normalized.updatedAt;
       persistImageState(id, s);
       // Server's state moved on. Tell other tabs to drop their
       // cached state for this id so their next save doesn't clobber.
@@ -166,7 +185,13 @@ export async function saveImageEdits(id: string, s: LocalEditState): Promise<voi
   await outboxAppend(
     {
       op: 'commitImageEdit',
-      payload: { id, ops: [...s.ops], redoStack: [...s.redoStack], hasBake: bake !== null }
+      payload: {
+        id,
+        ops: [...s.ops],
+        redoStack: [...s.redoStack],
+        hasBake: bake !== null,
+        sidecarBase: s.sidecarBase
+      }
     },
     bake ?? undefined
   );

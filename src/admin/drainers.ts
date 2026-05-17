@@ -65,13 +65,39 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
     }
     fd.append('bake', blob, `${entry.payload.id}.webp`);
   }
-  await postFormDrain(
-    'commitImageEdit',
-    `/admin/sidecar/${entry.payload.id}/commit`,
-    fd,
-    entry.seq,
-    entry.deviceId
-  );
+  // Edit-start sidecar baseline (mirrors savePost's
+  // x-rkr-last-synced-at). Omitted for entries queued before this
+  // field existed → server preserves legacy no-409 behavior.
+  const headers: Record<string, string> = {
+    'x-rkr-outbox-seq': String(entry.seq),
+    'x-rkr-device-id': entry.deviceId
+  };
+  if (entry.payload.sidecarBase) {
+    headers['x-rkr-sidecar-base'] = entry.payload.sidecarBase;
+  }
+  const res = await fetch(`/admin/sidecar/${entry.payload.id}/commit`, {
+    method: 'POST',
+    body: fd,
+    headers
+  });
+  if (res.status === 409) {
+    // sidecar-superseded: a newer edit to this image landed while
+    // this entry was queued offline. Applying the stale ops would
+    // silently revert that newer edit (the bug this guard exists to
+    // stop), so DROP the obsolete entry rather than retry it forever.
+    // Returning normally lets the drain loop outboxRemove() it.
+    /* v8 ignore next -- prod-only network path */
+    const body = (await res.json().catch(() => ({}))) as { serverUpdatedAt?: string };
+    console.warn(
+      `commitImageEdit entry ${entry.seq} superseded by a newer edit ` +
+        `(server ${body.serverUpdatedAt ?? '?'}); dropping stale ops`
+    );
+    return;
+  }
+  /* v8 ignore next 3 -- non-2xx, non-409 server response; prod-only */
+  if (!res.ok) {
+    throw new Error(`commitImageEdit drain ${entry.seq}: ${res.status}`);
+  }
 };
 
 export const drainSavePost: Drainer = async (entry: OutboxEntry) => {

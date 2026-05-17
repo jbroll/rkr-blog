@@ -25,6 +25,13 @@ export interface LocalEditState {
    * cropper to set up its display ratio. */
   sourceWidth: number | null;
   sourceHeight: number | null;
+  /** Server-side sidecar updated_at observed at edit-start (from
+   * /admin/sidecar/:id/meta) and re-anchored after each successful
+   * commit. Threaded into the queued commitImageEdit so a stale
+   * drained replay can be rejected (sidecar-superseded) instead of
+   * silently reverting a newer same-image edit. Undefined for state
+   * persisted before this field existed (legacy → no guard). */
+  sidecarBase?: string;
 }
 
 /** True when local ops or redoStack diverge from the server-known

@@ -21,6 +21,7 @@ import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import { imageDimensions } from '../lib/widget-helpers.ts';
 import { fallback as imageFallback } from '../widgets/figure.ts';
+import { sidecarUpdatedAt } from './sidecar-base.ts';
 
 /** Smallest source dimension the /img derivative pipeline accepts.
  * Mirrors the guard in src/routes/public.ts. Below this, /admin/preview
@@ -165,7 +166,12 @@ export function registerImageLookupRoutes(
         height: info?.height ?? null,
         format: info?.format ?? null,
         ops: sidecar.ops,
-        redoStack: sidecar.redoStack ?? []
+        redoStack: sidecar.redoStack ?? [],
+        // The sidecar's updated_at the client adopts as its
+        // edit-start baseline for the commitImageEdit
+        // optimistic-concurrency guard (mirrors savePost's
+        // updatedAt → meta.lastSyncedAt).
+        updatedAt: sidecarUpdatedAt(siteRoot, id)
       };
     }
   );

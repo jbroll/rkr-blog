@@ -24,6 +24,7 @@ import { validateOps } from '../lib/ops-validation.ts';
 import { bakePath, imageInfo } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { readIdempotencyKey } from './admin-idempotency.ts';
+import { evaluateSidecarBase, opsUnchanged, sidecarUpdatedAt } from './sidecar-base.ts';
 
 const BAKE_MAX_BYTES = 25 * 1024 * 1024;
 const OPS_MAX_BYTES = 64 * 1024;
@@ -119,6 +120,59 @@ export function registerSidecarEditRoutes(
       if (!opsV.ok) return reply.code(400).send({ error: opsV.error });
       const rsV = validateOps(parsed.redoStack ?? [], dims);
       if (!rsV.ok) return reply.code(400).send({ error: `redoStack: ${rsV.error}` });
+
+      // Idempotency / optimistic-concurrency, mirroring savePost. The
+      // applied_outbox table short-circuit ran first (above). Now,
+      // BEFORE any write:
+      //
+      //   (1) Cheap pure-replay no-op. If the on-disk ops + redoStack
+      //       already equal what's being committed, this drained entry
+      //       was already applied (lost-ACK replay after the table row
+      //       was pruned / db absent). Return the normal 2xx without
+      //       re-running the non-idempotent write — and without
+      //       requiring the bake (a pure replay may re-POST without
+      //       it, exactly like the table layer). It must NOT swallow
+      //       the "bake forbidden when ops is empty" contract though:
+      //       a genuine pure replay of a clear-edits save never
+      //       carries a bake, so a bake here is a malformed request
+      //       regardless of disk state — fall through to the 400.
+      //
+      //   (2) Optimistic-concurrency guard. If the client supplied an
+      //       edit-start baseline (x-rkr-sidecar-base, the sidecar
+      //       updated_at it saw when editing began) and the on-disk
+      //       sidecar has advanced PAST it, a newer same-image edit
+      //       landed while this entry was queued offline. With (1)
+      //       already ruling out a pure replay, applying now would
+      //       silently revert that newer edit — reject with 409
+      //       instead. Absent header (legacy queued entry) → no 409,
+      //       backward compatible; the table + no-op still cover pure
+      //       replays.
+      const malformedEmptyWithBake = opsV.ops.length === 0 && bakeBuf !== null;
+      if (!malformedEmptyWithBake && opsUnchanged(sidecar, opsV.ops, rsV.ops)) {
+        const body = {
+          ops: sidecar.ops,
+          redoStack: sidecar.redoStack ?? [],
+          updatedAt: sidecarUpdatedAt(siteRoot, id)
+        };
+        if (idem && db) {
+          recordApplied(db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
+          pruneApplied(db);
+        }
+        return body;
+      }
+      const baseRaw = req.headers['x-rkr-sidecar-base'];
+      if (typeof baseRaw === 'string' && Number.isNaN(Date.parse(baseRaw))) {
+        return reply.code(400).send({ error: 'x-rkr-sidecar-base must be an ISO-8601 timestamp' });
+      }
+      const base = evaluateSidecarBase(baseRaw, siteRoot, id);
+      if (base.verdict === 'superseded') {
+        return reply.code(409).send({
+          error: 'sidecar-superseded',
+          id,
+          serverUpdatedAt: base.serverUpdatedAt,
+          clientBase: baseRaw
+        });
+      }
 
       // ops=[] is the "clear all edits" save: no bake to upload, just
       // unlink any existing one. Non-empty ops require the matching
@@ -222,7 +276,14 @@ export function registerSidecarEditRoutes(
         await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
       }
 
-      const body = { ops: sidecar.ops, redoStack: sidecar.redoStack ?? [] };
+      // Echo the sidecar's new updated_at so the client can re-anchor
+      // its edit-start baseline for the next commit's guard (mirrors
+      // savePost echoing updatedAt → meta.lastSyncedAt).
+      const body = {
+        ops: sidecar.ops,
+        redoStack: sidecar.redoStack ?? [],
+        updatedAt: sidecarUpdatedAt(siteRoot, id)
+      };
       if (idem && db) {
         recordApplied(db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
         pruneApplied(db);
