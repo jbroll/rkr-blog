@@ -6,7 +6,8 @@
 // (script-src 'self' only, no esm.sh / CDN allowance).
 
 import { escapeText } from '../lib/content.ts';
-import { ADMIN_CSS } from './admin-styles.ts';
+import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
+import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { icon } from './icons.ts';
 import { type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 
@@ -30,7 +31,8 @@ ${stylesheetLinks()}
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
 <link rel="stylesheet" href="/static/admin/main.css"/>
 <style>
-${ADMIN_CSS}
+${ADMIN_CSS_CORE}
+${ADMIN_CSS_DIALOGS}
 </style>
 </head>
 <body>
@@ -130,7 +132,7 @@ ${siteHead(data.site, { isAdmin: true })}
     <!-- Close is FIRST in DOM order so showModal's focusing steps
          land here (Enter on dialog open = close, harmless). Delete
          follows but is reordered visually to its left via flex
-         order in admin-styles, with extra gap so a stray tap on
+         order in admin-styles-dialogs, with extra gap so a stray tap on
          the X doesn't fire delete. Confirm + splice in main.ts. -->
     <button type="submit" class="rkr-cell-dialog-close" aria-label="Close">✕</button>
     <button type="button" id="rkr-cell-delete-btn" class="rkr-cell-delete" aria-label="Remove image from figure" title="Remove image from figure">${icon('trash2', 18)}</button>

@@ -31,7 +31,7 @@ function ensureStyle(): void {
   if (document.getElementById(STYLE_ID)) return;
   const s = document.createElement('style');
   s.id = STYLE_ID;
-  // CSS lives here (not in admin-styles.ts) so this module stays
+  // CSS lives here (not in the admin-styles modules) so this stays
   // self-contained — drop the toast usage and nothing else needs
   // to change.
   s.textContent = `

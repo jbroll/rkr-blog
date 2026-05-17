@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import 'cropperjs/dist/cropper.css';
 
 import { hasWebglSupport } from './canvas-loaders';
+import { wireCellDelete } from './cell-delete.ts';
 import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
@@ -403,55 +404,19 @@ function mount(): void {
     commit: (v, h) => commitFigureAttr('alts', v, { addToHistory: h })
   });
 
-  // Remove the active cell from the figure (image bytes + sidecar
-  // stay on disk; only this figure's reference is dropped).
-  attrCellDeleteBtn.addEventListener('click', () => {
-    if (activeCellIndex === null || !editor.isActive('figure')) return;
-    if (
-      !window.confirm(
-        'Remove this image from the figure? The image file is kept; only this figure stops referencing it.'
-      )
-    ) {
-      return;
-    }
-    const attrs = editor.getAttributes('figure') as Partial<FigureAttrs>;
-    const ids = (attrs.ids ?? '').split(',').map((s) => s.trim());
-    const alts = (attrs.alts ?? '').split(',').map((s) => s.trim());
-    const captions = (attrs.captions ?? '').split('|');
-    const idx = activeCellIndex;
-    if (idx < ids.length) ids.splice(idx, 1);
-    if (idx < alts.length) alts.splice(idx, 1);
-    if (idx < captions.length) captions.splice(idx, 1);
-    while (alts.length > ids.length) alts.pop();
-    while (captions.length > ids.length) captions.pop();
-    const patch = {
-      ids: ids.filter(Boolean).join(','),
-      alts: alts.join(','),
-      captions: captions.join('|')
-    };
-    // Walk the doc + setNodeMarkup: avoids the selection-anchor
-    // flakiness of the chain helper after a dialog focus shift.
-    const preIds = attrs.ids ?? '';
-    editor.commands.command(({ tr, state, dispatch }) => {
-      let target: number | null = null;
-      state.doc.descendants((node, pos) => {
-        if (node.type.name === 'figure' && target === null) {
-          const nodeIds = (node.attrs.ids as string | undefined) ?? '';
-          if (nodeIds === preIds) target = pos;
-        }
-        return target === null;
-      });
-      if (target === null) return false;
-      if (dispatch) {
-        const node = state.doc.nodeAt(target);
-        if (!node) return false;
-        dispatch(tr.setNodeMarkup(target, undefined, { ...node.attrs, ...patch }));
-      }
-      return true;
-    });
-    activeCellIndex = null;
-    if (cellDialog.open) cellDialog.close();
-    clearActiveCellHighlight();
+  // Per-cell delete button. The handler (doc-walk + setNodeMarkup)
+  // lives in cell-delete.ts so this file stays under the 500-line
+  // size cap; `activeCellIndex` is this scope's state, passed as a
+  // get/set accessor pair.
+  wireCellDelete({
+    editor,
+    attrCellDeleteBtn,
+    cellDialog,
+    getActiveCellIndex: () => activeCellIndex,
+    setActiveCellIndex: (idx) => {
+      activeCellIndex = idx;
+    },
+    clearActiveCellHighlight
   });
 
   /** Active cell's image id (null when no figure / no cell active).

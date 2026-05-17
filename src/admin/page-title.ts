@@ -33,7 +33,7 @@ function render(): void {
   const tabTitle = titleInput.value.trim() || label;
   document.title = `${dirty ? '● ' : ''}${tabTitle}${BASE_TITLE_SUFFIX}`;
   // Mirror the dirty state on the toolbar Save button — CSS in
-  // admin-styles.ts uses `.is-dirty` to flip the button from
+  // admin-styles-core.ts uses `.is-dirty` to flip the button from
   // outline-only (calm) to filled (needs action). The tab-title
   // dot was already there for findability, but it's offscreen
   // when the user is focused on the editor.

@@ -34,8 +34,8 @@
       "linesHit": 1
     },
     "src/admin/main.ts": {
-      "linesFound": 108,
-      "linesHit": 95
+      "linesFound": 95,
+      "linesHit": 82
     },
     "src/admin/perspective-modal.ts": {
       "linesFound": 73,
@@ -79,7 +79,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 36,
-      "linesHit": 33
+      "linesHit": 34
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -264,6 +264,10 @@
     "src/lib/figure-ids.ts": {
       "linesFound": 2,
       "linesHit": 2
+    },
+    "src/admin/cell-delete.ts": {
+      "linesFound": 18,
+      "linesHit": 18
     }
   }
 }
