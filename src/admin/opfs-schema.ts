@@ -1,6 +1,6 @@
 // OPFS schema versioning + migration framework (spec-offline §10).
 
-import { isSupported, readJson, writeJson } from './opfs.ts';
+import { isSupported, listDir, readJson, writeJson } from './opfs.ts';
 
 /** Bump alongside any schema-affecting change. Pure additions of
  * optional fields don't need a bump — see spec-offline §10 for the
@@ -70,6 +70,21 @@ function makeDeviceId(): string {
   return crypto.randomUUID();
 }
 
+/** Scan the outbox directory and return the highest seq number found
+ * in filenames (format: `<seq>.<op>.json`). Returns 0 when the
+ * outbox is absent or empty. Used to seed nextSeq above any live
+ * entries when _root.json is missing or corrupt, preventing seq
+ * collisions that would break coalescing/ordering of un-drained work. */
+async function maxOutboxSeqOnDisk(): Promise<number> {
+  const names = await listDir(OPFS_DIRS.OUTBOX);
+  let max = 0;
+  for (const n of names) {
+    const seq = Number.parseInt(n.split('.')[0] ?? '', 10);
+    if (Number.isFinite(seq) && seq > max) max = seq;
+  }
+  return max;
+}
+
 export async function ensureSchema(): Promise<SchemaStatus> {
   /* v8 ignore next 3 -- pre-OPFS browser */
   if (!isSupported()) {
@@ -77,7 +92,14 @@ export async function ensureSchema(): Promise<SchemaStatus> {
   }
   const onDisk = await readJson<OpfsRoot>(ROOT_PATH);
   if (!onDisk) {
-    await writeJson(ROOT_PATH, makeRoot());
+    const root = makeRoot();
+    // A corrupt/quarantined or missing _root.json must not reset
+    // nextSeq beneath live outbox entries — that collides seqs and
+    // breaks coalescing/ordering, orphaning un-drained work. Seed
+    // above the highest on-disk seq.
+    const floor = await maxOutboxSeqOnDisk();
+    if (floor > 0) root.nextSeq = floor + 1;
+    await writeJson(ROOT_PATH, root);
     return { status: 'fresh' };
   }
 
