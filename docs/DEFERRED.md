@@ -53,26 +53,6 @@ saves, not clipboard. Cross-session paste isn't a current use case.
 **Trigger.** If we add a "duplicate post" or "paste from preview" feature,
 or if authors start losing data via clipboard round-trips.
 
-## Step 7 follow-ups
-
-### OneDrive picker UI (Microsoft File Picker SDK)
-**What.** Server side is fully shipped (`src/lib/microsoft-graph.ts` +
-`src/routes/integrations-onedrive.ts`): connect/callback/access-token/
-import endpoints exist, tested with stubs. Editor has an MVP "OneDrive"
-button that opens the connect flow and falls back to a manual item-id
-prompt. The Microsoft File Picker SDK (analogous to Google's `gapi`
-picker, served from a Microsoft CDN) is NOT integrated; the
-`/picker-config` endpoint is ready for it.
-
-**Why deferred.** End-to-end testing of the picker SDK requires an MS
-Entra app registration, which is blocked on user-side credentials
-(`MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, optional
-`MICROSOFT_TENANT_ID`). Once those land, the SDK integration is a
-mirror of `pickFromDrive` in src/admin/main.ts.
-
-**Trigger.** When the user registers the Entra app and we want a
-proper picker UI rather than the manual id MVP.
-
 ## Step 9d follow-ups (after the crop UI shipped)
 
 ### Per-instance crops in multi-image directives
@@ -128,22 +108,22 @@ Suite covers the token-login golden path + the editor image flow:
   (`editor-flow.spec.ts`, 2026-05-09; covers the cropper-modal.ts
   extraction)
 
+- ✅ existing-post round-trip: pin → offline edit → reconnect
+  drain, plus the `Edit this post` route (`editor-flow.spec.ts`)
+- ✅ drag-drop / paste an image onto the editor
+  (`editor-drag-paste.spec.ts`)
+
 Outstanding editor-flow coverage:
 
-- Open an existing post, type, save → reload → content matches
-- Drag-drop an image onto the editor (the new drag-drop.ts factory
-  closure pattern only has the static-import smoke from the rotate
-  spec; the actual drag-drop path is unexercised)
 - Perspective rectify (gated on WebGL; chromium-headless support
   varies, so this needs a feature-detect-and-skip)
 - OAuth callback (Google) lands on admin dashboard (needs an inject
   hook to stub the exchange/verifier inside the long-running
   webServer; the unit suite already covers the data layer)
 
-**Why deferred.** The remaining cases need either richer fixture
-data (an existing-post round-trip needs a seeded post on disk),
-synthetic DataTransfer dispatch (drag-drop), or an OAuth stub hook
-in the long-running webServer.
+**Why deferred.** The two remaining cases need a WebGL-stable
+headless path (perspective rectify) or an OAuth stub hook inside
+the long-running webServer (Google callback).
 
 **Trigger.** Add cases as fixture infrastructure grows, or the
 first time a UI bug ships uncaught.
@@ -175,24 +155,6 @@ duplication is 2.55%, well below "act on it" thresholds.
 that point unifying the existing pair behind a Provider interface
 saves real work. Otherwise it's a pure code-tidiness exercise.
 
-### `src/admin/main.ts` is exactly at the 500-line size cap
-
-**Source.** Size audit 2026-05-09, refreshed after per-cell editing
-landed. main.ts hit 560 during the per-cell work and was brought
-back to 500 by extracting the toolbar setup (admin/toolbar.ts) and
-trimming inline comments. Headroom for the next SPA feature is
-**zero lines** — anything new trips the gate.
-
-**What.** The natural-cut extractions are done. Further reduction
-needs a structural change: extract a per-panel `mountX(deps)` shape
-(figure-attrs panel, image-edit panel, cell-selection state) so
-each panel becomes its own ~80-line module that mount() composes.
-
-**Why deferred.** No active feature is being blocked yet, but the
-next will need the structural extraction first.
-
-**Trigger.** First commit that adds non-trivial editor behavior.
-
 ### Per-cell editing UX polish
 
 **Source.** Per-cell editing landed 2026-05-09 (selection by thumb
@@ -212,25 +174,6 @@ refresh after Save — shipped.)
 polish.
 
 **Trigger.** First author feedback report on multi-image editing.
-
-### Bundle-size monitoring
-
-**Source.** PhotoSwipe replacement 2026-05-09. Adding PhotoSwipe
-grew the public-page footprint by ~64KB (lightbox.js 15kb +
-lightbox.css 4.6kb + a 59kb dynamically-imported chunk). No alert,
-no budget — the change shipped silently.
-
-**What.** Neither admin nor site bundles have a recorded size
-baseline or a CI threshold. Bloat creeps in invisibly.
-
-**Why deferred.** Current bundles are reasonable; no immediate
-problem to solve.
-
-**Trigger.** A bundle change that materially affects time-to-
-interactive (e.g., a heavy editor library landing in admin/main.js).
-Cheap remedy: add a `du -b static/admin static/site` line to the
-gauntlet that snapshots sizes and warns on >10% growth from the
-last commit.
 
 ## UI review (2026-05-11)
 
@@ -291,19 +234,6 @@ A/B tests themes or wants per-post overrides.
 
 **Trigger.** Author wants more than one theme live at once or
 requests a per-post override.
-
-### More ported SSG themes
-
-**What.** Phase 3 ports one theme (papermod-style) to prove the
-contract. The library should grow over time — more Hugo / Jekyll /
-Astro minimalist themes ported into `static/themes/`.
-
-**Why deferred.** Each theme is mechanical CSS work, not a code
-change. Adding them on demand keeps the bundle / static-dir lean.
-
-**Trigger.** Specific theme request, or a public-facing site that
-benefits from a curated picker.
-
 
 ## Post-editor pass (2026-05-11)
 
@@ -459,10 +389,12 @@ with stubs.
 available, or when integration tests against a credentialed
 staging environment are introduced.
 
-### `src/admin/perspective-modal.ts` (1%, 73 LOC) + `src/lib/canvas-math.ts` (23% partial)
+### `src/admin/perspective-modal.ts` (WebGL UI shell, e2e-uncovered)
 **What.** Perspective rectify uses WebGL for the homography
-rendering. The math is in canvas-math.ts; the UI shell in
-perspective-modal.ts.
+rendering. The pure math (`src/lib/canvas-math.ts`) is now covered
+by node unit tests (`test/lib/canvas-math.test.ts`, ~30 cases:
+homography, resample, perspective-output-size). The remaining gap
+is purely the WebGL UI shell in `perspective-modal.ts`.
 
 **Why deferred.** Chromium headless support for WebGL varies
 across versions (`--use-gl=swiftshader` flag is required and not
