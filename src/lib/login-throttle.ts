@@ -29,11 +29,15 @@
 /** Hard upper bound on the number of IPs tracked simultaneously. An
  * in-window rotating-IP spray must not grow the tally unbounded;
  * sweepExpired only drops *expired* entries (none expire during an
- * active spray). When the map is full we evict the oldest-inserted
- * entry before inserting the new one. Evicting an arbitrary IP only
- * resets THAT IP's count — safe, since a brute-forcer would need the
- * evicted IP to be the one they're attacking from. */
+ * active spray). When the map is full we prefer evicting an
+ * un-throttled entry so a persistent attacker already over the ceiling
+ * is never reset by a spray flood. See EVICT_SCAN. */
 const MAX_TRACKED_IPS = 10_000;
+
+/** How many of the oldest Map entries to scan when looking for an
+ * un-throttled (count < DEFAULT_MAX) eviction candidate. Keeps the
+ * cap-eviction path O(1) even for a saturated table. */
+const EVICT_SCAN = 32;
 
 /** Default per-IP failed-attempt ceiling. `isThrottled` is true once
  * the recorded count reaches this within the window. Matches the old
@@ -92,12 +96,28 @@ export function recordFailure(ip: string): void {
   // so rotating-IP attackers can't grow the Map without bound.
   sweepExpired();
   if (failures.size >= MAX_TRACKED_IPS) {
-    // Still over cap after sweeping expired entries → an in-window
-    // IP-spray flood. Drop the oldest-inserted entry (Map preserves
-    // insertion order, so the first key is the oldest).
-    const oldest = failures.keys().next().value;
+    // In-window IP-spray flood. Prefer evicting an un-throttled
+    // (count < DEFAULT_MAX) entry so a persistent attacker that has
+    // already crossed the ceiling is never reset by the spray. Map
+    // updates keep a key's original insertion slot, so a long-lived
+    // attacker entry is "old" — without this preference an attacker
+    // running a botnet-scale spray could position their brute-force
+    // IP as oldest and keep resetting its count. Bounded scan keeps
+    // this O(1); if the oldest EVICT_SCAN entries are all throttled
+    // the table is already saturated with throttled IPs (the defense
+    // working) and evicting the oldest is acceptable.
+    let victim: string | undefined;
+    let scanned = 0;
+    for (const [k, w] of failures) {
+      if (w.count < DEFAULT_MAX) {
+        victim = k;
+        break;
+      }
+      if (++scanned >= EVICT_SCAN) break;
+    }
+    if (victim === undefined) victim = failures.keys().next().value;
     /* v8 ignore next -- unreachable: size >= MAX_TRACKED_IPS > 0 */
-    if (oldest !== undefined) failures.delete(oldest);
+    if (victim !== undefined) failures.delete(victim);
   }
   failures.set(ip, { count: 1, resetAt: Date.now() + WINDOW_MS });
 }

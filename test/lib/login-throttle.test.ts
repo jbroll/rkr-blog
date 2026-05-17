@@ -109,6 +109,27 @@ test('failures map is bounded under an in-window IP spray', () => {
   assert.ok(_loginThrottleSize() <= 10_000, `expected <=10000, got ${_loginThrottleSize()}`);
 });
 
+test('throttled IP survives a large spray (no count reset)', () => {
+  _resetLoginThrottle();
+  // Push 1.2.3.4 past the ceiling so it is throttled.
+  for (let i = 0; i < DEFAULT_MAX + 2; i++) recordFailure('1.2.3.4');
+  assert.equal(
+    isThrottled('1.2.3.4'),
+    true,
+    'precondition: 1.2.3.4 must be throttled before spray'
+  );
+
+  // Spray 30_000 distinct fresh IPs — far more than MAX_TRACKED_IPS.
+  // With the old oldest-only eviction the early throttled entry would
+  // be evicted and its count reset; with the fixed prefer-un-throttled
+  // eviction it must survive.
+  for (let i = 0; i < 30_000; i++) {
+    recordFailure(`spray.${i}.0.1`);
+  }
+
+  assert.equal(isThrottled('1.2.3.4'), true, '1.2.3.4 must still be throttled after spray');
+});
+
 test('recordFailure sweeps expired entries when opening a new window', () => {
   // IP-A records failures to create a window entry.
   const realNow = Date.now;
