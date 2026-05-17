@@ -17,7 +17,7 @@ import type { Editor } from '@tiptap/core';
 
 import { LOCK_GRACE_MS } from '../lib/eviction-pure.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
-import { OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
+import { mutateRoot, OPFS_DIRS, type OpfsRoot } from './opfs-schema.ts';
 
 const DRAFT_DIR = OPFS_DIRS.DRAFTS;
 const META_DIR = OPFS_DIRS.META;
@@ -47,14 +47,20 @@ interface DraftMeta {
 
 /** @public */
 export async function getOrCreateDraftId(): Promise<string> {
-  const root = await readRoot();
-  /* v8 ignore next 3 -- ensureSchema runs first */
-  if (!root) {
-    throw new Error('draft: _root.json missing — ensureSchema not called?');
-  }
-  if (root.currentDraftId) return root.currentDraftId;
+  // Atomic read-decide-write under ROOT_LOCK: if a draft already
+  // exists keep+return it; otherwise set+return the new id. Without
+  // the lock a concurrent append()'s nextSeq bump could be clobbered
+  // by this currentDraftId write reading a stale _root.
   const draftId = crypto.randomUUID();
-  await writeRoot({ ...root, currentDraftId: draftId });
+  let chosen: string = draftId;
+  await mutateRoot((root) => {
+    if (root.currentDraftId) {
+      chosen = root.currentDraftId;
+      return root;
+    }
+    return { ...root, currentDraftId: draftId };
+  });
+  if (chosen !== draftId) return chosen;
   // Brand-new drafts start pinned so an author who loses connection
   // mid-compose doesn't lose work — eviction's 7-day cached TTL
   // would reclaim a fresh draft far too aggressively. The author can
@@ -170,10 +176,10 @@ export async function clearDraft(draftId: string): Promise<void> {
   await removeFile(`${DRAFT_DIR}/${draftId}.json`);
   await removeFile(`${DRAFT_DIR}/${draftId}.lock`);
   await removeFile(`${META_DIR}/${draftId}.json`);
-  const root = await readRoot();
-  if (root?.currentDraftId === draftId) {
+  await mutateRoot((root) => {
+    if (root.currentDraftId !== draftId) return root;
     const { currentDraftId: _drop, ...rest } = root;
-    await writeRoot(rest);
-  }
+    return rest as OpfsRoot;
+  });
   /* v8 ignore stop */
 }

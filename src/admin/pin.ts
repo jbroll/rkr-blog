@@ -4,7 +4,7 @@ import { markdownToProse } from '../lib/prose-markdown.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import { readMeta, updateMeta } from './draft.ts';
 import { listDir, readBlob, writeBlob, writeJson } from './opfs.ts';
-import { OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
+import { mutateRoot, OPFS_DIRS } from './opfs-schema.ts';
 
 const META_DIR = OPFS_DIRS.META;
 
@@ -78,14 +78,11 @@ export async function pinPost(
   const doc = markdownToProse(manifest.markdown);
 
   const draftId = crypto.randomUUID();
-  const root = await readRoot();
-  /* v8 ignore next 3 -- ensureSchema runs at startup */
-  if (!root) {
-    throw new Error('pin: _root.json missing — ensureSchema not called?');
-  }
   // Body + meta first, currentDraftId flip last: a crash between
   // them orphans the new draft (eviction reclaims) rather than
-  // leaving _root pointing at a missing file.
+  // leaving _root pointing at a missing file. Only the final flip
+  // moves under ROOT_LOCK (mutateRoot) — the body/meta writes above
+  // it keep their ordering.
   await writeJson(`drafts/${draftId}.json`, doc);
   await updateMeta(draftId, {
     slug: manifest.slug,
@@ -93,7 +90,7 @@ export async function pinPost(
     mode: 'pinned',
     refIds: manifest.sidecars.map((s) => s.id)
   });
-  await writeRoot({ ...root, currentDraftId: draftId });
+  await mutateRoot((root) => ({ ...root, currentDraftId: draftId }));
 
   return { draftId, manifest, progress };
 }

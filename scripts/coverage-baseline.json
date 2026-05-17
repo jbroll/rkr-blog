@@ -58,8 +58,8 @@
       "linesHit": 8
     },
     "src/admin/opfs-schema.ts": {
-      "linesFound": 23,
-      "linesHit": 21
+      "linesFound": 31,
+      "linesHit": 29
     },
     "src/admin/opfs.ts": {
       "linesFound": 62,
@@ -70,16 +70,16 @@
       "linesHit": 25
     },
     "src/admin/outbox.ts": {
-      "linesFound": 14,
-      "linesHit": 14
+      "linesFound": 12,
+      "linesHit": 12
     },
     "src/admin/sync.ts": {
       "linesFound": 36,
       "linesHit": 30
     },
     "src/admin/startup.ts": {
-      "linesFound": 34,
-      "linesHit": 31
+      "linesFound": 32,
+      "linesHit": 29
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 26,
-      "linesHit": 23
+      "linesHit": 24
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -122,16 +122,16 @@
       "linesHit": 12
     },
     "src/admin/draft.ts": {
-      "linesFound": 42,
-      "linesHit": 40
+      "linesFound": 40,
+      "linesHit": 38
     },
     "src/admin/status-badge.ts": {
       "linesFound": 19,
       "linesHit": 18
     },
     "src/admin/pin.ts": {
-      "linesFound": 34,
-      "linesHit": 32
+      "linesFound": 32,
+      "linesHit": 31
     },
     "src/admin/posts-list.ts": {
       "linesFound": 55,
@@ -207,7 +207,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 26
+      "linesHit": 27
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,

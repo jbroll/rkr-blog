@@ -11,20 +11,24 @@
 
 import { coalescePending, type OutboxEntry } from '../lib/outbox-types.ts';
 import { listDir, readBlob, readJson, removeFile, writeBlob, writeJson } from './opfs.ts';
-import { OPFS_DIRS, type OpfsRoot, readRoot, writeRoot } from './opfs-schema.ts';
+import {
+  OPFS_DIRS,
+  type OpfsRoot,
+  readRoot,
+  withRootLock as withAppendLock,
+  writeRoot
+} from './opfs-schema.ts';
 import { PENDING_UPLOADS_DIR, seqFromMarker } from './pending-uploads.ts';
 
 const OUTBOX_DIR = OPFS_DIRS.OUTBOX;
 const BLOB_DIR = OPFS_DIRS.OUTBOX_BLOBS;
-const APPEND_LOCK = 'rkr-outbox-append';
 
-/** Run `fn` under the rkr-outbox-append Web Lock. Sole owner of the
- * lock name so both append() and the startup orphan sweeps serialize
- * through one place — a sweep can never observe append()'s half-
- * written (blob-but-no-JSON) state. */
-function withAppendLock<T>(fn: () => Promise<T>): Promise<T> {
-  return navigator.locks.request(APPEND_LOCK, fn) as Promise<T>;
-}
+// The append/sweep lock is the SAME Web Lock as opfs-schema's
+// ROOT_LOCK (name 'rkr-outbox-append'). Owned there so the outbox
+// append path and the currentDraftId / ensureSchema _root.json
+// writers serialise through ONE lock — a stale nextSeq can never
+// clobber a concurrent append()'s bump. append() and the startup
+// orphan sweeps keep calling withAppendLock(...) exactly as before.
 
 /** @public */
 export async function append(

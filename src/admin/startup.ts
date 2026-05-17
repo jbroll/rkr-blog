@@ -10,7 +10,7 @@ import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts'
 import { runEviction } from './eviction.ts';
 import { hydrateLocalThumbs } from './local-thumb.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
-import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
+import { ensureSchema, mutateRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
   gcUnderAppendLock,
@@ -94,12 +94,7 @@ async function runStart(editor: Editor): Promise<void> {
     }
     const newParam = params.get('new');
     if (newParam) {
-      const root = await readRoot();
-      /* v8 ignore next 3 -- ensureSchema runs first */
-      if (!root) {
-        throw new Error('startup: _root.json missing — ensureSchema not called?');
-      }
-      await writeRoot({ ...root, currentDraftId: '' });
+      await mutateRoot((root) => ({ ...root, currentDraftId: '' }));
     }
     // ?slug=foo: caller asked to edit an existing post. Pin its
     // bundle into OPFS (writes drafts/<new-id>.json + meta,

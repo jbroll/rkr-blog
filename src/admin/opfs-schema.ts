@@ -66,6 +66,32 @@ export async function writeRoot(root: OpfsRoot): Promise<void> {
   await writeJson(ROOT_PATH, root);
 }
 
+/** The single Web Lock serialising every read-modify-write of
+ * _root.json. Owned here so the outbox append path AND the
+ * currentDraftId writers share ONE lock and can never interleave a
+ * stale nextSeq over a concurrent bump. Value MUST stay equal to the
+ * name outbox.append()/gcUnderAppendLock acquire. */
+export const ROOT_LOCK = 'rkr-outbox-append';
+
+export function withRootLock<T>(fn: () => Promise<T>): Promise<T> {
+  return navigator.locks.request(ROOT_LOCK, fn) as Promise<T>;
+}
+
+/** Atomic read-modify-write of _root.json under ROOT_LOCK. `fn` gets
+ * the current root (or a fresh one if absent) and returns the next
+ * root to persist. Every currentDraftId/nextSeq mutation MUST go
+ * through this so concurrent tabs can't clobber each other. */
+export async function mutateRoot(
+  fn: (root: OpfsRoot) => OpfsRoot | Promise<OpfsRoot>
+): Promise<OpfsRoot> {
+  return withRootLock(async () => {
+    const current = (await readRoot()) ?? makeRoot();
+    const next = await fn(current);
+    await writeRoot(next);
+    return next;
+  });
+}
+
 function makeDeviceId(): string {
   return crypto.randomUUID();
 }
@@ -92,14 +118,20 @@ export async function ensureSchema(): Promise<SchemaStatus> {
   }
   const onDisk = await readJson<OpfsRoot>(ROOT_PATH);
   if (!onDisk) {
-    const root = makeRoot();
-    // A corrupt/quarantined or missing _root.json must not reset
-    // nextSeq beneath live outbox entries — that collides seqs and
-    // breaks coalescing/ordering, orphaning un-drained work. Seed
-    // above the highest on-disk seq.
-    const floor = await maxOutboxSeqOnDisk();
-    if (floor > 0) root.nextSeq = floor + 1;
-    await writeJson(ROOT_PATH, root);
+    // Under ROOT_LOCK so the fresh/floor-seeded write can't interleave
+    // with a concurrent append()'s nextSeq bump. The floor read and the
+    // write happen atomically inside the locked callback. mutateRoot's
+    // callback receives a fresh makeRoot() here (readRoot() is still
+    // null) — equivalent to the old makeRoot(), now lock-serialised.
+    await mutateRoot(async (root) => {
+      // A corrupt/quarantined or missing _root.json must not reset
+      // nextSeq beneath live outbox entries — that collides seqs and
+      // breaks coalescing/ordering, orphaning un-drained work. Seed
+      // above the highest on-disk seq.
+      const floor = await maxOutboxSeqOnDisk();
+      if (floor > 0) return { ...root, nextSeq: floor + 1 };
+      return root;
+    });
     return { status: 'fresh' };
   }
 
@@ -122,7 +154,12 @@ export async function ensureSchema(): Promise<SchemaStatus> {
     working = await step(working);
     working.schemaVersion = v + 1;
   }
-  await writeJson(ROOT_PATH, working);
+  // Under ROOT_LOCK so the migrated _root.json write can't interleave
+  // with a concurrent append()'s nextSeq bump. WHAT is written is
+  // unchanged — only the lock is added.
+  await withRootLock(async () => {
+    await writeJson(ROOT_PATH, working);
+  });
   return { status: 'migrated', from: fromVersion, to: OPFS_SCHEMA_CURRENT };
   /* v8 ignore stop */
 }
