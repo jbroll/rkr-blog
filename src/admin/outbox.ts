@@ -138,6 +138,34 @@ export async function gcOrphansAgainstOutbox(
   return removed;
 }
 
+/** Sweep leaked atomic-write temp files. opfs.ts atomicWrite() stages
+ * into a sibling `.${leaf}.tmp-${uuid}` then move()s it onto the
+ * target; the in-line catch only covers a fault DURING staging. A tab
+ * killed after close() but before/within move(), or a throwing
+ * move() itself, leaks the fully-written temp forever — unbounded on
+ * the highest-frequency path (writeJson(_root.json) on every schema
+ * mutation). This is the missing sweeper.
+ *
+ * A `.tmp-` name is NEVER a live file: the live name is always the
+ * move() target (the leaf), never the temp. So any `.tmp-` straggler
+ * is provably dead and unconditionally removable. Runs at boot before
+ * this tab issues writes; a cross-tab sub-ms temp colliding with the
+ * sweep is negligible and fails loud (the other tab's move() errors,
+ * it does not corrupt the target). Best-effort; failures don't block
+ * startup. @public */
+export async function gcAtomicWriteTemps(): Promise<number> {
+  let removed = 0;
+  for (const dir of Object.values(OPFS_DIRS)) {
+    const names = await listDir(dir).catch(() => [] as string[]);
+    for (const name of names) {
+      if (!/\.tmp-/.test(name)) continue;
+      await removeFile(`${dir}/${name}`).catch(() => {});
+      removed++;
+    }
+  }
+  return removed;
+}
+
 /** One-shot migration: drop outbox entries with a legacy op kind
  * ('setOps' or 'bake') that no longer has a registered drainer after
  * the /commit endpoint replaced the /ops + /bake split. Without this,

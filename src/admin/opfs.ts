@@ -58,8 +58,58 @@ async function walk(
   return { parent, leafName };
 }
 
-/** Read a file as JSON. Returns null when the file doesn't exist;
- * throws on parse errors so silent corruption isn't masked. */
+/** Atomic write: stage into a sibling temp file then swap it into
+ * place, so a crash mid-write can never truncate or partially
+ * overwrite the target. createWritable() truncates whatever handle
+ * it opens to zero immediately, so the temp must be a *different*
+ * file from the target — never the target itself. The swap uses the
+ * native handle.move() when available (a true atomic rename); the
+ * fallback (copy temp → target → drop temp) is non-atomic but still
+ * never leaves the target empty on a write fault, because a thrown
+ * write() aborts before the target handle is ever opened. */
+// FileSystemFileHandle.move() is part of the File System Access API
+// but not yet in TS's DOM lib; narrow locally instead of augmenting
+// the global type.
+type MovableFileHandle = FileSystemFileHandle & {
+  move(parent: FileSystemDirectoryHandle, name: string): Promise<void>;
+};
+
+async function atomicWrite(path: string, data: string | Blob): Promise<void> {
+  const { parent, leafName } = await walk(path, true);
+  const tmpName = `.${leafName}.tmp-${crypto.randomUUID()}`;
+  const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
+  try {
+    const writable = await tmpHandle.createWritable();
+    await writable.write(data);
+    await writable.close();
+  } catch (err) {
+    // Staging failed — the real target was never touched. Drop the
+    // partial temp so it doesn't linger / show up in listDir.
+    await parent.removeEntry(tmpName).catch(() => {});
+    throw err;
+  }
+  const movable = tmpHandle as Partial<MovableFileHandle>;
+  if (typeof movable.move === 'function') {
+    // Atomic rename: the target flips from old → new in one step.
+    await movable.move(parent, leafName);
+    return;
+  }
+  /* v8 ignore start -- move() fallback; only taken on browsers
+     without FileSystemFileHandle.move (the unit harness mocks move,
+     so this path is e2e-only) */
+  const target = await parent.getFileHandle(leafName, { create: true });
+  const writable = await target.createWritable();
+  await writable.write(await tmpHandle.getFile());
+  await writable.close();
+  await parent.removeEntry(tmpName).catch(() => {});
+  /* v8 ignore stop */
+}
+
+/** Read a file as JSON. Returns null when the file doesn't exist.
+ * Unparseable content (a crash-truncated file) is treated as absent:
+ * it's quarantined (removed) and null is returned, rather than
+ * throwing a SyntaxError that would wedge every caller iterating the
+ * directory (e.g. outbox.list(), readRoot()). */
 export async function readJson<T>(path: string): Promise<T | null> {
   if (!isSupported()) return null;
   let parent: FileSystemDirectoryHandle;
@@ -80,7 +130,21 @@ export async function readJson<T>(path: string): Promise<T | null> {
   const file = await handle.getFile();
   const text = await file.text();
   if (text.length === 0) return null;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // Crash-truncated / corrupt JSON. Quarantine it so a single bad
+    // file can't wedge outbox.list()/readRoot() forever: removing it
+    // makes the next read see it as absent (→ null) instead of
+    // re-throwing on every traversal.
+    // Race: another tab could land a good atomicWrite between this
+    // parse failure and this removeEntry, so we'd delete a freshly-
+    // good file. Accepted: these are regenerable cache (next read
+    // returns null and the system rebuilds), and the File System
+    // Access API has no compare-and-delete to make this atomic.
+    await parent.removeEntry(leafName).catch(() => {});
+    return null;
+  }
 }
 
 /** Write a value as pretty-printed JSON, creating intermediate
@@ -92,11 +156,7 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
   if (!isSupported()) {
     throw new Error('writeJson called on unsupported browser');
   }
-  const { parent, leafName } = await walk(path, true);
-  const handle = await parent.getFileHandle(leafName, { create: true });
-  const writable = await handle.createWritable();
-  await writable.write(`${JSON.stringify(value, null, 2)}\n`);
-  await writable.close();
+  await atomicWrite(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 /** Read a binary file as a Blob. Returns null when not present. */
@@ -126,11 +186,7 @@ export async function writeBlob(path: string, blob: Blob): Promise<void> {
   if (!isSupported()) {
     throw new Error('writeBlob called on unsupported browser');
   }
-  const { parent, leafName } = await walk(path, true);
-  const handle = await parent.getFileHandle(leafName, { create: true });
-  const writable = await handle.createWritable();
-  await writable.write(blob);
-  await writable.close();
+  await atomicWrite(path, blob);
 }
 
 /** List the names in a directory. Returns [] when the directory

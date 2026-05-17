@@ -13,6 +13,7 @@ import { onChange as onOnlineChange, start as startOnline } from './online-state
 import { ensureSchema, OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
+  gcAtomicWriteTemps,
   gcOrphansAgainstOutbox,
   append as outboxAppend,
   list as outboxList,
@@ -73,6 +74,11 @@ async function runStart(editor: Editor): Promise<void> {
       return m ? Number(m[1]) : null;
     });
     void gcOrphansAgainstOutbox(PENDING_UPLOADS_DIR, seqFromMarker);
+    // Sweep leaked atomic-write temps (.${leaf}.tmp-${uuid}) across
+    // every OPFS dir the wrapper writes into. A tab killed after the
+    // temp's close() but before/within move() leaks it forever; this
+    // is the only sweeper for that path.
+    void gcAtomicWriteTemps();
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.
     //   ?new=1     → discard any in-progress draftId and create a
