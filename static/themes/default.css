@@ -755,6 +755,18 @@ article hr {
   margin-right: calc(50% - 50vw);
   max-width: none;
 }
+/* Anon posts-list teaser hero: never break out of the posts column
+   (a bleed/full banner otherwise spans 100vw and overlaps the sticky
+   tag rail). Force the centered, column-contained treatment. The
+   teaser is anon-only; this does not touch the post page's own banner.
+   Higher specificity than .rkr-justify-* so it wins regardless of the
+   featured post's justify. */
+.rkr-teaser .rkr-figure {
+  width: 100%;
+  max-width: var(--rkr-content);
+  margin-left: auto;
+  margin-right: auto;
+}
 /* Inline mode wraps the picture in a <span> rather than <figure>; styling
    matches the legacy rkr-pos-inline so authors get identical behaviour. */
 span.rkr-justify-inline {
