@@ -465,3 +465,32 @@ test('GET /admin/settings: postTeaser checkbox reflects persisted state', async 
   assert.match(off.body, /name="postTeaser"/);
   assert.doesNotMatch(off.body, /name="postTeaser"[^>]*checked/);
 });
+
+test('GET /admin/about/edit creates _about.md when absent and 302s to the editor', async (t) => {
+  const { root, app } = await setup(t);
+  const aboutPath = path.join(root, 'content', 'posts', '_about.md');
+  assert.equal(fs.existsSync(aboutPath), false);
+
+  const res = await app.inject({ method: 'GET', url: '/admin/about/edit' });
+  assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/admin/editor?slug=_about');
+  assert.equal(fs.existsSync(aboutPath), true);
+  assert.match(fs.readFileSync(aboutPath, 'utf8'), /slug: _about/);
+
+  fs.writeFileSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\nEDITED\n');
+  await app.inject({ method: 'GET', url: '/admin/about/edit' });
+  assert.match(fs.readFileSync(aboutPath, 'utf8'), /EDITED/);
+});
+
+test('settings page shows Create/Edit About by file presence', async (t) => {
+  const { root, app } = await setup(t);
+  let res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /Create About/);
+  fs.mkdirSync(path.join(root, 'content', 'posts'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', '_about.md'),
+    '---\nslug: _about\ntitle: About\nstatus: published\n---\n'
+  );
+  res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /Edit About →/);
+});

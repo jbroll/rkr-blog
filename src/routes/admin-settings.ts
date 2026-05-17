@@ -64,6 +64,7 @@ export function registerAdminSettingsRoutes(
         onedriveConnected = readToken(db, key, user.id, 'onedrive') !== null;
       }
       const hasBanner = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_site-banner.md'));
+      const hasAbout = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_about.md'));
       return reply.type('text/html; charset=utf-8').send(
         renderAdminSettingsPage({
           site,
@@ -73,7 +74,8 @@ export function registerAdminSettingsRoutes(
           gitHash,
           gdriveConnected,
           onedriveConnected,
-          hasBanner
+          hasBanner,
+          hasAbout
         })
       );
     }
@@ -216,6 +218,18 @@ export function registerAdminSettingsRoutes(
       );
     }
     return reply.redirect('/admin/editor?slug=_site-banner&mode=figure', 302);
+  });
+
+  // GET /admin/about/edit — create _about.md from a stub if absent,
+  // then open it in the normal editor (NOT figure mode). Never
+  // overwrites existing content (idempotent seed).
+  fastify.get('/admin/about/edit', { ...guard }, async (_req, reply) => {
+    const aboutPath = path.join(siteRoot, 'content', 'posts', '_about.md');
+    if (!fs.existsSync(aboutPath)) {
+      fs.mkdirSync(path.dirname(aboutPath), { recursive: true });
+      fs.writeFileSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\n');
+    }
+    return reply.redirect('/admin/editor?slug=_about', 302);
   });
 
   // POST /admin/settings/banner — set the site-wide banner image by ID.

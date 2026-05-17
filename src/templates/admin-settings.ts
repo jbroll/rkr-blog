@@ -47,6 +47,8 @@ export interface AdminSettingsPageData extends SiteChrome {
   onedriveConnected: boolean;
   /** Whether content/posts/_site-banner.md exists on disk. */
   hasBanner: boolean;
+  /** Whether content/posts/_about.md exists on disk. */
+  hasAbout: boolean;
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
@@ -94,6 +96,10 @@ ${saveBtn}
   <h2 class="rkr-admin-settings-section">Banner</h2>
   <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
     <a href="/admin/banner/edit">${data.hasBanner ? 'Edit banner →' : 'Create banner'}</a>
+  </div>
+  <h2 class="rkr-admin-settings-section">About page</h2>
+  <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
+    <a href="/admin/about/edit">${data.hasAbout ? 'Edit About →' : 'Create About'}</a>
   </div>
 
   <h2 class="rkr-admin-settings-section">Posts</h2>
