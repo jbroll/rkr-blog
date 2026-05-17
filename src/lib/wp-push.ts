@@ -22,6 +22,7 @@ import type { Readable } from 'node:stream';
 import { imageInfo } from './originals.ts';
 import { importPost } from './wp-import.ts';
 import type { WpPost } from './wp-import-types.ts';
+import { fetchWpPage } from './wp-rest.ts';
 
 export interface PushOpts {
   wpBaseUrl: string;
@@ -53,17 +54,28 @@ export interface PushResult {
 
 export async function pushPost(opts: PushOpts): Promise<PushResult> {
   const fetcher = opts.fetcher ?? fetch;
+  const post = await fetchWpPost(fetcher, opts.wpBaseUrl, opts.slug);
+  return pushWpObject(post, opts);
+}
+
+/** Push a WP *page* (e.g. roll-along's About) as the `_about` system
+ * post: fetch the page, force its slug to `_about`, then run the same
+ * import/upload/POST pipeline as pushPost. */
+export async function pushPage(opts: PushOpts): Promise<PushResult> {
+  const page = await fetchWpPage(opts.wpBaseUrl, String(opts.slug), opts.fetcher);
+  page.slug = '_about';
+  return pushWpObject(page, opts);
+}
+
+async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
+  const fetcher = opts.fetcher ?? fetch;
   const targetBase = stripTrailingSlash(opts.toUrl);
   const auth = `Bearer ${opts.token}`;
   const status = opts.status ?? 'published';
 
-  // 1. Pull from WP, run the local importer into a tempdir.
-  //    We don't go through wp-import.fetchPost here because that uses
-  //    safeFetch, which rejects non-default ports / private IPs — both
-  //    are common in tests and in operator-driven invocations against
-  //    a self-hosted WP. SSRF defense matters when an attacker chose
-  //    the URL; the push CLI is the operator typing it themselves.
-  const post = await fetchWpPost(fetcher, opts.wpBaseUrl, opts.slug);
+  // 1. Run the local importer into a tempdir (the WP object was already
+  //    fetched by the caller — pushPost via fetchWpPost, pushPage via
+  //    fetchWpPage). Produces local markdown + originals + sidecars.
   const bannerUrl = post.featured_media
     ? ((await fetchFeaturedMediaUrlDirect(fetcher, opts.wpBaseUrl, post.featured_media)) ??
       undefined)

@@ -14,7 +14,7 @@ import sharp from 'sharp';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import type { WpPost } from '../../src/lib/wp-import-types.ts';
-import { pushPost } from '../../src/lib/wp-push.ts';
+import { pushPage, pushPost } from '../../src/lib/wp-push.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
 
@@ -469,4 +469,74 @@ test('pushPost: featured_media → banner uploaded, banner in post frontmatter',
     'utf8'
   );
   assert.match(md, /^banner: [0-9a-f]{64}$/m);
+});
+
+test('pushPage: WP page fixture → target slug is _about', async (t) => {
+  const ABOUT_PAGE: WpPost = {
+    id: 10,
+    date: '2026-01-01T00:00:00',
+    modified: '2026-01-01T00:00:00',
+    slug: 'about',
+    status: 'publish',
+    title: { rendered: 'About' },
+    content: { rendered: '<p>about body</p>' },
+    excerpt: { rendered: '' },
+    link: 'http://wp.example/about/'
+  };
+
+  // Fake WP server that serves the page via /wp-json/wp/v2/pages?slug=about
+  let capturedAdminPostsSlug = '';
+  const wpServer = http.createServer((req, res) => {
+    const host = req.headers.host ?? '127.0.0.1';
+    const url = new URL(req.url ?? '/', `http://${host}`);
+    if (url.pathname === '/wp-json/wp/v2/pages' && url.searchParams.get('slug') === 'about') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify([ABOUT_PAGE]));
+      return;
+    }
+    res.writeHead(404);
+    res.end('not found');
+  });
+  await new Promise<void>((r) => wpServer.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => wpServer.close(() => r())));
+  const wpBaseUrl = `http://127.0.0.1:${(wpServer.address() as AddressInfo).port}`;
+
+  // Fake target server that records the slug from POST /admin/posts
+  const targetServer = http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', `http://127.0.0.1`);
+    if (req.method === 'POST' && url.pathname === '/admin/posts') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        const parsed = JSON.parse(body) as { slug: string };
+        capturedAdminPostsSlug = parsed.slug;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ slug: parsed.slug, inserted: true }));
+      });
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/admin/upload') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'fake' }));
+      return;
+    }
+    res.writeHead(404);
+    res.end('not found');
+  });
+  await new Promise<void>((r) => targetServer.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>((r) => targetServer.close(() => r())));
+  const targetBaseUrl = `http://127.0.0.1:${(targetServer.address() as AddressInfo).port}`;
+
+  const res = await pushPage({
+    wpBaseUrl,
+    slug: 'about',
+    toUrl: targetBaseUrl,
+    token: 'tok',
+    fetcher: fetch
+  });
+
+  assert.equal(capturedAdminPostsSlug, '_about');
+  assert.equal(res.slug, '_about');
 });
