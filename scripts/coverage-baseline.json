@@ -46,8 +46,8 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 50,
-      "linesHit": 41
+      "linesFound": 61,
+      "linesHit": 52
     },
     "src/admin/toolbar.ts": {
       "linesFound": 13,
@@ -79,7 +79,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 36,
-      "linesHit": 33
+      "linesHit": 32
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -114,8 +114,8 @@
       "linesHit": 13
     },
     "src/lib/prose-markdown.ts": {
-      "linesFound": 102,
-      "linesHit": 67
+      "linesFound": 107,
+      "linesHit": 72
     },
     "src/lib/safe-url.ts": {
       "linesFound": 12,

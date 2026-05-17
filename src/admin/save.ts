@@ -27,6 +27,20 @@ interface SaveResponse {
   date?: string;
 }
 
+/** A non-2xx response from the direct online POST. Carries the HTTP
+ * status so the caller can distinguish a semantic 409 (stale-post
+ * conflict — surface immediately) from a transport failure (fetch
+ * rejects with a plain Error and no status — queue + retry). */
+class SaveHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: string
+  ) {
+    super(`save failed: ${status} ${body}`);
+    this.name = 'SaveHttpError';
+  }
+}
+
 async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (payload.lastSyncedAt) {
@@ -37,7 +51,7 @@ async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
     headers,
     body: JSON.stringify(payload)
   });
-  if (!res.ok) throw new Error(`save failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new SaveHttpError(res.status, await res.text());
   return (await res.json()) as SaveResponse;
 }
 
@@ -137,13 +151,45 @@ export async function handleSave(editor: Editor): Promise<void> {
       });
       markClean();
       return;
-    } catch {
-      // Fall through to the outbox queue. A 409 conflict on the
-      // online attempt also lands here; drainSavePost will hit the
-      // same 409 on drain and surface it via DrainStatus 'conflict'.
+    } catch (err) {
+      // A 409 here means the user is editing a STALE post (a newer
+      // version exists server-side). The success-y "queued for sync"
+      // toast would let them close the tab believing it's saved while
+      // the conflict only surfaces later on drain (possibly in another
+      // tab). Surface it NOW via the SAME affordance a drained 409
+      // uses: queue the entry (so discardConflictedSave /
+      // forceConflictedSave have something to act on) and let the
+      // drain re-hit the 409 → drainSavePost throws
+      // SavePostConflictError → sync publishes DrainStatus 'conflict'
+      // → the badge shows it. Task 8 server idempotency makes the
+      // immediate re-POST safe. The only difference from the old
+      // behaviour is the toast: a conflict, not a cheerful "queued".
+      if (err instanceof SaveHttpError && err.status === 409) {
+        await queueConflictedSave(payload, draftId);
+        return;
+      }
+      // Transport failure (fetch rejected / offline) or a transient
+      // 5xx: preserve the existing behaviour — queue + the normal
+      // "queued for sync" toast; the drain retries with backoff and
+      // surfaces a persistent failure as 'halted' in the badge.
     }
   }
   await queueSavePost(payload, uploadsStillPending ? referencedIds.length : 0, draftId);
+}
+
+/** A 409 on the direct online POST: the post is stale. Queue the
+ * entry so the existing conflict-resolution flow (discard / force,
+ * driven off DrainStatus 'conflict') has something to act on, then
+ * kick the drain — drainSavePost re-hits the 409, throws
+ * SavePostConflictError, and sync.ts publishes 'conflict', exactly
+ * as a drained conflict does. Deliberately NOT the success-y
+ * "queued for sync" toast. */
+async function queueConflictedSave(payload: SavePostPayload, draftId: string): Promise<void> {
+  await outboxAppend({ op: 'savePost', payload, draftId });
+  const msg = `conflict on /${payload.slug} — newer version on the server`;
+  setStatus(msg);
+  showToast({ kind: 'error', text: msg });
+  void tryDrain();
 }
 
 async function queueSavePost(

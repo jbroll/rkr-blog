@@ -1462,6 +1462,100 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   expect(html).toContain('v2 body');
 });
 
+// Task 15: a 409 on the DIRECT online POST must surface the conflict
+// affordance immediately — NOT a cheerful "queued for sync" toast
+// that lets the author close the tab believing the save landed. A
+// genuine network failure must still fall through to the normal
+// queue + "queued for sync" toast (only a semantic 409 changes
+// behaviour).
+test('editor: online-save 409 surfaces conflict, not a "queued" toast; network failure still queues', async ({
+  page,
+  context
+}) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  const slug = `e2e-409-online-${Date.now()}`;
+  await page.locator('#rkr-title').fill('409 online v1');
+  await setSlug(page, slug);
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>v1 body</p>');
+  });
+
+  // v1 online → meta.lastSyncedAt stamped, success toast shown.
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
+    timeout: 10_000
+  });
+
+  // Competing write bumps the file mtime so the next save's
+  // X-Rkr-Last-Synced-At header looks stale → the DIRECT online POST
+  // returns 409 (not a drained one).
+  const bump = await page.request.post(`/admin/test/bump-mtime/${slug}`, {
+    data: { offsetMs: 5_000 }
+  });
+  expect(bump.status()).toBe(200);
+
+  // v2 → the direct online POST hits 409.
+  await page.locator('#rkr-title').fill('409 online v2');
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>v2 body</p>');
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+  // The conflict affordance — the SAME one a drained 409 uses — must
+  // surface: the badge flips to is-conflict / "conflict on /slug".
+  const badge = page.locator('#rkr-sync-badge');
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-conflict/, { timeout: 10_000 });
+  await expect(badge.locator('.rkr-sync-text')).toHaveText(`conflict on /${slug}`);
+
+  // The misleading success path must NOT have fired: neither the
+  // status line nor any toast may say "queued … for sync".
+  await expect(page.locator('#rkroll-admin-status')).not.toContainText('for sync');
+  await expect(page.locator('#rkr-toast-stack')).not.toContainText('for sync');
+  // And a conflict-flavoured signal IS shown to the author.
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`conflict on /${slug}`);
+
+  // ---- network path preserved -------------------------------------
+  // Resolve the conflict so the queue is clear, then a genuine
+  // offline save must STILL queue with the normal "queued for sync"
+  // toast — only a semantic 409 changes behaviour.
+  await page.evaluate(async () =>
+    (window as unknown as { __rkrForceConflict: () => Promise<void> }).__rkrForceConflict()
+  );
+  await expect(badge.locator('.rkr-sync-dot')).not.toHaveClass(/is-conflict/, {
+    timeout: 10_000
+  });
+
+  const offSlug = `e2e-409-net-${Date.now()}`;
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await page.locator('#rkr-title').fill('offline still queues');
+  await setSlug(page, offSlug);
+  await page.evaluate(() => {
+    const ed = (
+      window as unknown as { __rkrEditor: { commands: { setContent: (s: string) => void } } }
+    ).__rkrEditor;
+    ed.commands.setContent('<p>offline body</p>');
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`queued /${offSlug} for sync`, {
+    timeout: 10_000
+  });
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+});
+
 // Regression: + New post FAB must give a fresh draft, not resurrect
 // whatever post was last edited. The bug: getOrCreateDraftId returns
 // the existing currentDraftId from OPFS if any, so opening the editor
