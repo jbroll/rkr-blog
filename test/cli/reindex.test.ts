@@ -409,3 +409,45 @@ test('readIndexedPosts sort:asc returns oldest published_at first', (t) => {
     db.close();
   }
 });
+
+test('runReindex populates posts_fts with body + tags, queryable by slug', (t) => {
+  const root = freshSiteRoot(t);
+  writePostWithTags(
+    root,
+    'a.md',
+    { slug: 'alpha', title: 'Alpha Post' },
+    ['rust', 'async'],
+    'The body mentions tokio.'
+  );
+  runReindex(root);
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const hit = db
+      .prepare<{ slug: string }>("SELECT slug FROM posts_fts WHERE posts_fts MATCH 'tokio'")
+      .get();
+    assert.equal(hit?.slug, 'alpha');
+    const byTag = db
+      .prepare<{ slug: string }>("SELECT slug FROM posts_fts WHERE posts_fts MATCH 'async'")
+      .get();
+    assert.equal(byTag?.slug, 'alpha');
+  } finally {
+    db.close();
+  }
+});
+
+test('runReindex removes the posts_fts row when the source file is gone', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(root, 'a.md', { slug: 'alpha', title: 'Alpha' }, 'body one');
+  runReindex(root);
+  fs.rmSync(path.join(root, 'content', 'posts', 'a.md'));
+  runReindex(root);
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const n = db
+      .prepare<{ c: number }>('SELECT COUNT(*) c FROM posts_fts WHERE slug = ?')
+      .get('alpha');
+    assert.equal(n?.c, 0);
+  } finally {
+    db.close();
+  }
+});

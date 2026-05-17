@@ -5,10 +5,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { Root } from 'mdast';
+
 import { paths } from '../lib/config.ts';
 import { type PostFrontmatter, parsePost } from '../lib/content.ts';
 import { type Db, open } from '../lib/db.ts';
 import { migrate } from '../lib/migrate.ts';
+import { extractPlainText } from '../lib/post-text.ts';
 
 export interface IndexedPost {
   slug: string;
@@ -68,8 +71,11 @@ function doReindex(
       const fullPath = path.join(postsDir, filename);
       const raw = fs.readFileSync(fullPath, 'utf8');
       let frontmatter: PostFrontmatter;
+      let ast: Root;
       try {
-        frontmatter = parsePost(raw).frontmatter;
+        const parsed = parsePost(raw);
+        frontmatter = parsed.frontmatter;
+        ast = parsed.ast;
       } catch (err) {
         console.error(`reindex: skipping ${filename}: ${(err as Error).message}`);
         continue;
@@ -109,6 +115,19 @@ function doReindex(
         inserted++;
       }
 
+      // Refresh the FTS row for this post (title + tags + plain-text
+      // body). Delete-then-insert keeps it in lockstep with `posts`.
+      const tagText = Array.isArray(frontmatter.tags)
+        ? (frontmatter.tags as string[]).join(' ')
+        : '';
+      db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(slug);
+      db.prepare('INSERT INTO posts_fts (slug, title, tags, body) VALUES (?, ?, ?, ?)').run(
+        slug,
+        frontmatter.title,
+        tagText,
+        extractPlainText(ast)
+      );
+
       // Sync tags for this post.
       const postId =
         existing?.id ??
@@ -131,6 +150,7 @@ function doReindex(
     const orphans = all.filter((row) => !row.slug.startsWith('_') && !seenSlugs.has(row.slug));
     for (const o of orphans) {
       db.prepare('DELETE FROM posts WHERE id = ?').run(o.id);
+      db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(o.slug);
     }
     return orphans.length;
   })();
