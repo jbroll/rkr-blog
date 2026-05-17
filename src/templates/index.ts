@@ -85,17 +85,14 @@ export function renderIndexPage(data: IndexPageData): string {
 </nav>`
       : '';
   const sortToggle = renderSortToggle(isAsc, activeTags, data.isAdmin);
-  const tagRail = renderTagRail(data.tagCounts, activeTags);
+  const tagRail = renderTagRail(data.tagCounts, activeTags, `${sortToggle}${renderSearchForm()}`);
   // The posts-list bundle wires status-select auto-submit + pin/unpin
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
   // never see those controls.
   const postsListScript = data.isAdmin
     ? `<script type="module" src="/static/admin/posts-list.js${bundleVersion()}"></script>`
     : '';
-  const head = siteHead(data.site, {
-    isAdmin: data.isAdmin,
-    listControls: `${sortToggle}${renderSearchForm()}`
-  });
+  const head = siteHead(data.site, { isAdmin: data.isAdmin });
   const banner = data.bannerHtml ?? '';
   const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   return `<!DOCTYPE html>
@@ -111,7 +108,7 @@ ${stylesheetLinks()}
 </head>
 <body>
 ${siteChrome}<main id="main" tabindex="-1">
-<div class="rkr-index-layout${tagRail ? ' rkr-index-layout--has-rail' : ''}">
+<div class="rkr-index-layout rkr-index-layout--has-rail">
 <div class="rkr-index-posts">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
 ${teaserHtml}${body}
@@ -242,23 +239,30 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
 /** Renders the tag rail aside. Returns empty string when tagCounts is
  * absent or empty — callers can splice the result directly into the
  * HTML without a wrapper conditional. */
+/** The posts-list rail: sort + search controls on top, tag pills
+ * below. Always rendered on the index so the controls are present
+ * even with no tags / on the admin view. `controls` is trusted HTML
+ * (sort toggle + search form). */
 function renderTagRail(
   tagCounts: { name: string; count: number }[] | undefined,
-  activeTags: string[]
+  activeTags: string[],
+  controls: string
 ): string {
-  if (!tagCounts || tagCounts.length === 0) return '';
-  const pills = tagCounts
-    .map((t) => {
-      const isActive = activeTags.includes(t.name);
-      // OR/replace: clicking the active tag clears the filter; clicking any
-      // other tag switches to it exclusively (no multi-tag AND).
-      const href = isActive ? '/' : `/?tag=${encodeURIComponent(t.name)}`;
-      const current = isActive ? ' aria-current="page"' : '';
-      return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
-    })
-    .join('\n');
-  return `<aside class="rkr-tag-rail" aria-label="Tags">
-${pills}
+  const pills =
+    tagCounts && tagCounts.length > 0
+      ? `\n<nav class="rkr-tag-pills" aria-label="Tags">\n${tagCounts
+          .map((t) => {
+            const isActive = activeTags.includes(t.name);
+            // OR/replace: clicking the active tag clears the filter;
+            // clicking any other tag switches to it exclusively.
+            const href = isActive ? '/' : `/?tag=${encodeURIComponent(t.name)}`;
+            const current = isActive ? ' aria-current="page"' : '';
+            return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
+          })
+          .join('\n')}\n</nav>`
+      : '';
+  return `<aside class="rkr-tag-rail">
+<div class="rkr-rail-controls">${controls}</div>${pills}
 </aside>`;
 }
 

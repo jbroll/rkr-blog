@@ -28,10 +28,7 @@ export interface SearchPageData extends SiteChrome {
 
 export function renderSearchPage(data: SearchPageData): string {
   const v = bundleVersion();
-  const head = siteHead(data.site, {
-    isAdmin: data.isAdmin,
-    listControls: renderSearchForm(data.q)
-  });
+  const head = siteHead(data.site, { isAdmin: data.isAdmin });
   const trimmed = data.q.trim();
 
   let bodyHtml: string;
@@ -64,11 +61,14 @@ ${stylesheetLinks()}
 </head>
 <body>
 ${head}<main id="main" tabindex="-1">
-<div class="rkr-index-layout">
+<div class="rkr-index-layout rkr-index-layout--has-rail">
 <div class="rkr-index-posts">
 <h1 class="rkr-index-heading">Search</h1>
 ${bodyHtml}
 </div>
+<aside class="rkr-tag-rail">
+<div class="rkr-rail-controls">${renderSearchForm(data.q)}</div>
+</aside>
 </div>
 </main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}

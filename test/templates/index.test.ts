@@ -8,16 +8,23 @@ import { test } from 'node:test';
 
 import { renderIndexPage } from '../../src/templates/index.ts';
 
-test('renderIndexPage header has both sort toggle and search form', () => {
+test('rail-controls hold the sort toggle + search form; rail renders even with no tags', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
     totalPages: 1,
     posts: []
   });
-  assert.match(html, /class="rkr-sort-toggle"/);
-  assert.match(html, /<form[^>]*action="\/search"/);
-  assert.ok(html.indexOf('action="/search"') < html.indexOf('href="/">Home'));
+  // Rail always renders on the index (controls live in it).
+  assert.match(html, /class="rkr-index-layout rkr-index-layout--has-rail"/);
+  assert.match(html, /<aside class="rkr-tag-rail">/);
+  // Sort toggle + search form are inside .rkr-rail-controls.
+  const controls = html.slice(html.indexOf('class="rkr-rail-controls"'), html.indexOf('</aside>'));
+  assert.match(controls, /class="rkr-sort-toggle"/);
+  assert.match(controls, /<form[^>]*action="\/search"/);
+  // No longer in the header nav.
+  const nav = html.slice(html.indexOf('rkr-site-head-nav'), html.indexOf('</nav>'));
+  assert.doesNotMatch(nav, /action="\/search"/);
 });
 
 test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
@@ -248,7 +255,7 @@ test('renderIndexPage: tag rail renders when tagCounts provided', () => {
   assert.match(html, /food \(3\)/);
 });
 
-test('renderIndexPage: no tag rail when tagCounts is empty', () => {
+test('renderIndexPage: rail (with controls) renders but no tag pills when tagCounts is empty', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
@@ -256,17 +263,22 @@ test('renderIndexPage: no tag rail when tagCounts is empty', () => {
     posts: [],
     tagCounts: []
   });
-  assert.doesNotMatch(html, /rkr-tag-rail/);
+  assert.match(html, /<aside class="rkr-tag-rail">/);
+  assert.match(html, /class="rkr-rail-controls"/);
+  assert.doesNotMatch(html, /rkr-tag-pills/);
+  assert.doesNotMatch(html, /rkr-tag-pill"/);
 });
 
-test('renderIndexPage: no tag rail when tagCounts is absent', () => {
+test('renderIndexPage: rail (with controls) renders but no tag pills when tagCounts is absent', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     page: 1,
     totalPages: 1,
     posts: []
   });
-  assert.doesNotMatch(html, /rkr-tag-rail/);
+  assert.match(html, /<aside class="rkr-tag-rail">/);
+  assert.match(html, /class="rkr-rail-controls"/);
+  assert.doesNotMatch(html, /rkr-tag-pills/);
 });
 
 test('renderIndexPage: active tag gets aria-current and toggles off on click', () => {

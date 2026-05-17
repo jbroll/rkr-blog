@@ -170,9 +170,11 @@ test('GET /?tag=travel&tag=food: OR/replace — only first tag is used', async (
 
 // --- Draft vs published visibility -------------------------------------------
 
-test('GET /: anonymous view shows no tag rail when all tagged posts are drafts', async (t) => {
-  // This is the most common reason a tag rail "doesn't appear" after saving
-  // a post with tags: the post is still a draft, which the public index hides.
+test('GET /: anonymous view shows no tag pills when all tagged posts are drafts', async (t) => {
+  // The rail itself always renders now (it hosts the sort/search
+  // controls); only the tag pills are gated on published tagged posts.
+  // This is the most common reason tags "don't appear" after saving a
+  // post with tags: the post is still a draft, which the index hides.
   const root = freshSiteRoot(t);
   writePostMd(root, 'draft-post', 'Draft Post', 'draft', ['travel']);
   const db = open(path.join(root, 'data', 'site.db'));
@@ -184,14 +186,16 @@ test('GET /: anonymous view shows no tag rail when all tagged posts are drafts',
 
   const res = await app.inject({ method: 'GET', url: '/' });
   assert.equal(res.statusCode, 200);
+  // Rail (controls) is present, but no tag pills for draft-only posts.
+  assert.match(res.body, /rkr-tag-rail/);
   assert.doesNotMatch(
     res.body,
-    /rkr-tag-rail/,
-    'no tag rail for draft-only posts on anonymous view'
+    /rkr-tag-pills/,
+    'no tag pills for draft-only posts on anonymous view'
   );
 });
 
-test('GET /: anonymous view shows tag rail once a tagged draft is published', async (t) => {
+test('GET /: anonymous view shows tag pills once a tagged draft is published', async (t) => {
   const root = freshSiteRoot(t);
   writePostMd(root, 'my-post', 'My Post', 'draft', ['travel']);
   const db = open(path.join(root, 'data', 'site.db'));
@@ -202,13 +206,13 @@ test('GET /: anonymous view shows tag rail once a tagged draft is published', as
   t.after(() => app.close());
 
   const draft = await app.inject({ method: 'GET', url: '/' });
-  assert.doesNotMatch(draft.body, /rkr-tag-rail/, 'no rail before publishing');
+  assert.doesNotMatch(draft.body, /rkr-tag-pills/, 'no tag pills before publishing');
 
   // Publish the post and re-index.
   writePostMd(root, 'my-post', 'My Post', 'published', ['travel']);
   runReindex(root);
 
   const published = await app.inject({ method: 'GET', url: '/' });
-  assert.match(published.body, /rkr-tag-rail/, 'rail appears after publishing');
+  assert.match(published.body, /rkr-tag-pills/, 'tag pills appear after publishing');
   assert.match(published.body, /travel/);
 });
