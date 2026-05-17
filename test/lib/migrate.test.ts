@@ -12,9 +12,9 @@ test('migrate() applies all migrations once; second run is a no-op', () => {
   try {
     const first = migrate(db);
     // 001 (initial) + 002 (auth refactor) + 003 (tags) + 004 (comments)
-    // + 005 (drop comments.author_url); update assertion as new
-    // migrations land.
-    assert.deepEqual(first, [1, 2, 3, 4, 5], 'first run applies all known versions');
+    // + 005 (drop comments.author_url) + 006 (search FTS); update
+    // assertion as new migrations land.
+    assert.deepEqual(first, [1, 2, 3, 4, 5, 6], 'first run applies all known versions');
 
     // Final-state tables (post-002): users + sessions + oauth_accounts +
     // allowed_emails + oauth_tokens + posts + jobs + schema_migrations.
@@ -33,7 +33,8 @@ test('migrate() applies all migrations once; second run is a no-op', () => {
       'schema_migrations',
       'tags',
       'post_tags',
-      'comments'
+      'comments',
+      'posts_fts'
     ]) {
       assert.ok(tables.includes(t), `expected table ${t} in ${tables.join(',')}`);
     }
@@ -61,8 +62,31 @@ test('migrate() runs against a real sqlite file', (t) => {
       { version: 2 },
       { version: 3 },
       { version: 4 },
-      { version: 5 }
+      { version: 5 },
+      { version: 6 }
     ]);
+  } finally {
+    db.close();
+  }
+});
+
+test('migration 006 creates the posts_fts FTS5 table', () => {
+  const db = open(':memory:');
+  try {
+    migrate(db);
+    const row = db
+      .prepare<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='posts_fts'"
+      )
+      .get();
+    assert.equal(row?.name, 'posts_fts');
+    db.prepare(
+      "INSERT INTO posts_fts(slug,title,tags,body) VALUES('s','T','tag','hello world')"
+    ).run();
+    const hit = db
+      .prepare<{ slug: string }>("SELECT slug FROM posts_fts WHERE posts_fts MATCH 'world'")
+      .get();
+    assert.equal(hit?.slug, 's');
   } finally {
     db.close();
   }
