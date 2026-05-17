@@ -88,17 +88,19 @@ function scheduleNextProbe(): void {
 let probeSeq = 0;
 
 async function runProbe(): Promise<void> {
-  const wasOnline = current === 'online';
   const seq = ++probeSeq;
   const ok = await probe();
   if (seq !== probeSeq) return; // newer probe already settled the state
   publish(ok ? 'online' : 'offline');
-  // Re-probe on a cadence only when not currently online. Once
-  // online, the next check runs lazily via a sync attempt failing
-  // or a window 'offline' event.
+  // Re-probe on a cadence only when offline. Once online, the next
+  // check runs lazily via a sync attempt failing or a window 'offline'
+  // event. Cancel any pending re-probe timer on success regardless of
+  // wasOnline: a window 'offline' event (or a prior !ok probe) may have
+  // scheduled a timer while this probe was in-flight, and leaving it
+  // pending would fire a spurious extra runProbe after recovery.
   if (!ok) {
     scheduleNextProbe();
-  } else if (!wasOnline) {
+  } else {
     /* v8 ignore next -- timer cleanup */
     if (probeTimer !== null) {
       clearTimeout(probeTimer);
