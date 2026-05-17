@@ -30,11 +30,9 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 
 test('editor: drag-and-drop of an image inserts a figure', async ({ page }) => {
   page.on('console', (msg) => {
-    // biome-ignore lint/suspicious/noConsole: e2e debug surface
     console.log(`[browser ${msg.type()}] ${msg.text()}`);
   });
   page.on('pageerror', (err) => {
-    // biome-ignore lint/suspicious/noConsole: e2e debug surface
     console.log(`[browser pageerror] ${err.message}`);
   });
   await login(page);

@@ -70,7 +70,7 @@ export async function fetchWpSiteBannerUrl(
   baseUrl: string,
   fetcher: WpFetcher = defaultWpFetcher
 ): Promise<string | null> {
-  const url = stripTrailingSlash(baseUrl) + '/';
+  const url = `${stripTrailingSlash(baseUrl)}/`;
   const res = await fetcher(url);
   if (!res.ok) return null;
   const html = await res.text();

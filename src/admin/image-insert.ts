@@ -152,7 +152,8 @@ export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
     try {
       let ids: string[];
       if (files.length === 1) {
-        const file = files[0]!;
+        const [file] = files;
+        if (!file) return; // unreachable (length === 1); satisfies biome
         setStatus(`uploading ${file.name}…`);
         const result = await uploadImage(file);
         setStatus(

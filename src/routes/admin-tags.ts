@@ -35,7 +35,7 @@ export function registerAdminTagsRoute(fastify: FastifyInstance, opts: AdminTags
             .all(MAX_RESULTS);
         } else {
           // LIKE with % suffix = prefix match; COLLATE NOCASE = case-insensitive.
-          const pattern = q.replace(/[%_\\]/g, '\\$&') + '%';
+          const pattern = `${q.replace(/[%_\\]/g, '\\$&')}%`;
           rows = db
             .prepare<{ name: string }>(
               "SELECT name FROM tags WHERE name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY name ASC LIMIT ?"
