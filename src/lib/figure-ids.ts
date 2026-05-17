@@ -9,13 +9,20 @@
 // and the renderer parse the same shape, so a parsing inconsistency
 // between them is a real bug surface — hence the unit-test gate.
 
-/** Count the comma-separated ids in a figure-attrs `ids` string.
- * Whitespace-tolerant; empty / undefined input → 0. */
-export function idCount(ids: string | undefined): number {
+/** Split a figure-attrs `ids` string into its trimmed, non-empty
+ * ids. The single canonical parse of the comma-separated wire shape —
+ * callers (idCount, eviction live-refs) must not re-roll split/trim. */
+export function splitIds(ids: string | undefined): string[] {
   return (ids ?? '')
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean).length;
+    .filter(Boolean);
+}
+
+/** Count the comma-separated ids in a figure-attrs `ids` string.
+ * Whitespace-tolerant; empty / undefined input → 0. */
+export function idCount(ids: string | undefined): number {
+  return splitIds(ids).length;
 }
 
 /** Extract the single id from a figure that has exactly one. Returns

@@ -254,6 +254,104 @@ test('editor: just-inserted original survives the post-drain eviction pass', asy
   await expect(thumb).toHaveAttribute('src', /^blob:/);
 });
 
+// Data-loss regression: collectLiveRefIds only protected ids on an
+// `upload` outbox entry + live-DOM <img>. An unsynced post whose
+// images' upload entries already drained (markers cleared, no editor
+// DOM) could have its referenced originals reclaimed before its
+// queued savePost drained. runEviction must union the figure ids in
+// every queued savePost's markdown into the live-ref set.
+test('editor: original referenced only by a queued savePost survives eviction', async ({
+  page
+}) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+
+  // Clear the outbox so prior tests' entries don't pollute the scan.
+  await page.evaluate(async () => {
+    const opfs = await navigator.storage.getDirectory();
+    for (const dir of ['outbox', 'outbox-blobs']) {
+      try {
+        await opfs.removeEntry(dir, { recursive: true });
+      } catch {
+        /* absent */
+      }
+    }
+  });
+
+  const protectedId = `e2e-savepost-${Date.now()}`;
+  const orphanId = `e2e-orphan-${Date.now()}`;
+
+  // Seed OPFS: a surviving meta that does NOT reference either id (so
+  // haveAnyMetas → orphan cleanup runs and both look orphaned), plus
+  // two originals on disk. No upload entry, no live <img> for either.
+  await page.evaluate(
+    async ({ pid, oid }) => {
+      const opfs = await navigator.storage.getDirectory();
+      const write = async (dir: string, name: string, body: BlobPart) => {
+        const d = await opfs.getDirectoryHandle(dir, { create: true });
+        const fh = await d.getFileHandle(name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(body);
+        await w.close();
+      };
+      await write(
+        'meta',
+        'e2e-other-draft.json',
+        JSON.stringify({
+          schemaVersion: 1,
+          draftId: 'e2e-other-draft',
+          mode: 'cached',
+          lastAccessedAt: '2026-01-01T00:00:00Z',
+          refIds: ['e2e-unrelated']
+        })
+      );
+      await write('originals', `${pid}.webp`, new Uint8Array([1, 2, 3]));
+      await write('originals', `${oid}.webp`, new Uint8Array([4, 5, 6]));
+    },
+    { pid: protectedId, oid: orphanId }
+  );
+
+  // Queue a savePost whose markdown references protectedId via the
+  // ::figure directive the markdown→prose pipeline parses.
+  await page.evaluate(async (pid) => {
+    type AppendFn = (entry: {
+      op: 'savePost';
+      payload: { slug: string; title: string; status: 'draft'; markdown: string };
+    }) => Promise<number>;
+    const append = (window as unknown as { __rkrOutboxAppend: AppendFn }).__rkrOutboxAppend;
+    await append({
+      op: 'savePost',
+      payload: {
+        slug: '',
+        title: 'unsynced',
+        status: 'draft',
+        markdown: `intro\n\n::figure{ids=${pid} width=600}\n\nmore text\n`
+      }
+    });
+  }, protectedId);
+
+  // Run the real eviction pass through the browser bundle.
+  const plan = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __rkrEviction: () => Promise<{ evictOriginals: string[] }>;
+        }
+      ).__rkrEviction(),
+    null
+  );
+
+  // protectedId is load-bearing (queued savePost references it) → not
+  // evicted. orphanId is referenced by nothing → still evictable, the
+  // inverse-sanity guard against over-protection.
+  expect(plan.evictOriginals).not.toContain(protectedId);
+  expect(plan.evictOriginals).toContain(orphanId);
+});
+
 // Image-edit pipeline coverage: rotate (a runEdit path) writes through
 // the canvas pipeline + setStatus, then Save commits ops + bake to
 // /admin/sidecar/:id. Targets image-edit.ts (saveImageEdits) and the

@@ -1,6 +1,8 @@
 // OPFS-side eviction. Pure planner: src/lib/eviction-pure.ts.
 
 import { type EvictionPlan, type MetaSnapshot, planEviction } from '../lib/eviction-pure.ts';
+import { splitIds } from '../lib/figure-ids.ts';
+import { markdownToProse, type ProseDoc } from '../lib/prose-markdown.ts';
 import { listDir, readJson, removeFile } from './opfs.ts';
 import { OPFS_DIRS } from './opfs-schema.ts';
 import { list as outboxList } from './outbox.ts';
@@ -34,9 +36,16 @@ interface PersistedMeta {
 async function collectLiveRefIds(): Promise<Set<string>> {
   const ids = new Set<string>();
   // 1. Outbox-pending uploads: drain might be in-flight; the file
-  //    is still load-bearing for the figure thumb.
+  //    is still load-bearing for the figure thumb. savePost entries:
+  //    an inserted image's upload entry may have already drained
+  //    (marker cleared) while the post itself is still unsynced — the
+  //    originals it references stay load-bearing until savePost drains.
   for (const entry of await outboxList()) {
-    if (entry.op === 'upload') ids.add(entry.payload.id);
+    if (entry.op === 'upload') {
+      ids.add(entry.payload.id);
+    } else if (entry.op === 'savePost') {
+      for (const id of figureIdsInMarkdown(entry.payload.markdown)) ids.add(id);
+    }
   }
   // 2. Live editor DOM: the persist debounce may not have written
   //    a fresh refIds yet, but every <img data-id> on the page is
@@ -48,6 +57,25 @@ async function collectLiveRefIds(): Promise<Set<string>> {
     }
   }
   return ids;
+}
+
+/** Figure ids referenced by a savePost payload's markdown. Parses
+ * via the shared markdown→prose pipeline (no regex over the wire
+ * format) and splits each figure's `ids` with the canonical
+ * figure-ids splitter — same shape as draft.ts refIdsFromDoc. */
+function figureIdsInMarkdown(markdown: string): string[] {
+  const out: string[] = [];
+  const stack: ProseDoc['content'] = [markdownToProse(markdown)];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (node.type === 'figure') {
+      const raw = (node.attrs as { ids?: string } | undefined)?.ids;
+      out.push(...splitIds(raw));
+    }
+    if (node.content) stack.push(...node.content);
+  }
+  return out;
 }
 
 /** @public */

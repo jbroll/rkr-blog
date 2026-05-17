@@ -79,7 +79,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 36,
-      "linesHit": 32
+      "linesHit": 33
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -138,8 +138,8 @@
       "linesHit": 40
     },
     "src/admin/eviction.ts": {
-      "linesFound": 39,
-      "linesHit": 36
+      "linesFound": 51,
+      "linesHit": 50
     },
     "src/lib/eviction-pure.ts": {
       "linesFound": 10,
@@ -260,6 +260,10 @@
     "src/admin/settings-page.ts": {
       "linesFound": 7,
       "linesHit": 4
+    },
+    "src/lib/figure-ids.ts": {
+      "linesFound": 2,
+      "linesHit": 2
     }
   }
 }

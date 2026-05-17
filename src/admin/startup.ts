@@ -41,7 +41,8 @@ export async function startOfflineInfrastructure(editor: Editor): Promise<void> 
       __rkrPin: pinPost,
       __rkrPanel: openStoragePanel,
       __rkrOutboxAppend: outboxAppend,
-      __rkrOutboxList: outboxList
+      __rkrOutboxList: outboxList,
+      __rkrEviction: runEviction
     });
   }
   await ready;
