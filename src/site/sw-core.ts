@@ -50,6 +50,20 @@ export const ALL_CACHES = [SHELL, PAGES, IMAGES];
  * once the cache hits cap. */
 export const PAGES_CAP = 50;
 const IMAGES_CAP = 200;
+/** /static/* is versioned by deploy hash, so every deploy adds a
+ * fresh set of keys; an unbounded cap retained every historical
+ * bundle forever. A finite LRU bound covers the current deploy's
+ * shell + a few prior deploys' worth of assets and evicts the rest
+ * (spec §16 Defaults — tunable, only matters once at cap). */
+export const SHELL_CAP = 64;
+
+/** The admin SPA bundles live under /static/admin/ (main.js,
+ * posts-list.js, settings-page.js, …, possibly `?v=<gitHash>`).
+ * Unlike public /static assets these are NOT served stale-first:
+ * the offline outbox/conflict protocol must stay in lockstep
+ * client↔server, so a deploy-boundary navigation must never run
+ * the previous deploy's admin client against this deploy's API. */
+const ADMIN_BUNDLE_PREFIX = '/static/admin/';
 
 /** site.css and JS bundles are versioned (`?v=<gitHash>` from the
  * templates), so each deploy is a distinct cache key — let SWR
@@ -112,6 +126,32 @@ export async function staleWhileRevalidate(
       return hit;
     });
   return hit ?? network;
+}
+
+/** Network-first: try the network, and on a successful 200 cache it
+ * (capped) and return it; on network failure fall back to the cached
+ * copy if present, else re-throw. Used for the admin SPA bundle so a
+ * fresh deploy is served immediately (never stale-first) while an
+ * offline admin still loads the last-cached bundle. */
+export async function networkFirst(
+  caches: CacheStorageLike,
+  req: Request,
+  cacheName: string,
+  cap: number,
+  doFetch: typeof fetch = fetch
+): Promise<Response> {
+  const cache = await caches.open(cacheName);
+  try {
+    const res = await doFetch(req);
+    if (res.ok && res.status === 200 && !isNoStore(res)) {
+      void cacheWithCap(cache, req, res.clone(), cap);
+    }
+    return res;
+  } catch (err) {
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    throw err;
+  }
 }
 
 /** Does the response opt out of caching via Cache-Control? Matches
@@ -177,8 +217,13 @@ export function dispatchFetch(
   if (url.pathname.startsWith('/img/')) {
     return cacheFirst(caches, req, IMAGES, IMAGES_CAP, doFetch);
   }
+  if (url.pathname.startsWith(ADMIN_BUNDLE_PREFIX)) {
+    // Admin client bundle: network-first so a deploy is never served
+    // stale; cache fallback keeps offline admin working.
+    return networkFirst(caches, req, SHELL, SHELL_CAP, doFetch);
+  }
   if (url.pathname.startsWith('/static/')) {
-    return staleWhileRevalidate(caches, req, SHELL, Number.POSITIVE_INFINITY, doFetch);
+    return staleWhileRevalidate(caches, req, SHELL, SHELL_CAP, doFetch);
   }
   // / and /:slug — rendered pages.
   return staleWhileRevalidate(caches, req, PAGES, PAGES_CAP, doFetch);

@@ -16,12 +16,14 @@ import {
   dispatchFetch,
   IMAGES,
   isNoStore,
+  networkFirst,
   PAGES,
   PAGES_CAP,
   runActivate,
   runInstall,
   runMessage,
   SHELL,
+  SHELL_CAP,
   SHELL_PRECACHE
 } from '../../src/site/sw-core.ts';
 
@@ -271,6 +273,76 @@ test('staleWhileRevalidate: cold cache + network error propagates', async () => 
   await assert.rejects(() => staleWhileRevalidate(caches, req, PAGES, PAGES_CAP, fakeFetch));
 });
 
+// ---- networkFirst -------------------------------------------------
+
+test('networkFirst: returns the network response and caches it', async () => {
+  const caches = new MockCacheStorage();
+  const req = new Request('https://x/static/admin/main.js');
+  const fakeFetch = (async () => new Response('fresh-bundle', { status: 200 })) as typeof fetch;
+  const res = await networkFirst(caches, req, SHELL, SHELL_CAP, fakeFetch);
+  assert.equal(await res.text(), 'fresh-bundle');
+  await new Promise((r) => setTimeout(r, 0));
+  const cache = await caches.open(SHELL);
+  const hit = await cache.match(req);
+  assert.ok(hit);
+  assert.equal(await hit.text(), 'fresh-bundle');
+});
+
+test('networkFirst: prefers the network even when a stale copy is cached', async () => {
+  const caches = new MockCacheStorage();
+  const cache = await caches.open(SHELL);
+  const req = new Request('https://x/static/admin/main.js');
+  await cache.put(req, new Response('old-deploy-bundle', { status: 200 }));
+
+  const fakeFetch = (async () =>
+    new Response('new-deploy-bundle', { status: 200 })) as typeof fetch;
+  const res = await networkFirst(caches, req, SHELL, SHELL_CAP, fakeFetch);
+  // The whole point: a deploy-boundary navigation must NOT be served
+  // the previous deploy's admin client.
+  assert.equal(await res.text(), 'new-deploy-bundle');
+});
+
+test('networkFirst: falls back to the cached copy when the network is down', async () => {
+  const caches = new MockCacheStorage();
+  const cache = await caches.open(SHELL);
+  const req = new Request('https://x/static/admin/main.js');
+  await cache.put(req, new Response('cached-offline-bundle', { status: 200 }));
+
+  const fakeFetch = (async () => {
+    throw new Error('offline');
+  }) as typeof fetch;
+  const res = await networkFirst(caches, req, SHELL, SHELL_CAP, fakeFetch);
+  // Offline admin must still load from the cache.
+  assert.equal(await res.text(), 'cached-offline-bundle');
+});
+
+test('networkFirst: network error + cold cache propagates', async () => {
+  const caches = new MockCacheStorage();
+  const req = new Request('https://x/static/admin/main.js');
+  const fakeFetch = (async () => {
+    throw new Error('offline');
+  }) as typeof fetch;
+  await assert.rejects(() => networkFirst(caches, req, SHELL, SHELL_CAP, fakeFetch));
+});
+
+test('networkFirst: non-200 network response is not cached', async () => {
+  const caches = new MockCacheStorage();
+  const req = new Request('https://x/static/admin/main.js');
+  const fakeFetch = (async () => new Response('boom', { status: 500 })) as typeof fetch;
+  const res = await networkFirst(caches, req, SHELL, SHELL_CAP, fakeFetch);
+  assert.equal(res.status, 500);
+  await new Promise((r) => setTimeout(r, 0));
+  const cache = await caches.open(SHELL);
+  assert.equal((await cache.keys()).length, 0);
+});
+
+// ---- SHELL_CAP ----------------------------------------------------
+
+test('SHELL_CAP: the /static cache cap is finite (not Infinity)', () => {
+  assert.equal(Number.isFinite(SHELL_CAP), true);
+  assert.ok(SHELL_CAP > 0);
+});
+
 // ---- dispatchFetch ------------------------------------------------
 
 test('dispatchFetch: non-GET passes through', () => {
@@ -331,6 +403,71 @@ test('dispatchFetch: /static/* and / both return SWR promises', async () => {
 
   const c = await dispatchFetch(caches, new Request('https://x/some-slug'), 'https://x', fakeFetch);
   assert.ok(c);
+});
+
+test('dispatchFetch: admin bundle is network-first, not stale-first SWR', async () => {
+  // A deploy bumps the ?v= hash, but the bare path can also be hit
+  // directly; cover both. The previous deploy may have left a stale
+  // copy in the SHELL cache — the SW must still hit the network so
+  // the admin client never straddles a deploy boundary.
+  for (const path of [
+    '/static/admin/main.js',
+    '/static/admin/main.js?v=abcdef123456',
+    '/static/admin/posts-list.js',
+    '/static/admin/settings-page.js?v=deadbeef0000'
+  ]) {
+    const caches = new MockCacheStorage();
+    const cache = await caches.open(SHELL);
+    const req = new Request(`https://x${path}`);
+    await cache.put(req, new Response('STALE-old-deploy', { status: 200 }));
+
+    let fetched = 0;
+    const fakeFetch = (async () => {
+      fetched++;
+      return new Response('FRESH-this-deploy', { status: 200 });
+    }) as typeof fetch;
+
+    const promise = dispatchFetch(caches, req, 'https://x', fakeFetch);
+    assert.ok(promise, `should respond for ${path}`);
+    const res = await promise;
+    assert.equal(await res.text(), 'FRESH-this-deploy', `network-first for ${path}`);
+    assert.equal(fetched, 1, `network was hit for ${path}`);
+  }
+});
+
+test('dispatchFetch: admin bundle falls back to cache when offline', async () => {
+  const caches = new MockCacheStorage();
+  const cache = await caches.open(SHELL);
+  const req = new Request('https://x/static/admin/main.js?v=abcdef123456');
+  await cache.put(req, new Response('cached-bundle', { status: 200 }));
+
+  const fakeFetch = (async () => {
+    throw new Error('offline');
+  }) as typeof fetch;
+  const promise = dispatchFetch(caches, req, 'https://x', fakeFetch);
+  assert.ok(promise);
+  const res = await promise;
+  // Offline admin still loads from cache.
+  assert.equal(await res.text(), 'cached-bundle');
+});
+
+test('dispatchFetch: public /static/* asset stays stale-while-revalidate', async () => {
+  const caches = new MockCacheStorage();
+  const cache = await caches.open(SHELL);
+  const req = new Request('https://x/static/site.css?v=abcdef123456');
+  await cache.put(req, new Response('cached-css', { status: 200 }));
+
+  let fetched = 0;
+  const fakeFetch = (async () => {
+    fetched++;
+    return new Response('network-css', { status: 200 });
+  }) as typeof fetch;
+
+  const promise = dispatchFetch(caches, req, 'https://x', fakeFetch);
+  assert.ok(promise);
+  const res = await promise;
+  // SWR serves the cached copy synchronously (unchanged behavior).
+  assert.equal(await res.text(), 'cached-css');
 });
 
 // ---- runInstall / runActivate / runMessage ------------------------
