@@ -64,13 +64,21 @@ export class MockFileImpl implements MockFile {
   }
 }
 
+/** Opt-in async gate: returns a Promise the next matching write()
+ * awaits (default null = no gating). Separate seam from `fault` so a
+ * test can pause a specific write (e.g. append's JSON commit) and
+ * interleave another op deterministically without injecting an error. */
+export type GateFn = ((path: string) => Promise<void> | null) | null;
+
 export class MockWritableImpl implements MockWritable {
   #file: MockFileImpl;
   #buf: Array<string | Blob> = [];
   #fault: () => FaultFn;
-  constructor(file: MockFileImpl, getFault: () => FaultFn) {
+  #gate: () => GateFn;
+  constructor(file: MockFileImpl, getFault: () => FaultFn, getGate: () => GateFn = () => null) {
     this.#file = file;
     this.#fault = getFault;
+    this.#gate = getGate;
     this.#file.contents = '';
     this.#file.blob = null;
   }
@@ -78,6 +86,8 @@ export class MockWritableImpl implements MockWritable {
     if (this.#fault()?.(this.#file.path)) {
       throw new Error(`injected write fault: ${this.#file.path}`);
     }
+    const wait = this.#gate()?.(this.#file.path);
+    if (wait) await wait;
     this.#buf.push(data);
   }
   async close(): Promise<void> {
@@ -99,13 +109,20 @@ export class MockFileHandleImpl implements MockFileHandle {
   owner: MockDirHandleImpl | null = null;
   ownerName = '';
   #getFault: () => FaultFn;
-  constructor(name: string, file: MockFileImpl, getFault: () => FaultFn) {
+  #getGate: () => GateFn;
+  constructor(
+    name: string,
+    file: MockFileImpl,
+    getFault: () => FaultFn,
+    getGate: () => GateFn = () => null
+  ) {
     this.name = name;
     this.file = file;
     this.#getFault = getFault;
+    this.#getGate = getGate;
   }
   async createWritable(): Promise<MockWritable> {
-    return new MockWritableImpl(this.file, this.#getFault);
+    return new MockWritableImpl(this.file, this.#getFault, this.#getGate);
   }
   async getFile(): Promise<MockFile> {
     return this.file;
@@ -127,16 +144,23 @@ export class MockDirHandleImpl implements MockDirHandle {
   name: string;
   path: string;
   #getFault: () => FaultFn;
-  constructor(name: string, path: string, getFault: () => FaultFn = () => null) {
+  #getGate: () => GateFn;
+  constructor(
+    name: string,
+    path: string,
+    getFault: () => FaultFn = () => null,
+    getGate: () => GateFn = () => null
+  ) {
     this.name = name;
     this.path = path;
     this.#getFault = getFault;
+    this.#getGate = getGate;
   }
   async getDirectoryHandle(name: string, opts?: HandleOpts): Promise<MockDirHandle> {
     const existing = this.entries.get(name);
     if (existing && existing.kind === 'directory') return existing;
     if (!opts?.create) throw new Error(`NotFound: dir ${name}`);
-    const d = new MockDirHandleImpl(name, `${this.path}/${name}`, this.#getFault);
+    const d = new MockDirHandleImpl(name, `${this.path}/${name}`, this.#getFault, this.#getGate);
     this.entries.set(name, d);
     return d;
   }
@@ -147,7 +171,8 @@ export class MockDirHandleImpl implements MockDirHandle {
     const h = new MockFileHandleImpl(
       name,
       new MockFileImpl(`${this.path}/${name}`),
-      this.#getFault
+      this.#getFault,
+      this.#getGate
     );
     h.owner = this;
     h.ownerName = name;
@@ -163,8 +188,45 @@ export class MockDirHandleImpl implements MockDirHandle {
   }
 }
 
-/** Install navigator.storage with a stable proxy root, then return
- * { mockRoot getter, resetMockOpfs, setFault } for per-test use.
+/** Minimal Web Locks (navigator.locks) mock: serializes callbacks
+ * per lock name (exclusive mode only — the prod code never uses
+ * 'shared'), and honours `{ ifAvailable: true }` by invoking the
+ * callback with `null` when the lock is held. Faithful enough to
+ * exercise the rkr-outbox-append serialization the sweeps rely on
+ * and the rkr-sync-leader ifAvailable guard tryDrain uses. */
+class MockLockManager {
+  #chains = new Map<string, Promise<unknown>>();
+
+  request(name: string, a: unknown, b?: unknown): Promise<unknown> {
+    const opts = (typeof a === 'object' && a !== null ? a : {}) as {
+      ifAvailable?: boolean;
+    };
+    const cb = (typeof a === 'function' ? a : b) as (lock: unknown) => unknown | Promise<unknown>;
+    const prev = this.#chains.get(name);
+    if (opts.ifAvailable && prev) {
+      // Lock is held — the spec calls back with null and does not queue.
+      return Promise.resolve().then(() => cb(null));
+    }
+    const run = (prev ?? Promise.resolve()).then(
+      () => cb({ name }),
+      () => cb({ name })
+    );
+    // Keep the chain alive until cb settles, then prune if we're the tail.
+    const settled = run.then(
+      () => {},
+      () => {}
+    );
+    this.#chains.set(name, settled);
+    void settled.then(() => {
+      if (this.#chains.get(name) === settled) this.#chains.delete(name);
+    });
+    return run;
+  }
+}
+
+/** Install navigator.storage + navigator.locks with a stable proxy
+ * root, then return { mockRoot getter, resetMockOpfs, setFault } for
+ * per-test use.
  *
  * Call this ONCE at module level (before any dynamic imports of
  * opfs.ts / opfs-schema.ts), then call resetMockOpfs() in beforeEach. */
@@ -172,13 +234,16 @@ export function installMockOpfs(): {
   getMockRoot: () => MockDirHandleImpl;
   resetMockOpfs: () => void;
   setFault: (fn: FaultFn) => void;
+  setGate: (fn: GateFn) => void;
 } {
   let fault: FaultFn = null;
   const getFault = (): FaultFn => fault;
+  let gate: GateFn = null;
+  const getGate = (): GateFn => gate;
 
-  let mockRoot = new MockDirHandleImpl('', '', getFault);
+  let mockRoot = new MockDirHandleImpl('', '', getFault, getGate);
 
-  const stableRoot = new MockDirHandleImpl('', '', getFault);
+  const stableRoot = new MockDirHandleImpl('', '', getFault, getGate);
   const mockRootProxy = new Proxy(stableRoot, {
     get(_t: MockDirHandleImpl, prop: string | symbol): unknown {
       const v = Reflect.get(mockRoot, prop) as unknown;
@@ -191,18 +256,23 @@ export function installMockOpfs(): {
     value: {
       storage: {
         getDirectory: async (): Promise<FileSystemDirectoryHandle> => mockRootProxy
-      }
+      },
+      locks: new MockLockManager()
     }
   });
 
   return {
     getMockRoot: () => mockRoot,
     resetMockOpfs: () => {
-      mockRoot = new MockDirHandleImpl('', '', getFault);
+      mockRoot = new MockDirHandleImpl('', '', getFault, getGate);
       fault = null;
+      gate = null;
     },
     setFault: (fn: FaultFn) => {
       fault = fn;
+    },
+    setGate: (fn: GateFn) => {
+      gate = fn;
     }
   };
 }

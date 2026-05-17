@@ -10,17 +10,15 @@ import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts'
 import { runEviction } from './eviction.ts';
 import { hydrateLocalThumbs } from './local-thumb.ts';
 import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
-import { ensureSchema, OPFS_DIRS, readRoot, writeRoot } from './opfs-schema.ts';
+import { ensureSchema, readRoot, writeRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
-  gcAtomicWriteTemps,
-  gcOrphansAgainstOutbox,
+  gcUnderAppendLock,
   append as outboxAppend,
   list as outboxList,
   pendingCount
 } from './outbox.ts';
 import { refreshPageTitle } from './page-title.ts';
-import { PENDING_UPLOADS_DIR, seqFromMarker } from './pending-uploads.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
 import { mountStatusBadge } from './status-badge.ts';
@@ -63,23 +61,19 @@ async function runStart(editor: Editor): Promise<void> {
     registerDrainer('savePost', drainSavePost);
     // One-shot migration: pre-/commit outboxes carry op='setOps' and
     // op='bake' entries that have no drainer in this build. Drop them
-    // up front so the drain loop doesn't halt on the first one.
-    void dropLegacyOpEntries();
-    // Sweep two classes of outbox orphans against the live JSON list:
-    // blob files (writeBlob succeeded but JSON write didn't), and
-    // pending-upload markers (drain succeeded but the tab died before
-    // the marker delete). Eviction doesn't reach either dir; without
-    // these sweeps they'd accumulate.
-    void gcOrphansAgainstOutbox(OPFS_DIRS.OUTBOX_BLOBS, (name) => {
-      const m = /^(\d+)\.bin$/.exec(name);
-      return m ? Number(m[1]) : null;
-    });
-    void gcOrphansAgainstOutbox(PENDING_UPLOADS_DIR, seqFromMarker);
-    // Sweep leaked atomic-write temps (.${leaf}.tmp-${uuid}) across
-    // every OPFS dir the wrapper writes into. A tab killed after the
-    // temp's close() but before/within move() leaks it forever; this
-    // is the only sweeper for that path.
-    void gcAtomicWriteTemps();
+    // up front — and AWAIT before the first tryDrain below — so the
+    // drain loop never observes a legacy op and never flashes a
+    // spurious 'halted' badge on boot.
+    await dropLegacyOpEntries();
+    // Sweep three classes of orphans (outbox blobs written before
+    // their JSON commit, leaked pending-upload markers, leaked
+    // atomic-write temps) — all under the rkr-outbox-append Web Lock
+    // so a sweep can't race a concurrent append()'s half-written
+    // (blob-but-no-JSON) state and delete a live blob. Eviction
+    // doesn't reach these dirs; without the sweeps they'd accumulate.
+    // Fire-and-forget: the lock-held window is short, boot isn't
+    // gated on it, and the legacy drop above already completed.
+    void gcUnderAppendLock();
     // URL drives one of three startup modes:
     //   ?slug=foo  → pin the named post, edit it.
     //   ?new=1     → discard any in-progress draftId and create a

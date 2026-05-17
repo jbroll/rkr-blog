@@ -12,10 +12,19 @@
 import { coalescePending, type OutboxEntry } from '../lib/outbox-types.ts';
 import { listDir, readBlob, readJson, removeFile, writeBlob, writeJson } from './opfs.ts';
 import { OPFS_DIRS, type OpfsRoot, readRoot, writeRoot } from './opfs-schema.ts';
+import { PENDING_UPLOADS_DIR, seqFromMarker } from './pending-uploads.ts';
 
 const OUTBOX_DIR = OPFS_DIRS.OUTBOX;
 const BLOB_DIR = OPFS_DIRS.OUTBOX_BLOBS;
 const APPEND_LOCK = 'rkr-outbox-append';
+
+/** Run `fn` under the rkr-outbox-append Web Lock. Sole owner of the
+ * lock name so both append() and the startup orphan sweeps serialize
+ * through one place — a sweep can never observe append()'s half-
+ * written (blob-but-no-JSON) state. */
+function withAppendLock<T>(fn: () => Promise<T>): Promise<T> {
+  return navigator.locks.request(APPEND_LOCK, fn) as Promise<T>;
+}
 
 /** @public */
 export async function append(
@@ -29,7 +38,7 @@ export async function append(
   // can both observe the same nextSeq and produce colliding
   // entries — outbox/<seq>.<op>.json names differ but the seq
   // ordering breaks and remove() targets the wrong file.
-  return navigator.locks.request(APPEND_LOCK, async () => {
+  return withAppendLock(async () => {
     const root = await readRoot();
     if (!root) {
       throw new Error('outbox.append: _root.json missing — ensureSchema not called?');
@@ -194,6 +203,37 @@ export async function dropLegacyOpEntries(): Promise<number> {
   return dropped;
 }
 /* v8 ignore stop */
+
+/** Run every startup orphan sweep under the rkr-outbox-append Web
+ * Lock so a sweep and a concurrent append() are mutually exclusive.
+ *
+ * Without this the sweeps ran fire-and-forget and could observe
+ * append()'s half-written window (blob written, JSON not yet) and
+ * delete the just-written blob — the subsequent commitImageEdit
+ * drain then throws `no blob` and wedges the queue. Holding the
+ * append lock for the sweep closes that race; the sweep itself only
+ * does listDir/removeFile and never re-enters the lock, so there is
+ * no deadlock.
+ *
+ * Best-effort: a failing sweep doesn't block startup. The lock-held
+ * window is short (filename scans + unlinks of provably-dead files);
+ * boot is not gated on it — the caller still fires this without
+ * awaiting. @public */
+export async function gcUnderAppendLock(): Promise<void> {
+  await withAppendLock(async () => {
+    // Blob orphans: written before the JSON commit (intentional
+    // ordering). Seq is filename-encoded (<seq>.bin).
+    await gcOrphansAgainstOutbox(BLOB_DIR, (name) => {
+      const m = /^(\d+)\.bin$/.exec(name);
+      return m ? Number(m[1]) : null;
+    });
+    // Pending-upload markers: landed at append, removed at drain
+    // success; an interrupted tab leaks one. Seq is JSON-encoded.
+    await gcOrphansAgainstOutbox(PENDING_UPLOADS_DIR, seqFromMarker);
+    // Leaked atomic-write temps across every OPFS dir.
+    await gcAtomicWriteTemps();
+  }).catch(() => {});
+}
 
 export async function pendingCount(): Promise<number> {
   return (await list()).length;
