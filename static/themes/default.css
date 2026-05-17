@@ -334,6 +334,9 @@ body {
   margin-bottom: 0.75rem;
 }
 .rkr-sort-toggle:hover { color: var(--rkr-link); }
+/* In the header nav the toggle is a flex row item — drop the
+   column-layout bottom margin so it aligns with the nav links. */
+.rkr-site-head-nav .rkr-sort-toggle { margin-bottom: 0; }
 
 /* Tag rail — right sidebar on the index page. */
 .rkr-index-layout { display: block; }

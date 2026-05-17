@@ -91,7 +91,7 @@ export function renderIndexPage(data: IndexPageData): string {
   const postsListScript = data.isAdmin
     ? `<script type="module" src="/static/admin/posts-list.js${bundleVersion()}"></script>`
     : '';
-  const head = siteHead(data.site, { isAdmin: data.isAdmin });
+  const head = siteHead(data.site, { isAdmin: data.isAdmin, sortControl: sortToggle });
   const banner = data.bannerHtml ?? '';
   const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   return `<!DOCTYPE html>
@@ -110,7 +110,7 @@ ${siteChrome}<main id="main" tabindex="-1">
 <div class="rkr-index-layout${tagRail ? ' rkr-index-layout--has-rail' : ''}">
 <div class="rkr-index-posts">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
-${teaserHtml}${sortToggle}${body}
+${teaserHtml}${body}
 ${pager}
 </div>
 ${tagRail}
