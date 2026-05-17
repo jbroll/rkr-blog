@@ -698,9 +698,13 @@ article hr {
 }
 /* When the banner/hero is the page-leading element (bannerAboveHeader),
    it is a direct body child before the header — kill its top margin so
-   it sits flush to the viewport top. Positional, so not a token. */
+   it sits flush to the viewport top, and its bottom margin so the
+   header sits close beneath it (the header's own top padding supplies
+   the gap). Vertical only — preserve the bleed's horizontal margins.
+   Positional, so not a token. */
 body > .rkr-figure:first-child {
   margin-top: 0;
+  margin-bottom: 0;
 }
 .rkr-figure-grid {
   display: grid;
