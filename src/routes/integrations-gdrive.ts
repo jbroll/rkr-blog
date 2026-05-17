@@ -26,6 +26,7 @@ import {
   upsertToken
 } from '../lib/oauth-tokens.ts';
 import { ingestStream } from '../lib/originals.ts';
+import { safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
 
@@ -122,7 +123,7 @@ export default async function integrationsGdriveRoutes(
       try {
         tokens = await exchange.exchange(code, parsed.codeVerifier);
       } catch (err) {
-        req.log.warn({ err }, 'gdrive token exchange failed');
+        req.log.warn({ err: safeErr(err) }, 'gdrive token exchange failed');
         return reply.code(400).send({ error: 'token exchange failed' });
       }
 

@@ -38,6 +38,7 @@ import {
   upsertToken
 } from '../lib/oauth-tokens.ts';
 import { ingestStream } from '../lib/originals.ts';
+import { safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
 
@@ -152,7 +153,7 @@ export default async function integrationsOnedriveRoutes(
       try {
         tokens = await exchange.exchange(code, parsed.codeVerifier);
       } catch (err) {
-        req.log.warn({ err }, 'onedrive token exchange failed');
+        req.log.warn({ err: safeErr(err) }, 'onedrive token exchange failed');
         return reply.code(400).send({ error: 'token exchange failed' });
       }
 
@@ -252,7 +253,10 @@ export default async function integrationsOnedriveRoutes(
         const refreshed = await exchange.refresh(stored.refresh_token, [scope, 'offline_access']);
         return { accessToken: refreshed.accessToken() };
       } catch (err) {
-        req.log.warn({ err, resource, scope }, 'onedrive picker token refresh failed');
+        req.log.warn(
+          { err: safeErr(err), resource, scope },
+          'onedrive picker token refresh failed'
+        );
         return reply.code(500).send({ error: 'token refresh failed' });
       }
     }

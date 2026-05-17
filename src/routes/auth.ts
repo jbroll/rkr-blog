@@ -24,6 +24,7 @@ import {
   recordFailure,
   WINDOW_MS
 } from '../lib/login-throttle.ts';
+import { safeErr } from '../lib/safe-err.ts';
 import { SESSION_COOKIE_NAME as SESSION_COOKIE } from '../lib/session-constants.ts';
 import { createSession, deleteSession } from '../lib/sessions.ts';
 import {
@@ -172,7 +173,7 @@ export default async function authRoutes(
       try {
         tokens = await exchange.exchange(code, codeVerifier);
       } catch (err) {
-        req.log.warn({ err }, 'token exchange failed');
+        req.log.warn({ err: safeErr(err) }, 'token exchange failed');
         return reply.code(400).send({ error: 'token exchange failed' });
       }
 
@@ -181,7 +182,7 @@ export default async function authRoutes(
       try {
         payload = await verifier.verify(idToken);
       } catch (err) {
-        req.log.warn({ err }, 'id token verification failed');
+        req.log.warn({ err: safeErr(err) }, 'id token verification failed');
         return reply.code(400).send({ error: 'invalid id token' });
       }
 
