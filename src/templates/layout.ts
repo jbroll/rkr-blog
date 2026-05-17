@@ -80,7 +80,11 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
       <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
       ${tagline}
     </div>
-    <div class="rkr-site-head-auth">${auth}</div>
+    <nav class="rkr-site-head-nav" aria-label="Site">
+      <a class="rkr-site-head-auth-btn" href="/">Home</a>
+      <a class="rkr-site-head-auth-btn" href="/about">About</a>
+      <div class="rkr-site-head-auth">${auth}</div>
+    </nav>
   </div>
 </header>`;
 }

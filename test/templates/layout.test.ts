@@ -122,3 +122,16 @@ test('stylesheetLinks: alternate theme layers on top of default', () => {
     else delete process.env.SITE_THEME;
   }
 });
+
+test('siteHead: emits Home + About nav and the correct auth control', () => {
+  const anon = siteHead({ title: 'S' });
+  assert.match(anon, /<nav class="rkr-site-head-nav"[^>]*>/);
+  assert.match(anon, /href="\/"[^>]*>Home</);
+  assert.match(anon, /href="\/about"[^>]*>About</);
+  assert.match(anon, /href="\/login"/);
+  assert.doesNotMatch(anon, /\/admin\/logout/);
+
+  const admin = siteHead({ title: 'S' }, { isAdmin: true });
+  assert.match(admin, /href="\/about"[^>]*>About</);
+  assert.match(admin, /action="\/admin\/logout"/);
+});

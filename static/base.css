@@ -131,3 +131,8 @@ main:focus-visible { outline: none; }
   max-width: var(--rkr-prose, 38rem);
   margin-inline: auto;
 }
+
+/* Header nav group (Home / About / Login|Logout). Layout only —
+   link colours come from the theme's .rkr-site-head-auth-btn. base.css
+   is always loaded, so this is theme-independent. */
+.rkr-site-head-nav { display: flex; align-items: center; gap: 1rem; }
