@@ -103,18 +103,17 @@ export const ADMIN_CSS = `
   #rkroll-admin-article .rkr-multi-thumbs { position: relative; }
   #rkroll-admin-article .rkr-multi-drop-indicator {
     position: absolute;
-    width: 5px;
-    margin-left: -2px;
-    background: var(--rkr-link, #1a4f7f);
+    width: 6px;
+    margin-left: -3px;
+    background: #00e000;
     border-radius: 3px;
-    /* Dual ring — light inner + dark outer — so the bar keeps contrast
-       on both a white and a dark editor background, plus a coloured
-       glow. (The old single #fff ring was the only thing rendering
-       because the bar background var had no fallback → transparent.) */
+    /* Thick dual ring — light inner + dark outer — so the bright-green
+       bar keeps contrast on both white and dark editor backgrounds,
+       plus a green glow. */
     box-shadow:
-      0 0 0 1px rgba(255, 255, 255, .9),
-      0 0 0 2px rgba(0, 0, 0, .55),
-      0 0 6px var(--rkr-link, #1a4f7f);
+      0 0 0 2px rgba(255, 255, 255, .95),
+      0 0 0 5px rgba(0, 0, 0, .6),
+      0 0 10px #00e000;
     pointer-events: none;
     z-index: 3;
   }
