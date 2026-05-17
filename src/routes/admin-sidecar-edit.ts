@@ -17,10 +17,13 @@ import path from 'node:path';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import sharp from 'sharp';
 
+import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
+import type { Db } from '../lib/db.ts';
 import { SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
 import { validateOps } from '../lib/ops-validation.ts';
 import { bakePath, imageInfo } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
+import { readIdempotencyKey } from './admin-idempotency.ts';
 
 const BAKE_MAX_BYTES = 25 * 1024 * 1024;
 const OPS_MAX_BYTES = 64 * 1024;
@@ -28,13 +31,18 @@ const OPS_MAX_BYTES = 64 * 1024;
 export interface SidecarEditRouteOpts {
   siteRoot: string;
   guard: RouteShorthandOptions;
+  /** Jobs/idempotency DB. When present, a drained commitImageEdit
+   * replayed with the same (x-rkr-device-id, x-rkr-outbox-seq)
+   * short-circuits to its original 2xx instead of re-running the
+   * non-idempotent write+cache-invalidation. */
+  db?: Db;
 }
 
 export function registerSidecarEditRoutes(
   fastify: FastifyInstance,
   opts: SidecarEditRouteOpts
 ): void {
-  const { siteRoot, guard } = opts;
+  const { siteRoot, guard, db } = opts;
 
   fastify.post<{
     Params: { id: string };
@@ -45,6 +53,18 @@ export function registerSidecarEditRoutes(
       const { id } = req.params;
       if (!/^[0-9a-f]{64}$/.test(id)) {
         return reply.code(400).send({ error: 'invalid id' });
+      }
+
+      // Server-side outbox idempotency (Task 8). commitImageEdit is
+      // non-idempotent (writes the bake, rewrites the sidecar,
+      // unlinks stale derivatives); a lost-ACK replay must return the
+      // original 2xx, not re-run the work.
+      const idem = readIdempotencyKey(req.headers);
+      if (idem && db) {
+        const prior = lookupApplied(db, idem.deviceId, idem.seq);
+        if (prior) {
+          return reply.code(prior.status).type('application/json').send(prior.body);
+        }
       }
       const sidecar = await sidecarRead(siteRoot, id);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
@@ -202,7 +222,12 @@ export function registerSidecarEditRoutes(
         await fs.promises.unlink(path.join(cacheImgDir, name)).catch(() => {});
       }
 
-      return { ops: sidecar.ops, redoStack: sidecar.redoStack ?? [] };
+      const body = { ops: sidecar.ops, redoStack: sidecar.redoStack ?? [] };
+      if (idem && db) {
+        recordApplied(db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
+        pruneApplied(db);
+      }
+      return body;
     }
   );
 }

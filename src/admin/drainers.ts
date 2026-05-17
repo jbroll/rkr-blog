@@ -15,12 +15,16 @@ async function postFormDrain(
   op: string,
   url: string,
   body: FormData,
-  seq: number
+  seq: number,
+  deviceId: string
 ): Promise<Response> {
   const res = await fetch(url, {
     method: 'POST',
     body,
-    headers: { 'x-rkr-outbox-seq': String(seq) }
+    // x-rkr-device-id + x-rkr-outbox-seq are the server-side
+    // idempotency key (Task 8): a lost-ACK replay short-circuits to
+    // the original 2xx instead of re-running a non-idempotent op.
+    headers: { 'x-rkr-outbox-seq': String(seq), 'x-rkr-device-id': deviceId }
   });
   /* v8 ignore next 3 -- non-2xx server response; prod-only path */
   if (!res.ok) {
@@ -44,7 +48,7 @@ export const drainUpload: Drainer = async (entry, _blobIgnored) => {
   }
   const fd = new FormData();
   fd.append('file', blob, entry.payload.filename);
-  const res = await postFormDrain('upload', '/admin/upload', fd, entry.seq);
+  const res = await postFormDrain('upload', '/admin/upload', fd, entry.seq, entry.deviceId);
   await res.json();
   // Clear the save-guard marker — server now has the bytes.
   await clearPendingUpload(entry.payload.id);
@@ -65,7 +69,8 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
     'commitImageEdit',
     `/admin/sidecar/${entry.payload.id}/commit`,
     fd,
-    entry.seq
+    entry.seq,
+    entry.deviceId
   );
 };
 
@@ -73,7 +78,9 @@ export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
   if (entry.op !== 'savePost') return;
   const headers: Record<string, string> = {
     'content-type': 'application/json',
-    'x-rkr-outbox-seq': String(entry.seq)
+    // Server-side idempotency key (Task 8) — see postFormDrain.
+    'x-rkr-outbox-seq': String(entry.seq),
+    'x-rkr-device-id': entry.deviceId
   };
   if (entry.payload.lastSyncedAt) {
     headers['x-rkr-last-synced-at'] = entry.payload.lastSyncedAt;

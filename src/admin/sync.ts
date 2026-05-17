@@ -186,7 +186,16 @@ export async function forceConflictedSave(): Promise<void> {
   }
   const res = await fetch('/admin/posts', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-rkr-outbox-seq': String(seq) },
+    headers: {
+      'content-type': 'application/json',
+      // Idempotency key (Task 8). NOTE: the force path deliberately
+      // omits x-rkr-last-synced-at so the server accepts the
+      // overwrite unconditionally; keying it the same as the normal
+      // drain means a lost-ACK replay of THIS request still
+      // short-circuits to the stored 2xx.
+      'x-rkr-outbox-seq': String(seq),
+      'x-rkr-device-id': entry.deviceId
+    },
     body: JSON.stringify(entry.payload)
   });
   if (!res.ok) {

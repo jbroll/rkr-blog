@@ -19,6 +19,33 @@ export function resolveSavedStatus(raw: unknown, filePath: string): 'draft' | 'p
   return m?.[1] === 'published' ? 'published' : 'draft';
 }
 
+/** Date precedence — mirrors resolveSavedStatus:
+ *   1. Body sent a non-blank `date`: honour it verbatim.
+ *   2. Updating an existing post with no `date`: preserve the file's
+ *      current date. Stamping a fresh `new Date()` on every dateless
+ *      re-save would (a) silently move a post's publish date and
+ *      (b) make every queued-entry replay produce different bytes,
+ *      defeating the byte-identical lost-ACK self-heal (Task 8).
+ *   3. Inserting a new post with no `date`: default to now. */
+export function resolveSavedDate(raw: unknown, filePath: string): string {
+  if (typeof raw === 'string' && raw.trim()) return raw;
+  if (fs.existsSync(filePath)) {
+    const existing = fs.readFileSync(filePath, 'utf8');
+    const m = /^date: (.+)$/m.exec(existing);
+    const captured = m?.[1]?.trim();
+    if (captured) {
+      // Frontmatter dates round-trip through yamlScalar; strip a
+      // surrounding quote pair so the re-emitted scalar matches.
+      const unquoted =
+        captured.startsWith('"') && captured.endsWith('"')
+          ? captured.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+          : captured;
+      return unquoted;
+    }
+  }
+  return new Date().toISOString();
+}
+
 /** Quote a string for emission as a YAML scalar. Conservative: any
  * char that could be parsed as YAML structure triggers quoting. */
 export function yamlScalar(s: string): string {

@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { runReindex } from '../cli/reindex.ts';
+import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
@@ -29,9 +30,11 @@ import { renderAdminPage } from '../templates/admin.ts';
 import { registerAdminCommentsRoutes } from './admin-comments.ts';
 import {
   looksLikeFrontmatterDelimiter,
+  resolveSavedDate,
   resolveSavedStatus,
   yamlScalar
 } from './admin-frontmatter.ts';
+import { readIdempotencyKey } from './admin-idempotency.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
@@ -131,7 +134,7 @@ export default async function adminRoutes(
     guard
   });
 
-  registerSidecarEditRoutes(fastify, { siteRoot, guard });
+  registerSidecarEditRoutes(fastify, { siteRoot, guard, ...(opts.db ? { db: opts.db } : {}) });
   registerPostBundleRoutes(fastify, { siteRoot, guard });
   registerAdminTagsRoute(fastify, { siteRoot, guard });
   registerAdminCommentsRoutes(fastify, { siteRoot, guard });
@@ -150,6 +153,20 @@ export default async function adminRoutes(
       tags?: unknown;
     };
   }>('/admin/posts', { ...guard }, async (request, reply) => {
+    // Server-side outbox idempotency (Task 8). A drained entry carries
+    // (x-rkr-device-id, x-rkr-outbox-seq); a lost-ACK replay short-
+    // circuits to the stored 2xx instead of re-running the mtime guard
+    // with a stale baked-in lastSyncedAt (phantom 409 → user discards
+    // → newer coalesced edit lost). opts.db is absent in some test
+    // harnesses; the byte-identical layer below still self-heals then.
+    const idem = readIdempotencyKey(request.headers);
+    if (idem && opts.db) {
+      const prior = lookupApplied(opts.db, idem.deviceId, idem.seq);
+      if (prior) {
+        return reply.code(prior.status).type('application/json').send(prior.body);
+      }
+    }
+
     const {
       slug: slugRaw,
       title,
@@ -188,11 +205,12 @@ export default async function adminRoutes(
     if (looksLikeFrontmatterDelimiter(markdown)) {
       return reply.code(400).send({ error: 'markdown body must not start with --- frontmatter' });
     }
-    const finalStatus = resolveSavedStatus(
-      status,
-      path.join(siteRoot, 'content', 'posts', `${slug}.md`)
-    );
-    const dateStr = typeof date === 'string' && date.trim() ? date : new Date().toISOString();
+    const postFilePath = path.join(siteRoot, 'content', 'posts', `${slug}.md`);
+    const finalStatus = resolveSavedStatus(status, postFilePath);
+    // Preserve the existing post's date when the body omits it — both
+    // to avoid silently re-dating a re-saved post and so a queued-
+    // entry replay produces byte-identical content (Task 8 self-heal).
+    const dateStr = resolveSavedDate(date, postFilePath);
 
     const bannerStr =
       typeof banner === 'string' && /^[0-9a-f]{64}$/.test(banner.trim()) ? banner.trim() : '';
@@ -232,6 +250,36 @@ export default async function adminRoutes(
     const filename = `${slug}.md`;
     const finalPath = path.join(postsDir, filename);
     const inserted = !fs.existsSync(finalPath);
+
+    // Cheap idempotency layer (Task 8). If the bytes we'd write are
+    // identical to what's already on disk, the queued POST has already
+    // been applied (a lost-ACK replay across a client restart, where
+    // the applied_outbox row may not exist or opts.db is absent).
+    // Treat it as a satisfied no-op and return the normal 2xx BEFORE
+    // the mtime/X-Rkr-Last-Synced-At guard below — otherwise the
+    // replay's stale baked-in lastSyncedAt produces a phantom 409 and
+    // the user "discarding" it can drop a newer coalesced edit.
+    // Genuine concurrent divergence (different content + stale
+    // lastSyncedAt) still falls through to the 409 path unchanged.
+    if (!inserted) {
+      let onDisk: string | null = null;
+      try {
+        onDisk = await fs.promises.readFile(finalPath, 'utf8');
+      } catch {
+        // Unreadable/just-vanished file: fall through to the normal
+        // path (write + guard) rather than guessing.
+        onDisk = null;
+      }
+      if (onDisk === file) {
+        const updatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
+        const body = { slug, inserted, updatedAt, date: dateStr };
+        if (idem && opts.db) {
+          recordApplied(opts.db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
+          pruneApplied(opts.db);
+        }
+        return body;
+      }
+    }
 
     // Optimistic-concurrency guard (spec-offline §6). When the
     // client supplies X-Rkr-Last-Synced-At — the server's
@@ -296,7 +344,12 @@ export default async function adminRoutes(
     // Also echo back the resolved date so new posts can populate
     // the date input without a full reload.
     const updatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
-    return { slug, inserted, updatedAt, date: dateStr };
+    const body = { slug, inserted, updatedAt, date: dateStr };
+    if (idem && opts.db) {
+      recordApplied(opts.db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
+      pruneApplied(opts.db);
+    }
+    return body;
   });
 
   fastify.post('/admin/upload', { ...guard }, async (request, reply) => {

@@ -12,9 +12,10 @@ test('migrate() applies all migrations once; second run is a no-op', () => {
   try {
     const first = migrate(db);
     // 001 (initial) + 002 (auth refactor) + 003 (tags) + 004 (comments)
-    // + 005 (drop comments.author_url) + 006 (search FTS); update
-    // assertion as new migrations land.
-    assert.deepEqual(first, [1, 2, 3, 4, 5, 6], 'first run applies all known versions');
+    // + 005 (drop comments.author_url) + 006 (search FTS) + 007
+    // (applied_outbox idempotency); update assertion as new
+    // migrations land.
+    assert.deepEqual(first, [1, 2, 3, 4, 5, 6, 7], 'first run applies all known versions');
 
     // Final-state tables (post-002): users + sessions + oauth_accounts +
     // allowed_emails + oauth_tokens + posts + jobs + schema_migrations.
@@ -34,7 +35,8 @@ test('migrate() applies all migrations once; second run is a no-op', () => {
       'tags',
       'post_tags',
       'comments',
-      'posts_fts'
+      'posts_fts',
+      'applied_outbox'
     ]) {
       assert.ok(tables.includes(t), `expected table ${t} in ${tables.join(',')}`);
     }
@@ -63,7 +65,8 @@ test('migrate() runs against a real sqlite file', (t) => {
       { version: 3 },
       { version: 4 },
       { version: 5 },
-      { version: 6 }
+      { version: 6 },
+      { version: 7 }
     ]);
   } finally {
     db.close();
