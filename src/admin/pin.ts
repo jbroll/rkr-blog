@@ -1,6 +1,5 @@
 // Pin an existing post into OPFS for offline editing (spec-offline §6).
 
-import { markdownToProse } from '../lib/prose-markdown.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
 import { readMeta, updateMeta } from './draft.ts';
 import { listDir, readBlob, writeBlob, writeJson } from './opfs.ts';
@@ -75,6 +74,7 @@ export async function pinPost(
 
   // Parse before any side effects. A throw here must not leave
   // currentDraftId pointing at a half-written draft.
+  const { markdownToProse } = await import('../lib/prose-markdown.ts');
   const doc = markdownToProse(manifest.markdown);
 
   const draftId = crypto.randomUUID();

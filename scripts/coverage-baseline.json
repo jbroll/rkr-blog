@@ -79,7 +79,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 32,
-      "linesHit": 29
+      "linesHit": 28
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 26,
-      "linesHit": 24
+      "linesHit": 23
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -207,7 +207,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 27
+      "linesHit": 26
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
@@ -268,6 +268,10 @@
     "src/admin/cell-delete.ts": {
       "linesFound": 18,
       "linesHit": 18
+    },
+    "127.0.0.1-3789/static/admin/prose-markdown-KRJA6KUO.js": {
+      "linesFound": 1,
+      "linesHit": 1
     }
   }
 }
