@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { markdownToProse, type ProseDoc, proseToMarkdown } from '../../src/lib/prose-markdown.ts';
+import { joinAlts, splitAlts } from '../../src/lib/widget-helpers.ts';
 
 function paragraph(...texts: string[]): {
   type: string;
@@ -155,6 +156,32 @@ test('proseToMarkdown: figure with per-image alts carries through', () => {
     ]
   };
   assert.match(proseToMarkdown(doc), /alts="workbench,sky,bird"/);
+});
+
+test('splitAlts/joinAlts: round-trip preserves commas inside individual alts', () => {
+  const alts = ['A cat, sitting', 'Plain', 'One, two, three'];
+  const joined = joinAlts(alts);
+  assert.equal(joined, 'A cat\\, sitting,Plain,One\\, two\\, three');
+  assert.deepEqual(splitAlts(joined), alts);
+});
+
+test('proseToMarkdown/markdownToProse: escaped comma in alts survives round-trip', () => {
+  // ProseDoc stores the \, escaped form; markdown stores %5C, (directiveEncode converts \→%5C);
+  // round-trip back produces the same \, escaped form in the ProseDoc.
+  const doc: ProseDoc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'figure',
+        attrs: { ids: 'aaaaaa,bbbbbb', matrix: 'justified', alts: 'A cat\\, sitting,Plain' }
+      }
+    ]
+  };
+  const md = proseToMarkdown(doc);
+  assert.match(md, /alts="A cat%5C, sitting,Plain"/);
+  const back = markdownToProse(md);
+  const fig = back.content?.[0];
+  assert.equal((fig as { attrs?: { alts?: string } }).attrs?.alts, 'A cat\\, sitting,Plain');
 });
 
 test('proseToMarkdown: empty alts on a figure is omitted', () => {

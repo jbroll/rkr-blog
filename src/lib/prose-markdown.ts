@@ -29,6 +29,7 @@ import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 
 import { safeLinkUrl } from './safe-url.ts';
+import { joinAlts, splitAlts } from './widget-helpers.ts';
 
 // ---- ProseMirror JSON shape (subset) ----------------------------------
 
@@ -264,12 +265,12 @@ function emitFigure(attrs: Record<string, unknown>): string {
   const altsRaw = attrs.alts;
   const altsList: string[] =
     typeof altsRaw === 'string'
-      ? altsRaw.split(',').map((s) => s.trim())
+      ? splitAlts(altsRaw)
       : Array.isArray(altsRaw)
         ? altsRaw.map((s) => (typeof s === 'string' ? s.trim() : ''))
         : [];
   if (altsList.some((a) => a.length > 0)) {
-    parts.push(`alts=${quote(altsList.join(','))}`);
+    parts.push(`alts=${quote(joinAlts(altsList))}`);
   }
 
   // Per-image captions (pipe-separated).

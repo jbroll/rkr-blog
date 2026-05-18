@@ -26,9 +26,7 @@ Format: **item** — _revisit when:_ trigger.
 - **Per-instance crops in multi-image directives** — crops are
   per-sidecar (global to every post using the image). _Revisit when:_
   an author wants the same image cropped differently in two posts.
-- **Container directive form for galleries** — leaf `alts="a,b,c"`
-  can't carry a comma in any single alt. _Revisit when:_ an alt needs
-  a comma, or per-image captions inside a multi-image directive.
+- **Container directive form for galleries** — leaf directive can't carry per-image captions. _Revisit when:_ per-image captions inside a multi-image directive are needed.
 - **Friendlier layout/position values** — values are machine strings
   (`1x2`/`bleed`/…); needs a labelled `<select>` + value migration.
   _Revisit when:_ an author finds the values confusing, or any

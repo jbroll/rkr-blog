@@ -59,6 +59,16 @@ export interface IdAndAlt {
   alt: string;
 }
 
+/** Split a comma-separated alts string, respecting \, escapes. */
+export function splitAlts(s: string): string[] {
+  return s.split(/(?<!\\),/).map((a) => a.replace(/\\,/g, ',').trim());
+}
+
+/** Join an alts array, escaping any commas inside individual values. */
+export function joinAlts(alts: string[]): string {
+  return alts.map((a) => a.replace(/,/g, '\\,')).join(',');
+}
+
 /**
  * Parse the `ids="abc,def,012"` attribute alongside the optional
  * parallel `alts="…"` attribute. Returns an order-preserving,
@@ -78,7 +88,7 @@ export interface IdAndAlt {
  */
 export function extractImageIdsAndAlts(idsRaw: unknown, altsRaw: unknown): IdAndAlt[] {
   if (typeof idsRaw !== 'string') return [];
-  const altsList = typeof altsRaw === 'string' ? altsRaw.split(',').map((s) => s.trim()) : [];
+  const altsList = typeof altsRaw === 'string' ? splitAlts(altsRaw) : [];
   const seen = new Set<string>();
   const out: IdAndAlt[] = [];
   const splits = idsRaw.split(',');
