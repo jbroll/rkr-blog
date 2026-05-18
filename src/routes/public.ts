@@ -153,7 +153,7 @@ export default async function publicRoutes(
       let siteBannerFigureFound = false;
       if (fs.existsSync(siteBannerPath)) {
         try {
-          const raw = fs.readFileSync(siteBannerPath, 'utf8');
+          const raw = await fs.promises.readFile(siteBannerPath, 'utf8');
           const { ast } = parsePost(raw);
           const figureNode = ast.children.find(
             (n): n is LeafDirective =>
@@ -192,7 +192,7 @@ export default async function publicRoutes(
       const top = rows[0];
       if (!isAdmin && site.postTeaser && top) {
         try {
-          const rawTop = fs.readFileSync(path.join(siteRoot, top.path), 'utf8');
+          const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
           const { ast } = parsePost(rawTop);
           const ctx = { siteRoot, widgets };
           const bannerHtml = await extractPostBanner(ast, ctx);
