@@ -95,13 +95,11 @@ export default async function adminRoutes(
       root: staticDir,
       prefix: '/static/',
       decorateReply: false,
-      // Service-Worker-Allowed lets the SW at /static/site/sw.js claim
-      // scope `/` rather than only `/static/site/`. Without this the
-      // browser rejects the registration the public templates issue.
-      // No effect on any other static asset.
+      // Service-Worker-Allowed lets sw-admin.js (served from /static/site/)
+      // claim scope `/admin/` rather than only `/static/site/`.
       setHeaders: (res, filepath) => {
-        if (filepath.endsWith(`${path.sep}site${path.sep}sw.js`)) {
-          res.setHeader('Service-Worker-Allowed', '/');
+        if (filepath.endsWith(`${path.sep}site${path.sep}sw-admin.js`)) {
+          res.setHeader('Service-Worker-Allowed', '/admin/');
         }
       }
     });

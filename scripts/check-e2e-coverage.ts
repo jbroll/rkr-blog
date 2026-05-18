@@ -30,10 +30,13 @@ const BASELINE_PATH = 'scripts/coverage-baseline.json';
 
 // Files exempt from the new-file gate. Service worker code runs in a
 // separate thread that Playwright's page.coverage can't instrument, so
-// the e2e suite is structurally unable to exercise these files. They
-// are covered by unit tests under test/site/ instead (e.g. sw-core.ts
-// at 100% lines via test/site/sw-core.test.ts).
-const EXEMPT: ReadonlySet<string> = new Set(['src/site/sw.ts', 'src/site/sw-core.ts']);
+// the e2e suite is structurally unable to exercise these files.
+const EXEMPT: ReadonlySet<string> = new Set([
+  'src/site/sw.ts',
+  'src/site/sw-core.ts',
+  'src/site/sw-admin.ts',
+  'src/site/sw-admin-register.ts'
+]);
 
 interface FileMetric {
   linesFound: number;

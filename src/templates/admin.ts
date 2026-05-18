@@ -9,7 +9,7 @@ import { escapeText } from '../lib/content.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { icon } from './icons.ts';
-import { type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
+import { bundleVersion, type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface AdminPageData extends SiteChrome {
   /** Where the compiled admin bundle is mounted on the URL space. */
@@ -40,6 +40,8 @@ ${stylesheetLinks()}
 ${ADMIN_CSS_CORE}
 ${ADMIN_CSS_DIALOGS}
 </style>
+<link rel="manifest" href="/static/admin-manifest.webmanifest"/>
+<script type="module" src="/static/site/sw-admin-register.js${bundleVersion()}" defer></script>
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: true })}
