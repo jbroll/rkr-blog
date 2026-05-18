@@ -8,19 +8,13 @@ Runs on any Node 22 host. No separate database to install.
 
 Authors can write, edit images, and queue posts without a connection. Changes sync automatically when connectivity returns. A status indicator shows what is pending. Pinned posts are available locally at any time.
 
----
-
 ## Comments
 
 Readers can leave comments without an account. Submissions are filtered for spam automatically using a local LLM, with a moderation queue for manual review.
 
-## Images from anywhere
+## Images
 
-Import photos directly into the editor from four sources: local files, any public URL, Google Drive, and OneDrive. Duplicate images from any source are detected and stored once.
-
-Quality and resolution settings are configurable in settings. PNG files are preserved losslessly.
-
-## Six image layout modes, one set of controls
+Import from four sources — local files, any public URL, Google Drive, and OneDrive — directly into the editor. Duplicate images from any source are detected and stored once. Quality and resolution settings are configurable in settings; PNG files are preserved losslessly.
 
 All image layouts share the same insertion and settings panel. Choose the arrangement from the toolbar:
 
@@ -30,8 +24,6 @@ All image layouts share the same insertion and settings panel. Choose the arrang
 - **Carousel** — horizontal scroll with keyboard navigation and optional autoplay; activates automatically when images exceed the grid layout capacity
 - **Full-bleed** — edge to edge across the viewport
 - **Inline** — flows with surrounding text
-
-## In-browser image editing
 
 Crop, rotate, flip, resize, and correct perspective without leaving the editor. Every operation is recorded as a named step that can be removed, undone, or redone — and the edit history persists across browser reloads. The stored original is never overwritten; remove any step and the image regenerates from it.
 
