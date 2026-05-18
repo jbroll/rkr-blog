@@ -3,6 +3,8 @@
 // element ids declared in templates/admin.ts; missing ids indicate a
 // template/main.ts mismatch and we fail loudly rather than soldier on.
 
+import { showToast } from './toast.ts';
+
 /** getElementById that throws if the element is missing. T defaults to
  * HTMLElement; pass a more specific subtype where the call site
  * narrows usage (e.g. $<HTMLInputElement>('rkr-slug').value). */
@@ -14,11 +16,13 @@ export function $<T extends HTMLElement = HTMLElement>(id: string): T {
 
 /** Update the status line under the toolbar. The single source of
  * progress / error feedback for the editor; tests + e2e specs assert
- * on its textContent. */
+ * on its textContent. Errors also show a persistent toast so the
+ * message is visible even when the status bar is scrolled off screen. */
 export function setStatus(msg: string, isError = false): void {
   const el = $('rkroll-admin-status');
   el.textContent = msg;
   el.classList.toggle('is-error', isError);
+  if (isError) showToast({ kind: 'error', text: msg, ttlMs: Infinity });
 }
 
 /** Status line with a trailing link — used after a successful save to
