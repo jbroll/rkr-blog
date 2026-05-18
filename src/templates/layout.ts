@@ -110,7 +110,7 @@ export interface FootOpts {
 export function siteFoot(site: SiteChrome['site'], _opts: FootOpts = {}): string {
   const year = new Date().getFullYear();
   return `<footer class="rkr-site-foot">
-  &copy; ${year} ${escapeText(site.title)}
+  &copy; ${year} ${escapeText(site.title)} &mdash; <a href="https://github.com/jbroll/rkr-blog">GitHub</a>
 </footer>`;
 }
 
