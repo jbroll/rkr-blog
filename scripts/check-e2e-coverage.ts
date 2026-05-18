@@ -32,8 +32,6 @@ const BASELINE_PATH = 'scripts/coverage-baseline.json';
 // separate thread that Playwright's page.coverage can't instrument, so
 // the e2e suite is structurally unable to exercise these files.
 const EXEMPT: ReadonlySet<string> = new Set([
-  'src/site/sw.ts',
-  'src/site/sw-core.ts',
   'src/site/sw-admin.ts',
   'src/site/sw-admin-register.ts'
 ]);

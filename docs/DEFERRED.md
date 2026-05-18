@@ -71,32 +71,16 @@ Format: **item** — _revisit when:_ trigger.
   _Revisit when:_ first co-author or multi-user pivot.
 - **User-facing theme picker** — theme is an env/ops action only.
   _Revisit when:_ author wants >1 theme live or per-post override.
-- **Comment bubble floated right in post title** — match the
-  roll-along.rkroll.com treatment. _Revisit when:_ next
-  comments-UI/post-title work, or explicit go-ahead.
 
 ## Performance / reliability
 
-- **Drop public/anon offline; keep authoring offline; make the editor
-  installable** — delete the public service worker + page/image cache
-  (`src/site/sw.ts` / `sw-core.ts` / `sw-register.ts` ≈285 LOC, the
-  `manifest` + `sw-register` refs in index/post/search/404, the
-  public-scoped manifest, `test/site/sw-core.test.ts`). Authoring
-  offline is OPFS/outbox and SW-independent — **untouched**. Then add
-  PWA installability for the **authoring** SPA (currently absent):
-  an `/admin`-scoped `manifest` (start_url `/admin/editor`, scope
-  `/admin`, icons, `display: standalone`) linked from `admin.ts`;
-  decide whether a minimal `/admin` SW is needed for cross-browser
-  install or modern manifest-only install suffices (the editor keeps
-  working offline via OPFS either way). Closes outright: the
-  post-deploy "30s to first page" SW-nav stall, SW
-  stale-vs-fresh-comments, and the public-offline indicator. _Revisit
-  when:_ ready — a decided simplification; needs a spec/plan.
-- **Post-deploy deploy-gate (non-SW half)** — independent of the
-  above: `node_app/start.sh` does `systemctl restart` + a blind
-  `sleep 2`, no `/health` poll. Minor once the SW stall is gone.
-  _Revisit when:_ deploys get frequent enough that the ~1s restart
-  window matters, or when touching `deploy.sh`.
+- **Make the editor installable as a PWA** — public pages already load
+  `sw-unregister.js` (anon SW teardown done); `sw-register.js` is now
+  admin-only. Remaining: add an `/admin`-scoped manifest (`start_url
+  /admin/editor`, scope `/admin`, icons, `display: standalone`) linked
+  from `admin.ts`; decide whether a minimal `/admin` SW is needed for
+  cross-browser install or manifest-only suffices (editor works offline
+  via OPFS either way). _Revisit when:_ ready — needs a spec/plan.
 - **Teaser top-post sync `fs.readFileSync`** — blocking read on the
   anon `GET /` teaser path (mirrors the `_site-banner.md` read).
   _Revisit when:_ the homepage sees bot/cache-miss traffic, or the
