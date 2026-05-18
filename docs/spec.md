@@ -11,8 +11,8 @@ For local development setup, see [developer-quickstart.md](./developer-quickstar
 ## 1. Goals
 
 - Static markdown is the canonical content format. Custom widget blocks
-  (images, galleries, carousels, diptychs/triptychs) are markdown
-  directives, not HTML.
+  (images, multi-image layouts, carousels) are markdown directives
+  (`::figure`), not HTML.
 - The editor never exposes markdown syntax to the author.
 - Image pipeline retains the unmodified master forever, records edits
   declaratively, and serves cached derivatives.
@@ -137,8 +137,10 @@ and clicks **Save edits**.
   reads it as the source for variant downscale + format encode.
 - `Reset edits` clears the local op chain (the master is untouched).
 - Switching to another image preserves in-progress edits across the
-  session. Reload silently discards them; reload while any image is
-  dirty surfaces a browser warning.
+  session. In-progress edits are persisted to OPFS on every change and
+  restored automatically on reload. Reload while any image is dirty
+  still surfaces a browser beforeunload warning (so the author
+  consciously confirms the reload), but the edits survive it.
 - Saving the post auto-commits any dirty image edits first; on
   failure the post save is aborted so partial state isn't published.
 
@@ -216,11 +218,11 @@ status: published
 
 Prose paragraph.
 
-::image{id=abcd1234ef56 alt="Caption text"}
+::figure{ids="abcd1234ef56" alts="Caption text"}
 
 More prose.
 
-::gallery{ids=[abcd…, ef01…, 2345…] layout=masonry}
+::figure{ids="abcd…,ef01…,2345…" matrix=masonry}
 ```
 
 Custom widgets use the [CommonMark generic directive](https://talk.commonmark.org/t/generic-directives-plugins-syntax/444)
@@ -228,9 +230,10 @@ syntax (`::name{attrs}`).
 
 ### Editor
 
-Custom node types per widget — the author sees image / gallery /
-carousel / diptych / triptych blocks, never the directive syntax.
-Round-trips through markdown on save and reload. The ProseMirror ⇄
+A single `figure` node type — the author sees image / gallery /
+carousel layouts (discriminated by the figure's `matrix` + `ids`
+count via the `figureKind` adapter), never the directive syntax.
+Round-trips through markdown on save and reload. The TipTap ⇄
 markdown conversion happens in the browser; `POST /admin/posts`
 accepts markdown directly so the same endpoint can be driven by other
 tools (e.g. the WordPress importer).
@@ -431,8 +434,11 @@ either mechanism, useful for scripted clients.
 ```
 # Public — public.ts
 GET    /                              rendered post index (paginated)
+GET    /about                         about page
+GET    /search                        full-text search page
 GET    /:slug                         rendered single post
 GET    /img/:filename                 derivative image (cache-miss handler)
+POST   /:slug/comments                anonymous reader comment submission
 
 # Liveness — server.ts
 GET    /health                        liveness probe
@@ -464,6 +470,20 @@ POST   /admin/sidecar/:id/commit      replace ops + (optional) post-ops bake upl
 # Admin settings — admin-settings.ts
 GET    /admin/settings                read site title / tagline / theme
 POST   /admin/settings                update site config
+POST   /admin/settings/site           set title + tagline via JSON (WP importer)
+POST   /admin/settings/banner         set site-wide banner image id via JSON
+POST   /admin/settings/gdrive/disconnect   revoke gdrive tokens for the session user
+POST   /admin/settings/onedrive/disconnect revoke onedrive tokens for the session user
+POST   /admin/reindex                 rebuild post index + FTS from markdown files
+GET    /admin/banner/edit             open (creating if absent) _site-banner.md in editor
+GET    /admin/about/edit              open (creating if absent) _about.md in editor
+
+# Admin comments — admin-comments.ts
+GET    /admin/comments                comment moderation list
+POST   /admin/comments/:id/:action    approve / reject / delete a comment (action ∈ {approve,reject,delete})
+
+# Admin tags — admin-tags.ts
+GET    /admin/tags                    tag autocomplete (query param: q)
 
 # Admin imports — admin-import-url.ts + integrations-{gdrive,onedrive}.ts
 POST   /admin/import/url              server-side fetch
@@ -473,13 +493,18 @@ POST   /admin/import/onedrive         OneDrive Picker payload
 # Admin offline pin/load — admin-post-bundle.ts
 GET    /admin/post-bundle/:slug       full post JSON for offline editor load
 
-# Integrations — integrations-gdrive.ts (and identical onedrive.ts)
+# Integrations — integrations-gdrive.ts + integrations-onedrive.ts
 GET    /admin/integrations/<p>/connect          OAuth initiation
 GET    /admin/integrations/<p>/callback         OAuth code exchange
 GET    /admin/integrations/<p>/picker-config    Picker SDK config
 GET    /admin/integrations/<p>/status           connected user info
 GET    /admin/integrations/<p>/access-token     short-lived token for Picker SDK
 POST   /admin/integrations/<p>/disconnect       revoke tokens
+
+# OneDrive-only extras (v8 File Picker protocol)
+GET    /admin/integrations/onedrive/picker-token   resource-scoped token for the File Picker v8 authenticate handler
+GET    /admin/integrations/onedrive/files          browse a OneDrive folder (query: folderId, nextLink)
+GET    /admin/integrations/onedrive/thumbnail      proxy a OneDrive item thumbnail (query: itemId)
 ```
 
 (`<p>` ∈ {`gdrive`, `onedrive`})
@@ -504,6 +529,7 @@ import-wp list <base-url>                    list posts on a WordPress source
 import-wp post <base-url> <id-or-slug>       import one WP post + every image it references
 import-wp push <base-url> <slug> --to <url>  push one post to a remote rkr-blog via /admin
 import-wp-comments <base-url>               import approved comments from a WordPress source
+fix-wp-dates                                repair WP-imported post dates using the filename prefix as truth
 reset --to <fly-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove

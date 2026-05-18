@@ -79,10 +79,8 @@ rkr-blog/
 │   │   ├── config.ts         # env-var resolution
 │   │   └── migrate.ts        # numbered SQL migrations
 │   ├── widgets/              # one file per widget directive
-│   │   ├── image.ts
-│   │   ├── gallery.ts
-│   │   ├── carousel.ts
-│   │   └── diptych.ts        # diptych + triptych
+│   │   ├── figure.ts
+│   │   └── figure-attrs.ts
 │   ├── admin/                # browser bundle (esbuild → static/admin/)
 │   │   │                     # ~35 files; bucketed by feature here.
 │   │   ├── main.ts           # editor SPA entry (500-line cap)
@@ -96,10 +94,15 @@ rkr-blog/
 │   │   │                     # insert paths: dialog, drag-drop, picker, file
 │   │   ├── local-thumb.ts, ingest-resize-client.ts
 │   │   │                     # client-side ingest resize before upload
-│   │   ├── image-edit.ts, image-edit-panel.ts, figure-node.ts
-│   │   │                     # per-image ops + figure attribute panel
+│   │   ├── image-edit.ts, image-edit-panel.ts, figure-node.ts,
+│   │   │   figure-attr-panel.ts, figure-reorder.ts, cell-delete.ts
+│   │   │                     # per-image ops + figure attribute panel + reorder
 │   │   ├── matrix-control.ts, cropper-modal.ts, perspective-modal.ts
 │   │   │                     # grid picker, cropper, perspective rectify
+│   │   ├── pending-uploads.ts, toast.ts
+│   │   │                     # upload-drain guard + transient toasts
+│   │   ├── settings-page.ts, tag-input.ts
+│   │   │                     # settings UI + tag input widget
 │   │   ├── canvas.ts, canvas-loaders.ts
 │   │   │                     # WebGL pipeline + image loader cache
 │   │   ├── opfs.ts, opfs-schema.ts
@@ -115,9 +118,12 @@ rkr-blog/
 │   ├── site/                 # browser bundle (esbuild → static/site/)
 │   │   ├── lightbox.ts
 │   │   ├── carousel.ts
-│   │   ├── sw.ts             # service worker — event-listener glue
-│   │   ├── sw-core.ts        # SW logic, pure (Node-testable via mock cache)
-│   │   └── sw-register.ts    # page-side SW registration + auth-flush hook
+│   │   ├── comment-form.ts, copy-link.ts, img-retry.ts
+│   │   │                     # public-page interactive scripts
+│   │   ├── sw-admin.ts       # admin service worker — event-listener glue
+│   │   ├── sw-admin-register.ts # admin SPA SW registration (/admin/ scope)
+│   │   ├── sw-unregister.ts  # anon-page script: unregisters any prior SW
+│   │   └── sw-core.ts        # SW logic, pure (Node-testable via mock cache)
 │   ├── templates/            # public-facing templates (template literals)
 │   │   ├── layout.ts
 │   │   ├── post.ts
@@ -411,9 +417,9 @@ it. Holds:
   snapshot used for the dirty check.
 - All op clicks mutate `LocalEditState` synchronously. No server I/O
   per click. Live preview rebuilds via `PipelineCache.apply`.
-- `saveImageEdits(id, s)` — POSTs ops + redoStack, then if there's
-  ops uploads the WebP bake; updates `baseline` only after both
-  calls land.
+- `saveImageEdits(id, s)` — POSTs a single multipart `commit` with
+  ops + redoStack and (when ops is non-empty) the WebP bake in one
+  atomic request; updates `baseline` only after the call lands.
 - `flushDirtyImageEdits()` — saves every dirty image in parallel
   via `Promise.allSettled`; called by both the per-image **Save
   edits** button and the post-Save flow (so saving the post auto-
@@ -421,31 +427,41 @@ it. Holds:
   post save).
 - `beforeunload` listener blocks reload while any image is dirty.
 - Per-image caches (`originalCache`, `pipelineCaches`,
-  `previewBlobUrls`) are bounded by a 16-entry LRU. Eviction
-  revokes Blob URLs so the underlying Blobs are freed.
-  `localEditState` is intentionally uncapped — entries are tiny
-  JSON and evicting a dirty entry would silently lose unsaved work.
+  `previewBlobUrls`) live in `src/admin/canvas-loaders.ts` and are
+  bounded by a 16-entry LRU. Eviction revokes Blob URLs so the
+  underlying Blobs are freed. `localEditState` is intentionally
+  uncapped — entries are tiny JSON and evicting a dirty entry would
+  silently lose unsaved work.
 
 ### Bake invalidation contract
 
-- `POST /admin/sidecar/:id/ops` snapshots `cache/img/<id>.*` filenames,
-  writes the new sidecar, then unlinks the bake AND the snapshotted
-  cache files. Snapshotting before the write avoids racing a
-  render-in-flight that's about to rename its tmp into final position
-  with the new ops.
-- `POST /admin/sidecar/:id/bake` writes the new bake atomically (tmp +
-  rename), then unlinks `cache/img/<id>.*` so re-bakes don't serve
-  stale derivative content.
-- A render request landing between `/ops` (bake gone) and the next
-  `/bake` (new bake lands) falls through to the original + applyOp
-  path. One slower request at most; correct content.
+`POST /admin/sidecar/:id/commit` is the single atomic image-edit save
+endpoint (replaced the prior two-step `/ops` + `/bake` split). It accepts
+a multipart payload with two parts:
+
+- `ops` (text field) — JSON containing the new `ops` and `redoStack`.
+- `bake` (file part) — the client-rendered WebP. Required when `ops`
+  is non-empty; forbidden when `ops` is empty (the "clear all edits" case).
+
+Invalidation sequence within the handler:
+
+1. Snapshot `cache/img/<id>.*` filenames **before any write** to avoid
+   racing a render-in-flight that's about to rename its tmp into place.
+2. Write (or unlink) the bake file atomically via tmp + rename.
+3. Write the updated sidecar.
+4. Unlink the snapshotted stale cache files.
+
+The previous `/ops` + `/bake` split left a window between two separate
+HTTP requests where ops and bake could disagree; the `/commit` endpoint
+reduces that window to adjacent filesystem operations in a single request.
+A render landing in that window falls through to the original + applyOp
+path: one slower request at most, always correct content.
 
 ### Magic-byte validation
 
-`POST /admin/sidecar/:id/bake` checks the body starts with `RIFF????WEBP`
-before writing. Cheap defense at the boundary against arbitrary
-bytes labeled as `image/webp`. Body is capped at 25 MB
-(`BAKE_MAX_BYTES`); WebP at q=0.95 for a 50 MP source is ~5–10 MB so
+`POST /admin/sidecar/:id/commit` checks the bake body starts with
+`RIFF????WEBP` and decodes it via sharp before writing. Body is capped at
+25 MB (`BAKE_MAX_BYTES`); WebP at q=0.95 for a 50 MP source is ~5–10 MB so
 real bakes are well under.
 
 ## 6. Job worker lifecycle
@@ -657,7 +673,7 @@ step N's signal is green.
 - [x] Edits-list panel with delete-step, undo, redo, reset.
 - [x] `GET /admin/original/:id` streams the master so the client can decode once per session.
 - [x] Per-image `PipelineCache` for incremental "added one op" execution.
-- [x] `POST /admin/sidecar/:id/bake` accepts `image/webp` (≤25 MB) and stores `bakes/<id>.webp`. `renderDerivative` prefers it.
+- [x] `POST /admin/sidecar/:id/commit` atomically saves ops + WebP bake in one multipart request; stores `bakes/<id>.webp` and invalidates stale cache derivatives. `renderDerivative` prefers the bake.
 - [x] `LocalEditState` with explicit "Save edits" button. Dirty/clean flips Save button state.
 - [x] Cropper sources from the local post-ops canvas; crop appends to ops.
 - [x] Post-Save auto-commits dirty image edits; `beforeunload` warns; LRU caps in-browser caches.
@@ -675,15 +691,20 @@ step N's signal is green.
 - [x] `static/manifest.webmanifest` + 192/512 icons.
 - [x] `<link rel="manifest">` in public templates (`layout.ts`,
       `post.ts`, `index.ts`).
-- [x] `src/site/sw.ts` event-listener glue + `src/site/sw-core.ts`
+- [x] `src/site/sw-admin.ts` event-listener glue + `src/site/sw-core.ts`
       pure cache/route logic. Three caches:
       `rkr-shell-v<hash>`, `rkr-pages-v<hash>`, `rkr-images-v<hash>`.
 - [x] Cache-first for `/img/*`, SWR for `/static/*` + page navs;
       `Cache-Control: no-store` opt-out for session-private bodies.
-- [x] `src/site/sw-register.ts` registers + listens for the
-      `rkr-pages-flush` postMessage from login/logout.
-- [x] Bake-ops-hash server guard (`X-Rkr-Bake-Ops-Hash`); 409 on
-      mismatch; client re-bakes + retries.
+- [x] `src/site/sw-admin-register.ts` registers the admin SW at scope
+      `/admin/` and listens for the `rkr-pages-flush` postMessage.
+      Loaded only from the admin SPA template.
+- [x] `src/site/sw-unregister.ts` loaded on all **public (anon) pages**
+      instead of sw-register. Actively unregisters any previously
+      installed SW at scope `/` so casual readers don't retain stale
+      offline caching. Also strips the `?_rkr` cache-bust param and
+      posts `rkr-pages-flush` to any still-active SW controller before
+      unregistering.
 - [x] Content-hashed bundles via esbuild; bundle-size ratchet
       via `coverage-baseline.json` sibling `bundle-size-baseline.json`.
 
@@ -729,15 +750,16 @@ top-level comment (no `parent_id` of its own).
 
 Submit → `pending` row written + `classify` job enqueued on the existing
 `jobs` table → the in-process worker's classify handler calls the Ollama
-proxy (`llama3.2:3b` at `symon.rkroll.com:554/ollama`, Bearer token from
-`OLLAMA_TOKEN`) → ham auto-publishes; spam, timeout, or any failure
-leaves the comment `queued` for manual review (fail-safe: unscored
+proxy (`SPAM_MODEL`, default `llama3.2:3b`, at `OLLAMA_BASE_URL`, Bearer
+token from `OLLAMA_TOKEN`) → ham auto-publishes; spam, timeout, or any
+failure leaves the comment `queued` for manual review (fail-safe: unscored
 comments never auto-publish). Retries live inside the classifier
-(`SPAM_MAX_ATTEMPTS` attempts per job invocation) because the `jobs`
-table has no built-in auto-retry — a deliberate, faithful realization
-of the spec's "bounded retries, queue on failure". If `OLLAMA_BASE_URL`
-is unset (or the proxy is unreachable), the classify job fails safe: after
-bounded retries the comment is set to `queued` for manual review.
+(`SPAM_MAX_ATTEMPTS` attempts per job invocation, default 3) because the
+`jobs` table has no built-in auto-retry — a deliberate, faithful
+realization of the spec's "bounded retries, queue on failure". If
+`OLLAMA_BASE_URL` is unset (or the proxy is unreachable), the classify job
+fails safe: after bounded retries the comment is set to `queued` for manual
+review.
 
 ### Anti-abuse (pre-LLM)
 

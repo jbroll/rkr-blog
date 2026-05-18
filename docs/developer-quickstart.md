@@ -31,8 +31,7 @@ SITE_ROOT=$HOME/site bin/site-admin init
 
 1. **`npm install`** — pulls every Node dep, including the binary
    ones: `sharp` (libvips bindings; ships prebuilds for
-   Debian / Ubuntu / macOS / glibc + ARM), `argon2` (no longer used —
-   if you see it in node_modules it's stale), and the dev tooling
+   Debian / Ubuntu / macOS / glibc + ARM), and the dev tooling
    (biome, knip, dpdm, c8, esbuild, tiptap, cropperjs, @playwright/test).
 2. **`npx playwright install chromium`** — downloads Chrome Headless
    Shell (~110 MB) into the Playwright cache. Required for
@@ -40,7 +39,8 @@ SITE_ROOT=$HOME/site bin/site-admin init
 3. **`npm run hooks:install`** — sets `git config core.hooksPath` to
    `.githooks/` so `pre-commit` runs the full gate (biome / tsc /
    duplicate-type / no-reexports / knip / circular-import / size /
-   c8 coverage thresholds / npm test).
+   c8 coverage thresholds; plus bundle-size ratchet + e2e + e2e
+   coverage ratchet when `src/admin/**` or `src/site/**` is staged).
 
 ### Distro-specific Sharp notes
 
@@ -180,14 +180,14 @@ npm run test:coverage:full   # c8 (server) + e2e (browser) end-to-end;
 shim to test directly; the pure-math siblings already moved to
 `src/lib/` are covered). `test:e2e` fills that gap by capturing V8
 coverage of the live admin bundle: every spec wraps `page.coverage.
-startJSCoverage()` via the fixture in `test-e2e/coverage-fixtures.ts`,
+startJSCoverage()` via the fixture in `test/e2e/coverage-fixtures.ts`,
 the global teardown emits an HTML report at `coverage/e2e/index.html`
 and lcov at `coverage/e2e/lcov.info`. Source maps map the bundle URLs
 back to `src/admin/*.ts` and `src/site/*.ts` so the report is in
 source-file space.
 
-`test:e2e` boots the server via `test-e2e/server-runner.ts` against a
-freshly-mkdtemp'd SITE_ROOT, runs the spec files in `test-e2e/`, and
+`test:e2e` boots the server via `test/e2e/server-runner.ts` against a
+freshly-mkdtemp'd SITE_ROOT, runs the spec files in `test/e2e/`, and
 tears down. The chromium binary it drives was installed by
 `npm run setup`; if `playwright install` was skipped (or the cache
 was cleared), re-run `npx playwright install chromium`.
@@ -210,13 +210,17 @@ npm run circular                        # dpdm circular-import survey
 
 Each is invokable on demand if you want to debug a specific failure.
 The size hook (per-file 500-line ceiling for `src/`/`bin/`; tests
-exempt) is inline in the hook itself.
+exempt) is inline in the hook itself. When `src/admin/**` or
+`src/site/**` files are staged the hook additionally runs:
+`build:admin`, `build:site`, the bundle-size ratchet
+(`scripts/check-bundle-size.ts`), the full e2e suite, and the e2e
+coverage ratchet (`scripts/check-e2e-coverage.ts`).
 
 ## 7. Building the admin bundle
 
 ```bash
 npm run build:admin          # esbuild → static/admin/main.js
-npm run build:site           # esbuild → static/site/{lightbox,carousel,img-retry}.js
+npm run build:site           # esbuild → static/site/ (lightbox, carousel, img-retry, copy-link, comment-form, sw-unregister, sw-admin, sw-admin-register)
 npm run build                # both
 ```
 
@@ -252,6 +256,7 @@ npm run build:admin                       # esbuild → static/admin/main.js
 npm run build:site                        # esbuild → static/site/*.js
 npm run build                             # both
 npm run clean:admin                       # rm -rf static/admin
+npm run clean:site                        # rm -rf static/site
 
 # CLI
 SITE_ROOT=$HOME/site bin/site-admin init
