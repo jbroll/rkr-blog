@@ -16,6 +16,7 @@
 import type { Editor } from '@tiptap/core';
 
 import { LOCK_GRACE_MS } from '../lib/eviction-pure.ts';
+import { splitIds } from '../lib/figure-ids.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
 import { mutateRoot, OPFS_DIRS, type OpfsRoot } from './opfs-schema.ts';
 
@@ -158,10 +159,7 @@ function refIdsFromDoc(doc: unknown): string[] {
     const node = stack.pop();
     if (!node) continue;
     if (node.type === 'figure' && typeof node.attrs?.ids === 'string') {
-      for (const id of node.attrs.ids.split(',')) {
-        const trimmed = id.trim();
-        if (trimmed) ids.add(trimmed);
-      }
+      for (const id of splitIds(node.attrs.ids)) ids.add(id);
     }
     if (Array.isArray(node.content)) {
       for (const c of node.content) stack.push(c);
