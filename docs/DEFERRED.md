@@ -135,4 +135,3 @@ Format: **item** — _revisit when:_ trigger.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
-- **Gauntlet `tsc include` misses test subdirs** — `test/admin`, `test/routes`, `test/site` are NOT type-checked by pre-commit (tests run via `--experimental-strip-types`). _Revisit when:_ next test-infra/tsconfig touch — widen include or add a `tsconfig.test.json`.

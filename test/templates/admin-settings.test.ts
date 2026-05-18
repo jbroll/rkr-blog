@@ -11,7 +11,8 @@ test('renderAdminSettingsPage: form pre-fills persisted values', () => {
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   // Title + tagline are <input value="…">.
   assert.match(html, /<input id="rkr-settings-title"[^>]*value="My Blog"/);
@@ -38,7 +39,8 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.match(html, /<input id="rkr-settings-title"[^>]*value=""/);
   assert.match(html, /placeholder="rkroll"/);
@@ -52,7 +54,8 @@ test('renderAdminSettingsPage: title + tagline escape HTML', () => {
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.ok(!html.includes('<script>x</script>'), 'title must be escaped');
   // The quote in the tagline must be entity-escaped so it doesn't
@@ -70,6 +73,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     onedriveConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
+    hasAbout: false,
     flash: { kind: 'ok', text: 'Settings saved.' }
   });
   assert.doesNotMatch(ok, /rkr-admin-settings-flash/);
@@ -82,6 +86,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     onedriveConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
+    hasAbout: false,
     flash: { kind: 'error', text: 'title too long' }
   });
   assert.match(err, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
@@ -95,7 +100,8 @@ test('renderAdminSettingsPage: save button is in the heading row with a disk ico
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   // Heading and button share a flex row.
   assert.match(html, /rkr-admin-settings-heading-row/);
@@ -113,7 +119,8 @@ test('renderAdminSettingsPage: build chip shows the short git hash with full sha
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'abc123def456789ffeed0011223344556677889a',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   // Short form (12 chars) is the visible text; full sha is in the
   // title attr so a hover reveals the exact commit.
@@ -130,7 +137,8 @@ test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.match(html, /<code[^>]*>unknown<\/code>/);
 });
@@ -143,7 +151,8 @@ test('renderAdminSettingsPage: ingestResize fields show persisted values', () =>
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.match(html, /value="2400"/);
   assert.match(html, /value="80"/);
@@ -158,7 +167,8 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
     gdriveConnected: true,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.match(htmlGdrive, /Disconnect/);
 
@@ -169,7 +179,8 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
     gdriveConnected: false,
     onedriveConnected: true,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.match(htmlOnedrive, /Disconnect/);
 });
@@ -186,7 +197,8 @@ test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/banner/e
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: true
+    hasBanner: true,
+    hasAbout: false
   });
   assert.match(html, /href="\/admin\/banner\/edit"/);
   assert.match(html, /Edit banner/);
@@ -201,7 +213,8 @@ test('renderAdminSettingsPage: hasBanner=false shows create link to /admin/banne
     gdriveConnected: false,
     onedriveConnected: false,
     gitHash: 'unknown',
-    hasBanner: false
+    hasBanner: false,
+    hasAbout: false
   });
   assert.match(html, /href="\/admin\/banner\/edit"/);
   assert.match(html, /Create banner/);
@@ -217,7 +230,8 @@ test('renderAdminSettingsPage: banner section heading present in both states', (
       gdriveConnected: false,
       onedriveConnected: false,
       gitHash: 'unknown',
-      hasBanner
+      hasBanner,
+      hasAbout: false
     });
     assert.match(html, /Banner/, `Banner heading missing when hasBanner=${hasBanner}`);
   }

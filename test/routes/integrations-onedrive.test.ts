@@ -611,7 +611,7 @@ test('GET /admin/integrations/onedrive/files: returns items from Graph', async (
   assert.equal(res.statusCode, 200);
   const body = res.json<{ items: Array<{ name: string }> }>();
   assert.equal(body.items.length, 1);
-  assert.equal(body.items[0].name, 'photo.jpg');
+  assert.equal(body.items[0]?.name, 'photo.jpg');
 });
 
 test('GET /admin/integrations/onedrive/files: 400 when Graph call fails', async (t) => {

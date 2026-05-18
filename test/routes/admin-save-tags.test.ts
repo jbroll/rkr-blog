@@ -71,8 +71,8 @@ test('POST /admin/posts: invalid tag entries stripped (non-string, too long, bla
   assert.doesNotMatch(md, /- {33,}/); // long tag not present
   // only valid tag in the list
   const tagBlock = md.match(/^tags:\n((?:- .+\n?)*)/m);
-  assert.ok(tagBlock, 'tags block present');
-  assert.equal(tagBlock?.[1].trim(), '- valid');
+  assert.ok(tagBlock?.[1], 'tags block present');
+  assert.equal(tagBlock[1].trim(), '- valid');
 });
 
 test('POST /admin/posts: duplicate tags deduplicated (case-preserving first occurrence)', async (t) => {
