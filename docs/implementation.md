@@ -48,130 +48,19 @@ to add any of them.
 
 ## 2. Repo layout
 
-```
-rkr-blog/
-├── bin/
-│   ├── site-admin            # CLI entry point (Node shebang)
-│   └── server.js             # Fastify entry point
-├── src/
-│   ├── lib/                  # framework-agnostic library code
-│   │   ├── db.ts             # node:sqlite wrapper
-│   │   ├── hash.ts           # canonical-JSON, sha256, cache-key derivation
-│   │   ├── sidecar.ts        # read/write/validate sidecars
-│   │   ├── render.ts         # renderDerivative + Sharp pipeline
-│   │   ├── jobs.ts           # job queue operations
-│   │   ├── posts.ts          # post markdown read/parse/serialize
-│   │   ├── prose-markdown.ts # TipTap JSON ⇄ markdown directive round-trip (bundled into the admin browser bundle; not server-side at runtime)
-│   │   ├── safe-url.ts       # URL-scheme allowlist (shared by content.ts + prose-markdown.ts)
-│   │   ├── widgets.ts        # widget registry, dispatch
-│   │   ├── content.ts        # HTML escape, sanitize
-│   │   ├── render-formats.ts # constants for output format/quality
-│   │   ├── url-safety.ts     # SSRF guard for /admin/import/url
-│   │   ├── secrets.ts        # AES-256-GCM token encryption
-│   │   ├── google-jwt.ts     # ID-token verify
-│   │   ├── google-drive.ts   # picker + drive v3 client
-│   │   ├── microsoft-graph.ts# OneDrive picker + Graph API client
-│   │   ├── csrf.ts           # CSRF Origin/Referer guard for state-changing methods
-│   │   ├── auth-middleware.ts# requireUser
-│   │   ├── sessions.ts       # server-side session table
-│   │   ├── users.ts          # users + allowlist + oauth_accounts
-│   │   ├── oauth-tokens.ts   # encrypted picker tokens
-│   │   ├── config.ts         # env-var resolution
-│   │   └── migrate.ts        # numbered SQL migrations
-│   ├── widgets/              # one file per widget directive
-│   │   ├── figure.ts
-│   │   └── figure-attrs.ts
-│   ├── admin/                # browser bundle (esbuild → static/admin/)
-│   │   │                     # ~35 files; bucketed by feature here.
-│   │   ├── main.ts           # editor SPA entry (500-line cap)
-│   │   ├── startup.ts, toolbar.ts, dom.ts, dialog-focus.ts
-│   │   │                     # editor scaffolding + cross-module glue
-│   │   ├── save.ts, draft.ts, page-title.ts, attr-commit.ts
-│   │   │                     # post save + draft persistence + status bar
-│   │   ├── posts-list.ts, pin.ts
-│   │   │                     # /admin posts table + pin-to-home toggle
-│   │   ├── image-insert.ts, drag-drop.ts, pick.ts, upload.ts
-│   │   │                     # insert paths: dialog, drag-drop, picker, file
-│   │   ├── local-thumb.ts, ingest-resize-client.ts
-│   │   │                     # client-side ingest resize before upload
-│   │   ├── image-edit.ts, image-edit-panel.ts, figure-node.ts,
-│   │   │   figure-attr-panel.ts, figure-reorder.ts, cell-delete.ts
-│   │   │                     # per-image ops + figure attribute panel + reorder
-│   │   ├── matrix-control.ts, cropper-modal.ts, perspective-modal.ts
-│   │   │                     # grid picker, cropper, perspective rectify
-│   │   ├── pending-uploads.ts, toast.ts
-│   │   │                     # upload-drain guard + transient toasts
-│   │   ├── settings-page.ts, tag-input.ts
-│   │   │                     # settings UI + tag input widget
-│   │   ├── canvas.ts, canvas-loaders.ts
-│   │   │                     # WebGL pipeline + image loader cache
-│   │   ├── opfs.ts, opfs-schema.ts
-│   │   │                     # OPFS abstraction + versioned schema
-│   │   ├── outbox.ts, sync.ts, drainers.ts
-│   │   │                     # offline queue + leader-elected drain
-│   │   ├── eviction.ts, storage-panel.ts
-│   │   │                     # LRU + 7-day TTL + storage UI
-│   │   ├── online-state.ts, status-badge.ts
-│   │   │                     # navigator.onLine + HEAD probe state machine
-│   │   └── integrations/{gdrive,onedrive}.ts
-│   │                         # cloud-picker shims (server endpoints in routes/)
-│   ├── site/                 # browser bundle (esbuild → static/site/)
-│   │   ├── lightbox.ts
-│   │   ├── carousel.ts
-│   │   ├── comment-form.ts, copy-link.ts, img-retry.ts
-│   │   │                     # public-page interactive scripts
-│   │   ├── sw-admin.ts       # admin service worker — event-listener glue
-│   │   ├── sw-admin-register.ts # admin SPA SW registration (/admin/ scope)
-│   │   ├── sw-unregister.ts  # anon-page script: unregisters any prior SW
-│   │   └── sw-core.ts        # SW logic, pure (Node-testable via mock cache)
-│   ├── templates/            # public-facing templates (template literals)
-│   │   ├── layout.ts
-│   │   ├── post.ts
-│   │   ├── index.ts
-│   │   └── admin.ts          # editor SPA shell
-│   ├── routes/               # Fastify plugin modules
-│   │   ├── public.ts
-│   │   ├── admin.ts
-│   │   ├── auth.ts
-│   │   ├── integrations-gdrive.ts
-│   │   └── integrations-onedrive.ts
-│   ├── cli/                  # one file per `site-admin` subcommand
-│   │   ├── init.ts
-│   │   ├── migrate.ts
-│   │   ├── render.ts
-│   │   ├── reindex.ts
-│   │   ├── gc.ts
-│   │   ├── verify.ts
-│   │   ├── jobs.ts
-│   │   ├── user.ts
-│   │   ├── reset.ts
-│   │   ├── import-wp.ts
-│   │   └── server.ts
-│   └── server.ts             # buildApp() for tests + bin/server.js
-├── test/                     # mirrors src/ layout (server-side unit suite)
-│   ├── lib/, routes/, widgets/, cli/
-│   ├── site/                 # browser-only code unit-tested in Node
-│   │                         # (sw-core etc. — paths Playwright can't
-│   │                         # reach because the SW runs in its own
-│   │                         # thread)
-│   └── fixtures/
-│       ├── images/           # small JPEGs/PNGs (committed)
-│       └── posts/, sidecars/
-├── migrations/
-│   ├── 001_initial.sql
-│   └── 002_auth.sql
-├── deploy/
-│   ├── apache.conf           # vhost template
-│   └── systemd.service       # systemd unit
-├── biome.json
-├── tsconfig.json             # server-side TS (strict, noEmit, type-strip)
-├── tsconfig.browser.json     # admin/site → static/
-├── package.json
-├── README.md
-├── spec.md
-├── implementation.md         # this document
-└── developer-quickstart.md
-```
+| Directory | Purpose |
+|---|---|
+| `bin/` | CLI entry point (`site-admin`) and server entry point |
+| `src/lib/` | Framework-agnostic library code: DB wrapper, image pipeline, posts, auth, sessions, config |
+| `src/widgets/` | Public renderer widget — `::figure` only |
+| `src/admin/` | Editor browser bundle (esbuild → `static/admin/`): ~40 files covering editing, image ops, offline sync, and settings |
+| `src/site/` | Public-page browser scripts (esbuild → `static/site/`): lightbox, carousel, comment form, service worker |
+| `src/templates/` | Server-side HTML templates (TypeScript template literals) |
+| `src/routes/` | Fastify route modules (one per concern) |
+| `src/cli/` | One file per `site-admin` subcommand |
+| `test/` | Unit + integration tests mirroring `src/` layout; e2e specs under `test/e2e/` |
+| `migrations/` | Numbered SQL migration files applied by `site-admin migrate` |
+| `deploy/` | Apache vhost template and systemd unit |
 
 The runtime data tree (`originals/`, `sidecars/`, `bakes/`, `cache/`,
 `content/`, `data/`) lives **outside** the repo, configured via
@@ -203,145 +92,25 @@ $SITE_ROOT/
 
 ## 4. Database
 
-### `lib/db.ts` interface
+`src/lib/db.ts` is a thin wrapper around `node:sqlite` that normalises null-prototype rows, provides `transaction()`, and coerces bigint rowids. It is not designed for swap-out parity — the wrapper exists to keep call sites clean.
 
-```ts
-export function open(path: string): DB;
+`node:sqlite` requires `--experimental-sqlite` on Node 22 (unflagged on Node 24+). The server and CLI suppress the startup notice with `--no-warnings=ExperimentalWarning`.
 
-interface DB {
-  prepare(sql: string): Statement;
-  exec(sql: string): void;
-  transaction<T>(fn: (db: DB) => T): T;
-  pragma(name: string, value?: string): unknown;
-  close(): void;
-}
+### Tables
 
-interface Statement {
-  run(...params: unknown[]): { changes: number; lastInsertRowid: number };
-  get(...params: unknown[]): Row | undefined;
-  all(...params: unknown[]): Row[];
-  iterate(...params: unknown[]): AsyncIterator<Row>;
-}
-```
+| Table | Purpose |
+|---|---|
+| `schema_migrations` | Tracks applied migration versions |
+| `posts` | Index over `content/posts/*.md` — rebuilt by `site-admin reindex`; not the source of truth |
+| `jobs` | Render job queue with atomic state transitions; deduped by cache key |
+| `users` | Author accounts with `owner` / `editor` roles |
+| `oauth_accounts` | OAuth provider + subject ID linked to a user |
+| `allowed_emails` | Invite allowlist; a Google login only creates a user if the email is present here |
+| `sessions` | Server-side sessions (30-day fixed expiry; `last_seen_at` updated on each request) |
+| `oauth_tokens` | Encrypted Drive / OneDrive picker tokens per user |
+| `comments` | Reader comments with `pending` / `published` / `rejected` / `queued` status |
 
-`iterate` calls `all()` and yields each row — not a streaming reader.
-If a streaming need appears, swap the driver or paginate at the call site.
-
-`node:sqlite` requires `--experimental-sqlite` on Node 22 (unflagged on
-24+). The server and CLI both run with `--no-warnings=ExperimentalWarning`
-to suppress the stderr notice.
-
-### Schema (migrations/001_initial.sql)
-
-```sql
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE schema_migrations (
-  version INTEGER PRIMARY KEY,
-  applied_at TEXT NOT NULL
-);
-
-CREATE TABLE posts (
-  id INTEGER PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL,
-  title TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('draft','published')),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  published_at TEXT,
-  path TEXT NOT NULL                  -- relative path under content/
-);
-CREATE INDEX posts_status_published ON posts(status, published_at DESC);
-
-CREATE TABLE jobs (
-  id INTEGER PRIMARY KEY,
-  kind TEXT NOT NULL,                 -- 'render'
-  payload TEXT NOT NULL,              -- JSON: {originalId, ops, variant, output}
-  state TEXT NOT NULL                 -- 'queued','running','done','failed'
-    CHECK (state IN ('queued','running','done','failed')),
-  attempts INTEGER NOT NULL DEFAULT 0,
-  error TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  cache_key TEXT UNIQUE               -- dedupe: same derivative not enqueued twice
-);
-CREATE INDEX jobs_state_created ON jobs(state, created_at);
-```
-
-### Schema (migrations/002_auth.sql)
-
-```sql
-DROP TABLE IF EXISTS auth;
-DROP TABLE IF EXISTS sessions;
-DROP TABLE IF EXISTS oauth_tokens;
-
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  display_name TEXT,
-  role TEXT NOT NULL CHECK (role IN ('owner','editor')),
-  created_at TEXT NOT NULL,
-  last_seen_at TEXT
-);
-
-CREATE TABLE oauth_accounts (
-  provider TEXT NOT NULL,             -- 'google'
-  provider_sub TEXT NOT NULL,         -- the OAuth subject id
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (provider, provider_sub)
-);
-CREATE INDEX oauth_accounts_user ON oauth_accounts(user_id);
-
-CREATE TABLE allowed_emails (
-  email TEXT PRIMARY KEY,
-  role TEXT NOT NULL CHECK (role IN ('owner','editor')),
-  invited_at TEXT NOT NULL,
-  invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL
-);
-
-CREATE TABLE sessions (
-  id TEXT PRIMARY KEY,                -- 32 random bytes hex
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  last_seen_at TEXT,
-  ip TEXT,
-  user_agent TEXT
-);
-CREATE INDEX sessions_user ON sessions(user_id);
-CREATE INDEX sessions_expires ON sessions(expires_at);
-
-CREATE TABLE oauth_tokens (
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL,             -- 'gdrive', 'onedrive'
-  access_token BLOB NOT NULL,         -- encrypted
-  refresh_token BLOB,                 -- encrypted
-  expires_at TEXT NOT NULL,
-  scope TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (user_id, provider)
-);
-```
-
-The posts table is an **index** over the markdown files, not the
-source of truth. `site-admin reindex` rebuilds it from the
-filesystem.
-
-### Migration strategy
-
-```
-migrations/
-  001_initial.sql
-  002_add_xyz.sql
-```
-
-`site-admin migrate` reads the directory, sorts numerically, applies
-any version not yet in `schema_migrations` inside its own
-transaction. No down-migrations in v1; rollback by restore from
-backup.
+See `migrations/` for the full schema. `site-admin migrate` applies any unapplied file numerically, each in its own transaction. No down-migrations in v1; rollback by restore from backup.
 
 ## 5. Image pipeline internals
 
@@ -477,15 +246,7 @@ contexts:
    `os.cpus().length - 1` so an interactive batch doesn't starve a
    live server on the same box.
 
-Both compete for jobs by atomic SQLite state transitions:
-
-```sql
-UPDATE jobs SET state = 'running', updated_at = ?
- WHERE id = ? AND state = 'queued'
-RETURNING id;
-```
-
-If `RETURNING` returns no row, another worker took the job; move on.
+Both compete for jobs via an atomic SQLite `UPDATE … WHERE state = 'queued' RETURNING id`. If the update returns no row another worker claimed it first; move on.
 
 ### HTTP miss handling
 
@@ -509,27 +270,13 @@ constructing the app (currently only used by tests).
 
 ## 7. Front proxy (Apache vhost)
 
-```apache
-<VirtualHost *:443>
-    DocumentRoot /var/www/site
+The vhost template lives at `deploy/apache.conf`. Key behaviours:
 
-    RewriteEngine On
-    RewriteCond %{DOCUMENT_ROOT}/cache%{REQUEST_URI} -f
-    RewriteRule ^/img/(.*)$ /cache/img/$1 [L]
+- `mod_rewrite` checks whether the requested `/img/*` path exists on disk; if so it rewrites directly to the `cache/img/` file, bypassing Node entirely.
+- Everything else proxies to `localhost:3000`.
+- `cache/` and `static/` responses carry `Cache-Control: public, max-age=31536000, immutable`. The `immutable` flag is accurate because cache filenames are content-hashed.
 
-    ProxyPreserveHost On
-    ProxyPass        / http://127.0.0.1:3000/ enablereuse=on
-    ProxyPassReverse / http://127.0.0.1:3000/
-
-    <LocationMatch "^/(cache|static)/">
-        Header set Cache-Control "public, max-age=31536000, immutable"
-    </LocationMatch>
-</VirtualHost>
-```
-
-Required modules: `rewrite`, `proxy`, `proxy_http`, `headers`,
-`expires`. `immutable` is honest because cache filenames are
-content-hashed.
+Required modules: `rewrite`, `proxy`, `proxy_http`, `headers`, `expires`.
 
 ## 8. Editor browser bundle
 
@@ -565,26 +312,9 @@ field.
 
 ## 10. Deployment
 
-```bash
-# system deps
-apt install nodejs apache2
-a2enmod rewrite proxy proxy_http headers expires
-a2ensite rkroll
-systemctl reload apache2
+See `deploy/apache.conf` for the vhost template and `deploy/systemd.service` for the systemd unit. Full step-by-step setup is in [developer-quickstart.md](./developer-quickstart.md).
 
-# app
-git clone <repo> /opt/rkr-blog
-cd /opt/rkr-blog
-npm ci
-SITE_ROOT=/var/www/site bin/site-admin init
-cp deploy/systemd.service /etc/systemd/system/rkroll.service
-systemctl enable --now rkroll
-```
-
-Sharp on Debian/Ubuntu uses prebuilt binaries. On Void or musl-based
-distros, fall back to `xbps-install vips vips-devel && npm install
---build-from-source sharp`. Production VPS is glibc, so `node_modules`
-should not be shipped between dev and prod — install on target.
+Sharp on Debian/Ubuntu uses prebuilt binaries. On musl-based distros (Void, Alpine) build from source: install `vips-devel` then `npm install --build-from-source sharp`. Production is glibc; do not ship `node_modules` between dev and prod — install on target.
 
 ## 11. Build order with acceptance criteria
 
