@@ -78,8 +78,8 @@
       "linesHit": 30
     },
     "src/admin/startup.ts": {
-      "linesFound": 33,
-      "linesHit": 30
+      "linesFound": 43,
+      "linesHit": 37
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -231,7 +231,7 @@
     },
     "src/admin/toast.ts": {
       "linesFound": 26,
-      "linesHit": 23
+      "linesHit": 26
     },
     "127.0.0.1-3789/static/admin/chunk-RFBBAUMM.js": {
       "linesFound": 1,

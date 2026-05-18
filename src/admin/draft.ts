@@ -34,6 +34,14 @@ interface DraftMeta {
   schemaVersion: 1;
   draftId: string;
   slug?: string;
+  /** Post title — persisted so page reload restores the title input. */
+  title?: string;
+  /** Post subtitle — same reload-survival purpose as title. */
+  subtitle?: string;
+  /** Raw comma-separated tags string from the tags input. */
+  tags?: string;
+  /** Date string in YYYY-MM-DD form from the date input. */
+  date?: string;
   /** Server-side updated_at as of the last sync. Echoed back as
    * X-Rkr-Last-Synced-At for the optimistic-concurrency check. */
   lastSyncedAt?: string;

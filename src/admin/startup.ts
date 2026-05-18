@@ -5,7 +5,13 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 
 import { setStatus } from './dom.ts';
-import { getOrCreateDraftId, loadDraft, startDraftPersistence } from './draft.ts';
+import {
+  getOrCreateDraftId,
+  loadDraft,
+  readMeta,
+  startDraftPersistence,
+  updateMeta
+} from './draft.ts';
 import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts';
 import { runEviction } from './eviction.ts';
 import { hydrateLocalThumbs } from './local-thumb.ts';
@@ -140,6 +146,44 @@ async function runStart(editor: Editor): Promise<void> {
       void hydrateLocalThumbs(editor);
     }
     startDraftPersistence(editor, draftId);
+    // Restore form fields that survived the reload via draft meta.
+    // Only fills fields seedFormFields (the ?slug= pin flow) hasn't
+    // already populated — so an existing-post edit isn't overwritten.
+    const savedMeta = await readMeta(draftId);
+    if (savedMeta) {
+      const slugEl = document.getElementById('rkr-slug') as HTMLInputElement | null;
+      const titleEl = document.getElementById('rkr-title') as HTMLInputElement | null;
+      const subtitleEl = document.getElementById('rkr-subtitle') as HTMLInputElement | null;
+      const tagsEl = document.getElementById('rkr-tags') as HTMLInputElement | null;
+      const dateEl = document.getElementById('rkr-date') as HTMLInputElement | null;
+      if (slugEl && !slugEl.value && savedMeta.slug) slugEl.value = savedMeta.slug;
+      if (titleEl && !titleEl.value && savedMeta.title) {
+        titleEl.value = savedMeta.title;
+        refreshPageTitle();
+      }
+      if (subtitleEl && !subtitleEl.value && savedMeta.subtitle)
+        subtitleEl.value = savedMeta.subtitle;
+      if (tagsEl && !tagsEl.value && savedMeta.tags) tagsEl.value = savedMeta.tags;
+      if (dateEl && !dateEl.value && savedMeta.date) dateEl.value = savedMeta.date;
+    }
+    // Wire form-field inputs to persist changes so a reload doesn't
+    // wipe what the user has typed.
+    const titleEl = document.getElementById('rkr-title') as HTMLInputElement | null;
+    const subtitleEl = document.getElementById('rkr-subtitle') as HTMLInputElement | null;
+    const tagsEl = document.getElementById('rkr-tags') as HTMLInputElement | null;
+    const dateEl = document.getElementById('rkr-date') as HTMLInputElement | null;
+    titleEl?.addEventListener('input', () => {
+      void updateMeta(draftId, { title: titleEl.value });
+    });
+    subtitleEl?.addEventListener('input', () => {
+      void updateMeta(draftId, { subtitle: subtitleEl.value });
+    });
+    tagsEl?.addEventListener('input', () => {
+      void updateMeta(draftId, { tags: tagsEl.value });
+    });
+    dateEl?.addEventListener('change', () => {
+      void updateMeta(draftId, { date: dateEl.value });
+    });
     mountStatusBadge();
     void populateTagsDatalist();
     // Eviction-after-drain is wired directly inside sync.ts; this
