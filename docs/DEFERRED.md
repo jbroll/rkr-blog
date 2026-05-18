@@ -27,13 +27,6 @@ Format: **item** — _revisit when:_ trigger.
   per-sidecar (global to every post using the image). _Revisit when:_
   an author wants the same image cropped differently in two posts.
 - **Container directive form for galleries** — leaf directive can't carry per-image captions. _Revisit when:_ per-image captions inside a multi-image directive are needed.
-- **Friendlier layout/position values** — values are machine strings
-  (`1x2`/`bleed`/…); needs a labelled `<select>` + value migration.
-  _Revisit when:_ an author finds the values confusing, or any
-  figure-panel rework.
-- **Advanced disclosure for width/aspect/fit/autoplay** — collapse
-  rarely-used figure fields behind a `<details>`. _Revisit when:_ the
-  figure panel feels busy or grows more fields.
 - **Status pill / visibility chooser** — replace the draft/published
   `<select>` with pills in the editor. _Revisit when:_ a top-form
   layout pass, or status gains a third value.
