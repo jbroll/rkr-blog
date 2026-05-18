@@ -167,20 +167,33 @@ async function runStart(editor: Editor): Promise<void> {
       if (dateEl && !dateEl.value && savedMeta.date) dateEl.value = savedMeta.date;
     }
     // Wire form-field inputs to persist changes so a reload doesn't
-    // wipe what the user has typed.
+    // wipe what the user has typed. Debounced to match the editor
+    // content persistence (500 ms) — each updateMeta is an OPFS
+    // atomic write (temp + move), so per-keystroke is wasteful.
+    const META_DEBOUNCE_MS = 500;
+    const debounce = (fn: () => void): (() => void) => {
+      let t: ReturnType<typeof setTimeout> | null = null;
+      return () => {
+        if (t !== null) clearTimeout(t);
+        t = setTimeout(fn, META_DEBOUNCE_MS);
+      };
+    };
     const titleEl = document.getElementById('rkr-title') as HTMLInputElement | null;
     const subtitleEl = document.getElementById('rkr-subtitle') as HTMLInputElement | null;
     const tagsEl = document.getElementById('rkr-tags') as HTMLInputElement | null;
     const dateEl = document.getElementById('rkr-date') as HTMLInputElement | null;
-    titleEl?.addEventListener('input', () => {
-      void updateMeta(draftId, { title: titleEl.value });
-    });
-    subtitleEl?.addEventListener('input', () => {
-      void updateMeta(draftId, { subtitle: subtitleEl.value });
-    });
-    tagsEl?.addEventListener('input', () => {
-      void updateMeta(draftId, { tags: tagsEl.value });
-    });
+    titleEl?.addEventListener(
+      'input',
+      debounce(() => void updateMeta(draftId, { title: titleEl.value }))
+    );
+    subtitleEl?.addEventListener(
+      'input',
+      debounce(() => void updateMeta(draftId, { subtitle: subtitleEl.value }))
+    );
+    tagsEl?.addEventListener(
+      'input',
+      debounce(() => void updateMeta(draftId, { tags: tagsEl.value }))
+    );
     dateEl?.addEventListener('change', () => {
       void updateMeta(draftId, { date: dateEl.value });
     });
