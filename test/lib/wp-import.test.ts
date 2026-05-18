@@ -882,3 +882,38 @@ test('importPost: backslash and quote in title produce valid round-trippable YAM
     'backslash+quote title must survive YAML round-trip intact'
   );
 });
+
+// ---- Fix: control chars (newline/CR/tab) in title must not break YAML ----
+
+test('importPost: encoded newline in title does not break frontmatter or drop the post', async (t) => {
+  const root = freshSiteRoot(t);
+  // WP title.rendered with &#10; — decodeHtmlEntities turns it into a real \n.
+  // Without the fix, that newline lands inside the double-quoted YAML scalar
+  // and makes parsePost throw, causing reindex to silently drop the post.
+  const post = makePost(POST_HTML_SINGLE, 'newline-title');
+  post.title.rendered = 'Line one&#10;Line two';
+  const result = await importPost(post, { siteRoot: root, fetchImage: stubFetcher() });
+  // Must parse without throwing.
+  const parsed = parsePost(result.markdown);
+  // Title must be non-empty.
+  assert.ok(parsed.frontmatter.title.length > 0, 'title must be non-empty');
+  // Title must contain no raw newline or CR.
+  assert.doesNotMatch(parsed.frontmatter.title, /[\r\n]/, 'title must be single-line');
+  // Content must be preserved (collapsed to a space).
+  assert.match(
+    parsed.frontmatter.title,
+    /Line one[ ]Line two/,
+    'newline collapsed to space, content preserved'
+  );
+});
+
+test('importPost: encoded tab and CR in title are collapsed to single-line', async (t) => {
+  const root = freshSiteRoot(t);
+  // &#9; = tab, &#13; = CR
+  const post = makePost(POST_HTML_SINGLE, 'tab-cr-title');
+  post.title.rendered = 'A&#9;B&#13;C';
+  const result = await importPost(post, { siteRoot: root, fetchImage: stubFetcher() });
+  const parsed = parsePost(result.markdown);
+  assert.doesNotMatch(parsed.frontmatter.title, /[\r\n\t]/, 'title must have no CR/newline/tab');
+  assert.match(parsed.frontmatter.title, /A[ ]B[ ]C/, 'tab and CR collapsed to spaces');
+});

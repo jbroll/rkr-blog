@@ -229,6 +229,7 @@ function decodeHtmlEntities(s: string): string {
  * `draft` so the operator can review before publishing. */
 function renderFrontmatter(post: WpPost, tagNames: string[] = []): string {
   const titleEsc = decodeHtmlEntities(post.title.rendered)
+    .replace(/[\r\n\t]+/g, ' ')
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"');
   const lines = [
