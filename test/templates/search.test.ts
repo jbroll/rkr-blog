@@ -37,8 +37,8 @@ test('renderSearchPage: anonymous view uses sw-unregister.js, not sw-register.js
   assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });
 
-test('renderSearchPage: admin view uses sw-register.js, not sw-unregister.js', () => {
+test('renderSearchPage: admin view also uses sw-unregister.js', () => {
   const html = renderSearchPage({ ...base, q: '', results: [], isAdmin: true });
-  assert.match(html, /\/static\/site\/sw-register\.js/);
-  assert.doesNotMatch(html, /\/static\/site\/sw-unregister\.js/);
+  assert.match(html, /\/static\/site\/sw-unregister\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });

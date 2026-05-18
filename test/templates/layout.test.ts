@@ -162,8 +162,8 @@ test('renderNotFoundPage: anonymous view uses sw-unregister.js, not sw-register.
   assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });
 
-test('renderNotFoundPage: admin view uses sw-register.js, not sw-unregister.js', () => {
+test('renderNotFoundPage: admin view also uses sw-unregister.js', () => {
   const html = renderNotFoundPage({ site: { title: 'rkroll' }, isAdmin: true });
-  assert.match(html, /\/static\/site\/sw-register\.js/);
-  assert.doesNotMatch(html, /\/static\/site\/sw-unregister\.js/);
+  assert.match(html, /\/static\/site\/sw-unregister\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });
