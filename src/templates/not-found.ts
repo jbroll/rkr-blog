@@ -3,7 +3,14 @@
 // a bare `<h1>not found</h1>`.
 
 import { escapeText } from '../lib/content.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
+import {
+  bundleVersion,
+  headIcons,
+  type SiteChrome,
+  siteFoot,
+  siteHead,
+  stylesheetLinks
+} from './layout.ts';
 
 export interface NotFoundPageData extends SiteChrome {
   /** Authed visitors still see the admin footer affordances (Logout). */
@@ -19,6 +26,7 @@ export function renderNotFoundPage(data: NotFoundPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Not found — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks()}
+${headIcons()}
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="/static/site/sw-unregister.js${v}" defer></script>
 </head>

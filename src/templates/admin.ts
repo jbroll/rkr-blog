@@ -9,7 +9,7 @@ import { escapeText } from '../lib/content.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { icon } from './icons.ts';
-import { bundleVersion, type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
+import { bundleVersion, headIcons, type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface AdminPageData extends SiteChrome {
   /** Where the compiled admin bundle is mounted on the URL space. */
@@ -34,6 +34,7 @@ export function renderAdminPage(data: AdminPageData): string {
      Loaded BEFORE the admin overrides so the inline styles below win for
      admin chrome (toolbar, panels, body layout). -->
 ${stylesheetLinks()}
+${headIcons()}
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
 <link rel="stylesheet" href="/static/admin/main.css"/>
 <style nonce="${data.cspNonce}">

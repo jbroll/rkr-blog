@@ -4,7 +4,7 @@
 
 import type { ModerationRow } from '../lib/comments.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
+import { headIcons, type SiteChrome, siteHead, stylesheetLinks } from './layout.ts';
 
 function row(c: ModerationRow): string {
   const score = c.spam_score === null ? '' : ` · spam ${(c.spam_score * 100).toFixed(0)}%`;
@@ -34,6 +34,7 @@ export function renderAdminCommentsPage(rows: ModerationRow[], site: SiteChrome[
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Comment moderation</title>
 ${stylesheetLinks()}
+${headIcons()}
 </head><body>
 ${siteHead(site, { isAdmin: true })}
 <main class="amc-wrap" id="main">

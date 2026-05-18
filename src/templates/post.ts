@@ -6,6 +6,7 @@ import { renderCommentForm, renderCommentList } from './comments.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,
+  headIcons,
   postAdminFab,
   type SiteChrome,
   siteFoot,
@@ -84,6 +85,7 @@ export function renderPostPage(post: PostPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
 ${stylesheetLinks()}
+${headIcons()}
 <link rel="stylesheet" href="/static/site/lightbox.css${v}"/>
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="/static/site/sw-unregister.js${v}" defer></script>

@@ -42,6 +42,12 @@ export function bundleVersion(): string {
  * meta tag is parsed as the head streams in, before any external
  * stylesheet, and applies immediately.
  */
+export function headIcons(): string {
+  return `<link rel="icon" type="image/x-icon" href="/static/favicon.ico"/>
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png"/>
+<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png"/>`;
+}
+
 export function stylesheetLinks(): string {
   const v = bundleVersion();
   const theme = themeName();

@@ -11,6 +11,7 @@ import { escapeAttr, escapeText } from '../lib/content.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,
+  headIcons,
   indexAdminFabs,
   renderSearchForm,
   type SiteChrome,
@@ -102,6 +103,7 @@ export function renderIndexPage(data: IndexPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(data.site.title)}</title>
 ${stylesheetLinks()}
+${headIcons()}
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="/static/site/sw-unregister.js${v}" defer></script>
 </head>

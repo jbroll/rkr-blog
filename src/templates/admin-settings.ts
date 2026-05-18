@@ -13,7 +13,14 @@ import { TEASER_WORDS_BOUNDS } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { icon } from './icons.ts';
-import { bundleVersion, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
+import {
+  bundleVersion,
+  headIcons,
+  type SiteChrome,
+  siteFoot,
+  siteHead,
+  stylesheetLinks
+} from './layout.ts';
 
 export interface AdminSettingsPageData extends SiteChrome {
   /** Persisted values to pre-fill the form. Defaults from env vars
@@ -65,6 +72,7 @@ export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Settings — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks()}
+${headIcons()}
 <style>
 .rkr-admin-settings-heading-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;grid-column:1/-1}
 .rkr-admin-settings-heading{margin:0}
