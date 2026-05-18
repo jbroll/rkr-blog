@@ -189,20 +189,16 @@ the cached result. The exact default is set by the implementation
 
 ### Bake invalidation
 
-- Mutating a sidecar's ops unlinks the bake (ops changed → bake
-  stale) and any prior cache entries for that id.
-- Uploading a new bake unlinks any prior cache entries for the same id
-  so re-bakes don't serve stale derivatives.
-- A render request landing between "bake unlinked" and "new bake
-  uploaded" falls through to the master + apply-ops path. One slower
-  request at most; correct content.
-- Bake uploads carry an ops-hash header (`X-Rkr-Bake-Ops-Hash:
-  <sha256-of-canonical-json-of-current-ops>`); the server compares
-  against the live sidecar and rejects the upload with 409 if they
-  don't match. Without this guard, two clients racing the same id
-  (offline reconnect, two-tab session) can land a bake that no
-  longer corresponds to current ops; the public site would serve
-  the wrong pixels until the next save.
+`POST /admin/sidecar/:id/commit` atomically commits the ops chain and
+an optional post-ops bake in a single request. Because both writes
+happen together, there is no window where an old bake can be served
+against new ops. On commit:
+
+- Prior cache entries for the id are unlinked.
+- If a bake is included, it replaces the previous bake atomically.
+- A render request arriving during the commit falls through to the
+  master + apply-ops path at most once; correct content is always
+  served.
 
 ## 8. Content model
 
@@ -415,7 +411,7 @@ preserving the existing per-node-type editing affordances.
 | Local upload | multi-file input + drag-drop / paste into the editor | session |
 | Plain URL | server-side fetch (size + content-type capped) | session |
 | OneDrive | File Picker SDK + Graph API | OAuth2 |
-| Google Drive | Picker API + Drive v3 (`drive.file` scope) | OAuth2 |
+| Google Drive | Picker API + Drive v3 (`drive.readonly` scope) | OAuth2 |
 
 Common path: picker returns a file handle → server streams bytes →
 sha256 during stream → if hash already in originals, dedupe; otherwise
@@ -486,9 +482,7 @@ GET    /admin/integrations/<p>/access-token     short-lived token for Picker SDK
 POST   /admin/integrations/<p>/disconnect       revoke tokens
 ```
 
-(`<p>` ∈ {`gdrive`, `onedrive`}; OneDrive Picker SDK integration is
-deferred pending MS Entra app registration — server-side endpoints
-are in place.)
+(`<p>` ∈ {`gdrive`, `onedrive`})
 
 ## 12. Operator commands
 
@@ -506,9 +500,10 @@ render --force          re-render even existing cache entries
 gc                      delete cache entries that no sidecar references
 verify                  rehash originals; flag mismatches
 jobs failed             list jobs in state='failed' from the queue (id, kind, attempts, error)
-import-wp list <base-url>          list posts on a WordPress source
-import-wp post <base-url> <id>     import one WP post + every image it references
-import-wp push <base-url> <slug> --to <fly-url>  push one post to a remote rkr-blog via /admin
+import-wp list <base-url>                    list posts on a WordPress source
+import-wp post <base-url> <id-or-slug>       import one WP post + every image it references
+import-wp push <base-url> <slug> --to <url>  push one post to a remote rkr-blog via /admin
+import-wp-comments <base-url>               import approved comments from a WordPress source
 reset --to <fly-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
@@ -526,8 +521,10 @@ deletes everything in the cache not in the set; idempotent.
 - **Invite-only allowlist.** A successful Google authorization only
   creates a user if the email is on the allowlist. Roles: `owner`
   (everything) and `editor` (everything except user management).
-- **Sessions:** server-side, 30-day expiry, sliding last-seen.
-  Cookie is `HttpOnly`, `Secure`, `SameSite=Lax`.
+- **Sessions:** server-side, 30-day fixed expiry from login time;
+  `last_seen_at` is updated on each authenticated request but does
+  not extend the expiry window. Cookie is `HttpOnly`, `Secure`,
+  `SameSite=Lax`.
 - **Per-user picker tokens** (Drive, OneDrive) live encrypted in the
   index DB.
 - **CSRF**: Origin/Referer guard for state-changing methods, plus

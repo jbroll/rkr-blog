@@ -4,7 +4,15 @@ A blog where writing and images work together naturally. Bring in photos from yo
 
 Runs on any Node 22 host. No separate database to install.
 
+## Works offline
+
+Authors can write, edit images, and queue posts without a connection. Changes sync automatically when connectivity returns. A status indicator shows what is pending. Pinned posts are available locally at any time.
+
 ---
+
+## Comments
+
+Readers can leave comments without an account. Submissions are filtered for spam automatically using a local LLM, with a moderation queue for manual review.
 
 ## Images from anywhere
 
@@ -12,7 +20,7 @@ Import photos directly into the editor from four sources: local files, any publi
 
 Quality and resolution settings are configurable in settings. PNG files are preserved losslessly.
 
-## Six layout modes, one set of controls
+## Six image layout modes, one set of controls
 
 All image layouts share the same insertion and settings panel. Choose the arrangement from the toolbar:
 
@@ -25,19 +33,11 @@ All image layouts share the same insertion and settings panel. Choose the arrang
 
 ## In-browser image editing
 
-Crop, rotate, flip, resize, and correct perspective without leaving the editor. Every operation is recorded as a named step; steps can be removed individually, undone, or redone. The edit history persists across browser reloads.
-
-## Non-destructive
-
-Edits are stored as reversible steps alongside the image. The stored original is never overwritten. Remove any step and the image regenerates from the original.
+Crop, rotate, flip, resize, and correct perspective without leaving the editor. Every operation is recorded as a named step that can be removed, undone, or redone — and the edit history persists across browser reloads. The stored original is never overwritten; remove any step and the image regenerates from it.
 
 ## Fast by default
 
-Images are automatically served in multiple sizes and modern formats so every browser and screen gets the right file. Pages load fast on repeat visits, and readers can access previously visited posts without a connection.
-
-## Offline editing
-
-Changes queue locally when offline and sync automatically when the connection returns. A status indicator shows what is pending. Pinned posts are available locally without a network connection.
+Images are automatically served in multiple sizes and modern formats so every browser and screen gets the right file.
 
 ---
 
@@ -57,8 +57,7 @@ Changes queue locally when offline and sync automatically when the connection re
 
 - **Eight built-in themes** — switch from settings
 - **WordPress importer** — migrate posts and images from an existing WordPress site
-- **Comments** — with spam filtering via a local LLM (Ollama)
-- **Invite-only access** — add collaborators by email address; owner and editor roles
+- **Author access** — invite authors by email address; owner and editor roles
 - **Operator CLI** — tools for rendering, garbage collection, reindexing, and user management
 
 ---
