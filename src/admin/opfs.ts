@@ -15,15 +15,22 @@
 let supportedCached: boolean | null = null;
 export function isSupported(): boolean {
   if (supportedCached !== null) return supportedCached;
-  // createWritable is absent on iOS Safari <17 even though getDirectory
-  // exists, so we must probe both halves of the API.
+  // Probe getDirectory only. Runtime write failures (iOS devices where
+  // createWritable is absent or non-functional on OPFS handles despite the
+  // global existing) are caught by ensureSchema(), which calls
+  // markOpfsUnsupported() and returns { status: 'unsupported' }.
   supportedCached =
     typeof navigator !== 'undefined' &&
     typeof navigator.storage !== 'undefined' &&
-    typeof navigator.storage.getDirectory === 'function' &&
-    typeof FileSystemFileHandle !== 'undefined' &&
-    typeof FileSystemFileHandle.prototype.createWritable === 'function';
+    typeof navigator.storage.getDirectory === 'function';
   return supportedCached;
+}
+
+/** Called by ensureSchema() when a write proves OPFS non-functional at
+ * runtime (e.g. createWritable absent on iOS OPFS handles). Flips the
+ * cache so all subsequent isSupported() calls see false. */
+export function markOpfsUnsupported(): void {
+  supportedCached = false;
 }
 
 /** Resolve the OPFS root. Cached per process so repeated lookups

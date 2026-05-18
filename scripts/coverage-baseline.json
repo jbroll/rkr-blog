@@ -58,11 +58,11 @@
       "linesHit": 8
     },
     "src/admin/opfs-schema.ts": {
-      "linesFound": 31,
-      "linesHit": 29
+      "linesFound": 33,
+      "linesHit": 31
     },
     "src/admin/opfs.ts": {
-      "linesFound": 62,
+      "linesFound": 64,
       "linesHit": 60
     },
     "src/admin/online-state.ts": {
@@ -78,8 +78,8 @@
       "linesHit": 30
     },
     "src/admin/startup.ts": {
-      "linesFound": 32,
-      "linesHit": 28
+      "linesFound": 33,
+      "linesHit": 29
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,

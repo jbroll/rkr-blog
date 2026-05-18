@@ -47,6 +47,10 @@ export async function startOfflineInfrastructure(editor: Editor): Promise<void> 
 }
 
 async function runStart(editor: Editor): Promise<void> {
+  // Start online detection unconditionally — it must run even if OPFS
+  // init fails or is unsupported, otherwise the sync badge stays 'online'
+  // but the drain loop never fires and saves silently queue forever.
+  startOnline();
   try {
     const schema = await ensureSchema();
     if (schema.status === 'unsupported') {
@@ -144,7 +148,6 @@ async function runStart(editor: Editor): Promise<void> {
     void runEviction();
     const pending = await pendingCount();
     if (pending > 0) setStatus(`${pending} pending offline edit(s)`);
-    startOnline();
     onOnlineChange((state) => {
       if (state === 'online') void tryDrain();
     });

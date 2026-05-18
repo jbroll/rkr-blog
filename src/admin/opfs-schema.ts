@@ -1,6 +1,6 @@
 // OPFS schema versioning + migration framework (spec-offline §10).
 
-import { isSupported, listDir, readJson, writeJson } from './opfs.ts';
+import { isSupported, listDir, markOpfsUnsupported, readJson, writeJson } from './opfs.ts';
 
 /** Bump alongside any schema-affecting change. Pure additions of
  * optional fields don't need a bump — see spec-offline §10 for the
@@ -123,15 +123,28 @@ export async function ensureSchema(): Promise<SchemaStatus> {
     // write happen atomically inside the locked callback. mutateRoot's
     // callback receives a fresh makeRoot() here (readRoot() is still
     // null) — equivalent to the old makeRoot(), now lock-serialised.
-    await mutateRoot(async (root) => {
-      // A corrupt/quarantined or missing _root.json must not reset
-      // nextSeq beneath live outbox entries — that collides seqs and
-      // breaks coalescing/ordering, orphaning un-drained work. Seed
-      // above the highest on-disk seq.
-      const floor = await maxOutboxSeqOnDisk();
-      if (floor > 0) return { ...root, nextSeq: floor + 1 };
-      return root;
-    });
+    try {
+      await mutateRoot(async (root) => {
+        // A corrupt/quarantined or missing _root.json must not reset
+        // nextSeq beneath live outbox entries — that collides seqs and
+        // breaks coalescing/ordering, orphaning un-drained work. Seed
+        // above the highest on-disk seq.
+        const floor = await maxOutboxSeqOnDisk();
+        if (floor > 0) return { ...root, nextSeq: floor + 1 };
+        return root;
+      });
+    } catch (err) {
+      // iOS exposes navigator.storage.getDirectory but createWritable()
+      // may be absent or non-functional on the returned handles. Treat
+      // any TypeError during the first write as a permanent capability
+      // gap and fall back to online-only mode.
+      /* v8 ignore next 5 -- iOS-only runtime failure path */
+      if (err instanceof TypeError) {
+        markOpfsUnsupported();
+        return { status: 'unsupported' };
+      }
+      throw err;
+    }
     return { status: 'fresh' };
   }
 
