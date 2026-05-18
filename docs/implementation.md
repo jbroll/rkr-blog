@@ -286,12 +286,16 @@ Required modules: `rewrite`, `proxy`, `proxy_http`, `headers`, `expires`.
 `tsconfig.browser.json` covers `src/admin/**`, `src/site/**`, and the
 two shared lib files the admin bundle pulls in (`prose-markdown.ts` +
 `safe-url.ts`). The admin bundle is built with esbuild (TipTap +
-ProseMirror + Cropper.js):
+ProseMirror + Cropper.js), ESM format with code-splitting:
 
-- `static/admin/main.js` — admin SPA bundle (~420 KB minified)
-- `static/admin/main.css` — Cropper.js extracted CSS
+- `static/admin/main.js` — editor SPA (TipTap, image ops, offline sync)
+- `static/admin/posts-list.js` — post list page
+- `static/admin/settings-page.js` — settings page
 - `static/site/lightbox.js` — public-page lightbox
 - `static/site/carousel.js` — public-page carousel runtime
+- `static/site/comment-form.js`, `copy-link.js`, `img-retry.js` — lightweight public-page helpers
+- `static/site/sw-unregister.js` — loaded on all public pages; actively unregisters any prior SW at scope `/`
+- `static/site/sw-admin.js` + `sw-admin-register.js` — admin PWA service worker and registration script
 
 The editor converts ProseMirror → markdown locally before POSTing to
 `/admin/posts`. The server only receives markdown (validated via

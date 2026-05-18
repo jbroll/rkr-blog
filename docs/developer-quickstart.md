@@ -219,7 +219,7 @@ coverage ratchet (`scripts/check-e2e-coverage.ts`).
 ## 7. Building the admin bundle
 
 ```bash
-npm run build:admin          # esbuild → static/admin/main.js
+npm run build:admin          # esbuild → static/admin/ (main, posts-list, settings-page)
 npm run build:site           # esbuild → static/site/ (lightbox, carousel, img-retry, copy-link, comment-form, sw-unregister, sw-admin, sw-admin-register)
 npm run build                # both
 ```
@@ -252,7 +252,7 @@ npm start                                 # boot Fastify
 SITE_ROOT=$HOME/site PORT=3000 npm start  # with explicit env
 
 # admin bundle
-npm run build:admin                       # esbuild → static/admin/main.js
+npm run build:admin                       # esbuild → static/admin/ (main, posts-list, settings-page)
 npm run build:site                        # esbuild → static/site/*.js
 npm run build                             # both
 npm run clean:admin                       # rm -rf static/admin
