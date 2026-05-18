@@ -70,19 +70,25 @@ const mcr = new CoverageReport({
 });
 
 export const test = baseTest.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page, browserName }, use) => {
+    // V8 JS coverage is Chromium (CDP) only. On WebKit / Firefox
+    // the page.coverage API is absent; skip collection silently so
+    // the same spec files can run on Safari without modification.
+    const hasCoverage = browserName === 'chromium';
     // CSS coverage skipped: PhotoSwipe + cropperjs ship un-source-
     // mapped CSS that mcr emits warnings for. Add it later if useful.
-    await page.coverage.startJSCoverage({ resetOnNavigation: false });
+    if (hasCoverage) await page.coverage.startJSCoverage({ resetOnNavigation: false });
     try {
       await use(page);
     } finally {
-      const data = await page.coverage.stopJSCoverage();
-      // mcr.add rejects empty arrays as invalid; tests like
-      // "wrong token does not establish a session" never load any of
-      // our bundles so V8 has nothing to record. Skip silently.
-      if (data.length > 0) {
-        await mcr.add(data);
+      if (hasCoverage) {
+        const data = await page.coverage.stopJSCoverage();
+        // mcr.add rejects empty arrays as invalid; tests like
+        // "wrong token does not establish a session" never load any of
+        // our bundles so V8 has nothing to record. Skip silently.
+        if (data.length > 0) {
+          await mcr.add(data);
+        }
       }
     }
   }

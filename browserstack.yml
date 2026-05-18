@@ -1,0 +1,30 @@
+# BrowserStack Automate configuration for Playwright (webkit/Safari).
+# Credentials are loaded from environment — set BROWSERSTACK_USERNAME and
+# BROWSERSTACK_ACCESS_KEY, or put them in secrets.env (gitignored).
+userName: ${BROWSERSTACK_USERNAME}
+accessKey: ${BROWSERSTACK_ACCESS_KEY}
+
+projectName: rkr-blog
+buildName: webkit-safari
+buildIdentifier: '#${BUILD_NUMBER}'
+
+# Run on real macOS + Safari via playwright-webkit.
+# iOS device testing requires Appium (separate suite); playwright-webkit
+# on macOS exercises the same WebKit engine and catches iOS API gaps.
+platforms:
+  - os: OS X
+    osVersion: Sonoma
+    browserName: playwright-webkit
+    browserVersion: latest
+  - os: OS X
+    osVersion: Ventura
+    browserName: playwright-webkit
+    browserVersion: latest
+
+parallelsPerPlatform: 1
+
+# BrowserStack Local: tunnel so the SDK can reach the local webServer.
+browserstackLocal: true
+
+consoleLogs: errors
+testReporting: true
