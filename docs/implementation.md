@@ -109,8 +109,11 @@ $SITE_ROOT/
 | `sessions` | Server-side sessions (30-day fixed expiry; `last_seen_at` updated on each request) |
 | `oauth_tokens` | Encrypted Drive / OneDrive picker tokens per user |
 | `comments` | Reader comments with `pending` / `published` / `rejected` / `queued` status |
+| `tags` | Normalised tag names (`COLLATE NOCASE`); first writer wins on casing |
+| `post_tags` | Many-to-many join between `posts` and `tags`; cascades on post delete |
+| `posts_fts` | FTS5 virtual table (`porter unicode61`) over title, tags, and body; populated by `reindex` in the same pass that upserts `posts`; joined back to `posts` on slug for status/date scoping |
 
-See `migrations/` for the full schema. `site-admin migrate` applies any unapplied file numerically, each in its own transaction. No down-migrations in v1; rollback by restore from backup.
+See `src/migrations/` for the full schema. `site-admin migrate` applies any unapplied file numerically, each in its own transaction. No down-migrations in v1; rollback by restore from backup.
 
 ## 5. Image pipeline internals
 
@@ -373,7 +376,7 @@ step N's signal is green.
 ### Step 7 — Remote import
 
 - [x] Plain URL import: `POST /admin/import/url`, with size cap and content-type allowlist enforced.
-- [x] Google Drive: Picker API + `drive.file` scope; OAuth tokens stored encrypted.
+- [x] Google Drive: Picker API + `drive.readonly` scope; OAuth tokens stored encrypted.
 - [x] OneDrive: server-side ready; picker SDK integration deferred until an MS Entra app is registered.
 - [ ] Dropbox: deferred.
 
@@ -496,6 +499,10 @@ review.
 Honeypot field (hidden input; any fill → `queued`), minimum fill-time
 check (too-fast submit → `queued`), per-IP rate limit (5 submissions per
 10 minutes via `@fastify/rate-limit`), and length caps on name/body.
+
+### Email notification
+
+`src/lib/notify-handler.ts` fires on every new web submission (before triage) and sends an email via `src/lib/mailer.ts` (nodemailer). The mailer is a no-op when `SMTP_HOST` is unset, so notification is opt-in at deploy time.
 
 ### Moderation
 
