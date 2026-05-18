@@ -1,4 +1,6 @@
-# rkr-blog
+<h1> rkr-blog - simple offline blogging </h1>
+<img src="rkr-blog.png" alt="rkr-blog icon" align="right" width="40%"/>
+
 
 A blog where writing and images work together naturally. Bring in photos from your desktop, Google Drive, OneDrive, or any URL; arrange them in rich layouts; publish. No markup, no plugins, no external services.
 
