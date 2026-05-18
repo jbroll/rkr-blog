@@ -111,6 +111,7 @@ export function registerAdminSettingsRoutes(
       postTeaser?: unknown;
       bannerAboveHeader?: unknown;
       teaserWords?: unknown;
+      commentNotify?: unknown;
     };
   }>('/admin/settings', { ...guard }, async (request, reply) => {
     const body = request.body ?? {};
@@ -170,6 +171,11 @@ export function registerAdminSettingsRoutes(
       scalePct: scalePct.value,
       webpQuality: webpQuality.value
     });
+    // Validated enum; an invalid/absent value is omitted from the
+    // patch so the partial-update merge leaves the prior value intact.
+    const cn = body.commentNotify;
+    const commentNotify =
+      cn === 'off' || cn === 'ham' || cn === 'queued' || cn === 'all' ? cn : undefined;
 
     // Persist the form values verbatim, empty strings included.
     // siteConfig() / themeName() each treat an empty-string persisted
@@ -185,6 +191,7 @@ export function registerAdminSettingsRoutes(
       postTeaser,
       bannerAboveHeader,
       teaserWords: teaserWords.value ?? 0,
+      ...(commentNotify ? { commentNotify } : {}),
       ...(ingestResize ? { ingestResize } : {})
     });
 

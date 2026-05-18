@@ -27,6 +27,7 @@ export interface AdminSettingsPageData extends SiteChrome {
     postTeaser?: boolean;
     bannerAboveHeader?: boolean;
     teaserWords?: number;
+    commentNotify?: 'off' | 'ham' | 'queued' | 'all';
     ingestResize?: {
       maxDim?: number;
       scalePct?: number;
@@ -121,6 +122,23 @@ ${saveBtn}
     min="${TEASER_WORDS_BOUNDS.min}" max="${TEASER_WORDS_BOUNDS.max}" step="1"
     value="${data.persisted.teaserWords ?? ''}"
     placeholder="0"/>
+
+  <h2 class="rkr-admin-settings-section">Comments</h2>
+  <label for="rkr-settings-comment-notify">Email me about comments</label>
+  <select id="rkr-settings-comment-notify" name="commentNotify">
+    ${(['off', 'ham', 'queued', 'all'] as const)
+      .map((v) => {
+        const label = {
+          off: 'Never',
+          ham: 'When auto-published',
+          queued: 'When held for moderation',
+          all: 'Any comment'
+        }[v];
+        const sel = (data.persisted.commentNotify ?? 'ham') === v ? ' selected' : '';
+        return `<option value="${v}"${sel}>${label}</option>`;
+      })
+      .join('')}
+  </select>
 
   <h2 class="rkr-admin-settings-section">Image uploads</h2>
 

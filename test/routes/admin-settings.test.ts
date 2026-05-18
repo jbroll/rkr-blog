@@ -597,3 +597,36 @@ test('GET /admin/settings renders the reindex form (feedback is a client toast)'
   // (same as ?flash=saved); no inline ok-flash is rendered server-side.
   assert.doesNotMatch(res.body, /rkr-admin-settings-flash is-ok/);
 });
+
+test('GET /admin/settings renders the commentNotify select with persisted value selected', async (t) => {
+  const { root, app } = await setup(t);
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ commentNotify: 'queued' })
+  );
+  const res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /name="commentNotify"/);
+  assert.match(res.body, /<option value="queued" selected>/);
+});
+
+test('POST /admin/settings persists a valid commentNotify, ignores an invalid one', async (t) => {
+  const { root, app } = await setup(t);
+  await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=&tagline=&theme=default&commentNotify=all'
+  });
+  let onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.commentNotify, 'all');
+
+  await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=&tagline=&theme=default&commentNotify=bogus'
+  });
+  onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.commentNotify, 'all'); // unchanged — invalid ignored
+});
