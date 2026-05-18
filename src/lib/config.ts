@@ -54,6 +54,8 @@ export interface SiteConfig {
   /** Max words in the teaser excerpt. Surfaced only when > 0; absent /
    * 0 means no truncation (full first paragraph). */
   teaserWords?: number;
+  /** Email-notification verbosity for new comments. Default 'ham'. */
+  commentNotify?: 'off' | 'ham' | 'queued' | 'all';
 }
 
 /** Blog-level defaults for the ingest-time downsample + re-encode
@@ -83,6 +85,8 @@ export interface PersistedSiteConfig {
   bannerAboveHeader?: boolean;
   /** Max words in the teaser excerpt (0 / absent = no truncation). */
   teaserWords?: number;
+  /** Email-notification verbosity for new comments. */
+  commentNotify?: 'off' | 'ham' | 'queued' | 'all';
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
@@ -120,6 +124,14 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   if (typeof r.bannerAboveHeader === 'boolean') out.bannerAboveHeader = r.bannerAboveHeader;
   const tw = clampInt(r.teaserWords, TEASER_WORDS_BOUNDS);
   if (tw !== undefined) out.teaserWords = tw;
+  if (
+    r.commentNotify === 'off' ||
+    r.commentNotify === 'ham' ||
+    r.commentNotify === 'queued' ||
+    r.commentNotify === 'all'
+  ) {
+    out.commentNotify = r.commentNotify;
+  }
   const ingest = pickPersistedIngestResize(r.ingestResize);
   if (ingest) out.ingestResize = ingest;
   return out;
@@ -181,6 +193,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   if (persisted.postTeaser) out.postTeaser = true;
   if (persisted.bannerAboveHeader) out.bannerAboveHeader = true;
   if (persisted.teaserWords && persisted.teaserWords > 0) out.teaserWords = persisted.teaserWords;
+  if (persisted.commentNotify) out.commentNotify = persisted.commentNotify;
   return out;
 }
 

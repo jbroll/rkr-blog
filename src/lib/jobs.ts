@@ -175,7 +175,7 @@ export const renderHandler: JobHandler<RenderPayload> = async (payload, ctx) => 
 
 const DEFAULT_HANDLERS: JobHandlerMap = {
   render: renderHandler as JobHandler<unknown>,
-  classify: makeClassifyHandler(envClassifier()) as JobHandler<unknown>,
+  classify: makeClassifyHandler(envClassifier(), enqueue) as JobHandler<unknown>,
   notify: makeNotifyHandler(envMailer()) as JobHandler<unknown>
 };
 

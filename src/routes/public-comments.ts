@@ -8,6 +8,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { getPostIdBySlug, insertWebComment, setCommentStatus } from '../lib/comments.ts';
+import { siteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { enqueue } from '../lib/jobs.ts';
 import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
@@ -111,6 +112,13 @@ export function registerPublicCommentRoutes(
       const tooFast = Number.isFinite(tRaw) && tRaw > 0 && Date.now() - tRaw < MIN_FILL_MS;
       if (tooFast) {
         setCommentStatus(db, id, 'queued');
+        // Skips the classify job, so notify must be enqueued here for
+        // the queued-covering levels (classify-handler handles the
+        // non-too-fast path).
+        const lvl = siteConfig().commentNotify ?? 'ham';
+        if (lvl === 'queued' || lvl === 'all') {
+          enqueue(db, { kind: 'notify', payload: { commentId: id } });
+        }
       } else {
         enqueue(db, { kind: 'classify', payload: { commentId: id } });
       }

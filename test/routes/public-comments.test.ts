@@ -206,3 +206,43 @@ test('__proto__ key in body does not pollute Object.prototype', async (t) => {
   assert.ok([303, 400, 404].includes(res.statusCode));
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });
+
+test('too-fast fill enqueues notify when level=queued, not when level=ham', async (t) => {
+  const levelRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-cmt-lvl-'));
+  const prev = process.env.SITE_ROOT;
+  t.after(() => {
+    if (prev === undefined) delete process.env.SITE_ROOT;
+    else process.env.SITE_ROOT = prev;
+    fs.rmSync(levelRoot, { recursive: true, force: true });
+  });
+  const { writePersistedSiteConfig } = await import('../../src/lib/config.ts');
+  writePersistedSiteConfig({ commentNotify: 'queued' }, { SITE_ROOT: levelRoot });
+  process.env.SITE_ROOT = levelRoot;
+
+  const { app, db } = await setup(t);
+  const notify = () =>
+    db.prepare<{ c: number }>("SELECT COUNT(*) c FROM jobs WHERE kind = 'notify'").get()?.c ?? 0;
+
+  await app.inject({
+    method: 'POST',
+    url: '/hello/comments',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: form({ name: 'A', email: 'a@e.com', body: 'fast', website: '', t: String(Date.now()) })
+  });
+  assert.equal(notify(), 1);
+
+  writePersistedSiteConfig({ commentNotify: 'ham' }, { SITE_ROOT: levelRoot });
+  await app.inject({
+    method: 'POST',
+    url: '/hello/comments',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: form({
+      name: 'B',
+      email: 'b@e.com',
+      body: 'fast2',
+      website: '',
+      t: String(Date.now())
+    })
+  });
+  assert.equal(notify(), 1); // unchanged — ham level skips queued notify
+});

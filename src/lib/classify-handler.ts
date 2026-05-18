@@ -6,8 +6,32 @@
 // auto-retry; the classifier already retried internally).
 
 import { applyClassification, getCommentById } from './comments.ts';
+import { siteConfig } from './config.ts';
 import type { Db } from './db.ts';
 import { type ClassifyConfig, classifyComment, type SpamVerdict } from './spam-classifier.ts';
+
+// Injected rather than imported from jobs.ts: jobs.ts imports this
+// module for makeClassifyHandler, so importing `enqueue` back would
+// create a jobs↔classify-handler cycle (the circular gate fails).
+// jobs.ts passes its own `enqueue` when wiring DEFAULT_HANDLERS;
+// `enqueue` is structurally assignable to this narrow type.
+type NotifyEnqueue = (db: Db, job: { kind: 'notify'; payload: { commentId: number } }) => unknown;
+
+/** Enqueue a notify job iff the operator's commentNotify level
+ * (default 'ham') covers this resolved status. Gating at enqueue
+ * keeps dead jobs out of the queue. */
+function maybeNotify(
+  enqueueJob: NotifyEnqueue,
+  db: Db,
+  commentId: number,
+  status: 'published' | 'queued'
+): void {
+  const lvl = siteConfig().commentNotify ?? 'ham';
+  const want =
+    (status === 'published' && (lvl === 'ham' || lvl === 'all')) ||
+    (status === 'queued' && (lvl === 'queued' || lvl === 'all'));
+  if (want) enqueueJob(db, { kind: 'notify', payload: { commentId } });
+}
 
 export interface ClassifyPayload {
   commentId: number;
@@ -35,7 +59,8 @@ export function envClassifier(): Classifier {
 /** Create a classify handler around a Classifier. The handler reads
  * `ctx.db`, which `server.ts`'s worker populates. */
 export function makeClassifyHandler(
-  classifier: Classifier
+  classifier: Classifier,
+  enqueueJob: NotifyEnqueue
 ): (payload: ClassifyPayload, ctx: { siteRoot: string; [k: string]: unknown }) => Promise<void> {
   return async (payload, ctx) => {
     const db = ctx.db as Db | undefined;
@@ -48,11 +73,13 @@ export function makeClassifyHandler(
         authorEmail: comment.author_email,
         body: comment.body
       });
+      const status = v.verdict === 'ham' ? 'published' : 'queued';
       applyClassification(db, payload.commentId, {
-        status: v.verdict === 'ham' ? 'published' : 'queued',
+        status,
         score: v.score,
         reason: v.reason
       });
+      maybeNotify(enqueueJob, db, payload.commentId, status);
     } catch (err) {
       applyClassification(db, payload.commentId, {
         status: 'queued',
@@ -60,6 +87,7 @@ export function makeClassifyHandler(
         // cap the stored reason at a tweet-ish length (audit only)
         reason: `classify failed: ${(err as Error).message}`.slice(0, 280)
       });
+      maybeNotify(enqueueJob, db, payload.commentId, 'queued');
     }
   };
 }

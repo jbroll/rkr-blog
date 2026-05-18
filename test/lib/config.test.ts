@@ -239,3 +239,19 @@ test('teaserWords round-trips, clamps to bounds, surfaces only when > 0', (t) =>
   writePersistedSiteConfig({ teaserWords: 9999 }, env);
   assert.equal(readPersistedSiteConfig(env).teaserWords, 200);
 });
+
+test('commentNotify round-trips a valid enum', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig({ commentNotify: 'queued' }, env);
+  assert.equal(readPersistedSiteConfig(env).commentNotify, 'queued');
+  assert.equal(siteConfig(env).commentNotify, 'queued');
+  writePersistedSiteConfig({ commentNotify: 'all' }, env);
+  assert.equal(siteConfig(env).commentNotify, 'all');
+});
+
+test('commentNotify: an invalid value is dropped (never persisted)', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig({ commentNotify: 'bogus' as never }, env);
+  assert.equal(readPersistedSiteConfig(env).commentNotify, undefined);
+  assert.equal(siteConfig(env).commentNotify, undefined);
+});
