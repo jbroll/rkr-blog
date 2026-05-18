@@ -6,7 +6,7 @@ Runs on any Node 22 host. No separate database to install.
 
 ## Works offline
 
-Authors can write, edit images, and queue posts without a connection. Changes sync automatically when connectivity returns. A status indicator shows what is pending. Pinned posts are available locally at any time.
+Authors can write, import and edit images without a connection. Changes sync automatically when connectivity returns. A status indicator shows what is pending. Pinned posts are available locally at any time.
 
 ## Comments
 
