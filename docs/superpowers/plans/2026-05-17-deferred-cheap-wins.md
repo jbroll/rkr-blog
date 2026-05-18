@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close six DEFERRED.md items that turned out to be small, no-tradeoff changes mis-estimated as larger work.
+**Goal:** Close five DEFERRED.md items that turned out to be small, no-tradeoff changes mis-estimated as larger work. (Task 4 — comment bubble — shipped 2026-05-16 via the post-comment-bubble plan.)
 
-**Architecture:** Six independent tasks, each self-contained and individually shippable; order is cheapest-first. No shared state between them. Each is committed on its own (the active `.git/hooks/pre-commit` shim runs the full gauntlet per commit).
+**Architecture:** Five independent tasks, each self-contained and individually shippable; order is cheapest-first. No shared state between them. Each is committed on its own (the active `.git/hooks/pre-commit` shim runs the full gauntlet per commit).
 
 **Tech Stack:** TypeScript (ES modules, `--experimental-strip-types`), Fastify, remark/mdast, `node:test`, headless-Chromium visual checks for presentational changes (the repo's established pattern).
 
@@ -172,69 +172,6 @@ git commit -m "feat(editor): collapse advanced figure fields behind <details>"
 
 ---
 
-### Task 4: Comment bubble floated right in the post title
-
-**Files:**
-- Modify: `src/templates/post.ts` (the `<header>` block ~line 86; `commentBubble` is rendered at line 90 — move it into the title row)
-- Modify: `static/themes/default.css` (add `.rkr-comment-bubble` float-right rule near the post-header rules)
-- Reference: roll-along.rkroll.com markup/CSS (the entry names this as the visual target)
-- Test: template assertion that the bubble is inside the title `<header>` row; visual check vs reference
-
-- [ ] **Step 1: Read current header + bubble placement**
-
-Run: `sed -n '84,95p' src/templates/post.ts`
-Expected: `<header>` with `<h1>` then the post meta then `${showComments ? commentBubble : ''}`.
-
-- [ ] **Step 2: Write the failing test**
-
-```ts
-test('comment bubble sits in the post title header row', () => {
-  const html = renderPostPage({ /* minimal post w/ showComments:true */ });
-  const header = html.slice(html.indexOf('<header>'), html.indexOf('</header>'));
-  assert.ok(/rkr-post-title-row/.test(header), 'title row wrapper present');
-  assert.ok(header.includes('rkr-comment-bubble'), 'bubble inside the header row');
-});
-```
-
-- [ ] **Step 3: Run → fails**
-
-Run: `node --test … test/templates/post.test.ts`
-Expected: FAIL (no title-row wrapper / bubble not in row).
-
-- [ ] **Step 4: Implement**
-
-In `post.ts`, wrap the `<h1>` and `commentBubble` in a flex row:
-
-```html
-<div class="rkr-post-title-row">
-  <h1 …>…</h1>
-  ${showComments ? commentBubble : ''}
-</div>
-```
-
-In `static/themes/default.css`, near the post-header block:
-
-```css
-.rkr-post-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.rkr-post-title-row .rkr-comment-bubble { flex: none; margin-left: auto; }
-```
-
-Mirror roll-along.rkroll.com's spacing/size if it differs after the visual check.
-
-- [ ] **Step 5: Run → passes; visual check**
-
-Run: `npm run typecheck && node --test … test/templates/post.test.ts`
-Then headless-Chromium screenshot of a post page; compare bubble placement to roll-along.rkroll.com. Expected: PASS; bubble flush-right in the title row.
-
-- [ ] **Step 6: Commit + drop DEFERRED entry**
-
-```bash
-git add src/templates/post.ts static/themes/default.css test/templates/post.test.ts docs/DEFERRED.md
-git commit -m "style(post): float the comment bubble right in the title row"
-```
-
----
-
 ### Task 5: Escaped comma in per-image `alts`
 
 **Files:**
@@ -356,7 +293,7 @@ git commit -m "feat(editor): Save & view button (save, then go to permalink)"
 
 ## Self-Review
 
-**Spec coverage (bucket-B subset):** Task 1 = teaser sync read; Task 2 = friendlier values (the cheap presentation-only half — the entry's "value migration" premise is dispelled, machine values stay); Task 3 = advanced disclosure; Task 4 = comment-bubble float; Task 5 = container-alt comma (the comma blocker specifically; captions remain a separate, still-deferred concern); Task 6 = Save & view. The other three bucket-B candidates (SW-stale-comments, post-deploy-30s SW half, slug-rename) are deliberately excluded with a stated reason and routed to the bucket-C review — not silently dropped.
+**Spec coverage (bucket-B subset):** Task 1 = teaser sync read; Task 2 = friendlier values (the cheap presentation-only half — the entry's "value migration" premise is dispelled, machine values stay); Task 3 = advanced disclosure; Task 4 = comment-bubble float (shipped 2026-05-16, removed from this plan); Task 5 = container-alt comma (the comma blocker specifically; captions remain a separate, still-deferred concern); Task 6 = Save & view. The other three bucket-B candidates (SW-stale-comments, post-deploy-30s SW half, slug-rename) are deliberately excluded with a stated reason and routed to the bucket-C review — not silently dropped.
 
 **Placeholder scan:** Each code-changing step shows the actual edit. A few steps say "match the real exported symbol / signature" (Tasks 2, 5, 6) — that is a deliberate guard because `admin.ts`/`save.ts` exact export shapes were not fully quoted here; the grep in each task's Step 1 resolves them before code is written. Not a TODO — an ordering instruction.
 
