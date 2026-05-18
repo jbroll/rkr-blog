@@ -33,13 +33,11 @@ describe('safeErr', () => {
     assert.equal('config' in result, false);
   });
 
-  it('passes message content through without scrubbing (field-level-only stripping)', () => {
-    // We only strip non-allowlisted fields, not message content.
-    // If a provider embeds a token in the message string, it still passes through.
-    // The protection is refusing to serialize the whole object.
+  it('redacts secret key=value pairs from message content', () => {
+    // safeErr now redacts secret patterns from message in addition to stripping fields.
     const err = new Error('code=AUTH_CODE&refresh_token=abc123&client_secret=XYZ');
     const result = safeErr(err);
-    assert.equal(result.message, 'code=AUTH_CODE&refresh_token=abc123&client_secret=XYZ');
+    assert.doesNotMatch(result.message ?? '', /AUTH_CODE|abc123|XYZ/);
     assert.equal(result.name, 'Error');
   });
 
@@ -76,5 +74,48 @@ describe('safeErr', () => {
 
   it('handles a number', () => {
     assert.deepEqual(safeErr(42), { message: undefined });
+  });
+
+  it('safeErr redacts token/secret patterns embedded in message', () => {
+    const e = new Error(
+      'exchange failed: code=AUTHCODE123 refresh_token=rt_secret access_token=at_secret client_secret=cs_secret'
+    );
+    const s = safeErr(e);
+    assert.doesNotMatch(s.message ?? '', /AUTHCODE123|rt_secret|at_secret|cs_secret/);
+    assert.match(s.message ?? '', /exchange failed/); // non-secret context preserved
+  });
+
+  it('safeErr redacts a long opaque token-like run', () => {
+    const e = new Error(
+      'jwt rejected: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbb'
+    );
+    assert.doesNotMatch(safeErr(e).message ?? '', /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9/);
+  });
+
+  it('safeErr still returns only name/message/code (no extra fields)', () => {
+    const e = Object.assign(new Error('boom'), {
+      response: { token: 'leak' },
+      code: 'EBADR',
+      config: { x: 1 }
+    });
+    assert.deepEqual(safeErr(e), { name: 'Error', message: 'boom', code: 'EBADR' });
+  });
+
+  it('safeErr string branch is also redacted', () => {
+    assert.doesNotMatch(safeErr('failed access_token=zzz').message ?? '', /zzz/);
+  });
+
+  it('a benign message is unchanged', () => {
+    assert.equal(safeErr(new Error('post not found')).message, 'post not found');
+  });
+
+  it('safeErr redacts the token after Authorization: Bearer (short token)', () => {
+    const s = safeErr(new Error('upstream rejected Authorization: Bearer short_tok_123 (401)'));
+    assert.doesNotMatch(s.message ?? '', /short_tok_123/);
+    assert.match(s.message ?? '', /upstream rejected/); // benign context kept
+  });
+
+  it('safeErr redacts a lowercase bearer token form', () => {
+    assert.doesNotMatch(safeErr('fetch failed: bearer abcDEF12').message ?? '', /abcDEF12/);
   });
 });
