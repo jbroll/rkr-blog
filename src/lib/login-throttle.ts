@@ -17,9 +17,23 @@
 // process, not per-fastify-instance); tests reset it via
 // _resetLoginThrottle in their setup helpers.
 //
-// Per-IP integrity depends on trustProxy:'loopback' plus a single
-// trusted loopback proxy hop; if Fastify is bound without that,
-// req.ip becomes client-controlled and the per-IP control degrades.
+// OPERATIONAL REQUIREMENT — the fronting proxy MUST strip inbound
+// X-Forwarded-For before forwarding to this process (e.g. Apache:
+//   RequestHeader unset X-Forwarded-For
+// placed immediately before ProxyPass). Without it a client can
+// spoof req.ip by supplying their own X-Forwarded-For header, making
+// the per-IP throttle void. Fastify's trustProxy:'loopback' ensures
+// the loopback hop is trusted but cannot defend against a spoofed
+// header arriving from the proxy if the proxy does not strip it first.
+
+/** Hard upper bound on the number of IPs tracked simultaneously. An
+ * in-window rotating-IP spray must not grow the tally unbounded;
+ * sweepExpired only drops *expired* entries (none expire during an
+ * active spray). When the map is full we evict the oldest-inserted
+ * entry before inserting the new one. Evicting an arbitrary IP only
+ * resets THAT IP's count — safe, since a brute-forcer would need the
+ * evicted IP to be the one they're attacking from. */
+const MAX_TRACKED_IPS = 10_000;
 
 /** Default per-IP failed-attempt ceiling. `isThrottled` is true once
  * the recorded count reaches this within the window. Matches the old
@@ -77,6 +91,14 @@ export function recordFailure(ip: string): void {
   // New window: opportunistically purge expired entries for other IPs
   // so rotating-IP attackers can't grow the Map without bound.
   sweepExpired();
+  if (failures.size >= MAX_TRACKED_IPS) {
+    // Still over cap after sweeping expired entries → an in-window
+    // IP-spray flood. Drop the oldest-inserted entry (Map preserves
+    // insertion order, so the first key is the oldest).
+    const oldest = failures.keys().next().value;
+    /* v8 ignore next -- unreachable: size >= MAX_TRACKED_IPS > 0 */
+    if (oldest !== undefined) failures.delete(oldest);
+  }
   failures.set(ip, { count: 1, resetAt: Date.now() + WINDOW_MS });
 }
 

@@ -103,6 +103,12 @@ test('_resetLoginThrottle wipes all ip tallies', () => {
   assert.equal(isThrottled('b'), false);
 });
 
+test('failures map is bounded under an in-window IP spray', () => {
+  _resetLoginThrottle();
+  for (let i = 0; i < 50_000; i++) recordFailure(`10.0.${(i >> 8) & 255}.${i & 255}`);
+  assert.ok(_loginThrottleSize() <= 10_000, `expected <=10000, got ${_loginThrottleSize()}`);
+});
+
 test('recordFailure sweeps expired entries when opening a new window', () => {
   // IP-A records failures to create a window entry.
   const realNow = Date.now;
