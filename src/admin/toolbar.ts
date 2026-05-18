@@ -13,7 +13,7 @@ import type { Editor } from '@tiptap/core';
 
 import { icon } from '../templates/icons.ts';
 
-import { handleSave } from './save';
+import { handleSave, handleSaveAndView } from './save';
 
 interface MakeButtonOpts {
   cmd?: string;
@@ -92,7 +92,8 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       cmd: 'save',
       className: 'rkr-toolbar-primary',
       iconSvg: icon('save', 16)
-    })
+    }),
+    makeButton('Save & view', () => void handleSaveAndView(editor), { cmd: 'save-view' })
   );
   toolbar.replaceChildren(...buttons);
 

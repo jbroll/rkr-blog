@@ -62,9 +62,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## UI / UX
 
-- **"Save & view" combined editor button** — currently a permalink in
-  the status line. _Revisit when:_ author friction with the
-  save→click pattern.
 - **Owner / user management UI** — users/sessions are DB/CLI only.
   _Revisit when:_ first co-author or multi-user pivot.
 - **User-facing theme picker** — theme is an env/ops action only.

@@ -46,11 +46,11 @@
       "linesHit": 0
     },
     "src/admin/save.ts": {
-      "linesFound": 61,
+      "linesFound": 63,
       "linesHit": 52
     },
     "src/admin/toolbar.ts": {
-      "linesFound": 13,
+      "linesFound": 14,
       "linesHit": 11
     },
     "src/admin/upload.ts": {
@@ -114,8 +114,8 @@
       "linesHit": 13
     },
     "src/lib/prose-markdown.ts": {
-      "linesFound": 107,
-      "linesHit": 72
+      "linesFound": 111,
+      "linesHit": 74
     },
     "src/lib/safe-url.ts": {
       "linesFound": 12,
@@ -275,6 +275,10 @@
     },
     "src/site/sw-admin-register.ts": {
       "linesFound": 2,
+      "linesHit": 1
+    },
+    "127.0.0.1-3789/static/admin/prose-markdown-BVDTPCKY.js": {
+      "linesFound": 1,
       "linesHit": 1
     }
   }

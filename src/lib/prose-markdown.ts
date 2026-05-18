@@ -29,7 +29,6 @@ import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 
 import { safeLinkUrl } from './safe-url.ts';
-import { joinAlts, splitAlts } from './widget-helpers.ts';
 
 // ---- ProseMirror JSON shape (subset) ----------------------------------
 
@@ -217,6 +216,14 @@ function quote(s: string): string {
 /** Carousel timer cap — anything larger reads as "the author meant ms
  * or made a typo." Mirrors the figure widget's TIMER_CAP_SECONDS. */
 const CAROUSEL_AUTOPLAY_CAP = 60;
+
+function splitAlts(s: string): string[] {
+  return s.split(/(?<!\\),/).map((a) => a.replace(/\\,/g, ',').trim());
+}
+
+function joinAlts(alts: string[]): string {
+  return alts.map((a) => a.replace(/,/g, '\\,')).join(',');
+}
 
 /**
  * Emit a `::figure{...}` directive for the unified widget. Mirrors

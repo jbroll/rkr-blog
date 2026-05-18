@@ -55,7 +55,15 @@ async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
   return (await res.json()) as SaveResponse;
 }
 
-export async function handleSave(editor: Editor): Promise<void> {
+/** Navigate to the saved permalink after a successful save. */
+export async function handleSaveAndView(editor: Editor): Promise<void> {
+  return handleSave(editor, { navigate: (u) => location.assign(u) });
+}
+
+export async function handleSave(
+  editor: Editor,
+  opts?: { navigate?: (url: string) => void }
+): Promise<void> {
   // Flush any pending caption/alt commits so editor.getJSON() below
   // serialises the latest typed values, not the pre-debounce state.
   flushPendingAttrCommits();
@@ -150,6 +158,7 @@ export async function handleSave(editor: Editor): Promise<void> {
         action: { href: `/${result.slug}`, label: 'View →' }
       });
       markClean();
+      opts?.navigate?.(`/${result.slug}`);
       return;
     } catch (err) {
       // A 409 here means the user is editing a STALE post (a newer

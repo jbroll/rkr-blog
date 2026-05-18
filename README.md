@@ -10,7 +10,7 @@ Authors can write, import and edit images without a connection. Changes sync aut
 
 ## Comments
 
-Readers can leave comments without an account. Submissions are optionally filtered for spam automatically using a configurable LLM, with a moderation queue for manual review. New comments trigger an email notification to the site owner.
+Anonymous readers can leave comments. Submissions are optionally filtered for spam automatically using a configurable LLM, with a moderation queue for manual review. New comments trigger an email notification to the site owner.
 
 ## Images
 
