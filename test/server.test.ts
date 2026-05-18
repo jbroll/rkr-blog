@@ -3,10 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-
 import { open } from '../src/lib/db.ts';
 import { migrate } from '../src/lib/migrate.ts';
-import { buildApp, startServer } from '../src/server.ts';
+import { bootDb, buildApp, startServer } from '../src/server.ts';
 
 test('GET /health returns 200 with ok flag and git hash', async () => {
   const app = await buildApp();
@@ -37,7 +36,10 @@ test('startServer listens on an ephemeral port and serves /health', async (_t) =
   for (const sub of ['sidecars', 'originals', 'cache/img', 'data']) {
     fs.mkdirSync(path.join(root, sub), { recursive: true });
   }
-  // startServer opens the db and starts the worker; both need migrations.
+  // Post-fix: startServer itself calls migrate(db) at boot, so no
+  // external seed is needed. We still call it here to confirm idempotency
+  // (migrate is a no-op when already applied), keeping this test valid
+  // for both pre- and post-fix states of startServer.
   const seedDb = open(path.join(root, 'data', 'site.db'));
   migrate(seedDb);
   seedDb.close();
@@ -83,5 +85,28 @@ test('startServer listens on an ephemeral port and serves /health', async (_t) =
       else process.env[k] = v;
     }
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Guard that bootDb (the real boot path used by startServer) runs migrate.
+// This test FAILS if the migrate(db) call is removed from bootDb — the
+// regression that originally let startServer ship without migrating.
+test('bootDb migrates the boot connection so posts_fts exists (search works on a clean deploy)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-bootdb-'));
+  const dbPath = path.join(dir, 'site.db');
+  try {
+    const db = bootDb(dbPath);
+    try {
+      const row = db
+        .prepare<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='posts_fts'"
+        )
+        .get();
+      assert.ok(row, 'posts_fts must exist immediately after bootDb (startServer uses bootDb)');
+    } finally {
+      db.close();
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

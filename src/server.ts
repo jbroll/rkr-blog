@@ -25,6 +25,7 @@ import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
+import { migrate } from './lib/migrate.ts';
 import { setPublicSecurityHeaders } from './lib/security-headers.ts';
 import adminRoutes from './routes/admin.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
@@ -281,10 +282,19 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
   return app;
 }
 
+/** Open the long-lived DB connection and bring its schema current.
+ * The single place boot-time DB init happens — startServer uses this,
+ * and tests exercise it to guard that migrate() is not forgotten. */
+export function bootDb(dbPath: string): Db {
+  const db = open(dbPath);
+  migrate(db);
+  return db;
+}
+
 export async function startServer(opts: StartServerOpts = {}): Promise<FastifyInstance> {
   const cfg = serverConfig();
   const p = paths();
-  const db = open(p.db);
+  const db = bootDb(p.db);
 
   const publicBaseUrl = process.env.PUBLIC_BASE_URL;
   if (!publicBaseUrl) {
