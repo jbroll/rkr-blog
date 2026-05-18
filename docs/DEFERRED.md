@@ -26,9 +26,6 @@ Format: **item** — _revisit when:_ trigger.
   per-sidecar (global to every post using the image). _Revisit when:_
   an author wants the same image cropped differently in two posts.
 - **Container directive form for galleries** — leaf directive can't carry per-image captions. _Revisit when:_ per-image captions inside a multi-image directive are needed.
-- **Status pill / visibility chooser** — replace the draft/published
-  `<select>` with pills in the editor. _Revisit when:_ a top-form
-  layout pass, or status gains a third value.
 - **Per-cell active-cell persistence** — selection resets to null when
   leaving and returning to a multi-image figure. _Revisit when:_ first
   author feedback on multi-image editing.
@@ -59,19 +56,6 @@ Format: **item** — _revisit when:_ trigger.
 - **gdrive ↔ onedrive structural duplication** — ~150 cloned LOC; two
   parallel modules vs one Provider interface. _Revisit when:_ a third
   integration (Dropbox/iCloud) lands.
-
-## Comments (blog-comments spec §11)
-
-- **Commenter self-service edit/delete** — needs an anon-auth scheme.
-  _Revisit when:_ feedback it's needed + a chosen auth strategy.
-
-## Deploy / config
-
-- **Split deployed env into `config.env` + `secrets.env`** — one
-  shipped env file mixes non-secret config with real secrets; a real
-  split touches shared `deploy.sh`. _Revisit when:_ next touching
-  `deploy.sh` env handling, or non-secret config needs to be
-  git-reviewable.
 
 ## Test coverage
 

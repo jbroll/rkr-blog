@@ -9,3 +9,18 @@ set -euo pipefail
 
 git -C "$PROJECT_DIR" rev-parse HEAD > "$TMP_DIR/app/git-hash"
 echo "  fastify_app.build.post: git-hash = $(cat "$TMP_DIR/app/git-hash")"
+
+# Merge config.env (non-secrets, git-tracked) into the build's secrets.env.
+# config.env lines are written first so that secrets.env values win on any
+# collision (e.g. if a non-secret key appears in both files).
+config_env="$PROJECT_DIR/config.env"
+secrets_env="$TMP_DIR/app/secrets.env"
+if [[ -f "$config_env" ]]; then
+  if [[ -f "$secrets_env" ]]; then
+    merged="$(cat "$config_env" <(echo) "$secrets_env")"
+    echo "$merged" > "$secrets_env"
+  else
+    cp "$config_env" "$secrets_env"
+  fi
+  echo "  fastify_app.build.post: merged config.env into secrets.env"
+fi
