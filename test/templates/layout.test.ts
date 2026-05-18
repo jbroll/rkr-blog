@@ -12,6 +12,7 @@ import {
   siteHead,
   stylesheetLinks
 } from '../../src/templates/layout.ts';
+import { renderNotFoundPage } from '../../src/templates/not-found.ts';
 
 test('renderSearchForm is a no-JS GET form with escaped, prefilled q', () => {
   const html = renderSearchForm('a "b" <x>');
@@ -153,4 +154,16 @@ test('siteHead: hideHomeLink omits the Home link but keeps About', () => {
   const html = siteHead({ title: 'S' }, { hideHomeLink: true });
   assert.doesNotMatch(html, /href="\/"[^>]*>Home</);
   assert.match(html, /href="\/about"[^>]*>About</);
+});
+
+test('renderNotFoundPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
+  const html = renderNotFoundPage({ site: { title: 'rkroll' } });
+  assert.match(html, /\/static\/site\/sw-unregister\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
+});
+
+test('renderNotFoundPage: admin view uses sw-register.js, not sw-unregister.js', () => {
+  const html = renderNotFoundPage({ site: { title: 'rkroll' }, isAdmin: true });
+  assert.match(html, /\/static\/site\/sw-register\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-unregister\.js/);
 });

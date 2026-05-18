@@ -57,7 +57,7 @@ export function renderSearchPage(data: SearchPageData): string {
 ${stylesheetLinks()}
 <link rel="manifest" href="/static/manifest.webmanifest"/>
 <meta name="theme-color" content="#1a4f7f"/>
-<script type="module" src="/static/site/sw-register.js${v}" defer></script>
+<script type="module" src="/static/site/${data.isAdmin ? 'sw-register' : 'sw-unregister'}.js${v}" defer></script>
 </head>
 <body>
 ${head}<main id="main" tabindex="-1">

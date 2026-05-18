@@ -95,3 +95,15 @@ test('renderPostPage: bannerAboveHeader moves the banner above the site header',
   });
   assert.ok(html.indexOf('id="BANNER"') < html.indexOf('rkr-site-head'));
 });
+
+test('renderPostPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
+  const html = renderPostPage({ ...base });
+  assert.match(html, /\/static\/site\/sw-unregister\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
+});
+
+test('renderPostPage: admin view uses sw-register.js, not sw-unregister.js', () => {
+  const html = renderPostPage({ ...base, isAdmin: true });
+  assert.match(html, /\/static\/site\/sw-register\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-unregister\.js/);
+});

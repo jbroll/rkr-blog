@@ -30,3 +30,15 @@ test('renders hits with title link, date, and snippet HTML', () => {
   assert.match(html, /<time[^>]*>2026-05-01<\/time>/);
   assert.match(html, /<mark>rust<\/mark>/);
 });
+
+test('renderSearchPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
+  const html = renderSearchPage({ ...base, q: '', results: [] });
+  assert.match(html, /\/static\/site\/sw-unregister\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
+});
+
+test('renderSearchPage: admin view uses sw-register.js, not sw-unregister.js', () => {
+  const html = renderSearchPage({ ...base, q: '', results: [], isAdmin: true });
+  assert.match(html, /\/static\/site\/sw-register\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-unregister\.js/);
+});

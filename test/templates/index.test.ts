@@ -420,3 +420,21 @@ test('renderIndexPage: bannerAboveHeader moves the banner above the site header'
   });
   assert.ok(html.indexOf('id="BANNER"') < html.indexOf('rkr-site-head'));
 });
+
+test('renderIndexPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
+  const html = renderIndexPage({ site: { title: 'rkroll' }, page: 1, totalPages: 1, posts: [] });
+  assert.match(html, /\/static\/site\/sw-unregister\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
+});
+
+test('renderIndexPage: admin view uses sw-register.js, not sw-unregister.js', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    page: 1,
+    totalPages: 1,
+    isAdmin: true,
+    posts: []
+  });
+  assert.match(html, /\/static\/site\/sw-register\.js/);
+  assert.doesNotMatch(html, /\/static\/site\/sw-unregister\.js/);
+});

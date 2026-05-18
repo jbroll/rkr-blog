@@ -31,21 +31,12 @@ test('token-login establishes a session and lands on the public index with admin
 
 // Regression: the public service worker used to serve stale-while-
 // revalidate for /, so after logging in the redirect target returned
-// the cached anonymous HTML (no FABs, no Logout). The user had to
-// refresh to see the admin chrome. Network-first for / closes this
-// gap. To reproduce: visit / anonymously so the SW activates +
-// caches /, then run the normal login flow and assert the admin
-// chrome appears without a manual reload.
-test('login: SW-cached anonymous / does not shadow the admin chrome after login', async ({
-  page
-}) => {
+// the cached anonymous HTML (no FABs, no Logout). Anon pages now run
+// sw-unregister.js (no SW registration), so the cached-anon-page
+// scenario is structurally impossible. Test remains to guard the
+// login-from-anon flow.
+test('login: anon visit followed by login shows admin chrome without reload', async ({ page }) => {
   await page.goto('/');
-  // Wait for the SW to take control of this client so subsequent
-  // navigations (/) actually go through cache logic.
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-  });
-  await page.reload();
   await expect(page.getByRole('link', { name: 'New post' })).toHaveCount(0);
 
   await page.goto('/login');
@@ -55,6 +46,24 @@ test('login: SW-cached anonymous / does not shadow the admin chrome after login'
     page.getByRole('button', { name: /Sign in with token/ }).click()
   ]);
   await expect(page.getByRole('link', { name: 'New post' })).toBeVisible();
+});
+
+test('logout: sw-unregister strips ?_rkr param so URL bar stays clean', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
+  await Promise.all([
+    page.waitForURL((url) => new URL(url).pathname === '/'),
+    page.getByRole('button', { name: /Sign in with token/ }).click()
+  ]);
+  await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Logout' }).click();
+  // Logout redirects to /?_rkr=logout; sw-unregister.js strips the param
+  // via history.replaceState. waitForURL doesn't detect replaceState, so
+  // poll via waitForFunction instead.
+  await page.waitForFunction(() => !location.search.includes('_rkr'));
+  expect(page.url()).not.toContain('_rkr');
+  await expect(page.getByRole('link', { name: 'New post' })).toHaveCount(0);
 });
 
 test('wrong token does not establish a session', async ({ page }) => {

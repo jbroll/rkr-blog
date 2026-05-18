@@ -87,7 +87,7 @@ ${stylesheetLinks()}
 <link rel="stylesheet" href="/static/site/lightbox.css${v}"/>
 <link rel="manifest" href="/static/manifest.webmanifest"/>
 <meta name="theme-color" content="#1a4f7f"/>
-<script type="module" src="/static/site/sw-register.js${v}" defer></script>
+<script type="module" src="/static/site/${post.isAdmin ? 'sw-register' : 'sw-unregister'}.js${v}" defer></script>
 <script type="module" src="/static/site/img-retry.js${v}" defer></script>
 <script type="module" src="/static/site/lightbox.js${v}" defer></script>
 <script type="module" src="/static/site/carousel.js${v}" defer></script>
