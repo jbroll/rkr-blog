@@ -43,7 +43,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Performance / reliability
 
-- **Replace placeholder admin PWA icons** — `static/admin-manifest.webmanifest` reuses the public `icon-192.png` / `icon-512.png`. _Revisit when:_ an editor-specific icon is designed.
 - **Module-level mutable singletons** — `liveInflight` + `events` emitter in `src/lib/jobs.ts`, resolved-theme cache in `config.ts` are process-singletons (fine for single-instance deploy). _Revisit when:_ moving to multi-process/multi-instance.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
