@@ -19,7 +19,7 @@ Run entirely in the cloud; the operator controls the data. Image editing is basi
 | Non-destructive editing | No | No | No | Yes (JSON sidecar ops) |
 | Self-hosted | Optional (Ghost Pro is hosted; OSS self-host is complex) | No | No | Yes (only mode) |
 | Image layout options | 1 (content width) | 1 | 2–3 templates | 6 layout modes |
-| Offline editing | No | No | No | Yes (OPFS outbox) |
+| Offline editing | No | No | No | Yes |
 | Stack complexity | Node + MySQL/SQLite + CDN | Hosted only | Hosted only | Node + SQLite + Apache |
 
 rkr-blog trails on: zero onboarding friction, managed TLS/DNS, built-in email newsletter, multi-author workflow.
@@ -80,10 +80,11 @@ rkr-blog trails on: large-library management, EXIF/metadata browsing, public alb
 - **True non-destructive pipeline.** The stored master is never written after ingest. Every edit — crop, rotate, flip, resample, perspective — is a JSON op in a sidecar. Any op can be removed to recover the original framing; derivatives are regenerated on demand.
 - **Six layout modes from one editor block.** Justified rows (Flickr-style), masonry columns, NxM grid, carousel (manual + autoplay), full-bleed, inline — no theme or plugin required.
 - **Apache serves derivatives directly.** Cache hits bypass Node entirely. Derivatives are 6 widths × 3 formats (WebP, AVIF, JPEG). Node handles only misses.
-- **Offline admin.** OPFS outbox with leader-elected drain via `navigator.locks`. Draft, edit, and queue saves while offline; they flush when connectivity returns.
-- **Reader service worker.** Cache-first for images, stale-while-revalidate for pages. Fast repeat loads without a CDN.
+- **Offline admin.** Draft, edit, and queue saves while offline; changes sync automatically when connectivity returns.
 - **Ingest-time WebP encode with generation-loss awareness.** PNG → lossless WebP; others → lossy WebP. The WordPress importer uses passthrough mode to avoid re-encoding already-compressed files.
-- **Ollama-backed comment spam classification.** Local inference; no third-party moderation SaaS.
+- **Ollama-backed comment spam classification.** Local inference; no third-party moderation SaaS. New comments trigger email notification to the site owner via SMTP.
+- **Full-text search.** Built-in FTS across all published posts; no external search service required.
+- **Tags with autocomplete.** Posts can be tagged in the editor with autocomplete; the index filters by tag.
 - **Minimal, auditable stack.** Node 22 + Fastify 5 + SQLite + Sharp + Apache. A developer can read the entire system in a few sessions.
 
 ---
@@ -92,9 +93,8 @@ rkr-blog trails on: large-library management, EXIF/metadata browsing, public alb
 
 - **No multi-author workflow.** User management is CLI-only; no UI for inviting or managing co-authors beyond the allowlist.
 - **No plugin or theme marketplace.** 8 CSS-only themes ship out of the box; extending requires writing code.
-- **No hosted option.** Self-hosted on a VPS is the only mode. No managed hosting, no one-click cloud deploy.
+- **No managed hosting.** Requires a VPS or container host (Fly.io supported); no one-click cloud deploy or managed SaaS option.
 - **No mobile app.** Admin is a web app; no native iOS or Android client.
-- **OneDrive picker deferred.** Server-side OneDrive OAuth is complete, but the browser-side file picker SDK is not yet wired.
 - **No CDN integration.** Apache serves derivatives from disk; no built-in Cloudflare, Fastly, or S3 offload path.
 - **Corpus scan performance.** `listPosts` and `listSidecars` do full scans; performance degrades with very large image libraries.
 - **Single-instance only.** In-process semaphores mean horizontal scaling requires architectural changes.
