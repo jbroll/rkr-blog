@@ -335,7 +335,10 @@ export async function imageInfo(
   const found = await findExistingOriginal(siteRoot, id);
   if (!found) return null;
   try {
-    const meta = await sharp(found.path).metadata();
+    const meta = await sharp(found.path, {
+      limitInputPixels: SHARP_INGEST_PIXEL_LIMIT,
+      failOn: 'error'
+    }).metadata();
     return {
       path: found.path,
       ext: found.ext,
