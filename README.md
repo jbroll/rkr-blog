@@ -1,23 +1,88 @@
 # rkr-blog
 
-Self-hosted blog built for photography. Your originals are never touched. Edit and publish from the browser.
+A blog where writing and images work together naturally. Bring in photos from your desktop, Google Drive, OneDrive, or any URL; arrange them in rich layouts; publish. No markup, no plugins, no external services.
 
-## For the author
+Runs on any Node 22 host. No separate database to install.
 
-Clean editor — write prose, drop in photos. No markdown syntax in your face. Crop, rotate, and straighten images right there in the browser. Save once, publish everything.
+---
 
-Import from Google Drive, OneDrive, a URL, or your local machine. Keep writing offline; it syncs when you reconnect.
+## Images from anywhere
 
-## For the reader
+Import photos directly into the editor from four sources: local files, any public URL, Google Drive, and OneDrive. Duplicate images from any source are detected and stored once.
 
-Pages load fast. Images render once and serve from disk with long-cache headers. The service worker caches pages for instant repeat visits and offline reading.
+Quality and resolution settings are configurable in settings. PNG files are preserved losslessly.
+
+## Six layout modes, one set of controls
+
+All image layouts share the same insertion and settings panel. Choose the arrangement from the toolbar:
+
+- **Justified rows** — rows of images at a uniform height, each image at its natural width
+- **Masonry columns** — columns of images at a uniform width, each image at its natural height
+- **Grid** — fixed rows and columns at a consistent aspect ratio
+- **Carousel** — horizontal scroll with keyboard navigation and optional autoplay; activates automatically when images exceed the grid layout capacity
+- **Full-bleed** — edge to edge across the viewport
+- **Inline** — flows with surrounding text
+
+## In-browser image editing
+
+Crop, rotate, flip, resize, and correct perspective without leaving the editor. Every operation is recorded as a named step; steps can be removed individually, undone, or redone. The edit history persists across browser reloads.
+
+## Non-destructive
+
+Edits are stored as reversible steps alongside the image. The stored original is never overwritten. Remove any step and the image regenerates from the original.
+
+## Fast by default
+
+Images are automatically served in multiple sizes and modern formats so every browser and screen gets the right file. Pages load fast on repeat visits, and readers can access previously visited posts without a connection.
+
+## Offline editing
+
+Changes queue locally when offline and sync automatically when the connection returns. A status indicator shows what is pending. Pinned posts are available locally without a network connection.
+
+---
 
 ## Stack
 
-Node 22, Fastify, SQLite, Apache. No bundler, no ORM, no Redis. TypeScript runs as-is via `--experimental-strip-types`.
+| | |
+|---|---|
+| Runtime | Node 22 |
+| Language | TypeScript |
+| Database | SQLite |
+| Auth | Google OAuth |
+| Deployment | Apache, Docker / Fly.io |
+
+---
+
+## Also included
+
+- **Eight built-in themes** — switch from settings
+- **WordPress importer** — migrate posts and images from an existing WordPress site
+- **Comments** — with spam filtering via a local LLM (Ollama)
+- **Invite-only access** — add collaborators by email address; owner and editor roles
+- **Operator CLI** — tools for rendering, garbage collection, reindexing, and user management
+
+---
+
+## Requirements
+
+Node 22 and a reverse proxy. Apache configuration and a Dockerfile are included.
+
+## Quick start
+
+```bash
+git clone <repo> /opt/rkr-blog
+cd /opt/rkr-blog && npm ci
+SITE_ROOT=/var/www/site bin/site-admin init
+# configure reverse proxy from deploy/apache.conf
+systemctl enable --now rkroll
+```
+
+Full setup: [docs/developer-quickstart.md](./docs/developer-quickstart.md)
+
+---
 
 ## Docs
 
-- **[docs/spec.md](./docs/spec.md)** — what the app does
-- **[docs/implementation.md](./docs/implementation.md)** — how it's built
-- **[docs/developer-quickstart.md](./docs/developer-quickstart.md)** — local setup
+- [docs/spec.md](./docs/spec.md) — what the app does
+- [docs/implementation.md](./docs/implementation.md) — how it's built
+- [docs/developer-quickstart.md](./docs/developer-quickstart.md) — local setup

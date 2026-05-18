@@ -18,6 +18,8 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Editor & figures
 
+- **Drop-onto-editor inserts figure block but image does not appear** — the figure node is created but the image src is not wired up after drop. _Revisit when:_ investigating the drop upload path end-to-end.
+
 - **`src/admin/main.ts` next size-split unit** — per-cell caption/alt wiring + `spliceCellSlot` gated by deferred per-cell-caption/alt e2e coverage (DEFERRED 9a). _Revisit when:_ DEFERRED 9a (per-cell caption/alt) ships — split alongside its e2e.
 - **parseHTML doesn't recover attrs** (9b) — rendered-HTML/clipboard
   round-trip drops figure attrs. _Revisit when:_ a "duplicate post" /
