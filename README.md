@@ -10,7 +10,7 @@ Authors can write, import and edit images without a connection. Changes sync aut
 
 ## Comments
 
-Readers can leave comments without an account. Submissions are filtered for spam automatically using a local LLM, with a moderation queue for manual review.
+Readers can leave comments without an account. Submissions are filtered for spam automatically using a local LLM, with a moderation queue for manual review. New comments trigger an email notification to the site owner.
 
 ## Images
 
@@ -47,6 +47,8 @@ Images are automatically served in multiple sizes and modern formats so every br
 
 ## Also included
 
+- **Full-text search** — search across all published posts
+- **Tags** — tag posts and filter by tag on the index; autocomplete in the editor
 - **Eight built-in themes** — switch from settings
 - **WordPress importer** — migrate posts and images from an existing WordPress site
 - **Author access** — invite authors by email address; owner and editor roles
