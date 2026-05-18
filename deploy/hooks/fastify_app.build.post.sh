@@ -13,7 +13,7 @@ echo "  fastify_app.build.post: git-hash = $(cat "$TMP_DIR/app/git-hash")"
 # Merge config.env (non-secrets, git-tracked) into the build's secrets.env.
 # config.env lines are written first so that secrets.env values win on any
 # collision (e.g. if a non-secret key appears in both files).
-config_env="$PROJECT_DIR/config.env"
+config_env="$PROJECT_DIR/deploy/config.env"
 secrets_env="$TMP_DIR/app/secrets.env"
 if [[ -f "$config_env" ]]; then
   if [[ -f "$secrets_env" ]]; then
