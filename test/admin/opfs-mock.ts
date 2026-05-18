@@ -261,6 +261,17 @@ export function installMockOpfs(): {
     }
   });
 
+  // isSupported() probes FileSystemFileHandle.prototype.createWritable to
+  // detect iOS Safari <17. Expose a minimal stub so the check passes in Node.
+  if (typeof (globalThis as Record<string, unknown>).FileSystemFileHandle === 'undefined') {
+    Object.defineProperty(globalThis, 'FileSystemFileHandle', {
+      configurable: true,
+      value: class FileSystemFileHandle {
+        createWritable(): void {}
+      }
+    });
+  }
+
   return {
     getMockRoot: () => mockRoot,
     resetMockOpfs: () => {

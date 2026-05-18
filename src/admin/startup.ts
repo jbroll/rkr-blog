@@ -119,7 +119,7 @@ async function runStart(editor: Editor): Promise<void> {
         const { manifest } = await pinPost(slugParam);
         seedFormFields(manifest);
       } catch (err) {
-        setStatus(`could not load /${slugParam}: ${(err as Error).message}`);
+        setStatus(`could not load /${slugParam}: ${(err as Error).message}`, true);
         // Failed load → revert the h1 to the default state so the
         // "loading …" string doesn't get stuck.
         if (pageTitleEl) pageTitleEl.textContent = 'New post';
@@ -150,7 +150,7 @@ async function runStart(editor: Editor): Promise<void> {
     });
     await tryDrain();
   } catch (err) {
-    setStatus(`offline cache init failed: ${(err as Error).message}`);
+    setStatus(`offline cache init failed: ${(err as Error).message}`, true);
   }
 }
 

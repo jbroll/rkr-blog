@@ -210,7 +210,7 @@ export async function refreshImagePreview(
     // don't show" symptom we want to diagnose on Android Firefox.
     const msg = (err as Error).message ?? String(err);
     console.error(`refreshImagePreview ${id.slice(0, 8)}…:`, err);
-    setStatus(`preview failed (${id.slice(0, 8)}…): ${msg}`);
+    setStatus(`preview failed (${id.slice(0, 8)}…): ${msg}`, true);
     setEditorImageSrc(editor, id, `/admin/preview/${id}?v=${Date.now()}`);
     return null;
   }

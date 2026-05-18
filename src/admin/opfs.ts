@@ -15,10 +15,14 @@
 let supportedCached: boolean | null = null;
 export function isSupported(): boolean {
   if (supportedCached !== null) return supportedCached;
+  // createWritable is absent on iOS Safari <17 even though getDirectory
+  // exists, so we must probe both halves of the API.
   supportedCached =
     typeof navigator !== 'undefined' &&
     typeof navigator.storage !== 'undefined' &&
-    typeof navigator.storage.getDirectory === 'function';
+    typeof navigator.storage.getDirectory === 'function' &&
+    typeof FileSystemFileHandle !== 'undefined' &&
+    typeof FileSystemFileHandle.prototype.createWritable === 'function';
   return supportedCached;
 }
 

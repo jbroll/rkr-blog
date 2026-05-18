@@ -71,7 +71,7 @@ export async function handleSave(
   const title = $<HTMLInputElement>('rkr-title').value.trim();
   const subtitle = $<HTMLInputElement>('rkr-subtitle').value.trim();
   if (!title) {
-    setStatus('title is required');
+    setStatus('title is required', true);
     return;
   }
   // Flush dirty image edits first: the saved markdown references
@@ -82,7 +82,7 @@ export async function handleSave(
     setStatus(`saving ${dirtyCount} image edit${dirtyCount === 1 ? '' : 's'}…`);
     const { ok, failed } = await flushDirtyImageEdits();
     if (failed > 0) {
-      setStatus(`save aborted: ${failed}/${ok + failed} image edits failed to upload`);
+      setStatus(`save aborted: ${failed}/${ok + failed} image edits failed to upload`, true);
       return;
     }
   }

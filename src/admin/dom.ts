@@ -14,8 +14,7 @@ export function $<T extends HTMLElement = HTMLElement>(id: string): T {
 
 /** Update the status line under the toolbar. The single source of
  * progress / error feedback for the editor; tests + e2e specs assert
- * on its textContent. Error messages get user-select:text so they can
- * be copied; normal messages revert to the default non-selectable style. */
+ * on its textContent. */
 export function setStatus(msg: string, isError = false): void {
   const el = $('rkroll-admin-status');
   el.textContent = msg;

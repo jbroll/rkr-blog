@@ -25,7 +25,7 @@ export async function openCropper(
   const saveBtn = $<HTMLButtonElement>('rkr-crop-save');
 
   if (!s.sourceWidth || !s.sourceHeight) {
-    setStatus('crop: source image has no recorded dimensions');
+    setStatus('crop: source image has no recorded dimensions', true);
     return;
   }
 
@@ -42,7 +42,7 @@ export async function openCropper(
       s.ops
     );
   } catch (err) {
-    setStatus(`crop: ${(err as Error).message}`);
+    setStatus(`crop: ${(err as Error).message}`, true);
     return;
   }
 
@@ -50,7 +50,7 @@ export async function openCropper(
   try {
     blob = await canvasToBlob(canvas, 'image/webp', 0.95);
   } catch (err) {
-    setStatus(`crop: ${(err as Error).message}`);
+    setStatus(`crop: ${(err as Error).message}`, true);
     return;
   }
   const stageUrl = URL.createObjectURL(blob);

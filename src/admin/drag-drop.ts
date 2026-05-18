@@ -69,7 +69,7 @@ async function uploadAndInsertAt(ed: Editor, files: File[], pos: number | null):
         `inserted ${f.name || 'image'} (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`
       );
     } catch (err) {
-      setStatus(`upload error: ${(err as Error).message}`);
+      setStatus(`upload error: ${(err as Error).message}`, true);
       return;
     }
   }
