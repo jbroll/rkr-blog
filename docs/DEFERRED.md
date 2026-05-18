@@ -26,9 +26,6 @@ Format: **item** — _revisit when:_ trigger.
   per-sidecar (global to every post using the image). _Revisit when:_
   an author wants the same image cropped differently in two posts.
 - **Container directive form for galleries** — leaf directive can't carry per-image captions. _Revisit when:_ per-image captions inside a multi-image directive are needed.
-- **Per-cell active-cell persistence** — selection resets to null when
-  leaving and returning to a multi-image figure. _Revisit when:_ first
-  author feedback on multi-image editing.
 - **Cross-figure image move** — drag an image from one figure into
   another (two-node PM transaction + emptied-source deletion).
   _Revisit when:_ an author wants an image moved between two figures.
