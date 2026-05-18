@@ -2420,3 +2420,528 @@ test('admin chrome: hidden for anonymous visitors', async ({ browser }) => {
   await expect(page.getByRole('button', { name: 'Logout' })).toHaveCount(0);
   await ctx.close();
 });
+
+// ---------------------------------------------------------------------------
+// pick.ts — uploadMany (multi-file upload)
+// ---------------------------------------------------------------------------
+
+test('editor: uploadMany uploads multiple files in series', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  // Open source picker, choose local — then provide two files at once.
+  // handleFileChange sees files.length === 2 and calls uploadMany().
+  const dialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="local"]').click();
+  await expect(dialog).toBeHidden();
+
+  await page.locator('#rkr-image-input').setInputFiles([
+    { name: 'multi1.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1X1_BLUE, 'base64') },
+    { name: 'multi2.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1X1_GREEN, 'base64') }
+  ]);
+
+  // After both uploads complete the status line mentions the last file.
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/multi2\.png/, {
+    timeout: 15_000
+  });
+
+  // A figure carrying both ids must be in the doc.
+  const figureIds = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed');
+    let ids = '';
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') ids = String((node.attrs as { ids: string }).ids ?? '');
+    });
+    return ids;
+  });
+  expect(figureIds.split(',').length).toBeGreaterThanOrEqual(2);
+});
+
+// ---------------------------------------------------------------------------
+// settings-page.ts — flash toast + dirty save button
+// ---------------------------------------------------------------------------
+
+test('settings: flash=saved shows success toast and strips query param', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/settings?flash=saved');
+
+  // The top-level code fires showToast({ kind: 'success', text: 'Settings saved.' })
+  // then calls history.replaceState to strip ?flash=saved from the URL.
+  await expect(page.locator('.rkr-toast.is-success')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('.rkr-toast.is-success')).toContainText('Settings saved');
+
+  // URL must no longer include the flash param.
+  await expect(page).not.toHaveURL(/flash=saved/);
+});
+
+test('settings: changing a field marks save button as dirty', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/settings');
+  await expect(page.locator('form.rkr-admin-settings')).toBeVisible();
+
+  // Trigger the input event on any visible form field.
+  const firstInput = page
+    .locator('form.rkr-admin-settings input, form.rkr-admin-settings textarea')
+    .first();
+  await firstInput.focus();
+  await page.keyboard.press('Space');
+
+  await expect(page.locator('form.rkr-admin-settings .rkr-admin-settings-submit')).toHaveClass(
+    /is-dirty/,
+    { timeout: 3_000 }
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gdrive.ts — Google Drive picker integration
+// ---------------------------------------------------------------------------
+
+// Shared gapi + google.picker mock injected before page load.
+// loadGapi() checks window.gapi before injecting a <script>, so the
+// mock short-circuits the real network fetch entirely.
+const GDRIVE_INIT_SCRIPT = `
+  window.gapi = { load(_name, cb) { cb(); } };
+  window.google = {
+    picker: {
+      PickerBuilder: class {
+        _cb = null;
+        addView() { return this; }
+        setOAuthToken() { return this; }
+        setDeveloperKey() { return this; }
+        setAppId() { return this; }
+        setCallback(cb) { this._cb = cb; return this; }
+        build() {
+          const cb = this._cb;
+          return {
+            setVisible(visible) {
+              if (visible && cb) {
+                void cb({ action: 'PICKED', docs: [{ id: 'gd-file-001', name: 'photo.jpg' }] });
+              }
+            }
+          };
+        }
+      },
+      DocsView: class { constructor(_id) {} },
+      ViewId: { DOCS_IMAGES: 'DOCS_IMAGES' },
+      Action: { PICKED: 'PICKED', CANCEL: 'CANCEL', ERROR: 'ERROR' }
+    }
+  };
+`;
+
+const GDRIVE_CANCEL_SCRIPT = `
+  window.gapi = { load(_name, cb) { cb(); } };
+  window.google = {
+    picker: {
+      PickerBuilder: class {
+        _cb = null;
+        addView() { return this; }
+        setOAuthToken() { return this; }
+        setDeveloperKey() { return this; }
+        setAppId() { return this; }
+        setCallback(cb) { this._cb = cb; return this; }
+        build() {
+          const cb = this._cb;
+          return {
+            setVisible(visible) {
+              if (visible && cb) {
+                void cb({ action: 'CANCEL' });
+              }
+            }
+          };
+        }
+      },
+      DocsView: class { constructor(_id) {} },
+      ViewId: { DOCS_IMAGES: 'DOCS_IMAGES' },
+      Action: { PICKED: 'PICKED', CANCEL: 'CANCEL', ERROR: 'ERROR' }
+    }
+  };
+`;
+
+const GDRIVE_ERROR_SCRIPT = `
+  window.gapi = { load(_name, cb) { cb(); } };
+  window.google = {
+    picker: {
+      PickerBuilder: class {
+        _cb = null;
+        addView() { return this; }
+        setOAuthToken() { return this; }
+        setDeveloperKey() { return this; }
+        setAppId() { return this; }
+        setCallback(cb) { this._cb = cb; return this; }
+        build() {
+          const cb = this._cb;
+          return {
+            setVisible(visible) {
+              if (visible && cb) {
+                void cb({ action: 'ERROR', message: 'quota exceeded' });
+              }
+            }
+          };
+        }
+      },
+      DocsView: class { constructor(_id) {} },
+      ViewId: { DOCS_IMAGES: 'DOCS_IMAGES' },
+      Action: { PICKED: 'PICKED', CANCEL: 'CANCEL', ERROR: 'ERROR' }
+    }
+  };
+`;
+
+function setupGdriveRoutes(page: import('@playwright/test').Page): void {
+  void page.route('**/admin/integrations/gdrive/status', (route) =>
+    route.fulfill({ json: { connected: true } })
+  );
+  void page.route('**/admin/integrations/gdrive/access-token', (route) =>
+    route.fulfill({ json: { accessToken: 'mock-token', expiresAt: '2099-01-01T00:00:00Z' } })
+  );
+  void page.route('**/admin/integrations/gdrive/picker-config', (route) =>
+    route.fulfill({
+      json: { clientId: 'mock-client', developerKey: 'mock-key', appId: 'mock-app' }
+    })
+  );
+  void page.route('**/admin/import/gdrive', (route) =>
+    route.fulfill({
+      json: {
+        id: 'aaa111bbb222ccc333ddd444eee555ff',
+        bytes: 1234,
+        ext: 'webp',
+        deduplicated: false
+      }
+    })
+  );
+}
+
+test('gdrive: happy path — picker fires PICKED → figure inserted with imported id', async ({
+  page
+}) => {
+  // addInitScript must run before goto so window.gapi is available when
+  // gdrive.ts's loadGapi() checks for it.
+  await page.addInitScript(GDRIVE_INIT_SCRIPT);
+  setupGdriveRoutes(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const dialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="drive"]').click();
+
+  // pickFromDrive resolves once the PICKED callback runs and import returns.
+  await expect(page.locator('#rkroll-admin-status')).toContainText(
+    /imported photo\.jpg|aaa111bbb222ccc333ddd444eee555ff/,
+    { timeout: 10_000 }
+  );
+
+  const figureIds = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed');
+    let ids = '';
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') ids = String((node.attrs as { ids: string }).ids ?? '');
+    });
+    return ids;
+  });
+  expect(figureIds).toContain('aaa111bbb222ccc333ddd444eee555ff');
+});
+
+test('gdrive: not connected + dismiss confirm → no navigation, returns []', async ({ page }) => {
+  await page.addInitScript(GDRIVE_INIT_SCRIPT);
+  // Override status to not connected.
+  void page.route('**/admin/integrations/gdrive/status', (route) =>
+    route.fulfill({ json: { connected: false } })
+  );
+
+  // Dismiss the native confirm dialog (confirm returns false).
+  page.on('dialog', (dialog) => void dialog.dismiss());
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="drive"]').click();
+
+  // No figure inserted — doc stays empty.
+  await page.waitForTimeout(500);
+  const figureCount = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) return -1;
+    let count = 0;
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') count++;
+    });
+    return count;
+  });
+  expect(figureCount).toBe(0);
+});
+
+test('gdrive: CANCEL action → no figure inserted', async ({ page }) => {
+  await page.addInitScript(GDRIVE_CANCEL_SCRIPT);
+  setupGdriveRoutes(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const dialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="drive"]').click();
+
+  await page.waitForTimeout(500);
+  const figureCount = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) return -1;
+    let count = 0;
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') count++;
+    });
+    return count;
+  });
+  expect(figureCount).toBe(0);
+});
+
+test('gdrive: ERROR action → status shows error message', async ({ page }) => {
+  await page.addInitScript(GDRIVE_ERROR_SCRIPT);
+  setupGdriveRoutes(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const dialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="drive"]').click();
+
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/Drive picker error/, {
+    timeout: 5_000
+  });
+});
+
+test('gdrive: import error → status shows error', async ({ page }) => {
+  await page.addInitScript(GDRIVE_INIT_SCRIPT);
+  void page.route('**/admin/integrations/gdrive/status', (route) =>
+    route.fulfill({ json: { connected: true } })
+  );
+  void page.route('**/admin/integrations/gdrive/access-token', (route) =>
+    route.fulfill({ json: { accessToken: 'mock-token', expiresAt: '2099-01-01T00:00:00Z' } })
+  );
+  void page.route('**/admin/integrations/gdrive/picker-config', (route) =>
+    route.fulfill({
+      json: { clientId: 'mock-client', developerKey: 'mock-key', appId: 'mock-app' }
+    })
+  );
+  void page.route('**/admin/import/gdrive', (route) =>
+    route.fulfill({ status: 500, body: 'internal server error' })
+  );
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const dialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.locator('button[data-source="drive"]').click();
+
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/Drive import error/, {
+    timeout: 5_000
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onedrive.ts — OneDrive browser integration
+// ---------------------------------------------------------------------------
+
+function setupOneDriveRoutes(
+  page: import('@playwright/test').Page,
+  opts: { connected?: boolean; importStatus?: number } = {}
+): void {
+  const connected = opts.connected ?? true;
+  const importStatus = opts.importStatus ?? 200;
+
+  void page.route('**/admin/integrations/onedrive/status', (route) =>
+    route.fulfill({ json: { connected } })
+  );
+  void page.route('**/admin/integrations/onedrive/files**', (route) => {
+    const url = new URL(route.request().url());
+    const folderId = url.searchParams.get('folderId') ?? 'root';
+    if (folderId === 'folder-001') {
+      return route.fulfill({
+        json: {
+          items: [{ id: 'img-002', name: 'beach.jpg', type: 'file', mimeType: 'image/jpeg' }],
+          nextLink: null
+        }
+      });
+    }
+    return route.fulfill({
+      json: {
+        items: [
+          { id: 'folder-001', name: 'Photos', type: 'folder' },
+          { id: 'img-001', name: 'vacation.jpg', type: 'file', mimeType: 'image/jpeg' }
+        ],
+        nextLink: null
+      }
+    });
+  });
+  void page.route('**/admin/integrations/onedrive/thumbnail**', (route) =>
+    route.fulfill({
+      json: {
+        url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+      }
+    })
+  );
+  if (importStatus === 200) {
+    void page.route('**/admin/import/onedrive', (route) =>
+      route.fulfill({
+        json: {
+          id: 'bbb222ccc333ddd444eee555fff66600',
+          bytes: 2000,
+          ext: 'webp',
+          deduplicated: false
+        }
+      })
+    );
+  } else {
+    void page.route('**/admin/import/onedrive', (route) =>
+      route.fulfill({ status: importStatus, body: 'import failed' })
+    );
+  }
+}
+
+test('onedrive: not connected + dismiss → no dialog opened', async ({ page }) => {
+  setupOneDriveRoutes(page, { connected: false });
+
+  page.on('dialog', (dialog) => void dialog.dismiss());
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="onedrive"]').click();
+
+  // The OneDrive browser dialog must not appear.
+  await page.waitForTimeout(500);
+  await expect(page.locator('#rkr-onedrive-browser')).toHaveCount(0);
+});
+
+test('onedrive: happy path — select file + import → figure inserted', async ({ page }) => {
+  setupOneDriveRoutes(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="onedrive"]').click();
+
+  const browser = page.locator('#rkr-onedrive-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+
+  // Wait for files to load then click the file item.
+  const fileBtn = browser.locator('button.rkr-od-file').filter({ hasText: 'vacation.jpg' });
+  await expect(fileBtn).toBeVisible({ timeout: 5_000 });
+  await fileBtn.click();
+
+  // Import button should be visible now.
+  const importBtn = browser.locator('.rkr-od-import');
+  await expect(importBtn).toBeVisible({ timeout: 2_000 });
+  await importBtn.click();
+
+  // Status line confirms import.
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/imported.*OneDrive/, {
+    timeout: 10_000
+  });
+
+  // Dialog should be gone.
+  await expect(browser).toHaveCount(0);
+
+  // Figure with the imported id must be in the doc.
+  const figureIds = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed');
+    let ids = '';
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') ids = String((node.attrs as { ids: string }).ids ?? '');
+    });
+    return ids;
+  });
+  expect(figureIds).toContain('bbb222ccc333ddd444eee555fff66600');
+});
+
+test('onedrive: folder navigation updates breadcrumb and grid', async ({ page }) => {
+  setupOneDriveRoutes(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="onedrive"]').click();
+
+  const browser = page.locator('#rkr-onedrive-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+
+  // Click the Photos folder to navigate into it.
+  const folderBtn = browser.locator('button.rkr-od-folder').filter({ hasText: 'Photos' });
+  await expect(folderBtn).toBeVisible({ timeout: 5_000 });
+  await folderBtn.click();
+
+  // Breadcrumb should now show OneDrive › Photos.
+  const breadcrumb = browser.locator('.rkr-od-breadcrumb');
+  await expect(breadcrumb).toContainText('Photos', { timeout: 5_000 });
+
+  // The folder's content (beach.jpg) should appear.
+  await expect(browser.locator('button.rkr-od-file').filter({ hasText: 'beach.jpg' })).toBeVisible({
+    timeout: 5_000
+  });
+});
+
+test('onedrive: cancel button closes dialog without inserting figure', async ({ page }) => {
+  setupOneDriveRoutes(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="onedrive"]').click();
+
+  const browser = page.locator('#rkr-onedrive-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+
+  // Wait for contents to render then cancel.
+  await expect(browser.locator('.rkr-od-grid')).toBeVisible();
+  await browser.locator('.rkr-od-cancel').click();
+
+  await expect(browser).toHaveCount(0);
+
+  // No figure should have been inserted.
+  const figureCount = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) return -1;
+    let count = 0;
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') count++;
+    });
+    return count;
+  });
+  expect(figureCount).toBe(0);
+});

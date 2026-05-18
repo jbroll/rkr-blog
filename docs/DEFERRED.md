@@ -82,9 +82,6 @@ Format: **item** — _revisit when:_ trigger.
 
 - **Playwright: perspective-rectify + Google OAuth callback** —
   _revisit when:_ fixture infra grows, or a UI bug ships uncaught.
-- **e2e-uncovered: gdrive/onedrive pickers** — need creds + provider
-  SDKs. _Revisit when:_ picker-SDK fixtures or a credentialed staging
-  env exist.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
