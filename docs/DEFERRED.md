@@ -115,8 +115,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Comments (blog-comments spec §11)
 
-- **Email notifications on new/queued comments** — _revisit when:_ an
-  email sender exists and the author wants async moderation alerts.
 - **Commenter self-service edit/delete** — needs an anon-auth scheme.
   _Revisit when:_ feedback it's needed + a chosen auth strategy.
 

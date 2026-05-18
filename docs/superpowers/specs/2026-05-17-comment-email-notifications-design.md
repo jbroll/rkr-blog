@@ -1,8 +1,9 @@
 # Comment Email Notifications — Design
 
 **Date:** 2026-05-17
-**Status:** Revised 2026-05-17 — notification level is now an
-operator-selectable Settings value (was hardcoded ham-only).
+**Status:** Implemented 2026-05-17 (branch `feat/comment-email-notif`)
+— notification level is an operator-selectable Settings value
+(off/ham/queued/all, default ham); was hardcoded ham-only.
 
 > Line/path anchors below (`server.ts:228/:245`,
 > `classify-handler.ts:42/44`) were written against an older `main`
