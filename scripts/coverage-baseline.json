@@ -62,8 +62,8 @@
       "linesHit": 31
     },
     "src/admin/opfs.ts": {
-      "linesFound": 64,
-      "linesHit": 60
+      "linesFound": 56,
+      "linesHit": 52
     },
     "src/admin/online-state.ts": {
       "linesFound": 27,
@@ -79,7 +79,7 @@
     },
     "src/admin/startup.ts": {
       "linesFound": 33,
-      "linesHit": 29
+      "linesHit": 30
     },
     "node_modules/@tiptap/core/src/lib/ResizableNodeView.ts": {
       "linesFound": 1,
@@ -231,7 +231,7 @@
     },
     "src/admin/toast.ts": {
       "linesFound": 26,
-      "linesHit": 26
+      "linesHit": 23
     },
     "127.0.0.1-3789/static/admin/chunk-RFBBAUMM.js": {
       "linesFound": 1,

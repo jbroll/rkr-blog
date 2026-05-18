@@ -157,13 +157,35 @@ test('startup ordering (FIX): awaiting the legacy drop before the first drain le
 test('startup ordering (PRE-FIX repro): void-ing the legacy drop lets the first drain observe the legacy op', async () => {
   await seedLegacy();
 
+  // Gate the removeEntry for the legacy JSON so the drain read happens
+  // deterministically while the entry is still present (simulating the
+  // pre-fix race where dropLegacyOpEntries was fire-and-forget).
+  let release!: () => void;
+  let gated = false;
+  const gateHit = new Promise<void>((resolveHit) => {
+    setGate((path) => {
+      if (!gated && path === '/outbox/1.setOps.json') {
+        gated = true;
+        resolveHit();
+        return new Promise<void>((r) => {
+          release = r;
+        });
+      }
+      return null;
+    });
+  });
+
   // startup.ts old ordering: `void dropLegacyOpEntries()` (fire-and-
   // forget) then the drain runs. The drain's head read happens before
   // the un-awaited drop finished removing the entry — proving the race
   // the fix closes. (Asserts the pre-change bug is real; the FIX test
   // above asserts it's gone.)
   const dropping = dropLegacyOpEntries();
+  await gateHit;
+
   const halts = await firstDrainWouldHaltOnLegacy();
+
+  release();
   await dropping;
 
   assert.ok(halts, 'pre-fix: first drain observed the still-present legacy op (spurious halted)');

@@ -28,12 +28,14 @@ const FLOOR = 0.75;
 const LCOV_PATH = 'coverage/e2e/lcov.info';
 const BASELINE_PATH = 'scripts/coverage-baseline.json';
 
-// Files exempt from the new-file gate. Service worker code runs in a
-// separate thread that Playwright's page.coverage can't instrument, so
-// the e2e suite is structurally unable to exercise these files.
+// Files exempt from the new-file gate. Worker/SW code runs in a
+// separate thread that Playwright's page.coverage can't instrument.
+// Type-only files have no executable lines and never appear in lcov.
 const EXEMPT: ReadonlySet<string> = new Set([
   'src/site/sw-admin.ts',
-  'src/site/sw-admin-register.ts'
+  'src/site/sw-admin-register.ts',
+  'src/admin/opfs-worker.ts',
+  'src/admin/opfs-worker-msg.ts'
 ]);
 
 interface FileMetric {

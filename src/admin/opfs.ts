@@ -2,11 +2,12 @@
 // offline cache. Browser-private filesystem at navigator.storage
 // .getDirectory(); see spec-offline.md §4 for the on-disk layout.
 //
-// Phase 1 foundation: JSON + blob read/write, directory listing,
-// file/directory removal. Each call collapses the verbose native
-// API (getDirectoryHandle → getFileHandle → createWritable → write
-// → close) to one function and auto-creates intermediate
-// directories on writes.
+// Write path: dispatches to opfs-worker.ts via postMessage so all
+// writes use createSyncAccessHandle() — the correct OPFS write API
+// on iOS 17+ and all desktop browsers.
+// Read path: JSON + blob reads, directory listing stay on main thread.
+
+import type { WriteRequest, WriteRequestBody, WriteResponse } from './opfs-worker-msg.ts';
 
 /** True iff the running browser exposes OPFS. Cached because the
  * answer is process-stable. Older browsers + some private-browsing
@@ -16,9 +17,8 @@ let supportedCached: boolean | null = null;
 export function isSupported(): boolean {
   if (supportedCached !== null) return supportedCached;
   // Probe getDirectory only. Runtime write failures (iOS devices where
-  // createWritable is absent or non-functional on OPFS handles despite the
-  // global existing) are caught by ensureSchema(), which calls
-  // markOpfsUnsupported() and returns { status: 'unsupported' }.
+  // createSyncAccessHandle is absent) are caught by the worker response
+  // path, which calls markOpfsUnsupported() and returns { status: 'unsupported' }.
   supportedCached =
     typeof navigator !== 'undefined' &&
     typeof navigator.storage !== 'undefined' &&
@@ -27,11 +27,69 @@ export function isSupported(): boolean {
 }
 
 /** Called by ensureSchema() when a write proves OPFS non-functional at
- * runtime (e.g. createWritable absent on iOS OPFS handles). Flips the
+ * runtime (e.g. createSyncAccessHandle absent on iOS 16). Flips the
  * cache so all subsequent isSupported() calls see false. */
 export function markOpfsUnsupported(): void {
   supportedCached = false;
 }
+
+// ---------------------------------------------------------------------------
+// Worker write path
+// ---------------------------------------------------------------------------
+
+let worker: Worker | null = null;
+
+/* v8 ignore next 10 -- Worker() requires a real browser */
+function getWorker(): Worker {
+  if (!worker) {
+    worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), {
+      type: 'module'
+    });
+    worker.onerror = () => {
+      markOpfsUnsupported();
+      worker = null;
+    };
+    worker.onmessage = ({ data }: MessageEvent<WriteResponse>) => settle(data);
+  }
+  return worker;
+}
+
+const pending = new Map<string, { resolve: () => void; reject: (e: Error) => void }>();
+
+/* v8 ignore next 9 -- worker response path; exercised by e2e */
+function settle(res: WriteResponse): void {
+  const p = pending.get(res.id);
+  if (!p) return;
+  pending.delete(res.id);
+  if (res.ok) {
+    p.resolve();
+    return;
+  }
+  if (res.isTypeError) markOpfsUnsupported();
+  p.reject(new Error(res.error));
+}
+
+/* v8 ignore next 8 -- Worker.postMessage; exercised by e2e */
+function workerRequest(req: WriteRequestBody): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    pending.set(id, { resolve, reject });
+    const msg = { ...req, id } as WriteRequest;
+    const transfer: Transferable[] =
+      msg.op === 'write' && msg.data instanceof ArrayBuffer ? [msg.data] : [];
+    getWorker().postMessage(msg, transfer);
+  });
+}
+
+/* v8 ignore next 4 -- worker dispatch; exercised by e2e */
+async function atomicWrite(path: string, data: string | Blob): Promise<void> {
+  const buffer = data instanceof Blob ? await data.arrayBuffer() : data;
+  await workerRequest({ op: 'write', path, data: buffer });
+}
+
+// ---------------------------------------------------------------------------
+// Read path (unchanged — reads work fine on the main thread)
+// ---------------------------------------------------------------------------
 
 /** Resolve the OPFS root. Cached per process so repeated lookups
  * don't repeatedly traverse the API. Throws when OPFS isn't
@@ -67,53 +125,6 @@ async function walk(
     parent = await parent.getDirectoryHandle(segment, { create });
   }
   return { parent, leafName };
-}
-
-/** Atomic write: stage into a sibling temp file then swap it into
- * place, so a crash mid-write can never truncate or partially
- * overwrite the target. createWritable() truncates whatever handle
- * it opens to zero immediately, so the temp must be a *different*
- * file from the target — never the target itself. The swap uses the
- * native handle.move() when available (a true atomic rename); the
- * fallback (copy temp → target → drop temp) is non-atomic but still
- * never leaves the target empty on a write fault, because a thrown
- * write() aborts before the target handle is ever opened. */
-// FileSystemFileHandle.move() is part of the File System Access API
-// but not yet in TS's DOM lib; narrow locally instead of augmenting
-// the global type.
-type MovableFileHandle = FileSystemFileHandle & {
-  move(parent: FileSystemDirectoryHandle, name: string): Promise<void>;
-};
-
-async function atomicWrite(path: string, data: string | Blob): Promise<void> {
-  const { parent, leafName } = await walk(path, true);
-  const tmpName = `.${leafName}.tmp-${crypto.randomUUID()}`;
-  const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
-  try {
-    const writable = await tmpHandle.createWritable();
-    await writable.write(data);
-    await writable.close();
-  } catch (err) {
-    // Staging failed — the real target was never touched. Drop the
-    // partial temp so it doesn't linger / show up in listDir.
-    await parent.removeEntry(tmpName).catch(() => {});
-    throw err;
-  }
-  const movable = tmpHandle as Partial<MovableFileHandle>;
-  if (typeof movable.move === 'function') {
-    // Atomic rename: the target flips from old → new in one step.
-    await movable.move(parent, leafName);
-    return;
-  }
-  /* v8 ignore start -- move() fallback; only taken on browsers
-     without FileSystemFileHandle.move (the unit harness mocks move,
-     so this path is e2e-only) */
-  const target = await parent.getFileHandle(leafName, { create: true });
-  const writable = await target.createWritable();
-  await writable.write(await tmpHandle.getFile());
-  await writable.close();
-  await parent.removeEntry(tmpName).catch(() => {});
-  /* v8 ignore stop */
 }
 
 /** Read a file as JSON. Returns null when the file doesn't exist.
@@ -225,20 +236,8 @@ export async function listDir(path: string): Promise<string[]> {
 /** Remove a single file. Silent on "doesn't exist" — callers
  * dropping a possibly-already-drained outbox entry shouldn't have
  * to differentiate. */
+/* v8 ignore next 4 -- worker dispatch; exercised by e2e */
 export async function removeFile(path: string): Promise<void> {
   if (!isSupported()) return;
-  let parent: FileSystemDirectoryHandle;
-  let leafName: string;
-  try {
-    ({ parent, leafName } = await walk(path, false));
-    /* v8 ignore next */
-  } catch {
-    return;
-  }
-  try {
-    await parent.removeEntry(leafName);
-    /* v8 ignore next 3 -- already-gone path; harmless, fires on retried drains */
-  } catch {
-    /* already gone or nonexistent — fine */
-  }
+  await workerRequest({ op: 'remove', path });
 }
