@@ -7,11 +7,7 @@
 
 import { openModal } from '../dialog-focus.ts';
 import { setStatus } from '../dom.ts';
-import type { UploadResponse } from '../upload.ts';
-
-interface OneDriveStatus {
-  connected: boolean;
-}
+import { ensureConnected, importCloudFile } from './provider-helpers.ts';
 
 interface BrowseItem {
   id: string;
@@ -19,12 +15,6 @@ interface BrowseItem {
   type: 'file' | 'folder';
   mimeType?: string;
   thumbnailUrl?: string;
-}
-
-async function oneDriveStatus(): Promise<OneDriveStatus> {
-  const res = await fetch('/admin/integrations/onedrive/status');
-  if (!res.ok) throw new Error(`status: ${res.status}`);
-  return (await res.json()) as OneDriveStatus;
 }
 
 interface FilesPage {
@@ -40,26 +30,15 @@ async function listOneDriveFiles(folderId: string, nextLink?: string): Promise<F
   return (await res.json()) as FilesPage;
 }
 
-async function importOneDriveFile(fileId: string): Promise<UploadResponse> {
-  const res = await fetch('/admin/import/onedrive', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fileId })
-  });
-  if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
-  return (await res.json()) as UploadResponse;
-}
-
 /** Open the OneDrive file browser modal → pick images → resolve with
  * the resulting stored image ids. Cancelled / no-pick resolves []. */
 export async function pickFromOneDrive(): Promise<string[]> {
-  const status = await oneDriveStatus();
-  if (!status.connected) {
-    if (confirm('OneDrive is not connected for your account. Open the connect flow now?')) {
-      window.location.href = '/admin/integrations/onedrive/connect';
-    }
-    return [];
-  }
+  const connected = await ensureConnected(
+    'OneDrive',
+    '/admin/integrations/onedrive/status',
+    '/admin/integrations/onedrive/connect'
+  );
+  if (!connected) return [];
   return openOneDriveBrowser();
 }
 
@@ -286,7 +265,7 @@ function openOneDriveBrowser(): Promise<string[]> {
       for (const item of items) {
         statusEl.textContent = `Importing ${item.name}…`;
         try {
-          const r = await importOneDriveFile(item.id);
+          const r = await importCloudFile('/admin/import/onedrive', item.id);
           ids.push(r.id);
         } catch (err) {
           statusEl.textContent = (err as Error).message;

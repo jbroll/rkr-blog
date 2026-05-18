@@ -8,11 +8,7 @@
 // config arrive from per-user OAuth state stored in oauth_tokens.
 
 import { setStatus } from '../dom';
-import type { UploadResponse } from '../upload';
-
-interface GdriveStatus {
-  connected: boolean;
-}
+import { ensureConnected, importCloudFile } from './provider-helpers.ts';
 
 interface GdriveAccessToken {
   accessToken: string;
@@ -100,12 +96,6 @@ async function loadPicker(): Promise<GoogleGlobal['picker']> {
   return pickerLoading;
 }
 
-async function gdriveStatus(): Promise<GdriveStatus> {
-  const res = await fetch('/admin/integrations/gdrive/status');
-  if (!res.ok) throw new Error(`status: ${res.status}`);
-  return (await res.json()) as GdriveStatus;
-}
-
 async function gdriveAccessToken(): Promise<GdriveAccessToken> {
   const res = await fetch('/admin/integrations/gdrive/access-token');
   if (!res.ok) throw new Error(`access-token: ${res.status}`);
@@ -118,16 +108,6 @@ async function gdrivePickerConfig(): Promise<GdrivePickerConfig> {
   return (await res.json()) as GdrivePickerConfig;
 }
 
-async function importGdriveFile(fileId: string): Promise<UploadResponse> {
-  const res = await fetch('/admin/import/gdrive', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fileId })
-  });
-  if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
-  return (await res.json()) as UploadResponse;
-}
-
 /**
  * Open Drive picker → on selection, import each chosen file and resolve
  * with the resulting stored image ids. Cancelled / no-pick resolves []
@@ -135,13 +115,12 @@ async function importGdriveFile(fileId: string): Promise<UploadResponse> {
  * insert into the editor (new figure vs append to an existing one).
  */
 export async function pickFromDrive(): Promise<string[]> {
-  const status = await gdriveStatus();
-  if (!status.connected) {
-    if (confirm('Google Drive is not connected for your account. Open the connect flow now?')) {
-      window.location.href = '/admin/integrations/gdrive/connect';
-    }
-    return [];
-  }
+  const connected = await ensureConnected(
+    'Google Drive',
+    '/admin/integrations/gdrive/status',
+    '/admin/integrations/gdrive/connect'
+  );
+  if (!connected) return [];
 
   const [token, config, picker] = await Promise.all([
     gdriveAccessToken(),
@@ -174,7 +153,7 @@ export async function pickFromDrive(): Promise<string[]> {
         for (const doc of data.docs ?? []) {
           setStatus(`importing ${doc.name ?? doc.id} from Drive…`);
           try {
-            const r = await importGdriveFile(doc.id);
+            const r = await importCloudFile('/admin/import/gdrive', doc.id);
             ids.push(r.id);
             setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
           } catch (err) {

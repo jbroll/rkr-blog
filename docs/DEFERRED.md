@@ -51,11 +51,6 @@ Format: **item** — _revisit when:_ trigger.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
 
-## Code quality
-
-- **gdrive ↔ onedrive structural duplication** — ~150 cloned LOC; two
-  parallel modules vs one Provider interface. _Revisit when:_ a third
-  integration (Dropbox/iCloud) lands.
 
 ## Test coverage
 

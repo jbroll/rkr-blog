@@ -30,8 +30,8 @@
       "linesHit": 49
     },
     "src/admin/integrations/gdrive.ts": {
-      "linesFound": 56,
-      "linesHit": 1
+      "linesFound": 47,
+      "linesHit": 43
     },
     "src/admin/main.ts": {
       "linesFound": 82,
@@ -43,7 +43,7 @@
     },
     "src/admin/pick.ts": {
       "linesFound": 7,
-      "linesHit": 0
+      "linesHit": 7
     },
     "src/admin/save.ts": {
       "linesFound": 63,
@@ -171,7 +171,7 @@
     },
     "src/admin/image-insert.ts": {
       "linesFound": 46,
-      "linesHit": 38
+      "linesHit": 43
     },
     "127.0.0.1-3789/static/admin/outbox-XMT7YGXK.js": {
       "linesFound": 1,
@@ -183,7 +183,7 @@
     },
     "src/lib/matrix.ts": {
       "linesFound": 17,
-      "linesHit": 12
+      "linesHit": 16
     },
     "src/site/copy-link.ts": {
       "linesFound": 7,
@@ -238,8 +238,8 @@
       "linesHit": 1
     },
     "src/admin/integrations/onedrive.ts": {
-      "linesFound": 121,
-      "linesHit": 1
+      "linesFound": 113,
+      "linesHit": 86
     },
     "src/admin/tag-input.ts": {
       "linesFound": 8,
@@ -255,7 +255,7 @@
     },
     "src/admin/settings-page.ts": {
       "linesFound": 7,
-      "linesHit": 4
+      "linesHit": 7
     },
     "src/lib/figure-ids.ts": {
       "linesFound": 2,
@@ -280,6 +280,10 @@
     "127.0.0.1-3789/static/admin/prose-markdown-BVDTPCKY.js": {
       "linesFound": 1,
       "linesHit": 1
+    },
+    "src/admin/integrations/provider-helpers.ts": {
+      "linesFound": 9,
+      "linesHit": 9
     }
   }
 }
