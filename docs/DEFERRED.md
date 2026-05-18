@@ -74,13 +74,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Performance / reliability
 
-- **Make the editor installable as a PWA** — public pages already load
-  `sw-unregister.js` (anon SW teardown done); `sw-register.js` is now
-  admin-only. Remaining: add an `/admin`-scoped manifest (`start_url
-  /admin/editor`, scope `/admin`, icons, `display: standalone`) linked
-  from `admin.ts`; decide whether a minimal `/admin` SW is needed for
-  cross-browser install or manifest-only suffices (editor works offline
-  via OPFS either way). _Revisit when:_ ready — needs a spec/plan.
+- **Replace placeholder admin PWA icons** — `static/admin-manifest.webmanifest` reuses the public `icon-192.png` / `icon-512.png`. _Revisit when:_ an editor-specific icon is designed.
 - **Teaser top-post sync `fs.readFileSync`** — blocking read on the
   anon `GET /` teaser path (mirrors the `_site-banner.md` read).
   _Revisit when:_ the homepage sees bot/cache-miss traffic, or the
