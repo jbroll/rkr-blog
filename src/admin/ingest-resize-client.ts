@@ -13,9 +13,11 @@
 // whatever the client uploads, so the id always names the bytes on
 // disk regardless of who encoded them.
 //
-// Decode failures (HEIC on non-Safari, animated GIF, SVG, TIFF in
-// most browsers, corrupted files) return `null`; the caller falls
-// back to the raw-upload path and the server handles ingest itself.
+// Formats the browser can't decode at all (HEIC on non-Safari, TIFF) are
+// rejected with a clear error rather than silently falling back to raw upload,
+// which would cause coord divergence between OPFS and server storage.
+// SVG, animated GIF, and other decodable-but-wrong-to-re-encode types return
+// null so the caller falls back to raw upload as before.
 
 const MAX_LONG_EDGE = 3200;
 const WEBP_QUALITY = 0.82;
@@ -43,13 +45,29 @@ export async function resizeForUpload(file: File): Promise<ClientResizeResult | 
     return null;
   }
 
+  // Formats the server would ingest-resize but the browser can't decode
+  // must be rejected — a raw-bytes fallback would create coord divergence.
+  // Check MIME type before attempting decode; createImageBitmap failures
+  // on decodable formats (e.g. headless Chromium rejecting imageOrientation)
+  // fall back to basic decode or raw upload instead.
+  const REJECT_TYPES = new Set(['image/heic', 'image/heif', 'image/tiff', 'image/x-tiff']);
+
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
-    // Unsupported format (HEIC outside Safari, corrupt, etc.). Caller
-    // uploads the raw bytes and the server's ingest pipeline handles it.
-    return null;
+    if (REJECT_TYPES.has(file.type)) {
+      throw new Error(
+        `"${file.name}" can't be opened in this browser — export to JPEG or PNG first`
+      );
+    }
+    // imageOrientation option unsupported (headless Chromium, older browsers)
+    // — fall back to basic decode; if that also fails, raw-upload.
+    try {
+      bitmap = await createImageBitmap(file);
+    } catch {
+      return null;
+    }
   }
 
   const srcW = bitmap.width;

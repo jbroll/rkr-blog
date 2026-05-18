@@ -40,18 +40,6 @@ Format: **item** — _revisit when:_ trigger.
 ## Local-first / sync
 
 - **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — a concurrent other-device edit between the conflict and the force can be overwritten (explicit user action; server idempotency covers replays, not this). _Revisit when:_ multi-device editing becomes common.
-- **HEIC upload: probe-decode → convert or reject** — non-Safari
-  browsers can't decode HEIC at all (`createImageBitmap` *and* `<img>`
-  both fail), so the elaborate "coord divergence" scenario is largely
-  unreachable there; the real defect is the silent raw-upload
-  fallback. Fix: capability-probe the upload (try to decode it — not
-  UA sniffing). Decodes → the existing client-resize path already
-  re-encodes it to WebP/JPEG with client/server coords consistent by
-  construction. Doesn't → reject with "export to JPEG/PNG first"
-  instead of the silent raw fallback. _Revisit when:_ ready to close
-  the raw-HEIC fallback — small, deterministic, ends the divergence
-  outright (verify the resize client re-encodes rather than passing
-  original bytes when decodable).
 
 ## UI / UX
 

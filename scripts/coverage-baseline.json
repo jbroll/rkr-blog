@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 26,
-      "linesHit": 24
+      "linesHit": 23
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -203,15 +203,15 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 27
+      "linesHit": 26
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
       "linesHit": 1
     },
     "src/admin/ingest-resize-client.ts": {
-      "linesFound": 14,
-      "linesHit": 12
+      "linesFound": 18,
+      "linesHit": 15
     },
     "src/admin/attr-commit.ts": {
       "linesFound": 14,
@@ -231,7 +231,7 @@
     },
     "src/admin/toast.ts": {
       "linesFound": 26,
-      "linesHit": 26
+      "linesHit": 23
     },
     "127.0.0.1-3789/static/admin/chunk-RFBBAUMM.js": {
       "linesFound": 1,

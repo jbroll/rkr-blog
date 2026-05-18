@@ -14,11 +14,11 @@
 // the same source through the same client environment is a no-op
 // server-side.
 //
-// When resizeForUpload returns null (HEIC, SVG, animated GIF, decode
-// failure), the raw file bytes ship instead. The server's
-// ingest-resize handles those — coord-divergence is still possible
-// for that path but the trigger is narrow (non-Safari + HEIC source
-// + offline edit). Tracked in DEFERRED.md.
+// When resizeForUpload returns null (SVG, animated GIF), the raw file
+// bytes ship instead and the server's ingest-resize handles them.
+// Formats the browser can't decode at all (HEIC on non-Safari, TIFF,
+// corrupt files) now throw so the author sees a clear error rather than
+// a silent raw-upload that would cause coord divergence.
 
 import { computeContentId, extForMime } from '../lib/content-id.ts';
 import { resizeForUpload } from './ingest-resize-client.ts';
