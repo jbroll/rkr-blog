@@ -2,7 +2,7 @@
 
 A blog where writing and images work together naturally. Bring in photos from your desktop, Google Drive, OneDrive, or any URL; arrange them in rich layouts; publish. No markup, no plugins, no external services.
 
-Runs on any Node 22 host. No separate database to install.
+Authoring entirely from the browser. Runs on any Node 22 host — no other services required.
 
 ## Works offline
 
