@@ -50,10 +50,6 @@ Format: **item** — _revisit when:_ trigger.
 ## Performance / reliability
 
 - **Replace placeholder admin PWA icons** — `static/admin-manifest.webmanifest` reuses the public `icon-192.png` / `icon-512.png`. _Revisit when:_ an editor-specific icon is designed.
-- **Teaser top-post sync `fs.readFileSync`** — blocking read on the
-  anon `GET /` teaser path (mirrors the `_site-banner.md` read).
-  _Revisit when:_ the homepage sees bot/cache-miss traffic, or the
-  banner read is converted to async (do both together).
 - **Module-level mutable singletons** — `liveInflight` + `events` emitter in `src/lib/jobs.ts`, resolved-theme cache in `config.ts` are process-singletons (fine for single-instance deploy). _Revisit when:_ moving to multi-process/multi-instance.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
@@ -63,7 +59,6 @@ Format: **item** — _revisit when:_ trigger.
 - **gdrive ↔ onedrive structural duplication** — ~150 cloned LOC; two
   parallel modules vs one Provider interface. _Revisit when:_ a third
   integration (Dropbox/iCloud) lands.
-- **`draft.ts refIdsFromDoc` hand-rolls id comma-split** — duplicates what `src/lib/figure-ids.ts splitIds` canonicalizes. _Revisit when:_ next touching `draft.ts`/`figure-ids`.
 
 ## Comments (blog-comments spec §11)
 
