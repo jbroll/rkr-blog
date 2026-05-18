@@ -123,7 +123,9 @@ test('listOneDriveFolder happy path', async () => {
   // text/plain should be filtered out; folder + jpeg remain
   assert.equal(page.items.length, 2);
   // folder sorts first
-  assert.equal(page.items[0].type, 'folder');
+  const first = page.items[0];
+  assert.ok(first);
+  assert.equal(first.type, 'folder');
   assert.ok(page.nextLink !== null);
 });
 
@@ -139,7 +141,7 @@ test('listOneDriveFolder uses subfolder URL', async () => {
   assert.match(capturedUrl, /\/items\/abc-folder\/children/);
 });
 
-test('listOneDriveFolder uses nextLink directly when provided', async () => {
+test('listOneDriveFolder uses a graph.microsoft.com nextLink directly when provided', async () => {
   let capturedUrl = '';
   const fetcher = (async (url: string | URL) => {
     capturedUrl = typeof url === 'string' ? url : url.toString();
@@ -147,9 +149,50 @@ test('listOneDriveFolder uses nextLink directly when provided', async () => {
       headers: { 'content-type': 'application/json' }
     });
   }) as typeof fetch;
-  const nextLink = 'https://example.com/next?token=xyz';
+  const nextLink = 'https://graph.microsoft.com/v1.0/me/drive/root/children?$skiptoken=abc';
   await listOneDriveFolder('tok', 'root', { fetcher, nextLink });
   assert.equal(capturedUrl, nextLink);
+});
+
+test('listOneDriveFolder rejects an unparseable nextLink', async () => {
+  await assert.rejects(
+    () =>
+      listOneDriveFolder('tok', 'root', {
+        nextLink: 'not a url',
+        fetcher: async () => new Response('{}')
+      }),
+    /invalid.*nextLink/i
+  );
+});
+
+test('listOneDriveFolder rejects a nextLink not on graph.microsoft.com', async () => {
+  await assert.rejects(
+    () =>
+      listOneDriveFolder('tok', 'root', {
+        nextLink: 'http://169.254.169.254/latest/meta-data/',
+        fetcher: async () => new Response('{}')
+      }),
+    /unsafe|invalid.*nextLink|graph\.microsoft\.com/i
+  );
+});
+
+test('listOneDriveFolder rejects a non-graph https host', async () => {
+  await assert.rejects(
+    () =>
+      listOneDriveFolder('tok', 'root', {
+        nextLink: 'https://evil.example.com/x',
+        fetcher: async () => new Response('{}')
+      }),
+    /unsafe|invalid.*nextLink|graph\.microsoft\.com/i
+  );
+});
+
+test('listOneDriveFolder accepts a real graph.microsoft.com nextLink', async () => {
+  const r = await listOneDriveFolder('tok', 'root', {
+    nextLink: 'https://graph.microsoft.com/v1.0/me/drive/items/x/children?$skiptoken=abc',
+    fetcher: async () => new Response(JSON.stringify({ value: [] }))
+  });
+  assert.ok(r);
 });
 
 test('listOneDriveFolder throws on HTTP error', async () => {

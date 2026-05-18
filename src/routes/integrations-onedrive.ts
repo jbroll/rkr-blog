@@ -289,8 +289,13 @@ export default async function integrationsOnedriveRoutes(
         });
         return page;
       } catch (err) {
-        req.log.warn({ err, folderId }, 'onedrive folder list failed');
-        return reply.code(400).send({ error: (err as Error).message });
+        req.log.warn({ err: safeErr(err), folderId }, 'onedrive folder list failed');
+        const msg = err instanceof Error ? err.message : '';
+        // The SSRF/nextLink-guard message is the only detail we must not
+        // echo to the client; other errors (auth expired, Graph 4xx/5xx)
+        // keep their diagnostic message like the gdrive/file-fetch peers.
+        const safeMsg = /nextLink/i.test(msg) ? 'invalid request' : msg;
+        return reply.code(400).send({ error: safeMsg });
       }
     }
   );

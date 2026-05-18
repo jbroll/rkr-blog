@@ -54,6 +54,17 @@ export async function listOneDriveFolder(
   const fetchImpl = opts.fetcher ?? fetch;
   let fetchUrl: string;
   if (opts.nextLink) {
+    let u: URL;
+    try {
+      u = new URL(opts.nextLink);
+    } catch {
+      throw new Error('invalid nextLink');
+    }
+    // Graph paginates only via graph.microsoft.com URLs. Anything
+    // else is an SSRF attempt carrying the user's bearer token.
+    if (u.protocol !== 'https:' || u.host !== 'graph.microsoft.com') {
+      throw new Error('unsafe nextLink (must be https://graph.microsoft.com)');
+    }
     fetchUrl = opts.nextLink;
   } else {
     const base =
