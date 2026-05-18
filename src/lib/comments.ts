@@ -216,3 +216,14 @@ export function listForModeration(db: Db, limit = 100): ModerationRow[] {
 export function getPostIdBySlug(db: Db, slug: string): number | null {
   return db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug)?.id ?? null;
 }
+
+/** slug + title for a post id — the notify handler needs both to
+ * build the email subject/permalink. Undefined when the post is gone. */
+export function getPostMetaById(
+  db: Db,
+  postId: number
+): { slug: string; title: string } | undefined {
+  return db
+    .prepare<{ slug: string; title: string }>('SELECT slug, title FROM posts WHERE id = ?')
+    .get(postId);
+}

@@ -5,6 +5,7 @@ import {
   countThread,
   getCommentById,
   getPostIdBySlug,
+  getPostMetaById,
   insertImportedComment,
   insertWebComment,
   listForModeration,
@@ -255,4 +256,10 @@ test('insertWebComment rejects parentId for a comment on a different post', (t) 
       }),
     /parent comment not found or not published on this post/
   );
+});
+
+test('getPostMetaById returns slug + title, undefined when absent', (t) => {
+  const { db, postId } = setup(t);
+  assert.deepEqual(getPostMetaById(db, postId), { slug: 'p', title: 'P' });
+  assert.equal(getPostMetaById(db, 999999), undefined);
 });
