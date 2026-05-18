@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 26,
-      "linesHit": 23
+      "linesHit": 24
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -203,7 +203,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 26
+      "linesHit": 27
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,

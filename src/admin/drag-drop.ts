@@ -17,6 +17,7 @@ import type { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 
 import { setStatus } from './dom';
+import { hydrateLocalThumbs } from './local-thumb';
 import { uploadImage } from './upload';
 
 /** Pull image File entries out of a DataTransfer / Clipboard event.
@@ -63,6 +64,7 @@ async function uploadAndInsertAt(ed: Editor, files: File[], pos: number | null):
         chain.insertContent({ type: 'figure', attrs });
       }
       chain.run();
+      void hydrateLocalThumbs(ed, [r.id]);
       setStatus(
         `inserted ${f.name || 'image'} (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`
       );
