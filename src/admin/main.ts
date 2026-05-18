@@ -10,7 +10,7 @@ import { wireCellDelete } from './cell-delete.ts';
 import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 import { makeDropHandlers, wireDragOverlay } from './drag-drop';
-import { makeCommitFigureAttr, wireDebouncedAttrInput } from './figure-attr-panel';
+import { makeCommitFigureAttr, wireCellAttrs, wireDebouncedAttrInput } from './figure-attr-panel';
 import { type FigureAttrs, FigureNode } from './figure-node';
 import { wireFigureReorder } from './figure-reorder';
 import { dirtyImageStates } from './image-edit';
@@ -348,14 +348,6 @@ function mount(): void {
 
   const commitFigureAttr = makeCommitFigureAttr(editor, () => populating);
 
-  /** Replace one slot of a parallel array (pads with empties). */
-  function spliceCellSlot(current: string, sep: '|' | ',', idx: number, value: string): string {
-    const list = current.split(sep);
-    while (list.length <= idx) list.push('');
-    list[idx] = value;
-    return list.join(sep);
-  }
-
   // justify=inline hides figcaption via site.css; warn so the author
   // doesn't watch their caption silently disappear at render time.
   const warnInlineCap = (): void => {
@@ -379,29 +371,13 @@ function mount(): void {
   attrFit.addEventListener('change', () => commitFigureAttr('fit', attrFit.value));
   attrTimer.addEventListener('input', () => commitFigureAttr('timer', attrTimer.value));
 
-  // Per-cell caption + alt: edit the slot in the parallel captions
-  // (pipe-separated) and alts (comma-separated) arrays.
-  const cellSlotGuard = (): boolean =>
-    !populating && activeCellIndex !== null && editor.isActive('figure');
-  wireDebouncedAttrInput({
-    key: 'captions',
-    input: attrCellCaption,
-    buildValue: () => {
-      if (!cellSlotGuard() || activeCellIndex === null) return null;
-      const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).captions ?? '';
-      return spliceCellSlot(cur, '|', activeCellIndex, attrCellCaption.value);
-    },
-    commit: (v, h) => commitFigureAttr('captions', v, { addToHistory: h })
-  });
-  wireDebouncedAttrInput({
-    key: 'alts',
-    input: attrCellAlt,
-    buildValue: () => {
-      if (!cellSlotGuard() || activeCellIndex === null) return null;
-      const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).alts ?? '';
-      return spliceCellSlot(cur, ',', activeCellIndex, attrCellAlt.value.trim());
-    },
-    commit: (v, h) => commitFigureAttr('alts', v, { addToHistory: h })
+  wireCellAttrs({
+    editor,
+    isPopulating: () => populating,
+    getActiveCellIndex: () => activeCellIndex,
+    commit: commitFigureAttr,
+    attrCellCaption,
+    attrCellAlt
   });
 
   // Per-cell delete button. The handler (doc-walk + setNodeMarkup)

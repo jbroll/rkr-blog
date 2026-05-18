@@ -56,6 +56,58 @@ interface DebouncedAttrInput {
   onInput?: () => void;
 }
 
+function spliceCellSlot(current: string, sep: '|' | ',', idx: number, value: string): string {
+  const list = current.split(sep);
+  while (list.length <= idx) list.push('');
+  list[idx] = value;
+  return list.join(sep);
+}
+
+interface CellAttrsOptions {
+  editor: Editor;
+  isPopulating: () => boolean;
+  getActiveCellIndex: () => number | null;
+  commit: CommitFigureAttr;
+  attrCellCaption: HTMLInputElement;
+  attrCellAlt: HTMLInputElement;
+}
+
+/** Wire per-cell caption + alt inputs. Extracted from main.ts alongside
+ * the DEFERRED 9a e2e coverage so main.ts stays under the 500-line cap. */
+export function wireCellAttrs({
+  editor,
+  isPopulating,
+  getActiveCellIndex,
+  commit,
+  attrCellCaption,
+  attrCellAlt
+}: CellAttrsOptions): void {
+  const guard = (): boolean =>
+    !isPopulating() && getActiveCellIndex() !== null && editor.isActive('figure');
+  wireDebouncedAttrInput({
+    key: 'captions',
+    input: attrCellCaption,
+    buildValue: () => {
+      const idx = getActiveCellIndex();
+      if (!guard() || idx === null) return null;
+      const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).captions ?? '';
+      return spliceCellSlot(cur, '|', idx, attrCellCaption.value);
+    },
+    commit: (v, h) => commit('captions', v, { addToHistory: h })
+  });
+  wireDebouncedAttrInput({
+    key: 'alts',
+    input: attrCellAlt,
+    buildValue: () => {
+      const idx = getActiveCellIndex();
+      if (!guard() || idx === null) return null;
+      const cur = (editor.getAttributes('figure') as Partial<FigureAttrs>).alts ?? '';
+      return spliceCellSlot(cur, ',', idx, attrCellAlt.value.trim());
+    },
+    commit: (v, h) => commit('alts', v, { addToHistory: h })
+  });
+}
+
 /** Wire input + blur on a text input that participates in the
  * silent-during-typing, history-checkpoint-on-blur pattern. */
 export function wireDebouncedAttrInput(b: DebouncedAttrInput): void {

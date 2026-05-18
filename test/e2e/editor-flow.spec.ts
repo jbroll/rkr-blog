@@ -1985,6 +1985,80 @@ test('editor: caption typed-then-saved-fast flushes pending debounce', async ({ 
   expect(await res.text()).toContain(caption);
 });
 
+test('editor: per-cell caption typed-then-saved-fast flushes pending debounce', async ({
+  page
+}) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+  const slug = `e2e-cell-cap-${Date.now()}`;
+  await page.locator('#rkr-title').fill('e2e cell caption');
+  await setSlug(page, slug);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'cell-cap.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_YELLOW, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded cell-cap/, {
+    timeout: 10_000
+  });
+
+  // Click the image thumb to enter per-cell mode.
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-cell-dialog')).toBeVisible();
+  const cellCaption = 'per-cell-debounce-caption';
+  await page.locator('#rkr-cell-caption').fill(cellCaption);
+  await page.locator('#rkr-cell-dialog .rkr-cell-dialog-close').click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
+    timeout: 20_000
+  });
+  await publishSlug(page, slug);
+  const res = await page.request.get(`/${slug}`);
+  expect(res.status()).toBe(200);
+  expect(await res.text()).toContain(cellCaption);
+});
+
+test('editor: per-cell alt typed-then-saved-fast flushes pending debounce', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.evaluate(
+    () => (window as unknown as { __rkrOfflineReady: Promise<void> }).__rkrOfflineReady
+  );
+  const slug = `e2e-cell-alt-${Date.now()}`;
+  await page.locator('#rkr-title').fill('e2e cell alt');
+  await setSlug(page, slug);
+
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'cell-alt.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(PNG_1X1_YELLOW, 'base64')
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded cell-alt/, {
+    timeout: 10_000
+  });
+
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-cell-dialog')).toBeVisible();
+  const cellAlt = 'per-cell-debounce-alt';
+  await page.locator('#rkr-cell-alt').fill(cellAlt);
+  await page.locator('#rkr-cell-dialog .rkr-cell-dialog-close').click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
+    timeout: 20_000
+  });
+  await publishSlug(page, slug);
+  const res = await page.request.get(`/${slug}`);
+  expect(res.status()).toBe(200);
+  // Alt text renders as the img alt attribute.
+  expect(await res.text()).toContain(`alt="${cellAlt}"`);
+});
+
 // Client-side ingest resize: a 4000×3000 PNG should be resized to
 // long-edge 3200 and re-encoded as WebP by the browser BEFORE
 // uploadImage hashes it. The bytes the server stores are then byte-

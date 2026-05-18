@@ -34,8 +34,8 @@
       "linesHit": 1
     },
     "src/admin/main.ts": {
-      "linesFound": 95,
-      "linesHit": 82
+      "linesFound": 82,
+      "linesHit": 79
     },
     "src/admin/perspective-modal.ts": {
       "linesFound": 73,
@@ -87,7 +87,7 @@
     },
     "src/admin/drainers.ts": {
       "linesFound": 26,
-      "linesHit": 23
+      "linesHit": 24
     },
     "src/lib/bake-ops-hash.ts": {
       "linesFound": 3,
@@ -115,7 +115,7 @@
     },
     "src/lib/prose-markdown.ts": {
       "linesFound": 111,
-      "linesHit": 74
+      "linesHit": 76
     },
     "src/lib/safe-url.ts": {
       "linesFound": 12,
@@ -203,7 +203,7 @@
     },
     "src/admin/local-thumb.ts": {
       "linesFound": 28,
-      "linesHit": 26
+      "linesHit": 27
     },
     "127.0.0.1-3789/static/admin/outbox-I4APEI6C.js": {
       "linesFound": 1,
@@ -222,8 +222,8 @@
       "linesHit": 4
     },
     "src/admin/figure-attr-panel.ts": {
-      "linesFound": 13,
-      "linesHit": 11
+      "linesFound": 28,
+      "linesHit": 26
     },
     "src/admin/pending-uploads.ts": {
       "linesFound": 9,
@@ -231,7 +231,7 @@
     },
     "src/admin/toast.ts": {
       "linesFound": 26,
-      "linesHit": 23
+      "linesHit": 26
     },
     "127.0.0.1-3789/static/admin/chunk-RFBBAUMM.js": {
       "linesFound": 1,

@@ -18,7 +18,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Editor & figures
 
-- **`src/admin/main.ts` next size-split unit** — per-cell caption/alt wiring + `spliceCellSlot` gated by deferred per-cell-caption/alt e2e coverage (DEFERRED 9a). _Revisit when:_ DEFERRED 9a (per-cell caption/alt) ships — split alongside its e2e.
 - **parseHTML doesn't recover attrs** (9b) — rendered-HTML/clipboard
   round-trip drops figure attrs. _Revisit when:_ a "duplicate post" /
   "paste from preview" feature lands, or authors lose data via
