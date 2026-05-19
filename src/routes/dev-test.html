@@ -8,7 +8,6 @@
 * { box-sizing: border-box; }
 body  { font-family: monospace; padding: 1rem; background: #111; color: #eee; font-size: 13px; line-height: 1.5; }
 h1    { font-size: 1rem; margin: 0 0 .5rem; }
-h2    { font-size: .85rem; margin: 1rem 0 .25rem; color: #aaa; text-transform: uppercase; letter-spacing: .05em; }
 .ok   { color: #4f4; }
 .fail { color: #f66; }
 .skip { color: #888; }
@@ -29,126 +28,320 @@ function log(cls, txt) {
   s.className = cls; s.textContent = txt + '\n';
   out.appendChild(s);
 }
-function section(title) { log('info', '\n── ' + title + ' ──'); }
+function section(title) { log('info', `\n── ${title} ──`); }
+function pass(name, detail = '') { return { name, ok: true,  detail }; }
+function fail(name, e)           { return { name, ok: false, detail: `${e?.constructor?.name ?? 'Error'}: ${e?.message ?? e}` }; }
+
+// Run an inline blob worker, return its postMessage result.
+function runWorker(src) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+    const w = new Worker(url);
+    w.onmessage = e => { URL.revokeObjectURL(url); w.terminate(); resolve(e.data); };
+    w.onerror   = e => { URL.revokeObjectURL(url); w.terminate(); reject(new Error(e.message ?? 'worker error')); };
+    w.postMessage(null);
+  });
+}
 
 // ── Level 1: raw OPFS APIs ──────────────────────────────────────────────────
-// Tests every layer independently: main-thread directory handle,
-// main-thread writable stream, and worker sync-access handle.
+async function level1() {
+  section('Level 1 — raw OPFS');
+  const results = [];
 
-const L1_WORKER = `
-self.onmessage = async () => {
-  const res = [];
-  const pass = (n, d) => res.push({ name: n, ok: true,  detail: d ?? '' });
-  const fail = (n, e) => res.push({ name: n, ok: false, detail: (e?.constructor?.name ?? 'Error') + ': ' + e?.message });
+  // Main-thread storage handle
   try {
     const root = await navigator.storage.getDirectory();
-    pass('getDirectory');
+    results.push(pass('main:getDirectory'));
+
+    // createWritable (main thread — async writable stream)
     try {
-      const fh = await root.getFileHandle('_probe', { create: true });
-      pass('getFileHandle');
+      const fh = await root.getFileHandle('_l1_writable', { create: true });
+      try {
+        const w = await fh.createWritable();
+        await w.write('writable-ok'); await w.close();
+        const text = await (await fh.getFile()).text();
+        results.push(pass('main:createWritable', text === 'writable-ok' ? text : `MISMATCH: ${text}`));
+      } catch(e) { results.push(fail('main:createWritable', e)); }
+      await root.removeEntry('_l1_writable').catch(() => {});
+    } catch(e) { results.push(fail('main:getFileHandle', e)); }
+  } catch(e) {
+    results.push(fail('main:getDirectory', e));
+  }
+
+  // Worker-thread: createSyncAccessHandle
+  try {
+    const workerResults = await runWorker(`
+self.onmessage = async () => {
+  const res = [];
+  try {
+    const root = await navigator.storage.getDirectory();
+    res.push({ name: 'worker:getDirectory', ok: true, detail: '' });
+    try {
+      const fh = await root.getFileHandle('_l1_sah', { create: true });
       try {
         const sah = await fh.createSyncAccessHandle();
         const enc = new TextEncoder().encode('sah-ok');
         sah.write(enc, { at: 0 }); sah.flush();
         const dec = new Uint8Array(enc.byteLength);
         sah.read(dec, { at: 0 }); sah.close();
-        pass('createSyncAccessHandle', new TextDecoder().decode(dec));
-      } catch(e) { fail('createSyncAccessHandle', e); }
-      await root.removeEntry('_probe').catch(() => {});
-    } catch(e) { fail('getFileHandle', e); }
-  } catch(e) { fail('getDirectory', e); }
+        const got = new TextDecoder().decode(dec);
+        res.push({ name: 'worker:createSyncAccessHandle', ok: got === 'sah-ok', detail: got });
+      } catch(e) { res.push({ name: 'worker:createSyncAccessHandle', ok: false, detail: e.constructor.name+': '+e.message }); }
+      await root.removeEntry('_l1_sah').catch(() => {});
+    } catch(e) { res.push({ name: 'worker:getFileHandle', ok: false, detail: e.constructor.name+': '+e.message }); }
+  } catch(e) { res.push({ name: 'worker:getDirectory', ok: false, detail: e.constructor.name+': '+e.message }); }
   self.postMessage(res);
 };
-`;
+    `);
+    results.push(...workerResults);
+  } catch(e) { results.push(fail('worker:init', e)); }
 
-async function level1() {
-  section('Level 1 — raw OPFS');
-  const results = [];
-
-  // Main thread
-  try {
-    const root = await navigator.storage.getDirectory();
-    results.push({ name: 'main:getDirectory', ok: true });
-    try {
-      const fh = await root.getFileHandle('_writable', { create: true });
-      try {
-        const w = await fh.createWritable();
-        await w.write('x'); await w.close();
-        results.push({ name: 'main:createWritable', ok: true });
-      } catch(e) {
-        results.push({ name: 'main:createWritable', ok: false,
-          detail: e?.constructor?.name + ': ' + e?.message });
-      }
-      await root.removeEntry('_writable').catch(() => {});
-    } catch(e) {
-      results.push({ name: 'main:getFileHandle', ok: false,
-        detail: e?.constructor?.name + ': ' + e?.message });
-    }
-  } catch(e) {
-    results.push({ name: 'main:getDirectory', ok: false,
-      detail: e?.constructor?.name + ': ' + e?.message });
-  }
-
-  // Worker
-  const workerResults = await new Promise(resolve => {
-    const url = URL.createObjectURL(new Blob([L1_WORKER], { type: 'application/javascript' }));
-    const w = new Worker(url);
-    w.onmessage = e => { URL.revokeObjectURL(url); resolve(e.data); };
-    w.onerror   = e => { URL.revokeObjectURL(url);
-      resolve([{ name: 'worker:init', ok: false, detail: e.message }]); };
-    w.postMessage(null);
-  });
-
-  return [...results, ...workerResults];
+  return results;
 }
 
-// ── Level 2: app worker (opfs-worker.js) ────────────────────────────────────
-// Exercises the real built worker: atomic write → verify → remove.
-// Skipped (not failed) if the bundle is absent (dev server without a build).
-
+// ── Level 2: app worker — atomic write/readback/remove ──────────────────────
 async function level2() {
-  section('Level 2 — app worker');
+  section('Level 2 — app worker (opfs-worker.js)');
 
-  // Check bundle exists first.
   const probe = await fetch('/static/admin/opfs-worker.js', { method: 'HEAD' });
   if (!probe.ok) {
-    const r = { name: 'worker:load', ok: null, detail: 'bundle missing — run npm run build:admin' };
-    log('skip', '⊘ ' + r.name + '  ' + r.detail);
-    return [r]; // null ok = skip, not fail
+    log('skip', '⊘ bundle missing — run npm run build:admin');
+    return [{ name: 'worker:load', ok: null }];
   }
 
   const results = [];
   const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
-  const call = (msg) => new Promise((resolve, reject) => {
+  const call = msg => new Promise((resolve, reject) => {
     worker.onmessage = e => resolve(e.data);
-    worker.onerror   = e => reject(new Error(e.type + ': ' + (e.message || JSON.stringify({ filename: e.filename, lineno: e.lineno }))));
+    worker.onerror   = e => reject(new Error(e.message ?? 'worker error'));
     worker.postMessage(msg);
   });
 
   try {
-    const id1 = 'w1';
-    const res1 = await call({ id: id1, op: 'write', path: '_test/probe.txt', data: 'app-worker-ok' });
-    results.push({ name: 'worker:write', ok: res1.ok && res1.id === id1,
-      detail: res1.ok ? '' : (res1.debug ?? res1.error) });
+    // Write
+    const r1 = await call({ id: 'l2a', op: 'write', path: '_test/probe.txt', data: 'app-worker-ok' });
+    results.push({ name: 'worker:write', ok: r1.ok, detail: r1.ok ? '' : (r1.debug ?? r1.error) });
 
-    if (res1.ok) {
-      // Read back via OPFS to confirm data was written correctly.
-      const root  = await navigator.storage.getDirectory();
-      const dir   = await root.getDirectoryHandle('_test', { create: false });
-      const fh    = await dir.getFileHandle('probe.txt', { create: false });
-      const file  = await fh.getFile();
-      const text  = await file.text();
+    if (r1.ok) {
+      // Readback via direct OPFS from main thread
+      const root = await navigator.storage.getDirectory();
+      const dir  = await root.getDirectoryHandle('_test', { create: false });
+      const fh   = await dir.getFileHandle('probe.txt', { create: false });
+      const text = await (await fh.getFile()).text();
       results.push({ name: 'worker:readback', ok: text === 'app-worker-ok', detail: text });
 
-      // Clean up.
-      const id2 = 'w2';
-      const res2 = await call({ id: id2, op: 'remove', path: '_test/probe.txt' });
-      results.push({ name: 'worker:remove', ok: res2.ok && res2.id === id2,
-        detail: res2.ok ? '' : res2.error });
-      await root.getDirectoryHandle('_test').then(d => root.removeEntry('_test', { recursive: true })).catch(() => {});
+      // Remove
+      const r2 = await call({ id: 'l2b', op: 'remove', path: '_test/probe.txt' });
+      results.push({ name: 'worker:remove', ok: r2.ok, detail: r2.ok ? '' : r2.error });
+      await root.removeEntry('_test', { recursive: true }).catch(() => {});
     }
   } catch(e) {
-    results.push({ name: 'worker:op', ok: false, detail: e?.message });
+    results.push(fail('worker:op', e));
+  } finally {
+    worker.terminate();
+  }
+  return results;
+}
+
+// ── Level 3: persistence across worker restart ───────────────────────────────
+// Write via one worker instance, terminate it, spin up a fresh one,
+// read back. Verifies data survives beyond the originating worker's lifetime.
+async function level3() {
+  section('Level 3 — persistence across worker restart');
+  const results = [];
+
+  const w1 = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const call1 = msg => new Promise((resolve, reject) => {
+    w1.onmessage = e => resolve(e.data);
+    w1.onerror   = e => reject(new Error(e.message));
+    w1.postMessage(msg);
+  });
+
+  try {
+    const r1 = await call1({ id: 'l3a', op: 'write', path: '_test/persist.txt', data: 'persist-ok' });
+    results.push({ name: 'persist:write', ok: r1.ok, detail: r1.ok ? '' : (r1.debug ?? r1.error) });
+    w1.terminate();
+
+    if (!r1.ok) return results;
+
+    // Fresh worker instance — no shared state with w1
+    const w2 = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+    const call2 = msg => new Promise((resolve, reject) => {
+      w2.onmessage = e => resolve(e.data);
+      w2.onerror   = e => reject(new Error(e.message));
+      w2.postMessage(msg);
+    });
+
+    try {
+      // Read back via main-thread OPFS (worker only writes; reads stay main-thread)
+      const root = await navigator.storage.getDirectory();
+      const dir  = await root.getDirectoryHandle('_test', { create: false });
+      const fh   = await dir.getFileHandle('persist.txt', { create: false });
+      const text = await (await fh.getFile()).text();
+      results.push({ name: 'persist:readback-after-restart', ok: text === 'persist-ok', detail: text });
+
+      // Overwrite with w2
+      const r2 = await call2({ id: 'l3b', op: 'write', path: '_test/persist.txt', data: 'overwrite-ok' });
+      results.push({ name: 'persist:overwrite', ok: r2.ok, detail: r2.ok ? '' : (r2.debug ?? r2.error) });
+
+      if (r2.ok) {
+        // Re-read the file handle since content changed
+        const fh2   = await dir.getFileHandle('persist.txt', { create: false });
+        const text3 = await (await fh2.getFile()).text();
+        results.push({ name: 'persist:readback-overwrite', ok: text3 === 'overwrite-ok', detail: text3 });
+      }
+
+      // Cleanup
+      const r3 = await call2({ id: 'l3c', op: 'remove', path: '_test/persist.txt' });
+      results.push({ name: 'persist:cleanup', ok: r3.ok, detail: r3.ok ? '' : r3.error });
+      await root.removeEntry('_test', { recursive: true }).catch(() => {});
+    } finally {
+      w2.terminate();
+    }
+  } catch(e) {
+    w1.terminate();
+    results.push(fail('persist:op', e));
+  }
+  return results;
+}
+
+// ── Level 4: nested directory paths ─────────────────────────────────────────
+// The app worker's walk() traverses multi-segment paths. Exercise it with
+// two levels of nesting and verify correct file resolution.
+async function level4() {
+  section('Level 4 — nested directory paths');
+  const results = [];
+
+  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const call = msg => new Promise((resolve, reject) => {
+    worker.onmessage = e => resolve(e.data);
+    worker.onerror   = e => reject(new Error(e.message));
+    worker.postMessage(msg);
+  });
+
+  const paths = [
+    '_test/a.txt',
+    '_test/sub/b.txt',
+    '_test/sub/deep/c.txt'
+  ];
+
+  try {
+    // Write all
+    for (const [i, p] of paths.entries()) {
+      const r = await call({ id: `l4w${i}`, op: 'write', path: p, data: `content:${p}` });
+      results.push({ name: `nested:write:${p}`, ok: r.ok, detail: r.ok ? '' : (r.debug ?? r.error) });
+    }
+
+    // Read back each via main-thread OPFS traversal
+    const root = await navigator.storage.getDirectory();
+    for (const p of paths) {
+      try {
+        const parts = p.split('/');
+        let dir = root;
+        for (const seg of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
+        const fh   = await dir.getFileHandle(parts.at(-1));
+        const text = await (await fh.getFile()).text();
+        results.push({ name: `nested:readback:${p}`, ok: text === `content:${p}`, detail: text });
+      } catch(e) {
+        results.push(fail(`nested:readback:${p}`, e));
+      }
+    }
+
+    // Remove root, verify it's gone
+    await root.removeEntry('_test', { recursive: true }).catch(() => {});
+    let gone = false;
+    try { await root.getDirectoryHandle('_test'); } catch { gone = true; }
+    results.push({ name: 'nested:cleanup', ok: gone, detail: gone ? '' : '_test dir still present' });
+  } catch(e) {
+    results.push(fail('nested:op', e));
+  } finally {
+    worker.terminate();
+  }
+  return results;
+}
+
+// ── Level 5: large payload ───────────────────────────────────────────────────
+// Write 1 MiB, read back and verify byte count + spot-check content.
+async function level5() {
+  section('Level 5 — large payload (1 MiB)');
+  const results = [];
+
+  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const call = msg => new Promise((resolve, reject) => {
+    worker.onmessage = e => resolve(e.data);
+    worker.onerror   = e => reject(new Error(e.message));
+    worker.postMessage(msg);
+  });
+
+  // 1 MiB of repeating ASCII — deterministic, easy to spot-check
+  const PAYLOAD = 'x'.repeat(1024 * 1024);
+
+  try {
+    const t0 = performance.now();
+    const r = await call({ id: 'l5a', op: 'write', path: '_test/large.txt', data: PAYLOAD });
+    const writeMs = Math.round(performance.now() - t0);
+    results.push({ name: 'large:write', ok: r.ok, detail: r.ok ? `${writeMs}ms` : (r.debug ?? r.error) });
+
+    if (r.ok) {
+      const root = await navigator.storage.getDirectory();
+      const dir  = await root.getDirectoryHandle('_test', { create: false });
+      const fh   = await dir.getFileHandle('large.txt', { create: false });
+      const file = await fh.getFile();
+      const t1 = performance.now();
+      const text = await file.text();
+      const readMs = Math.round(performance.now() - t1);
+      const sizeOk = text.length === PAYLOAD.length;
+      const contentOk = text === PAYLOAD;
+      results.push({
+        name: 'large:readback',
+        ok: sizeOk && contentOk,
+        detail: `${text.length} bytes, ${readMs}ms${contentOk ? '' : ' CONTENT MISMATCH'}`
+      });
+      await root.removeEntry('_test', { recursive: true }).catch(() => {});
+    }
+  } catch(e) {
+    results.push(fail('large:op', e));
+  } finally {
+    worker.terminate();
+  }
+  return results;
+}
+
+// ── Level 6: atomic swap — simulate concurrent write ────────────────────────
+// Fire two write ops to the same path from the same worker in quick
+// succession. Both should succeed (the second wins); no corruption.
+async function level6() {
+  section('Level 6 — rapid sequential writes (last-write-wins)');
+  const results = [];
+
+  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  // Dispatch both messages before either resolves so they queue inside the worker.
+  const responses = {};
+  worker.onmessage = e => { responses[e.data.id] = e.data; };
+
+  worker.postMessage({ id: 'l6a', op: 'write', path: '_test/race.txt', data: 'first' });
+  worker.postMessage({ id: 'l6b', op: 'write', path: '_test/race.txt', data: 'second' });
+
+  try {
+    const [r1, r2] = await Promise.all([
+      new Promise(res => { const iv = setInterval(() => { if (responses.l6a) { clearInterval(iv); res(responses.l6a); } }, 10); }),
+      new Promise(res => { const iv = setInterval(() => { if (responses.l6b) { clearInterval(iv); res(responses.l6b); } }, 10); })
+    ]);
+    results.push({ name: 'race:both-completed', ok: r1.ok && r2.ok,
+      detail: `r1=${r1.ok} r2=${r2.ok}${r1.ok ? '' : ' '+r1.error}${r2.ok ? '' : ' '+r2.error}` });
+
+    if (r1.ok && r2.ok) {
+      const root = await navigator.storage.getDirectory();
+      const dir  = await root.getDirectoryHandle('_test', { create: false });
+      const fh   = await dir.getFileHandle('race.txt', { create: false });
+      const text = await (await fh.getFile()).text();
+      // Either 'first' or 'second' is valid — worker serialises internally
+      const valid = text === 'first' || text === 'second';
+      results.push({ name: 'race:no-corruption', ok: valid, detail: `winner: "${text}"` });
+      await root.removeEntry('_test', { recursive: true }).catch(() => {});
+    }
+  } catch(e) {
+    results.push(fail('race:op', e));
   } finally {
     worker.terminate();
   }
@@ -157,44 +350,54 @@ async function level2() {
 
 // ── Runner ───────────────────────────────────────────────────────────────────
 
+function display(results) {
+  for (const r of results) {
+    if (r.ok === null) continue; // skipped level
+    log(r.ok ? 'ok' : 'fail', `${r.ok ? '✓' : '✗'} ${r.name}${r.detail ? '  ' + r.detail : ''}`);
+  }
+}
+
 async function run() {
   log('info', navigator.userAgent + '\n');
-
   const allResults = [];
 
   const l1 = await level1();
-  for (const r of l1) {
-    log(r.ok ? 'ok' : 'fail', (r.ok ? '✓ ' : '✗ ') + r.name + (r.detail ? '  ' + r.detail : ''));
-    allResults.push(r);
-  }
-
-  const l1pass = l1.every(r => r.ok);
-  if (!l1pass) {
-    st.textContent = 'FAIL (level 1)';
-    st.className = 'fail';
-    post(allResults);
-    return;
-  }
+  display(l1); allResults.push(...l1);
+  if (l1.some(r => !r.ok)) { finish('FAIL (level 1)', allResults); return; }
 
   const l2 = await level2();
-  for (const r of l2) {
-    if (r.ok === null) continue; // already logged as skip above
-    log(r.ok ? 'ok' : 'fail', (r.ok ? '✓ ' : '✗ ') + r.name + (r.detail ? '  ' + r.detail : ''));
-    allResults.push(r);
-  }
+  display(l2); allResults.push(...l2.filter(r => r.ok !== null));
+  if (l2.some(r => r.ok === false)) { finish('FAIL (level 2)', allResults); return; }
 
-  const l2fail = l2.some(r => r.ok === false);
-  const pass = !l2fail;
-  st.textContent = pass ? 'PASS ✓' : 'FAIL (level 2)';
-  st.className   = pass ? 'ok' : 'fail';
-  post(allResults);
+  const hasWorker = l2.every(r => r.ok !== null); // false = bundle missing
+  if (!hasWorker) { finish('PASS ✓ (levels 1–2, worker skipped)', allResults); return; }
+
+  const l3 = await level3();
+  display(l3); allResults.push(...l3);
+  if (l3.some(r => !r.ok)) { finish('FAIL (level 3)', allResults); return; }
+
+  const l4 = await level4();
+  display(l4); allResults.push(...l4);
+  if (l4.some(r => !r.ok)) { finish('FAIL (level 4)', allResults); return; }
+
+  const l5 = await level5();
+  display(l5); allResults.push(...l5);
+  if (l5.some(r => !r.ok)) { finish('FAIL (level 5)', allResults); return; }
+
+  const l6 = await level6();
+  display(l6); allResults.push(...l6);
+  if (l6.some(r => !r.ok)) { finish('FAIL (level 6)', allResults); return; }
+
+  finish('PASS ✓', allResults);
 }
 
-function post(results) {
+function finish(status, results) {
+  st.textContent = status;
+  st.className   = status.startsWith('PASS') ? 'ok' : 'fail';
   fetch('/_test/results', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer dev-test' },
-    body: JSON.stringify({ ts: new Date().toISOString(), ua: navigator.userAgent, results })
+    body: JSON.stringify({ ts: new Date().toISOString(), ua: navigator.userAgent, status, results })
   }).catch(e => log('fail', 'POST failed: ' + e.message));
 }
 

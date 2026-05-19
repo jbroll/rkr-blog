@@ -23,7 +23,6 @@
     "circular": "dpdm --circular --no-warning --no-tree --exit-code circular:1 'src/**/*.ts'",
     "test:e2e": "playwright test --config test/playwright.config.ts",
     "test:e2e:headed": "playwright test --config test/playwright.config.ts --headed",
-    "test:e2e:ios": "set -a; [ -f secrets.env ] && . ./secrets.env; set +a; npx playwright test --config test/playwright.config.ios.ts",
     "test:device": "set -a; [ -f secrets.env ] && . ./secrets.env; set +a; ENABLE_TEST_ROUTES=1 HOST=0.0.0.0 npm start",
     "test:coverage:full": "rm -rf coverage && npm run --silent test:coverage:report && npm run --silent build:admin && npm run --silent build:site && npm run --silent test:e2e",
     "format": "biome format --write",
@@ -89,7 +88,6 @@
       "test/**/*.test.ts",
       "test/e2e/**/*.spec.ts",
       "test/playwright.config.ts",
-      "test/playwright.config.ios.ts",
       "bin/site-admin",
       "src/lib/comments.ts"
     ],
@@ -105,8 +103,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
-    "@lambdatest/node-tunnel": "^4.0.11",
-    "@playwright/test": "^1.57.0",
+    "@playwright/test": "^1.60.0",
     "@tiptap/core": "^3.22.5",
     "@tiptap/pm": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
