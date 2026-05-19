@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+npm install
+npx playwright install chromium
+
+npm run test:coverage
+
+npm run build:admin
+npm run build:site
+node --no-warnings=ExperimentalWarning --experimental-strip-types \
+  scripts/check-bundle-size.ts
+
+npm run test:e2e
+
+admin_site_files=$(find src/admin src/site -name '*.ts' | tr '\n' ' ')
+# shellcheck disable=SC2086
+node --no-warnings=ExperimentalWarning --experimental-strip-types \
+  scripts/check-e2e-coverage.ts $admin_site_files
