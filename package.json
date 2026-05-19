@@ -70,6 +70,8 @@
       "src/cli/reset.ts",
       "src/cli/jobs.ts",
       "src/cli/fix-wp-dates.ts",
+      "src/cli/export.ts",
+      "src/cli/import.ts",
       "src/admin/opfs-worker.ts",
       "src/admin/posts-list.ts",
       "src/admin/settings-page.ts",

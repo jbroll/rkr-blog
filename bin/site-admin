@@ -10,7 +10,7 @@
 //   site-admin server [--port 3000]
 //   site-admin jobs failed
 //
-// Future subcommands (see spec.md §12 operator commands): reindex, import, password.
+// Future subcommands (see spec.md §12 operator commands): reindex, password.
 
 const COMMANDS = {
   init:              () => import('../src/cli/init.ts'),
@@ -25,7 +25,9 @@ const COMMANDS = {
   jobs:              () => import('../src/cli/jobs.ts'),
   'import-wp':          () => import('../src/cli/import-wp.ts'),
   'fix-wp-dates':       () => import('../src/cli/fix-wp-dates.ts'),
-  'import-wp-comments': () => import('../src/cli/import-wp-comments.ts')
+  'import-wp-comments': () => import('../src/cli/import-wp-comments.ts'),
+  export:               () => import('../src/cli/export.ts'),
+  import:               () => import('../src/cli/import.ts')
 };
 
 const KNOWN = Object.keys(COMMANDS);

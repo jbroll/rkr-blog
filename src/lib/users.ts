@@ -21,7 +21,6 @@ export interface AllowedEmail {
   email: string;
   role: Role;
   invited_at: string;
-  invited_by: number | null;
 }
 
 export interface OAuthIdentity {
@@ -117,15 +116,13 @@ export function inviteEmail(
   db: Db,
   email: string,
   role: Role,
-  invitedBy: number | null = null,
   when: string = new Date().toISOString()
 ): void {
   const e = normalizeEmail(email);
   db.prepare(
-    `INSERT INTO allowed_emails (email, role, invited_at, invited_by) VALUES (?, ?, ?, ?)
-     ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_at = excluded.invited_at,
-       invited_by = excluded.invited_by`
-  ).run(e, role, when, invitedBy);
+    `INSERT INTO allowed_emails (email, role, invited_at) VALUES (?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_at = excluded.invited_at`
+  ).run(e, role, when);
 }
 
 export function removeInvite(db: Db, email: string): boolean {
@@ -135,17 +132,13 @@ export function removeInvite(db: Db, email: string): boolean {
 
 export function listInvites(db: Db): AllowedEmail[] {
   return db
-    .prepare<AllowedEmail>(
-      'SELECT email, role, invited_at, invited_by FROM allowed_emails ORDER BY invited_at'
-    )
+    .prepare<AllowedEmail>('SELECT email, role, invited_at FROM allowed_emails ORDER BY invited_at')
     .all();
 }
 
 export function isAllowed(db: Db, email: string): AllowedEmail | undefined {
   return db
-    .prepare<AllowedEmail>(
-      'SELECT email, role, invited_at, invited_by FROM allowed_emails WHERE email = ?'
-    )
+    .prepare<AllowedEmail>('SELECT email, role, invited_at FROM allowed_emails WHERE email = ?')
     .get(normalizeEmail(email));
 }
 

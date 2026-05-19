@@ -27,6 +27,7 @@ import { runReindex } from '../lib/post-index.ts';
 import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
+import { registerArchiveRoutes } from './admin-archive.ts';
 import { registerAdminCommentsRoutes } from './admin-comments.ts';
 import { buildAdminEditorCsp, makeCspNonce } from './admin-csp.ts';
 import {
@@ -141,6 +142,7 @@ export default async function adminRoutes(
   registerPostBundleRoutes(fastify, { siteRoot, guard });
   registerAdminTagsRoute(fastify, { siteRoot, guard });
   registerAdminCommentsRoutes(fastify, { siteRoot, guard });
+  registerArchiveRoutes(fastify, { siteRoot, guard });
 
   fastify.post<{
     Body: {
