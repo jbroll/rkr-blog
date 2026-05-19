@@ -156,6 +156,18 @@ test('describeOp: rotate', () => {
   assert.equal(describeOp({ type: 'rotate', degrees: 90 }), 'rotate 90°');
 });
 
+test('describeOp rotate: positive angle shown as-is', () => {
+  assert.equal(describeOp({ type: 'rotate', degrees: 15 }), 'rotate 15°');
+});
+
+test('describeOp rotate: > 180 shown as negative', () => {
+  assert.equal(describeOp({ type: 'rotate', degrees: 345 }), 'rotate -15°');
+});
+
+test('describeOp rotate: 180 shown as 180', () => {
+  assert.equal(describeOp({ type: 'rotate', degrees: 180 }), 'rotate 180°');
+});
+
 test('describeOp: flip', () => {
   assert.equal(describeOp({ type: 'flip', axis: 'horizontal' }), 'flip horizontal');
   assert.equal(describeOp({ type: 'flip', axis: 'vertical' }), 'flip vertical');

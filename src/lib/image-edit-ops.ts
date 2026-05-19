@@ -88,8 +88,11 @@ export function describeOp(op: SidecarOp): string {
       const y = Number(op.y) || 0;
       return `crop ${w}×${h} @ ${x},${y}`;
     }
-    case 'rotate':
-      return `rotate ${String(op.degrees)}°`;
+    case 'rotate': {
+      const d = Number(op.degrees ?? 0);
+      const display = d > 180 ? d - 360 : d;
+      return `rotate ${display}°`;
+    }
     case 'flip':
       return `flip ${String(op.axis)}`;
     case 'resample':
