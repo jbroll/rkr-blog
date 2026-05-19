@@ -23,6 +23,16 @@ pre   { margin: 0; }
 const out = document.getElementById('out');
 const st  = document.getElementById('st');
 
+// When served via a reverse proxy at e.g. /_dev/_test, all internal URLs
+// must be prefixed with that base path and carry the auth token.
+const _tok  = new URLSearchParams(location.search).get('token') ?? '';
+const _base = location.pathname.replace(/\/_test.*$/, '');
+function url(path) {
+  const u = new URL(_base + path, location.origin);
+  if (_tok) u.searchParams.set('token', _tok);
+  return u.toString();
+}
+
 function log(cls, txt) {
   const s = document.createElement('span');
   s.className = cls; s.textContent = txt + '\n';
@@ -103,14 +113,14 @@ self.onmessage = async () => {
 async function level2() {
   section('Level 2 — app worker (opfs-worker.js)');
 
-  const probe = await fetch('/static/admin/opfs-worker.js', { method: 'HEAD' });
+  const probe = await fetch(url('/static/admin/opfs-worker.js'), { method: 'HEAD' });
   if (!probe.ok) {
     log('skip', '⊘ bundle missing — run npm run build:admin');
     return [{ name: 'worker:load', ok: null }];
   }
 
   const results = [];
-  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const worker = new Worker(url('/static/admin/opfs-worker.js'), { type: 'module' });
   const call = msg => new Promise((resolve, reject) => {
     worker.onmessage = e => resolve(e.data);
     worker.onerror   = e => reject(new Error(e.message ?? 'worker error'));
@@ -150,7 +160,7 @@ async function level3() {
   section('Level 3 — persistence across worker restart');
   const results = [];
 
-  const w1 = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const w1 = new Worker(url('/static/admin/opfs-worker.js'), { type: 'module' });
   const call1 = msg => new Promise((resolve, reject) => {
     w1.onmessage = e => resolve(e.data);
     w1.onerror   = e => reject(new Error(e.message));
@@ -165,7 +175,7 @@ async function level3() {
     if (!r1.ok) return results;
 
     // Fresh worker instance — no shared state with w1
-    const w2 = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+    const w2 = new Worker(url('/static/admin/opfs-worker.js'), { type: 'module' });
     const call2 = msg => new Promise((resolve, reject) => {
       w2.onmessage = e => resolve(e.data);
       w2.onerror   = e => reject(new Error(e.message));
@@ -212,7 +222,7 @@ async function level4() {
   section('Level 4 — nested directory paths');
   const results = [];
 
-  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const worker = new Worker(url('/static/admin/opfs-worker.js'), { type: 'module' });
   const call = msg => new Promise((resolve, reject) => {
     worker.onmessage = e => resolve(e.data);
     worker.onerror   = e => reject(new Error(e.message));
@@ -266,7 +276,7 @@ async function level5() {
   section('Level 5 — large payload (1 MiB)');
   const results = [];
 
-  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const worker = new Worker(url('/static/admin/opfs-worker.js'), { type: 'module' });
   const call = msg => new Promise((resolve, reject) => {
     worker.onmessage = e => resolve(e.data);
     worker.onerror   = e => reject(new Error(e.message));
@@ -314,7 +324,7 @@ async function level6() {
   section('Level 6 — rapid sequential writes (last-write-wins)');
   const results = [];
 
-  const worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), { type: 'module' });
+  const worker = new Worker(url('/static/admin/opfs-worker.js'), { type: 'module' });
   // Dispatch both messages before either resolves so they queue inside the worker.
   const responses = {};
   worker.onmessage = e => { responses[e.data.id] = e.data; };
@@ -394,7 +404,7 @@ async function run() {
 function finish(status, results) {
   st.textContent = status;
   st.className   = status.startsWith('PASS') ? 'ok' : 'fail';
-  fetch('/_test/results', {
+  fetch(url('/_test/results'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer dev-test' },
     body: JSON.stringify({ ts: new Date().toISOString(), ua: navigator.userAgent, status, results })
@@ -404,7 +414,7 @@ function finish(status, results) {
 run().catch(e => { st.textContent = 'ERROR'; log('fail', String(e)); });
 
 // Reload on server signal (file save during dev).
-const es = new EventSource('/_test/events');
+const es = new EventSource(url('/_test/events'));
 es.addEventListener('reload', () => location.reload());
 </script>
 </body>
