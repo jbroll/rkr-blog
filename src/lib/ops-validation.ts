@@ -62,6 +62,14 @@ export function validateOps(
     return { ok: false, error: 'source has no recorded dimensions; cannot validate ops' };
   }
 
+  // Track running canvas dimensions so crop bounds are validated
+  // against the actual current size (post-rotate/flip/prior-crop),
+  // not just the original.  flip never changes dimensions; resample
+  // sets them to the exact floor values it produces; rotate 90/270
+  // swaps W↔H; rotate 180 leaves them unchanged.
+  let curW = W;
+  let curH = H;
+
   const out: { type: string; [k: string]: unknown }[] = [];
   for (const [i, opRaw] of raw.entries()) {
     if (!opRaw || typeof opRaw !== 'object') {
@@ -80,19 +88,19 @@ export function validateOps(
       if (x < 0 || y < 0 || w <= 0 || h <= 0) {
         return { ok: false, error: `ops[${i}] crop must have x/y >= 0 and w/h > 0` };
       }
-      if (W > 0 && H > 0 && (x + w > W || y + h > H)) {
+      if (curW > 0 && curH > 0 && (x + w > curW || y + h > curH)) {
         return {
           ok: false,
-          error: `ops[${i}] crop ${x},${y} ${w}x${h} exceeds source ${W}x${H}`
+          error: `ops[${i}] crop ${x},${y} ${w}x${h} exceeds source ${curW}x${curH}`
         };
       }
-      out.push({
-        type: 'crop',
-        x: Math.floor(x),
-        y: Math.floor(y),
-        w: Math.floor(w),
-        h: Math.floor(h)
-      });
+      const nx = Math.floor(x);
+      const ny = Math.floor(y);
+      const nw = Math.floor(w);
+      const nh = Math.floor(h);
+      out.push({ type: 'crop', x: nx, y: ny, w: nw, h: nh });
+      curW = nw;
+      curH = nh;
     } else if (type === 'rotate') {
       const degrees = Number(op.degrees ?? 0);
       // Only orthogonal rotations make sense in our flow (the editor
@@ -105,6 +113,9 @@ export function validateOps(
       const norm = ((degrees % 360) + 360) % 360;
       if (norm === 0) continue; // no-op rotation; drop silently
       out.push({ type: 'rotate', degrees: norm });
+      if (norm === 90 || norm === 270) {
+        [curW, curH] = [curH, curW];
+      }
     } else if (type === 'flip') {
       const axis = op.axis;
       if (axis !== 'horizontal' && axis !== 'vertical') {
@@ -142,6 +153,20 @@ export function validateOps(
       if (w !== undefined) norm.w = Math.floor(w);
       if (h !== undefined) norm.h = Math.floor(h);
       out.push(norm);
+      // Update running dims for the resample: sharp's 'inside' (default)
+      // scales to fit within the target box preserving aspect ratio.
+      // Track the exact floor values so a subsequent crop sees the real
+      // post-resample canvas size.
+      if (norm.w !== undefined && norm.h !== undefined) {
+        curW = norm.w;
+        curH = norm.h;
+      } else if (norm.w !== undefined) {
+        curH = curH > 0 ? Math.floor((curH * norm.w) / curW) : norm.w;
+        curW = norm.w;
+      } else if (norm.h !== undefined) {
+        curW = curW > 0 ? Math.floor((curW * norm.h) / curH) : norm.h;
+        curH = norm.h;
+      }
     } else if (type === 'perspective') {
       // Perspective rectify is a client-only execution path: the
       // canvas pipeline produces the rectified result and uploads it
