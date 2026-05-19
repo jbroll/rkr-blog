@@ -74,10 +74,19 @@ export const test = baseTest.extend({
     // V8 JS coverage is Chromium (CDP) only. On WebKit / Firefox
     // page.coverage is null; check directly rather than relying on
     // browserName, which may be unreliable under BrowserStack's SDK.
-    const hasCoverage = page.coverage != null;
-    // CSS coverage skipped: PhotoSwipe + cropperjs ship un-source-
-    // mapped CSS that mcr emits warnings for. Add it later if useful.
-    if (hasCoverage) await page.coverage.startJSCoverage({ resetOnNavigation: false });
+    // page.coverage is non-null on Chromium and on BrowserStack's CDP proxy
+    // for WebKit (which exposes the object but fails when called). Wrap the
+    // start call so a CDP-level rejection just disables coverage for this test.
+    let hasCoverage = page.coverage != null;
+    if (hasCoverage) {
+      try {
+        // CSS coverage skipped: PhotoSwipe + cropperjs ship un-source-
+        // mapped CSS that mcr emits warnings for. Add it later if useful.
+        await page.coverage.startJSCoverage({ resetOnNavigation: false });
+      } catch {
+        hasCoverage = false;
+      }
+    }
     try {
       await use(page);
     } finally {
