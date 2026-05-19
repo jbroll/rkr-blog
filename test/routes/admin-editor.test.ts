@@ -749,18 +749,20 @@ test('POST /commit normalizes rotate degrees mod 360 and drops zero-angle', asyn
   assert.deepEqual(zero.json<OpsResponse>().ops, []);
 });
 
-test('POST /commit rejects rotate degrees that are not multiples of 90', async (t) => {
+test('POST /commit accepts arbitrary rotate degrees (with bake)', async (t) => {
   const root = freshSiteRoot(t);
   const ingest = await ingestSized(root, 800, 600);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await commit(app, ingest.id, {
-    ops: [{ type: 'rotate', degrees: 45 }],
-    redoStack: []
-  });
-  assert.equal(res.statusCode, 400);
-  assert.match(res.json<{ error: string }>().error, /multiple of 90/);
+  const res = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'rotate', degrees: 45 }], redoStack: [] },
+    { bake: await makeWebp(600, 800) }
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json<OpsResponse>().ops[0]?.degrees, 45);
 });
 
 test('POST /commit rejects flip with bad axis', async (t) => {

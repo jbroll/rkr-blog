@@ -11,6 +11,7 @@
 
 import { type Point, perspectiveOutputSize } from './canvas-math.ts';
 import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
+import { inscribedRect } from './rotation.ts';
 import type { SidecarOp } from './sidecar-types.ts';
 
 /** Maximum ops in a sidecar. Caps the chain depth a single editor save
@@ -109,18 +110,18 @@ export function validateOps(
       curH = nh;
     } else if (type === 'rotate') {
       const degrees = Number(op.degrees ?? 0);
-      // Only orthogonal rotations make sense in our flow (the editor
-      // emits ±90 multiples). Sharp accepts arbitrary angles, which
-      // would force libvips to fill the corners — reject as
-      // probably-wrong rather than render unexpectedly.
-      if (!Number.isFinite(degrees) || degrees % 90 !== 0) {
-        return { ok: false, error: `ops[${i}] rotate degrees must be a multiple of 90` };
+      if (!Number.isFinite(degrees)) {
+        return { ok: false, error: `ops[${i}] rotate degrees must be a finite number` };
       }
       const norm = ((degrees % 360) + 360) % 360;
-      if (norm === 0) continue; // no-op rotation; drop silently
+      if (norm === 0) continue; // no-op; drop silently
       out.push({ type: 'rotate', degrees: norm });
       if (norm === 90 || norm === 270) {
         [curW, curH] = [curH, curW];
+      } else if (norm !== 180) {
+        const { iw, ih } = inscribedRect(curW, curH, norm);
+        curW = iw;
+        curH = ih;
       }
     } else if (type === 'flip') {
       const axis = op.axis;
