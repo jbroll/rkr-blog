@@ -71,6 +71,57 @@ const mcr = new CoverageReport({
 
 export const test = baseTest.extend({
   page: async ({ page }, use) => {
+    // Capture browser console errors so worker diagnostic messages reach
+    // the Playwright output (workers post errors via the main thread).
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') console.error('[browser]', msg.text());
+    });
+    // OPFS diagnostic probe: runs on every admin page load to report what
+    // storage APIs actually work in this browser/environment.
+    // NOTE: addInitScript serialises the function as plain JS — no TS syntax.
+    await page.addInitScript(() => {
+      if (!location.pathname.startsWith('/admin')) return;
+      void (async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ed = (e: any) => `${e?.constructor?.name}: ${e?.message}`;
+        const log = (tag: string, ok: boolean, detail = '') =>
+          console.error(`[opfs-probe] ${tag}: ${ok ? 'OK' : 'FAIL'} ${detail}`);
+        try {
+          const root = await navigator.storage.getDirectory();
+          log('getDirectory', true);
+          try {
+            const fh = await root.getFileHandle('.probe-test', { create: true });
+            log('getFileHandle', true);
+            try {
+              const w = await fh.createWritable();
+              await w.write('x');
+              await w.close();
+              await root.removeEntry('.probe-test');
+              log('createWritable', true);
+            } catch (e) {
+              log('createWritable', false, ed(e));
+            }
+          } catch (e) {
+            log('getFileHandle', false, ed(e));
+          }
+          try {
+            await new Promise<void>((res, rej) =>
+              navigator.locks
+                .request('.probe-lock', () => {
+                  res();
+                  return Promise.resolve();
+                })
+                .catch(rej)
+            );
+            log('locks.request', true);
+          } catch (e) {
+            log('locks.request', false, ed(e));
+          }
+        } catch (e) {
+          log('getDirectory', false, ed(e));
+        }
+      })();
+    });
     // V8 JS coverage is Chromium (CDP) only. On WebKit / Firefox
     // page.coverage is null; check directly rather than relying on
     // browserName, which may be unreliable under BrowserStack's SDK.

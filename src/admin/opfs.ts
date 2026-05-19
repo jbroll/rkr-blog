@@ -66,6 +66,10 @@ function settle(res: WriteResponse): void {
     return;
   }
   if (res.isCapabilityError) markOpfsUnsupported();
+  /* v8 ignore next 2 -- diagnostic; remove once OPFS Safari issue resolved */
+  console.error(
+    `[opfs] worker error: ${res.error}${res.debug ? ` — ${res.debug}` : ''} (capability=${res.isCapabilityError})`
+  );
   p.reject(new Error(res.error));
 }
 

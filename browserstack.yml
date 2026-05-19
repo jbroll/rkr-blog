@@ -1,4 +1,4 @@
-# BrowserStack Automate configuration for Playwright (webkit/Safari).
+# BrowserStack Automate configuration for Playwright on real iOS Safari.
 # Credentials are loaded from environment — set BROWSERSTACK_USERNAME and
 # BROWSERSTACK_ACCESS_KEY, or put them in secrets.env (gitignored).
 userName: ${BROWSERSTACK_USERNAME}
@@ -7,25 +7,22 @@ accessKey: ${BROWSERSTACK_ACCESS_KEY}
 framework: playwright
 
 projectName: rkr-blog
-buildName: webkit-safari
+buildName: ios-safari-opfs
 buildIdentifier: '#${BUILD_NUMBER}'
 
-# Run on real macOS + Safari via playwright-webkit.
-# iOS device testing requires Appium (separate suite); playwright-webkit
-# on macOS exercises the same WebKit engine and catches iOS API gaps.
+# Real iOS devices. playwright-webkit runs in sandboxed non-persistent mode
+# and cannot access OPFS at all; real Safari on device has full storage APIs.
 platforms:
-  - os: OS X
-    osVersion: Sonoma
-    browserName: playwright-webkit
-    browserVersion: latest
-  - os: OS X
-    osVersion: Ventura
-    browserName: playwright-webkit
-    browserVersion: latest
+  - browserName: safari
+    osVersion: 18
+    deviceName: iPhone 16 Pro Max
+  - browserName: safari
+    osVersion: 17
+    deviceName: iPhone 15 Pro Max
 
 parallelsPerPlatform: 1
 
-# BrowserStack Local: tunnel so the SDK can reach the local webServer.
+# BrowserStack Local: SDK starts/stops the tunnel automatically.
 browserstackLocal: true
 
 consoleLogs: errors

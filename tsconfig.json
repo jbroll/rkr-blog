@@ -26,10 +26,11 @@
     "types": ["node"]
   },
   // test/ tsc routing: this (server) config checks all test/**/*.ts EXCEPT
-  // test/e2e/**/*.spec.ts and test/admin/** (DOM-dependent → tsconfig.e2e.json,
-  // which has the dom lib). tsconfig.browser.json is emit-only and checks no
-  // tests. A new test/<dir>/ defaults here (no-DOM); add it to tsconfig.e2e.json
+  // test/e2e/**/*.spec.ts, test/e2e/coverage-fixtures.ts, and test/admin/**
+  // (DOM-dependent → tsconfig.e2e.json, which has the dom lib).
+  // tsconfig.browser.json is emit-only and checks no tests.
+  // A new test/<dir>/ defaults here (no-DOM); add it to tsconfig.e2e.json
   // if it uses DOM/Playwright types.
   "include": ["src/**/*.ts", "test/**/*.ts", "test/e2e/server-runner.ts", "bin/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["node_modules", "src/admin/**", "src/site/**", "static/**", "test/e2e/**/*.spec.ts", "test/admin/**"]
+  "exclude": ["node_modules", "src/admin/**", "src/site/**", "static/**", "test/e2e/**/*.spec.ts", "test/e2e/coverage-fixtures.ts", "test/admin/**"]
 }

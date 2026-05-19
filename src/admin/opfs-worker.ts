@@ -51,6 +51,8 @@ export async function atomicWriteWithRoot(
   const { parent, leafName } = await walk(root, path, true);
   const tmpName = `.${leafName}.tmp-${crypto.randomUUID()}`;
   const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
+  let syncErrDesc = '';
+  let writableErrDesc = '';
   try {
     try {
       // Preferred: synchronous access handle (lower overhead, all
@@ -61,17 +63,28 @@ export async function atomicWriteWithRoot(
       sa.write(bytes, { at: 0 });
       sa.flush();
       sa.close();
-    } catch {
-      // createSyncAccessHandle() failed (e.g. WebKit in sandboxed/test
-      // environments throws a DOMException). Fall back to the async
-      // writable-stream API, which is also available in workers.
+    } catch (syncErr) {
+      // createSyncAccessHandle() failed — record for diagnostics then try
+      // the async writable-stream fallback.
+      /* v8 ignore next 2 -- diagnostic path */
+      const se = syncErr as Error;
+      syncErrDesc = `${se.constructor.name}: ${se.message}`;
       const writable = await tmpHandle.createWritable();
       await writable.write(data);
       await writable.close();
     }
   } catch (err) {
+    /* v8 ignore next 2 -- outer failure path */
+    const e = err as Error;
+    writableErrDesc = `${e.constructor.name}: ${e.message}`;
     await parent.removeEntry(tmpName).catch(() => {});
-    throw err;
+    const debug = syncErrDesc
+      ? `syncHandle: ${syncErrDesc}; writable: ${writableErrDesc}`
+      : writableErrDesc;
+    const tagged = new Error(e.message) as Error & { debug?: string };
+    tagged.debug = debug;
+    Object.setPrototypeOf(tagged, Object.getPrototypeOf(e) as object);
+    throw tagged;
   }
   await (tmpHandle as MovableHandle).move(parent, leafName);
 }
@@ -105,6 +118,7 @@ if (typeof self !== 'undefined') {
       self.postMessage(res);
     } catch (e) {
       const err = e as Error;
+      const debugErr = err as Error & { debug?: string };
       const res: WriteResponse = {
         id: req.id,
         ok: false,
@@ -112,7 +126,8 @@ if (typeof self !== 'undefined') {
         // TypeError = createSyncAccessHandle absent (old iOS).
         // DOMException = WebKit/Safari OPFS write broken at runtime.
         // Both mean OPFS writes are non-functional in this environment.
-        isCapabilityError: err instanceof TypeError || err instanceof DOMException
+        isCapabilityError: err instanceof TypeError || err instanceof DOMException,
+        debug: debugErr.debug
       };
       self.postMessage(res);
     }

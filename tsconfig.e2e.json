@@ -4,6 +4,6 @@
     "lib": ["es2023", "dom", "dom.iterable", "webworker"],
     "types": ["node"]
   },
-  "include": ["test/e2e/**/*.ts", "test/admin/**/*.ts", "test/playwright.config.ts"],
+  "include": ["test/e2e/**/*.ts", "test/admin/**/*.ts", "test/playwright.config.ts", "test/playwright.config.ios.ts"],
   "exclude": ["node_modules", "test/e2e/server-runner.ts"]
 }
