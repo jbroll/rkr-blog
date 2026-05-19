@@ -152,6 +152,47 @@ test('POST /admin/import returns 4xx without any auth', async (t) => {
   );
 });
 
+test('POST /admin/import?mode=replace wipes and restores', async (t) => {
+  const { root, app } = await setup(t);
+
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-arc-src2-'));
+  t.after(() => fs.rmSync(src, { recursive: true, force: true }));
+  for (const sub of ['content/posts', 'data', 'sidecars', 'originals', 'config']) {
+    fs.mkdirSync(path.join(src, sub), { recursive: true });
+  }
+  fs.writeFileSync(
+    path.join(src, 'content', 'posts', '2026-02-01-new.md'),
+    '---\nslug: new\ntitle: New\nstatus: published\ndate: 2026-02-01T00:00:00Z\n---\n\nbody\n'
+  );
+
+  // exportArchive includes users; replace mode requires at least one owner.
+  const srcDb = open(path.join(src, 'data', 'site.db'));
+  migrate(srcDb);
+  srcDb
+    .prepare('INSERT INTO users (email, display_name, role, created_at) VALUES (?,?,?,?)')
+    .run('owner@example.com', 'Owner', 'owner', '2026-01-01T00:00:00Z');
+  srcDb.close();
+
+  const arcPath = path.join(os.tmpdir(), `arc-replace-${Date.now()}.sqlite`);
+  t.after(() => fs.rmSync(arcPath, { force: true }));
+  exportArchive(src, arcPath);
+
+  const { payload, headers } = buildMultipart({
+    filename: 'backup.sqlite',
+    contentType: 'application/vnd.sqlite3',
+    bytes: fs.readFileSync(arcPath)
+  });
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import?mode=replace',
+    payload,
+    headers: { ...headers, authorization: `Bearer ${TOKEN}` }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.ok(fs.existsSync(path.join(root, 'content', 'posts', '2026-02-01-new.md')));
+});
+
 test('POST /admin/import returns 400 when no file part', async (t) => {
   const { app } = await setup(t);
   const boundary = '----rkrtest';

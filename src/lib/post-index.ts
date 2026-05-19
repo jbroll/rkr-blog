@@ -53,14 +53,17 @@ function doReindex(
   const postsDir = path.join(siteRoot, 'content', 'posts');
   if (!fs.existsSync(postsDir)) fs.mkdirSync(postsDir, { recursive: true });
 
-  const onDisk = listMarkdown(postsDir);
+  // Collect ALL filenames on disk first, independent of parseability.
+  // This is the ground truth for "file exists" — used in the orphan step
+  // to ensure a parse failure never triggers a cascade delete of comments.
+  const onDiskFiles = new Set(listMarkdown(postsDir));
   const seenSlugs = new Set<string>();
 
   let inserted = 0;
   let updated = 0;
 
   const upsert = db.transaction(() => {
-    for (const filename of onDisk) {
+    for (const filename of onDiskFiles) {
       const fullPath = path.join(postsDir, filename);
       const raw = fs.readFileSync(fullPath, 'utf8');
       let frontmatter: PostFrontmatter;
@@ -71,7 +74,9 @@ function doReindex(
         ast = parsed.ast;
       } catch (err) {
         // biome-ignore lint/suspicious/noConsole: surface unparseable posts to reindex output
-        console.error(`reindex: skipping ${filename}: ${(err as Error).message}`);
+        console.error(
+          `reindex: parse failed for ${filename} — retaining any existing DB row and comments: ${(err as Error).message}`
+        );
         continue;
       }
 
@@ -139,9 +144,20 @@ function doReindex(
   // ON DELETE CASCADE in post_tags keeps that table clean automatically.
   // _-prefixed slugs are never added to the index, so skip them in the
   // orphan filter too — they can never be orphans.
+  // IMPORTANT: only delete a post when its .md file is genuinely absent
+  // from disk. A parse failure alone must never trigger a cascade delete
+  // of comments; the file must be physically missing.
   const removed = db.transaction((): number => {
-    const all = db.prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts').all();
-    const orphans = all.filter((row) => !row.slug.startsWith('_') && !seenSlugs.has(row.slug));
+    const all = db
+      .prepare<{ id: number; slug: string; path: string }>('SELECT id, slug, path FROM posts')
+      .all();
+    const orphans = all.filter((row) => {
+      if (row.slug.startsWith('_')) return false;
+      // Derive the filename from the stored path (e.g. "content/posts/foo.md" → "foo.md").
+      const filename = path.basename(row.path);
+      // Only an orphan if the file is truly gone from disk.
+      return !onDiskFiles.has(filename);
+    });
     for (const o of orphans) {
       db.prepare('DELETE FROM posts WHERE id = ?').run(o.id);
       db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(o.slug);

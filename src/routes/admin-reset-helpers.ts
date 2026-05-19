@@ -93,6 +93,11 @@ export async function wipeRuntimeData(siteRoot: string): Promise<ResetCounts> {
       const before = db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM posts').get();
       postsTableRows = before?.n ?? 0;
       db.exec('DELETE FROM posts');
+      // posts_fts is an FTS5 virtual table not FK-linked to posts —
+      // deleting posts leaves stale FTS rows that corrupt search results.
+      db.exec('DELETE FROM posts_fts');
+      // tags accumulates orphaned tag names after posts are deleted.
+      db.exec('DELETE FROM tags');
       // The render queue (jobs table) may carry references to images
       // we just deleted; clear it so background workers don't churn
       // on missing files.

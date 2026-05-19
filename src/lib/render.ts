@@ -177,7 +177,13 @@ export async function renderDerivative(
         // Sharp has no homography operator: materialise the pipeline so
         // far as a raw RGBA buffer, apply the pure-JS resampler, then
         // restart a new Sharp from the result.
-        const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
+        // ensureAlpha() guarantees a 4-channel buffer regardless of
+        // whether the source is RGB (JPEG) or RGBA — resamplePerspective
+        // hardcodes a 4-channel stride.
+        const { data, info } = await pipeline
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
         const result = resamplePerspective(data, info.width, info.height, op);
         if (!result) {
           throw new Error(
@@ -219,7 +225,7 @@ export async function renderDerivative(
 
 // ---- ops & output -------------------------------------------------------
 
-function nextDims(op: Op, w: number, h: number): { w: number; h: number } {
+function nextDims(op: Exclude<Op, PerspectiveOp>, w: number, h: number): { w: number; h: number } {
   switch (op.type) {
     case 'crop':
       return { w: op.w, h: op.h };
@@ -238,8 +244,6 @@ function nextDims(op: Op, w: number, h: number): { w: number; h: number } {
       if (op.h !== undefined) return { w: w > 0 ? Math.floor((w * op.h) / h) : op.h, h: op.h };
       return { w, h };
     }
-    case 'perspective':
-      return { w, h };
   }
 }
 

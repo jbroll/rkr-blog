@@ -74,20 +74,20 @@ export function makeClassifyHandler(
         body: comment.body
       });
       const status = v.verdict === 'ham' ? 'published' : 'queued';
-      applyClassification(db, payload.commentId, {
+      const applied = applyClassification(db, payload.commentId, {
         status,
         score: v.score,
         reason: v.reason
       });
-      maybeNotify(enqueueJob, db, payload.commentId, status);
+      if (applied) maybeNotify(enqueueJob, db, payload.commentId, status);
     } catch (err) {
-      applyClassification(db, payload.commentId, {
+      const applied = applyClassification(db, payload.commentId, {
         status: 'queued',
         score: null,
         // cap the stored reason at a tweet-ish length (audit only)
         reason: `classify failed: ${(err as Error).message}`.slice(0, 280)
       });
-      maybeNotify(enqueueJob, db, payload.commentId, 'queued');
+      if (applied) maybeNotify(enqueueJob, db, payload.commentId, 'queued');
     }
   };
 }

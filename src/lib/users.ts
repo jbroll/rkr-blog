@@ -153,7 +153,7 @@ export function userCount(db: Db): number {
 /** Synthetic email used for the browser token-login admin user. The
  * bearer-header path attaches a non-DB synthetic user (id=0); the
  * token-login path needs a real DB row so sessions.user_id FK holds. */
-const TOKEN_ADMIN_EMAIL = 'admin@token.local';
+const TOKEN_ADMIN_EMAIL = 'admin@token.invalid';
 
 /** Find or create the admin user used by the browser token-login flow.
  * Idempotent — repeated logins return the existing row. Creates with

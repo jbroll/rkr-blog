@@ -80,6 +80,7 @@ export function open(filepath: string): Db {
   // PRAGMAs. WAL is a no-op for :memory: but harmless.
   raw.exec('PRAGMA journal_mode = WAL;');
   raw.exec('PRAGMA foreign_keys = ON;');
+  raw.exec('PRAGMA busy_timeout = 5000;');
 
   const db: Db = {
     prepare<TRow>(sql: string) {

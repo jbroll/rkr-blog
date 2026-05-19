@@ -11,7 +11,12 @@ export default function run(argv: string[]): void {
     if (argv[i] === '--replace') {
       replace = true;
     } else if (!argv[i]?.startsWith('-')) {
+      if (archivePath !== undefined) {
+        throw new Error(`unexpected extra argument: ${argv[i]}`);
+      }
       archivePath = argv[i];
+    } else {
+      throw new Error(`unknown flag: ${argv[i]}`);
     }
   }
 

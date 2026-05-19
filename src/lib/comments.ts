@@ -104,17 +104,27 @@ export function setCommentStatus(db: Db, id: number, status: CommentStatus): voi
   if (r.changes === 0) throw new Error(`comment ${id} not found`);
 }
 
-/** Persist a classifier verdict and resolve the row's status. */
+/** Persist a classifier verdict and resolve the row's status.
+ * Only applies when the comment is still pending — if a moderator
+ * approved or rejected the comment between classification starting
+ * and finishing, the moderator's decision takes precedence. */
 export function applyClassification(
   db: Db,
   id: number,
   v: { status: 'published' | 'queued'; score: number | null; reason: string | null }
-): void {
-  db.prepare(
-    `UPDATE comments
-       SET status = ?, spam_score = ?, spam_reason = ?, classified_at = ?
-     WHERE id = ?`
-  ).run(v.status, v.score, v.reason, new Date().toISOString(), id);
+): boolean {
+  const r = db
+    .prepare(
+      `UPDATE comments
+         SET status = ?, spam_score = ?, spam_reason = ?, classified_at = ?
+       WHERE id = ? AND status = 'pending'`
+    )
+    .run(v.status, v.score, v.reason, new Date().toISOString(), id);
+  if (r.changes === 0) {
+    // Comment was already moderated — skip notification
+    return false;
+  }
+  return true;
 }
 
 export interface ThreadComment {

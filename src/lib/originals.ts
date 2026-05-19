@@ -215,10 +215,15 @@ export async function ingestStream({
       }
       await safeUnlink(tmpPath);
       await fs.promises.rename(normTmp, tmpPath);
-      meta = await sharp(tmpPath, {
-        limitInputPixels: SHARP_INGEST_PIXEL_LIMIT,
-        failOn: 'error'
-      }).metadata();
+      try {
+        meta = await sharp(tmpPath, {
+          limitInputPixels: SHARP_INGEST_PIXEL_LIMIT,
+          failOn: 'error'
+        }).metadata();
+      } catch (err) {
+        await safeUnlink(tmpPath);
+        throw err;
+      }
     }
 
     let resized: ResizeResult;

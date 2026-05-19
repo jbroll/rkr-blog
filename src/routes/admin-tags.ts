@@ -8,6 +8,7 @@ import path from 'node:path';
 
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
+import type { Db } from '../lib/db.ts';
 import { open } from '../lib/db.ts';
 
 const MAX_RESULTS = 20;
@@ -15,6 +16,7 @@ const MAX_RESULTS = 20;
 export interface AdminTagsRouteOpts {
   siteRoot: string;
   guard: RouteShorthandOptions;
+  db?: Db;
 }
 
 export function registerAdminTagsRoute(fastify: FastifyInstance, opts: AdminTagsRouteOpts): void {
@@ -25,8 +27,8 @@ export function registerAdminTagsRoute(fastify: FastifyInstance, opts: AdminTags
     { ...guard },
     async (req, reply) => {
       const q = (req.query.q ?? '').trim();
-      const dbPath = path.join(siteRoot, 'data', 'site.db');
-      const db = open(dbPath);
+      const ownDb = !opts.db;
+      const db = opts.db ?? open(path.join(siteRoot, 'data', 'site.db'));
       try {
         let rows: { name: string }[];
         if (q === '') {
@@ -35,7 +37,7 @@ export function registerAdminTagsRoute(fastify: FastifyInstance, opts: AdminTags
             .all(MAX_RESULTS);
         } else {
           // LIKE with % suffix = prefix match; COLLATE NOCASE = case-insensitive.
-          const pattern = `${q.replace(/[%_\\]/g, '\\$&')}%`;
+          const pattern = q.replace(/[%_\\]/g, '\\$&') + '%';
           rows = db
             .prepare<{ name: string }>(
               "SELECT name FROM tags WHERE name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY name ASC LIMIT ?"
@@ -44,7 +46,7 @@ export function registerAdminTagsRoute(fastify: FastifyInstance, opts: AdminTags
         }
         return reply.send({ tags: rows.map((r) => r.name) });
       } finally {
-        db.close();
+        if (ownDb) db.close();
       }
     }
   );

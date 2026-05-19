@@ -170,6 +170,9 @@ export function registerPublicImgRoutes(fastify: FastifyInstance, opts: PublicIm
           noteLiveRender(-1);
         });
         inflightRenders.set(filename, renderPromise);
+        // Suppress unhandled-rejection when the timeout path sends 202 and
+        // the render later fails — the primary awaiter's catch won't run.
+        renderPromise.catch((_err: unknown) => {});
       }
 
       let timer: NodeJS.Timeout | undefined;

@@ -92,8 +92,15 @@ export default async function authRoutes(
   // Redis-backed store.
   const pendingFlows = new Map<string, { codeVerifier: string; expiresAt: number }>();
 
+  const MAX_PENDING_FLOWS = 1000;
+
   function rememberFlow(state: string, codeVerifier: string): void {
     sweepExpiredFlows();
+    if (pendingFlows.size >= MAX_PENDING_FLOWS) {
+      // evict the oldest entry (Maps iterate in insertion order)
+      const firstKey = pendingFlows.keys().next().value;
+      if (firstKey !== undefined) pendingFlows.delete(firstKey);
+    }
     pendingFlows.set(state, {
       codeVerifier,
       expiresAt: Date.now() + OAUTH_STATE_TTL_S * 1000

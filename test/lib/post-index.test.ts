@@ -127,6 +127,49 @@ test('runReindex skips files with bad frontmatter rather than failing the whole 
   assert.equal(r.updated, 0);
 });
 
+test('runReindex preserves comments when a sibling post has unparseable frontmatter', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(root, 'valid.md', { slug: 'valid', title: 'Valid Post', status: 'published' }, 'body');
+  runReindex(root);
+
+  // Insert a comment on the valid post.
+  const db = open(path.join(root, 'data', 'site.db'));
+  const post = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get('valid');
+  assert.ok(post, 'valid post must be in DB');
+  db.prepare(
+    `INSERT INTO comments
+       (post_id, parent_id, wp_comment_id, author_name, author_email,
+        body, status, source, created_at)
+     VALUES (?,NULL,NULL,?,?,?,?,?,?)`
+  ).run(
+    post.id,
+    'Alice',
+    'alice@example.com',
+    'Great!',
+    'published',
+    'web',
+    new Date().toISOString()
+  );
+  db.close();
+
+  // Write a second post with completely invalid frontmatter (no delimiters).
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', 'invalid.md'),
+    'not valid frontmatter at all'
+  );
+
+  // Reindex must NOT delete valid.md's comment via cascade.
+  runReindex(root);
+
+  const db2 = open(path.join(root, 'data', 'site.db'));
+  try {
+    const row = db2.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM comments').get();
+    assert.equal(row?.c, 1, 'comment on valid post preserved despite invalid sibling');
+  } finally {
+    db2.close();
+  }
+});
+
 test('readAllIndexedPosts returns drafts + published, newest-updated first', (t) => {
   const root = freshSiteRoot(t);
   writePost(

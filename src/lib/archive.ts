@@ -75,6 +75,7 @@ export function exportArchive(siteRoot: string, outPath: string): ExportStats {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   const arc = open(outPath);
+  arc.exec('PRAGMA journal_mode = DELETE');
   arc.exec(SCHEMA);
   const insertMeta = arc.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
   insertMeta.run('version', ARCHIVE_VERSION);
@@ -252,13 +253,58 @@ export function importArchive(
     );
   }
 
+  // Fix 4: refuse replace mode when archive has no owner-role user
+  if (opts.replace) {
+    const ownerCheck = arc
+      .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM users WHERE role = ?')
+      .get('owner');
+    if (!ownerCheck || ownerCheck.c === 0) {
+      arc.close();
+      throw new Error('importArchive: replace mode refused — archive contains no owner-role user');
+    }
+  }
+
+  // Fix 2: pre-validate all paths before writing any files
+  const ALLOWED =
+    /^(content\/posts\/[^/]+\.md|sidecars\/[^/]+\.json|originals\/[0-9a-f]{2}\/[0-9a-f]{2}\/.+|config\/site\.json)$/;
+  const rootResolved = path.resolve(siteRoot);
+  const allFileRows = arc
+    .prepare<{ path: string; data: Uint8Array }>('SELECT path, data FROM files ORDER BY path')
+    .all();
+  const badPaths: string[] = [];
+  for (const row of allFileRows) {
+    const norm = path.posix.normalize(row.path);
+    if (!ALLOWED.test(norm)) {
+      badPaths.push(row.path);
+      continue;
+    }
+    const target = path.resolve(siteRoot, norm.split('/').join(path.sep));
+    if (!target.startsWith(rootResolved + path.sep) && target !== rootResolved) {
+      badPaths.push(row.path);
+    }
+  }
+  if (badPaths.length > 0) {
+    arc.close();
+    throw new Error(
+      `importArchive: archive contains unsafe paths: ${badPaths.slice(0, 5).join(', ')}`
+    );
+  }
+
   // --- restore files to disk ---
   let written = 0;
   let skipped = 0;
-  for (const row of arc
-    .prepare<{ path: string; data: Uint8Array }>('SELECT path, data FROM files ORDER BY path')
-    .all()) {
-    const target = path.join(siteRoot, row.path.split('/').join(path.sep));
+  for (const row of allFileRows) {
+    // Fix 1: validated path — use same safe resolution
+    const norm = path.posix.normalize(row.path);
+    if (!ALLOWED.test(norm)) {
+      skipped++;
+      continue;
+    }
+    const target = path.resolve(siteRoot, norm.split('/').join(path.sep));
+    if (!target.startsWith(rootResolved + path.sep) && target !== rootResolved) {
+      skipped++;
+      continue;
+    }
     if (!opts.replace && fs.existsSync(target)) {
       skipped++;
       continue;
@@ -345,11 +391,11 @@ export function importArchive(
           created_at, classified_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
     );
-    const hasWpId = db.prepare<{ c: number }>(
-      'SELECT COUNT(*) AS c FROM comments WHERE wp_comment_id = ?'
+    const findByWpId = db.prepare<{ id: number }>(
+      'SELECT id FROM comments WHERE wp_comment_id = ?'
     );
-    const hasDupe = db.prepare<{ c: number }>(
-      'SELECT COUNT(*) AS c FROM comments WHERE post_id=? AND author_email=? AND created_at=?'
+    const findDupe = db.prepare<{ id: number }>(
+      'SELECT id FROM comments WHERE post_id=? AND author_email=? AND created_at=?'
     );
 
     for (const row of arc
@@ -374,17 +420,17 @@ export function importArchive(
       if (postId === undefined) continue; // post not found after reindex
 
       if (!opts.replace) {
-        // merge: skip duplicates
+        // Fix 3: merge dedup — store the real existing id so reply threading works
         if (row.wp_comment_id !== null) {
-          const { c } = hasWpId.get(row.wp_comment_id) as { c: number };
-          if (c > 0) {
-            exportIdToNewId.set(row.export_id, -1);
+          const existing = findByWpId.get(row.wp_comment_id);
+          if (existing) {
+            exportIdToNewId.set(row.export_id, Number(existing.id));
             continue;
           }
         } else {
-          const { c } = hasDupe.get(postId, row.author_email, row.created_at) as { c: number };
-          if (c > 0) {
-            exportIdToNewId.set(row.export_id, -1);
+          const existing = findDupe.get(postId, row.author_email, row.created_at);
+          if (existing) {
+            exportIdToNewId.set(row.export_id, Number(existing.id));
             continue;
           }
         }
@@ -394,7 +440,7 @@ export function importArchive(
         row.parent_export_id !== null ? (exportIdToNewId.get(row.parent_export_id) ?? null) : null;
       const result = insertComment.run(
         postId,
-        parentId === -1 ? null : (parentId ?? null),
+        parentId ?? null,
         row.wp_comment_id ?? null,
         row.author_name,
         row.author_email,

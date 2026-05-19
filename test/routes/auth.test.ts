@@ -498,7 +498,7 @@ test('POST /admin/auth/token-login: correct token → session cookie + 302', asy
   const sid = (sessionCookie ?? '').split(';')[0]?.split('=')[1] ?? '';
 
   // The synthetic admin user exists in the db.
-  const admin = findUserByEmail(db, 'admin@token.local');
+  const admin = findUserByEmail(db, 'admin@token.invalid');
   assert.ok(admin, 'token-admin user created');
   assert.equal(admin?.role, 'owner');
   // The session row points at the synthetic admin.
@@ -527,7 +527,7 @@ test('POST /admin/auth/token-login: wrong token → 401, no session', async (t) 
     'no session cookie on failed login'
   );
   // No synthetic admin row created.
-  assert.equal(findUserByEmail(db, 'admin@token.local'), undefined);
+  assert.equal(findUserByEmail(db, 'admin@token.invalid'), undefined);
 });
 
 test('POST /admin/auth/token-login: empty token → 400', async (t) => {
@@ -625,7 +625,7 @@ test('POST /admin/auth/token-login: second login is idempotent (one synthetic ad
   const count = (
     db
       .prepare<{ n: number }>('SELECT COUNT(*) AS n FROM users WHERE email = ?')
-      .get('admin@token.local') ?? { n: 0 }
+      .get('admin@token.invalid') ?? { n: 0 }
   ).n;
   assert.equal(count, 1, 'one synthetic admin row across multiple logins');
 });

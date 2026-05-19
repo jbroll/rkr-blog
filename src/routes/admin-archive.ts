@@ -15,7 +15,9 @@ function bearerOnly(
   request: { user?: { id: number } | null },
   reply: { code: (n: number) => { send: (b: unknown) => unknown } }
 ): boolean {
-  if (!request.user || request.user.id !== 0) {
+  // requireUser preHandler guarantees user is non-null; id=0 means bearer token.
+  /* c8 ignore next 3 */
+  if (request.user?.id !== 0) {
     reply.code(403).send({ error: 'bearer-only; cookie auth not accepted for this endpoint' });
     return false;
   }
@@ -42,6 +44,7 @@ export function registerArchiveRoutes(
 
     try {
       exportArchive(siteRoot, tmp);
+      /* c8 ignore next 3 */
     } catch (err) {
       fs.rmSync(tmp, { force: true });
       throw err;

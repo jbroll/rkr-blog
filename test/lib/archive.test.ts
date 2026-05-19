@@ -239,6 +239,9 @@ test('import replace overwrites files and wipes DB tables', async (t) => {
   writePost(src, '2026-01-15-hello.md', 'hello', 'Hello');
   runReindex(src);
   const sdb = open(path.join(src, 'data', 'site.db'));
+  sdb
+    .prepare(`INSERT INTO users (email, display_name, role, created_at) VALUES (?,?,?,?)`)
+    .run('owner@example.com', 'Owner', 'owner', '2026-01-01T00:00:00Z');
   inviteEmail(sdb, 'archive-invite@example.com', 'editor');
   sdb.close();
 
@@ -271,6 +274,12 @@ test('import replace never deletes existing originals', async (t) => {
   t.after(() => fs.rmSync(arcPath, { force: true }));
 
   writePost(src, '2026-01-15-post.md', 'post', 'Post');
+  runReindex(src);
+  const sdb2 = open(path.join(src, 'data', 'site.db'));
+  sdb2
+    .prepare(`INSERT INTO users (email, display_name, role, created_at) VALUES (?,?,?,?)`)
+    .run('owner@example.com', 'Owner', 'owner', '2026-01-01T00:00:00Z');
+  sdb2.close();
   exportArchive(src, arcPath);
 
   // plant an original in dst before replace-import
@@ -300,6 +309,60 @@ test('importArchive rejects wrong version', (t) => {
   db.close();
 
   assert.throws(() => importArchive(root, arcPath), /unsupported archive version/);
+});
+
+// ---- path traversal -------------------------------------------------------
+
+test('importArchive throws on unsafe paths (pre-validation)', (t) => {
+  const root = freshSiteRoot(t);
+  const arcPath = path.join(os.tmpdir(), `rkr-arc-traversal-${Date.now()}.sqlite`);
+  t.after(() => fs.rmSync(arcPath, { force: true }));
+
+  const arc = open(arcPath);
+  arc.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE files (path TEXT PRIMARY KEY, data BLOB NOT NULL);
+            CREATE TABLE comments (export_id INTEGER, post_slug TEXT, parent_export_id INTEGER, wp_comment_id INTEGER, author_name TEXT NOT NULL, author_email TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL, source TEXT NOT NULL, spam_score REAL, spam_reason TEXT, ip TEXT, created_at TEXT NOT NULL, classified_at TEXT);
+            CREATE TABLE users (email TEXT PRIMARY KEY, display_name TEXT, role TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT);
+            CREATE TABLE allowed_emails (email TEXT PRIMARY KEY, role TEXT NOT NULL, invited_at TEXT NOT NULL);`);
+  arc.prepare('INSERT INTO meta VALUES (?,?)').run('version', '1');
+  arc
+    .prepare('INSERT INTO files VALUES (?,?)')
+    .run('../../etc/passwd', new Uint8Array(Buffer.from('hacked')));
+  arc
+    .prepare('INSERT INTO files VALUES (?,?)')
+    .run(
+      'content/posts/legit.md',
+      new Uint8Array(
+        Buffer.from(
+          '---\nslug: legit\ntitle: Legit\nstatus: draft\ndate: 2026-01-01T00:00:00Z\n---\nbody\n'
+        )
+      )
+    );
+  arc.close();
+
+  // Pre-validation should throw rather than write any files
+  assert.throws(() => importArchive(root, arcPath), /unsafe paths/i);
+  assert.ok(
+    !fs.existsSync('/etc/passwd') || fs.readFileSync('/etc/passwd', 'utf8') !== 'hacked',
+    'traversal blocked'
+  );
+  assert.ok(
+    !fs.existsSync(path.join(root, 'content', 'posts', 'legit.md')),
+    'no files written when pre-validation fails'
+  );
+});
+
+// ---- replace mode owner check ---------------------------------------------
+
+test('importArchive replace mode refuses archive with no owner user', (t) => {
+  const root = freshSiteRoot(t);
+  const arcPath = path.join(os.tmpdir(), `rkr-arc-noowner-${Date.now()}.sqlite`);
+  t.after(() => fs.rmSync(arcPath, { force: true }));
+  exportArchive(root, arcPath); // empty archive, no users
+  assert.throws(
+    () => importArchive(root, arcPath, { replace: true }),
+    /replace mode refused.*no owner/i
+  );
 });
 
 // ---- helper ---------------------------------------------------------------
