@@ -6,7 +6,8 @@
 // How it works:
 //   The BrowserStack SDK (npx browserstack-node-sdk playwright test) reads
 //   browserstack.yml for platform/credentials and manages BrowserStack Local
-//   automatically. The webServer starts our local test server; BS Local
+//   automatically. ios-global-setup.ts starts our local test server manually
+//   (the SDK bypasses Playwright's native webServer lifecycle). BS Local
 //   tunnels localhost:PORT from the remote device back to this machine.
 //
 // Prerequisites:
@@ -15,7 +16,6 @@
 //   - npm run build:admin && npm run build:site  (bundles must exist)
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { defineConfig } from '@playwright/test';
 
@@ -30,11 +30,10 @@ if (fs.existsSync(secretsPath)) {
 }
 
 const PORT = 3790;
-const HOST = '127.0.0.1';
-// Remote devices access the local server via BrowserStack Local tunnel.
-// The tunnel maps 'localhost' on the device → our HOST:PORT.
-const BASE_URL = `http://localhost:${PORT}`;
-const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-e2e-ios-'));
+// bs-local.com is the hostname BrowserStack Local maps to the test machine
+// on real iOS devices. Safari on device navigating to 'localhost' goes to
+// the phone's own loopback; 'bs-local.com' routes through the BS Local tunnel.
+const BASE_URL = `http://bs-local.com:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -47,27 +46,18 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   // Real devices are slower than headless; give them extra time.
   timeout: 90_000,
+  // The BrowserStack SDK bypasses Playwright's webServer lifecycle so the
+  // test server is started in globalSetup instead.
+  globalSetup: './e2e/ios-global-setup.ts',
   use: {
     baseURL: BASE_URL,
-    trace: 'on-first-retry'
+    trace: 'off',
+    screenshot: 'off'
   },
   // Project names follow BrowserStack SDK convention:
   //   {browser}@{deviceName}:{osVersion}@browserstack-mobile
   projects: [
     { name: 'safari@iPhone 16 Pro Max:18@browserstack-mobile' },
     { name: 'safari@iPhone 15 Pro Max:17@browserstack-mobile' }
-  ],
-  webServer: {
-    command:
-      'node --no-warnings=ExperimentalWarning --experimental-strip-types e2e/server-runner.ts',
-    url: `http://${HOST}:${PORT}/health`,
-    timeout: 30_000,
-    reuseExistingServer: !process.env.CI,
-    env: {
-      SITE_ROOT: tmpRoot,
-      PORT: String(PORT),
-      HOST,
-      ADMIN_TOKEN: 'e2e-test-token-do-not-use-in-prod'
-    }
-  }
+  ]
 });
