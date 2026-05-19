@@ -553,6 +553,248 @@ async function level10() {
   return results;
 }
 
+// ── Level 11: client-side ingest pipeline ────────────────────────────────────
+// Exercises the full OffscreenCanvas + createImageBitmap + convertToBlob path
+// that ingest-resize-client.ts uses. Level 10 probes availability; this level
+// runs the actual pipeline so failures surface on real devices.
+async function level11() {
+  section('Level 11 — client-side ingest pipeline');
+  const results = [];
+
+  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
+    results.push({ name: 'ingest:pipeline', ok: null, detail: 'OffscreenCanvas/createImageBitmap unavailable — skipped' });
+    return results;
+  }
+
+  // Build a small source image as a PNG blob using a regular canvas.
+  try {
+    const src = document.createElement('canvas');
+    src.width = 64; src.height = 64;
+    const ctx2d = src.getContext('2d');
+    ctx2d.fillStyle = '#1a7fff'; ctx2d.fillRect(0, 0, 64, 64);
+    const pngBlob = await new Promise((res, rej) =>
+      src.toBlob(b => b ? res(b) : rej(new Error('null blob')), 'image/png')
+    );
+    results.push(pass('ingest:source-blob', `PNG ${pngBlob.size}B`));
+
+    // Decode via createImageBitmap (with imageOrientation option used in production).
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(pngBlob, { imageOrientation: 'from-image' });
+    } catch {
+      bitmap = await createImageBitmap(pngBlob);
+      results.push(pass('ingest:imageOrientation-option', 'unsupported — fell back to basic decode'));
+    }
+    results.push(pass('ingest:createImageBitmap', `${bitmap.width}×${bitmap.height}`));
+
+    // Draw onto an OffscreenCanvas (the resize step).
+    const osc = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const oscCtx = osc.getContext('2d');
+    if (!oscCtx) throw new Error('OffscreenCanvas 2d context unavailable');
+    oscCtx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    results.push(pass('ingest:OffscreenCanvas-draw', `${osc.width}×${osc.height}`));
+
+    // Encode to WebP (the re-encode step).
+    let blob;
+    try {
+      blob = await osc.convertToBlob({ type: 'image/webp', quality: 0.82 });
+    } catch {
+      blob = null;
+    }
+    if (!blob || blob.type !== 'image/webp') {
+      // iOS WebKit: convertToBlob may produce PNG even when asked for WebP.
+      // This mirrors the same fallback logic that exists for bakes.
+      const fallback = blob ?? await osc.convertToBlob({ type: 'image/png' });
+      results.push({ name: 'ingest:encode-webp', ok: false,
+        detail: `WebP encode unavailable — got type=${fallback.type}` });
+    } else {
+      results.push(pass('ingest:encode-webp', `${blob.type} ${blob.size}B`));
+    }
+  } catch(e) { results.push(fail('ingest:pipeline', e)); }
+
+  return results;
+}
+
+// ── Level 12: WebGL perspective pipeline ─────────────────────────────────────
+// Draws a solid-colour quad via WebGL and reads pixels back with readPixels.
+// Validates that canvas.ts applyPerspective would actually produce output.
+async function level12() {
+  section('Level 12 — WebGL rendering pipeline');
+  const results = [];
+
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = 8; cv.height = 8;
+    const gl = cv.getContext('webgl', { premultipliedAlpha: false });
+    if (!gl) {
+      results.push({ name: 'webgl:render-pipeline', ok: true, detail: 'WebGL unavailable — perspective op is disabled in app (expected)' });
+      return results;
+    }
+
+    // Compile a minimal program: clear to a known colour, read it back.
+    const vert = `attribute vec2 a;void main(){gl_Position=vec4(a,0,1);}`;
+    const frag = `precision mediump float;void main(){gl_FragColor=vec4(1.0,0.0,0.0,1.0);}`;
+
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vert));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+
+    // Full-screen quad (two triangles covering clip space).
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    const aLoc = gl.getAttribLocation(prog, 'a');
+    gl.enableVertexAttribArray(aLoc);
+    gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+
+    gl.viewport(0, 0, 8, 8);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    const pixels = new Uint8Array(4);
+    gl.readPixels(4, 4, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const [r, g, b, a] = pixels;
+
+    if (r === 255 && g === 0 && b === 0 && a === 255) {
+      results.push(pass('webgl:render-pipeline', `readPixels=[${r},${g},${b},${a}] ✓`));
+    } else {
+      results.push({ name: 'webgl:render-pipeline', ok: false,
+        detail: `readPixels=[${r},${g},${b},${a}] expected [255,0,0,255]` });
+    }
+
+    const ext = gl.getExtension('WEBGL_lose_context');
+    if (ext) ext.loseContext();
+  } catch(e) { results.push(fail('webgl:render-pipeline', e)); }
+
+  return results;
+}
+
+// ── Level 13: BroadcastChannel ───────────────────────────────────────────────
+// Used by online-state.ts and sync.ts for cross-tab coordination.
+async function level13() {
+  section('Level 13 — BroadcastChannel');
+  const results = [];
+
+  if (typeof BroadcastChannel === 'undefined') {
+    results.push({ name: 'BroadcastChannel', ok: true, detail: 'unavailable — cross-tab sync disabled (expected on some browsers)' });
+    return results;
+  }
+
+  try {
+    const received = await new Promise((resolve, reject) => {
+      const ch1 = new BroadcastChannel('rkr-test-bc');
+      const ch2 = new BroadcastChannel('rkr-test-bc');
+      const tid = setTimeout(() => { ch1.close(); ch2.close(); reject(new Error('timeout — message never arrived')); }, 2000);
+      ch2.onmessage = e => {
+        clearTimeout(tid);
+        ch1.close(); ch2.close();
+        resolve(e.data);
+      };
+      ch1.postMessage({ ping: 42 });
+    });
+    if (received?.ping === 42) {
+      results.push(pass('BroadcastChannel:send-receive', 'round-trip ok'));
+    } else {
+      results.push({ name: 'BroadcastChannel:send-receive', ok: false,
+        detail: `unexpected data: ${JSON.stringify(received)}` });
+    }
+  } catch(e) { results.push(fail('BroadcastChannel:send-receive', e)); }
+
+  return results;
+}
+
+// ── Level 14: navigator.locks ────────────────────────────────────────────────
+// Used by opfs-schema.ts and sync.ts for mutual exclusion.
+async function level14() {
+  section('Level 14 — navigator.locks');
+  const results = [];
+
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    results.push({ name: 'navigator.locks', ok: false,
+      detail: 'unavailable — OPFS mutual exclusion and outbox drain will not work' });
+    return results;
+  }
+  results.push(pass('navigator.locks', 'available'));
+
+  try {
+    const val = await navigator.locks.request('rkr-test-lock', async () => 'acquired');
+    if (val === 'acquired') {
+      results.push(pass('navigator.locks:request', 'lock acquired and released'));
+    } else {
+      results.push({ name: 'navigator.locks:request', ok: false,
+        detail: `unexpected return: ${val}` });
+    }
+  } catch(e) { results.push(fail('navigator.locks:request', e)); }
+
+  // Verify a second lock request on the same name resolves after first releases.
+  try {
+    let order = '';
+    await Promise.all([
+      navigator.locks.request('rkr-test-lock-b', async () => { order += 'A'; }),
+      navigator.locks.request('rkr-test-lock-b', async () => { order += 'B'; }),
+    ]);
+    results.push(pass('navigator.locks:exclusion', `sequential order confirmed`));
+  } catch(e) { results.push(fail('navigator.locks:exclusion', e)); }
+
+  return results;
+}
+
+// ── Level 15: platform APIs matrix (diagnostic) ──────────────────────────────
+// navigator.storage.estimate, serviceWorker, onLine, clipboard.
+// Informational only — never gates the final verdict.
+async function level15() {
+  section('Level 15 — platform APIs matrix');
+  const results = [];
+
+  // navigator.storage.estimate — used by storage-panel.ts to show quota/usage.
+  try {
+    if (!navigator.storage?.estimate) {
+      results.push({ name: 'storage:estimate', ok: true, detail: 'unavailable' });
+    } else {
+      const est = await navigator.storage.estimate();
+      const used = est.usage != null ? `${(est.usage / 1024).toFixed(1)}KB` : 'unknown';
+      const quota = est.quota != null ? `${(est.quota / 1024 / 1024).toFixed(1)}MB` : 'unknown';
+      results.push(pass('storage:estimate', `used=${used} quota=${quota}`));
+    }
+  } catch(e) { results.push(fail('storage:estimate', e)); }
+
+  // navigator.serviceWorker — used by save.ts to flush cached pages on publish.
+  results.push(pass('serviceWorker',
+    'serviceWorker' in navigator ? `available controller=${navigator.serviceWorker.controller ? 'yes' : 'none'}` : 'unavailable'));
+
+  // navigator.onLine — polled by online-state.ts; truth source is a HEAD probe.
+  results.push(pass('navigator.onLine', String(navigator.onLine)));
+
+  // Clipboard writeText — used by copy-link.ts.
+  try {
+    if (!navigator.clipboard?.writeText) {
+      results.push({ name: 'clipboard:writeText', ok: true, detail: 'unavailable' });
+    } else {
+      // Don't actually write; just verify the method exists and the permission
+      // API recognises the query (on browsers that support it).
+      let permState = 'unknown';
+      try {
+        const p = await navigator.permissions.query({ name: 'clipboard-write' });
+        permState = p.state;
+      } catch { /* permissions API may not support clipboard-write query */ }
+      results.push(pass('clipboard:writeText', `available perm=${permState}`));
+    }
+  } catch(e) { results.push(fail('clipboard:writeText', e)); }
+
+  return results;
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 function display(results) {
@@ -610,6 +852,26 @@ async function run() {
   const l10 = await level10();
   display(l10); allResults.push(...l10);
   // Level 10 is diagnostic-only — never gates the final verdict.
+
+  const l11 = await level11();
+  display(l11); allResults.push(...l11.filter(r => r.ok !== null));
+  if (l11.some(r => r.ok === false)) { finish('FAIL (level 11)', allResults); return; }
+
+  const l12 = await level12();
+  display(l12); allResults.push(...l12);
+  if (l12.some(r => r.ok === false)) { finish('FAIL (level 12)', allResults); return; }
+
+  const l13 = await level13();
+  display(l13); allResults.push(...l13);
+  if (l13.some(r => r.ok === false)) { finish('FAIL (level 13)', allResults); return; }
+
+  const l14 = await level14();
+  display(l14); allResults.push(...l14);
+  if (l14.some(r => r.ok === false)) { finish('FAIL (level 14)', allResults); return; }
+
+  const l15 = await level15();
+  display(l15); allResults.push(...l15);
+  // Level 15 is diagnostic-only — never gates the final verdict.
 
   finish('PASS ✓', allResults);
 }

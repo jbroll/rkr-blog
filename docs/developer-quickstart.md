@@ -328,6 +328,11 @@ curl http://localhost:<port>/_test/reload
 | 8 | Crop commit: canvas bake (WebP or JPEG fallback) → `POST /admin/sidecar/:id/commit` |
 | 9 | Sidecar meta read-back: ops and dims persisted after commit |
 | 10 | Canvas capability matrix (informational — never gates pass/fail): `canvas.toBlob` format support, WebGL renderer/max-texture, `createImageBitmap`, `OffscreenCanvas` |
+| 11 | Client-side ingest pipeline: `createImageBitmap` + `OffscreenCanvas.drawImage` + `convertToBlob('image/webp')` end-to-end (mirrors `ingest-resize-client.ts`; detects iOS WebP encode failure) |
+| 12 | WebGL rendering: compiles a minimal vert+frag shader, draws a full-screen quad, reads pixels back with `readPixels` to verify GPU output (validates `applyPerspective` preconditions) |
+| 13 | `BroadcastChannel` send/receive round-trip (used by `online-state.ts` and `sync.ts` for cross-tab coordination) |
+| 14 | `navigator.locks.request()` acquisition and sequential exclusion (used by `opfs-schema.ts` ROOT_LOCK and `sync.ts` drain/sync locks) |
+| 15 | Platform APIs matrix (informational): `navigator.storage.estimate()` quota/usage, `serviceWorker` availability, `navigator.onLine`, `clipboard.writeText` permission state |
 
 ### Adding new levels
 
