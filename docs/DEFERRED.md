@@ -55,3 +55,4 @@ Format: **item** — _revisit when:_ trigger.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
+- **Flaky: `editor: offline ops bake drains on reconnect`** — save-btn disabled check races `ensureLocalState`. _Revisit when:_ seen failing again; add explicit wait for network idle before the disabled assertion.
