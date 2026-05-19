@@ -94,9 +94,10 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
     );
     return;
   }
-  /* v8 ignore next 3 -- non-2xx, non-409 server response; prod-only */
+  /* v8 ignore next 4 -- non-2xx, non-409 server response; prod-only */
   if (!res.ok) {
-    throw new Error(`commitImageEdit drain ${entry.seq}: ${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(`commitImageEdit drain ${entry.seq}: ${res.status}${body ? ` ${body}` : ''}`);
   }
 };
 

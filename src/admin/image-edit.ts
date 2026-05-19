@@ -210,7 +210,13 @@ async function renderBakeBlob(id: string, ops: readonly SidecarOp[]): Promise<Bl
     },
     ops as SidecarOp[]
   );
-  return canvasToBlob(canvas, 'image/webp', 0.95);
+  const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
+  // iOS WebKit doesn't support WebP canvas encoding — fall back to JPEG.
+  // The server accepts both and re-encodes JPEG→WebP before storing.
+  if (blob.type !== 'image/webp') {
+    return canvasToBlob(canvas, 'image/jpeg', 0.95);
+  }
+  return blob;
 }
 
 export function dirtyImageStates(): Array<[string, LocalEditState]> {

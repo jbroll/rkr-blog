@@ -190,24 +190,29 @@ export function registerSidecarEditRoutes(
         if (bakeBuf.length === 0) {
           return reply.code(400).send({ error: 'empty bake' });
         }
-        if (
-          bakeBuf.length < 12 ||
-          bakeBuf.slice(0, 4).toString('ascii') !== 'RIFF' ||
-          bakeBuf.slice(8, 12).toString('ascii') !== 'WEBP'
-        ) {
-          return reply.code(400).send({ error: 'bake is not a WebP file' });
+        // Accept WebP (RIFF/WEBP magic) or JPEG (FF D8 FF magic).
+        // iOS Safari/Chrome can't produce WebP from canvas and fall back
+        // to JPEG; we accept both and re-encode JPEG→WebP before storing
+        // so all bakes on disk are always WebP.
+        const isWebP =
+          bakeBuf.length >= 12 &&
+          bakeBuf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+          bakeBuf.subarray(8, 12).toString('ascii') === 'WEBP';
+        const isJpeg = bakeBuf.length >= 2 && bakeBuf[0] === 0xff && bakeBuf[1] === 0xd8;
+        if (!isWebP && !isJpeg) {
+          return reply.code(400).send({ error: 'bake must be WebP or JPEG' });
         }
         try {
           const meta = await sharp(bakeBuf, {
             failOn: 'error',
             limitInputPixels: SHARP_PIXEL_LIMIT
           }).metadata();
-          if (meta.format !== 'webp') {
-            return reply.code(400).send({ error: 'bake did not decode as WebP' });
+          if (meta.format !== 'webp' && meta.format !== 'jpeg') {
+            return reply.code(400).send({ error: 'bake did not decode as WebP or JPEG' });
           }
           const w = meta.width ?? 0;
           const h = meta.height ?? 0;
-          /* c8 ignore next 5 -- requires a valid WebP that exceeds
+          /* c8 ignore next 5 -- requires a valid image that exceeds
              SHARP_PIXEL_LIMIT; the BAKE_MAX_BYTES cap makes this
              infeasible from real clients */
           if (w * h > SHARP_PIXEL_LIMIT) {
@@ -215,9 +220,14 @@ export function registerSidecarEditRoutes(
               .code(400)
               .send({ error: `bake exceeds pixel limit (${w}×${h} > ${SHARP_PIXEL_LIMIT})` });
           }
+          // Re-encode JPEG → WebP so all stored bakes are WebP.
+          /* c8 ignore next 3 -- JPEG bake path; exercised by iOS clients */
+          if (meta.format === 'jpeg') {
+            bakeBuf = await sharp(bakeBuf).webp({ quality: 92 }).toBuffer();
+          }
         } catch (err) {
           req.log.warn({ err, id }, 'bake decode failed');
-          return reply.code(400).send({ error: 'bake is not a decodable WebP' });
+          return reply.code(400).send({ error: 'bake is not a decodable WebP or JPEG' });
         }
       }
 

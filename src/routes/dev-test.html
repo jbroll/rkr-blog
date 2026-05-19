@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OPFS test</title>
+<title>App test</title>
 <style>
 * { box-sizing: border-box; }
 body  { font-family: monospace; padding: 1rem; background: #111; color: #eee; font-size: 13px; line-height: 1.5; }
@@ -16,7 +16,7 @@ pre   { margin: 0; }
 </style>
 </head>
 <body>
-<h1>OPFS — <span id="st">running…</span></h1>
+<h1>App — <span id="st">running…</span></h1>
 <pre id="out"></pre>
 
 <script type="module">
@@ -25,12 +25,18 @@ const st  = document.getElementById('st');
 
 // When served via a reverse proxy at e.g. /_dev/_test, all internal URLs
 // must be prefixed with that base path and carry the auth token.
-const _tok  = new URLSearchParams(location.search).get('token') ?? '';
-const _base = location.pathname.replace(/\/_test.*$/, '');
+const _tok      = new URLSearchParams(location.search).get('token') ?? '';
+const _adminTok = new URLSearchParams(location.search).get('admin_token') ?? '';
+const _base     = location.pathname.replace(/\/_test.*$/, '');
 function url(path) {
   const u = new URL(_base + path, location.origin);
   if (_tok) u.searchParams.set('token', _tok);
   return u.toString();
+}
+// Authorization header for admin API calls.
+// Pass ?admin_token=<ADMIN_TOKEN> to enable authenticated test levels.
+function authHdr() {
+  return _adminTok ? { Authorization: `Bearer ${_adminTok}` } : {};
 }
 
 function log(cls, txt) {
@@ -358,6 +364,121 @@ async function level6() {
   return results;
 }
 
+// ── Level 7: admin API — image upload ───────────────────────────────────────
+// Uploads a tiny canvas-generated JPEG. Requires ?admin_token=<ADMIN_TOKEN>.
+// Returns the image id for use by levels 8–9.
+async function level7() {
+  section('Level 7 — admin API: image upload');
+  if (!_adminTok) {
+    log('skip', '⊘ skipped — pass ?admin_token=<ADMIN_TOKEN> to enable');
+    return [{ name: 'upload:auth', ok: null }];
+  }
+  const results = [];
+  try {
+    // Tiny 10×10 JPEG via canvas
+    const c = document.createElement('canvas');
+    c.width = 10; c.height = 10;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'rgb(200,50,50)'; ctx.fillRect(0, 0, 10, 10);
+    const blob = await new Promise((res, rej) =>
+      c.toBlob(b => b ? res(b) : rej(new Error('toBlob empty')), 'image/jpeg', 0.8)
+    );
+    const fd = new FormData();
+    fd.append('file', blob, 'test.jpg');
+    const res = await fetch(url('/admin/upload'), {
+      method: 'POST', body: fd, headers: authHdr()
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      results.push(fail('upload:post', new Error(`${res.status} ${body}`)));
+      return results;
+    }
+    const json = JSON.parse(body);
+    results.push({ name: 'upload:post', ok: true, detail: `id=${json.id?.slice(0,12)}…` });
+    results.push({ name: 'upload:id', ok: typeof json.id === 'string' && json.id.length === 64,
+      detail: json.id?.length ? `len=${json.id.length}` : 'missing' });
+    results._uploadId = json.id; // pass to level 8
+  } catch(e) { results.push(fail('upload:op', e)); }
+  return results;
+}
+
+// ── Level 8: admin API — crop commit ────────────────────────────────────────
+// Commits a crop op + WebP bake against the image uploaded in level 7.
+// This replicates the exact flow the editor uses, including canvas→WebP encode.
+async function level8(imageId) {
+  section('Level 8 — admin API: crop commit');
+  if (!_adminTok || !imageId) {
+    log('skip', !_adminTok ? '⊘ skipped — no admin_token' : '⊘ skipped — level 7 failed');
+    return [{ name: 'commit:skip', ok: null }];
+  }
+  const results = [];
+  try {
+    // Bake: 8×8 WebP (crop {x:1,y:1,w:8,h:8} of the 10×10 original)
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'rgb(100,150,200)'; ctx.fillRect(0, 0, 8, 8);
+    let bakeBlob = await new Promise((res, rej) =>
+      c.toBlob(b => b ? res(b) : rej(new Error('toBlob empty')), 'image/webp', 0.95)
+    );
+
+    // Log what format canvas produced; fall back to JPEG on iOS (mirrors production).
+    // WebP is preferred; iOS Safari/Chrome fall back to JPEG which the server accepts.
+    if (bakeBlob.type !== 'image/webp') {
+      bakeBlob = await new Promise((res, rej) =>
+        c.toBlob(b => b ? res(b) : rej(new Error('toBlob empty')), 'image/jpeg', 0.95)
+      );
+    }
+    results.push({ name: 'commit:bake-format', ok: true, detail: `type=${bakeBlob.type}` });
+
+    const ops = [{ type: 'crop', x: 1, y: 1, w: 8, h: 8 }];
+    const fd = new FormData();
+    fd.append('ops', JSON.stringify({ ops, redoStack: [] }));
+    fd.append('bake', bakeBlob, `${imageId}.webp`);
+    const res = await fetch(url(`/admin/sidecar/${imageId}/commit`), {
+      method: 'POST', body: fd, headers: authHdr()
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      results.push(fail('commit:post', new Error(`${res.status} ${body}`)));
+      return results;
+    }
+    const json = JSON.parse(body);
+    const op = json.ops?.[0];
+    results.push({ name: 'commit:post', ok: res.ok, detail: `status=${res.status}` });
+    results.push({ name: 'commit:ops-roundtrip', ok: op?.type === 'crop' && op?.x === 1 && op?.y === 1 && op?.w === 8 && op?.h === 8,
+      detail: JSON.stringify(op) });
+  } catch(e) { results.push(fail('commit:op', e)); }
+  return results;
+}
+
+// ── Level 9: admin API — sidecar meta read-back ──────────────────────────────
+// Reads back the sidecar after the crop commit and verifies ops are persisted.
+async function level9(imageId) {
+  section('Level 9 — admin API: sidecar meta read-back');
+  if (!_adminTok || !imageId) {
+    log('skip', !_adminTok ? '⊘ skipped — no admin_token' : '⊘ skipped — level 7/8 failed or WebP not supported');
+    return [{ name: 'meta:skip', ok: null }];
+  }
+  const results = [];
+  try {
+    const res = await fetch(url(`/admin/sidecar/${imageId}/meta`), { headers: authHdr() });
+    const body = await res.text();
+    if (!res.ok) {
+      results.push(fail('meta:get', new Error(`${res.status} ${body}`)));
+      return results;
+    }
+    const json = JSON.parse(body);
+    results.push({ name: 'meta:get', ok: true, detail: `${json.width}×${json.height} ${json.format}` });
+    const op = json.ops?.[0];
+    results.push({ name: 'meta:ops-persisted', ok: op?.type === 'crop' && op?.x === 1 && op?.y === 1 && op?.w === 8 && op?.h === 8,
+      detail: JSON.stringify(op) });
+    results.push({ name: 'meta:dims', ok: json.width === 10 && json.height === 10,
+      detail: `${json.width}×${json.height}` });
+  } catch(e) { results.push(fail('meta:op', e)); }
+  return results;
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 function display(results) {
@@ -397,6 +518,20 @@ async function run() {
   const l6 = await level6();
   display(l6); allResults.push(...l6);
   if (l6.some(r => !r.ok)) { finish('FAIL (level 6)', allResults); return; }
+
+  const l7 = await level7();
+  display(l7); allResults.push(...l7.filter(r => r.ok !== null));
+  if (l7.some(r => r.ok === false)) { finish('FAIL (level 7)', allResults); return; }
+  const uploadId = l7._uploadId ?? null;
+
+  const l8 = await level8(uploadId);
+  display(l8); allResults.push(...l8.filter(r => r.ok !== null));
+  if (l8.some(r => r.ok === false)) { finish('FAIL (level 8)', allResults); return; }
+  const commitDone = l8.some(r => r.name === 'commit:post' && r.ok === true);
+
+  const l9 = await level9(commitDone ? uploadId : null);
+  display(l9); allResults.push(...l9.filter(r => r.ok !== null));
+  if (l9.some(r => r.ok === false)) { finish('FAIL (level 9)', allResults); return; }
 
   finish('PASS ✓', allResults);
 }

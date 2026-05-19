@@ -471,7 +471,7 @@ test('POST /commit rejects malformed bake bytes', async (t) => {
     { bake: Buffer.from('not a webp file at all') }
   );
   assert.equal(garbage.statusCode, 400);
-  assert.match(garbage.json<{ error: string }>().error, /not a WebP/);
+  assert.match(garbage.json<{ error: string }>().error, /bake must be WebP or JPEG/);
 
   // Magic-byte spoof: RIFF/WEBP header but the rest decodes nothing.
   const spoof = Buffer.concat([
@@ -488,6 +488,30 @@ test('POST /commit rejects malformed bake bytes', async (t) => {
   );
   assert.equal(spoofRes.statusCode, 400);
   assert.match(spoofRes.json<{ error: string }>().error, /not a decodable WebP/);
+});
+
+test('POST /commit accepts JPEG bake and re-encodes to WebP (iOS fallback)', async (t) => {
+  const root = freshSiteRoot(t);
+  const ingest = await ingestSized(root, 100, 100);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  const jpegBake = await makeJpegSized(50, 50);
+  const res = await commit(
+    app,
+    ingest.id,
+    { ops: [{ type: 'crop', x: 0, y: 0, w: 50, h: 50 }], redoStack: [] },
+    { bake: jpegBake }
+  );
+  assert.equal(res.statusCode, 200, `JPEG bake rejected: ${res.body}`);
+  const { ops } = res.json<{ ops: unknown[] }>();
+  assert.equal(ops.length, 1);
+
+  // Verify the stored bake was re-encoded to WebP by checking its magic bytes.
+  const { bakePath } = await import('../../src/lib/originals.ts');
+  const stored = fs.readFileSync(bakePath(root, ingest.id));
+  assert.equal(stored.subarray(0, 4).toString('ascii'), 'RIFF');
+  assert.equal(stored.subarray(8, 12).toString('ascii'), 'WEBP');
 });
 
 test('POST /commit 400s on malformed id, 404s on unknown', async (t) => {

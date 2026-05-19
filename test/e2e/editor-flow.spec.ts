@@ -473,6 +473,64 @@ test('editor: rotate + flip + resample chain saves three ops', async ({ page }) 
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
 });
 
+// Simulates iOS Safari/Chrome: canvas.toBlob('image/webp') silently
+// produces JPEG. The client should fall back to JPEG; the server should
+// accept it, re-encode to WebP, and return 200.
+test('editor: save image edits succeeds when canvas only supports JPEG (iOS fallback)', async ({
+  page
+}) => {
+  // Intercept canvas.toBlob before any page script runs. Always calls
+  // back with JPEG regardless of the requested MIME type — exact iOS
+  // Safari / CriOS behaviour.
+  await page.addInitScript(() => {
+    const orig = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (
+      cb: BlobCallback,
+      _type?: string,
+      quality?: number
+    ) {
+      orig.call(this, cb, 'image/jpeg', quality);
+    };
+  });
+
+  await login(page);
+  await page.goto('/admin/editor');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await page.locator('#rkr-title').fill('e2e jpeg-fallback');
+  await setSlug(page, `e2e-jpeg-fallback-${Date.now()}`);
+
+  // Unique orange so the content-hashed id doesn't collide with
+  // PNG_1X1_BLUE (used by cropper/per-cell tests that assert zero prior ops).
+  const orangeBuf = await sharp({
+    create: { width: 1, height: 1, channels: 3, background: { r: 255, g: 128, b: 0 } }
+  })
+    .png()
+    .toBuffer();
+  await page.locator('#rkr-image-input').setInputFiles({
+    name: 'jpeg-fallback.png',
+    mimeType: 'image/png',
+    buffer: orangeBuf
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded jpeg-fallback/, {
+    timeout: 10_000
+  });
+  await page.locator('img[data-cell-index="0"]').click();
+  await expect(page.locator('#rkr-image-edit')).toHaveAttribute('data-ready', 'true', {
+    timeout: 10_000
+  });
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+
+  await page.locator('#rkr-image-rotate-r-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^rotate /, { timeout: 5_000 });
+  await expect(page.locator('#rkr-image-save-btn')).toBeEnabled();
+
+  await page.locator('#rkr-image-save-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, {
+    timeout: 10_000
+  });
+  await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
+});
+
 // Cropper modal coverage: the crop button opens a <dialog> with
 // cropperjs mounted. We don't drive an actual crop — the test confirms
 // the modal opens (regression-guards the cropper-modal.ts extraction)

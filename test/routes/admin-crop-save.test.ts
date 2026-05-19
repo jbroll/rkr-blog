@@ -288,7 +288,63 @@ test('rotate-then-crop: crop in rotated canvas space is accepted', async (t) => 
     body
   });
 
-  // This SHOULD succeed but currently fails with 400 because validateOps
-  // checks crop against original dims (200×100) instead of post-rotate dims (100×200).
   assert.equal(res.statusCode, 200, `rotate-then-crop commit failed: ${res.body}`);
+});
+
+// Regression test: CropperJS emits subpixel float coordinates (e.g. w=80.4,
+// h=60.7). The pre-fix bounds check used raw floats, so x+w could exceed the
+// canvas width by a subpixel and return 400 even though Math.floor(w) fit fine.
+// The fix floors first, THEN bounds-checks, matching what sharp.extract receives.
+test('subpixel float crop coords are floored before bounds check', async (t) => {
+  const { app, imageId } = await setup(t);
+
+  // 100×100 image. CropperJS might produce {x:9.8, y:9.9, w:60.4, h:60.3}
+  // Floor → {x:9, y:9, w:60, h:60} which fits within 100×100.
+  const bakeBuf = await sharp({
+    create: { width: 60, height: 60, channels: 3, background: { r: 100, g: 100, b: 100 } }
+  })
+    .webp({ quality: 80 })
+    .toBuffer();
+
+  const cropOps = [{ type: 'crop', x: 9.8, y: 9.9, w: 60.4, h: 60.3 }];
+  const { body, boundary } = buildCommitBody(cropOps, bakeBuf, imageId);
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${imageId}/commit`,
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    body
+  });
+  assert.equal(res.statusCode, 200, `subpixel crop failed: ${res.body}`);
+  const result = JSON.parse(res.body) as {
+    ops: { type: string; x: number; y: number; w: number; h: number }[];
+  };
+  assert.deepEqual(result.ops[0], { type: 'crop', x: 9, y: 9, w: 60, h: 60 });
+});
+
+// Regression: a crop whose raw float width slightly exceeds the image width
+// (e.g. w=100.5 on a 100px-wide image) must be accepted after flooring to 100.
+test('float crop that exceeds canvas by subpixel is floored to fit', async (t) => {
+  const { app, imageId } = await setup(t);
+
+  // w=100.5 on a 100px image: 0 + 100.5 > 100 fails the old raw-float check.
+  // After floor: nw=100, 0+100 ≤ 100 — fits exactly.
+  const bakeBuf = await sharp({
+    create: { width: 100, height: 100, channels: 3, background: { r: 200, g: 50, b: 50 } }
+  })
+    .webp({ quality: 80 })
+    .toBuffer();
+
+  const cropOps = [{ type: 'crop', x: 0, y: 0, w: 100.5, h: 100.5 }];
+  const { body, boundary } = buildCommitBody(cropOps, bakeBuf, imageId);
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/sidecar/${imageId}/commit`,
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    body
+  });
+  assert.equal(res.statusCode, 200, `float-overflow crop failed: ${res.body}`);
+  const result = JSON.parse(res.body) as {
+    ops: { type: string; x: number; y: number; w: number; h: number }[];
+  };
+  assert.deepEqual(result.ops[0], { type: 'crop', x: 0, y: 0, w: 100, h: 100 });
 });

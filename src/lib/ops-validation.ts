@@ -88,16 +88,22 @@ export function validateOps(
       if (x < 0 || y < 0 || w <= 0 || h <= 0) {
         return { ok: false, error: `ops[${i}] crop must have x/y >= 0 and w/h > 0` };
       }
-      if (curW > 0 && curH > 0 && (x + w > curW || y + h > curH)) {
-        return {
-          ok: false,
-          error: `ops[${i}] crop ${x},${y} ${w}x${h} exceeds source ${curW}x${curH}`
-        };
-      }
+      // Floor before bounds-checking: CropperJS emits subpixel floats
+      // (e.g. w=100.5 on a 100px canvas). Checking raw floats rejects
+      // what would be a valid floor-truncated crop.
       const nx = Math.floor(x);
       const ny = Math.floor(y);
       const nw = Math.floor(w);
       const nh = Math.floor(h);
+      if (nw <= 0 || nh <= 0) {
+        return { ok: false, error: `ops[${i}] crop w/h must round to > 0` };
+      }
+      if (curW > 0 && curH > 0 && (nx + nw > curW || ny + nh > curH)) {
+        return {
+          ok: false,
+          error: `ops[${i}] crop ${nx},${ny} ${nw}x${nh} exceeds source ${curW}x${curH}`
+        };
+      }
       out.push({ type: 'crop', x: nx, y: ny, w: nw, h: nh });
       curW = nw;
       curH = nh;
