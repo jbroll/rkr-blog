@@ -4,6 +4,8 @@
 userName: ${BROWSERSTACK_USERNAME}
 accessKey: ${BROWSERSTACK_ACCESS_KEY}
 
+framework: playwright
+
 projectName: rkr-blog
 buildName: webkit-safari
 buildIdentifier: '#${BUILD_NUMBER}'
@@ -27,4 +29,4 @@ parallelsPerPlatform: 1
 browserstackLocal: true
 
 consoleLogs: errors
-testReporting: true
+testObservability: true

@@ -34,5 +34,9 @@ secrets.env
 /playwright-report/
 /playwright/.cache/
 
+# BrowserStack SDK auto-generated files
+/log/
+test/browserstackSetupConfig.json
+
 # agent worktrees (harness-managed, never tracked)
 .claude/worktrees/

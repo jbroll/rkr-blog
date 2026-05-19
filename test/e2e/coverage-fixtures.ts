@@ -70,11 +70,11 @@ const mcr = new CoverageReport({
 });
 
 export const test = baseTest.extend({
-  page: async ({ page, browserName }, use) => {
+  page: async ({ page }, use) => {
     // V8 JS coverage is Chromium (CDP) only. On WebKit / Firefox
-    // the page.coverage API is absent; skip collection silently so
-    // the same spec files can run on Safari without modification.
-    const hasCoverage = browserName === 'chromium';
+    // page.coverage is null; check directly rather than relying on
+    // browserName, which may be unreliable under BrowserStack's SDK.
+    const hasCoverage = page.coverage != null;
     // CSS coverage skipped: PhotoSwipe + cropperjs ship un-source-
     // mapped CSS that mcr emits warnings for. Add it later if useful.
     if (hasCoverage) await page.coverage.startJSCoverage({ resetOnNavigation: false });
