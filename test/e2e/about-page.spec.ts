@@ -126,8 +126,8 @@ function fetchSessionCookie(token: string): Promise<string> {
 }
 
 async function login(page: Page): Promise<void> {
-  if (process.env.BROWSERSTACK_USERNAME) {
-    // iOS BrowserStack: browser-side form submit and async evaluate are
+  if (process.env.LT_USERNAME) {
+    // iOS TestMu AI: browser-side form submit and async evaluate are
     // unreliable on real devices. POST the token-login from the test process
     // (Node.js), parse the session cookie, and inject it directly.
     const rawCookie = await fetchSessionCookie(ADMIN_TOKEN);
@@ -141,7 +141,7 @@ async function login(page: Page): Promise<void> {
       {
         name: name ?? 'session',
         value,
-        domain: 'bs-local.com',
+        domain: 'localhost.lambdatest.com',
         path: '/',
         httpOnly: true,
         secure: false,

@@ -279,6 +279,11 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     }
   }
 
+  if (process.env.ENABLE_TEST_ROUTES) {
+    const { default: devTestRoutes } = await import('./routes/dev-test.ts');
+    await app.register(devTestRoutes);
+  }
+
   return app;
 }
 

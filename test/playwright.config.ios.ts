@@ -1,17 +1,17 @@
-// Playwright config for running the e2e suite on BrowserStack Automate
+// Playwright config for running the e2e suite on TestMu AI (formerly LambdaTest)
 // using real iOS Safari devices.
 //
 // Run: npm run test:e2e:ios
 //
 // How it works:
-//   The BrowserStack SDK (npx browserstack-node-sdk playwright test) reads
-//   browserstack.yml for platform/credentials and manages BrowserStack Local
-//   automatically. ios-global-setup.ts starts our local test server manually
-//   (the SDK bypasses Playwright's native webServer lifecycle). BS Local
-//   tunnels localhost:PORT from the remote device back to this machine.
+//   Standard `npx playwright test` — no SDK wrapper. Each project connects to
+//   TestMu AI's Playwright endpoint via connectOptions.wsEndpoint with device
+//   capabilities encoded in the URL. ios-global-setup.ts starts the local test
+//   server and the LT tunnel. The tunnel exposes localhost:PORT as
+//   localhost.lambdatest.com:PORT on the remote device.
 //
 // Prerequisites:
-//   - BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY in environment
+//   - LT_USERNAME and LT_ACCESS_KEY in environment
 //     (or in secrets.env, which the npm script sources)
 //   - npm run build:admin && npm run build:site  (bundles must exist)
 
@@ -30,10 +30,31 @@ if (fs.existsSync(secretsPath)) {
 }
 
 const PORT = 3790;
-// bs-local.com is the hostname BrowserStack Local maps to the test machine
-// on real iOS devices. Safari on device navigating to 'localhost' goes to
-// the phone's own loopback; 'bs-local.com' routes through the BS Local tunnel.
-const BASE_URL = `http://bs-local.com:${PORT}`;
+// localhost.lambdatest.com is the hostname the LT tunnel maps to the test
+// machine on real iOS devices. 'localhost' on a real iPhone goes to the
+// device's own loopback; this hostname routes through the tunnel.
+const BASE_URL = `http://localhost.lambdatest.com:${PORT}`;
+
+function ltEndpoint(deviceName: string, platformVersion: string): string {
+  const caps = {
+    'LT:Options': {
+      platformName: 'ios',
+      deviceName,
+      platformVersion,
+      isRealMobile: true,
+      build: 'ios-safari-opfs',
+      name: 'OPFS smoke test',
+      user: process.env.LT_USERNAME,
+      accessKey: process.env.LT_ACCESS_KEY,
+      tunnel: true,
+      tunnelName: 'rkr-blog',
+      network: true,
+      console: true,
+      video: true
+    }
+  };
+  return `wss://cdp.lambdatest.com/playwright?capabilities=${encodeURIComponent(JSON.stringify(caps))}`;
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -46,18 +67,17 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   // Real devices are slower than headless; give them extra time.
   timeout: 90_000,
-  // The BrowserStack SDK bypasses Playwright's webServer lifecycle so the
-  // test server is started in globalSetup instead.
   globalSetup: './e2e/ios-global-setup.ts',
   use: {
     baseURL: BASE_URL,
     trace: 'off',
     screenshot: 'off'
   },
-  // Project names follow BrowserStack SDK convention:
-  //   {browser}@{deviceName}:{osVersion}@browserstack-mobile
+  grep: /settings → Create About/,
   projects: [
-    { name: 'safari@iPhone 16 Pro Max:18@browserstack-mobile' },
-    { name: 'safari@iPhone 15 Pro Max:17@browserstack-mobile' }
+    {
+      name: 'iPhone 16 Pro Max iOS 18',
+      use: { connectOptions: { wsEndpoint: ltEndpoint('iPhone 16 Pro Max', '18') } }
+    }
   ]
 });

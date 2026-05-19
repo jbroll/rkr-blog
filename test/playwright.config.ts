@@ -56,7 +56,8 @@ export default defineConfig({
       SITE_ROOT: tmpRoot,
       PORT: String(PORT),
       HOST,
-      ADMIN_TOKEN: 'e2e-test-token-do-not-use-in-prod'
+      ADMIN_TOKEN: 'e2e-test-token-do-not-use-in-prod',
+      ENABLE_TEST_ROUTES: '1'
     }
   }
 });

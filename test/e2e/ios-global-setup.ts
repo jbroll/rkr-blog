@@ -1,16 +1,23 @@
-// Global setup for BrowserStack iOS Playwright suite.
-// The BrowserStack SDK bypasses Playwright's native webServer lifecycle,
-// so we start the test server manually here.
+// Global setup for TestMu AI iOS Playwright suite.
+// Starts the local test server and the LT tunnel that exposes it as
+// localhost.lambdatest.com:PORT on the remote device.
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
+// @lambdatest/node-tunnel is CJS; use createRequire for ESM interop.
+const require = createRequire(import.meta.url);
+const LambdaTunnel = require('@lambdatest/node-tunnel') as new () => {
+  start(args: { user?: string; key?: string; tunnelName?: string }): Promise<boolean>;
+  stop(): Promise<boolean>;
+};
+
 const PORT = 3790;
-// Listen on all interfaces. BS Local routes bs-local.com to 127.0.0.1 on
-// the test machine; 0.0.0.0 ensures we accept those connections.
+// Listen on all interfaces so the LT tunnel can reach the server.
 const HOST = '0.0.0.0';
 
 function isPortInUse(port: number): Promise<boolean> {
@@ -77,7 +84,17 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await waitForServer(`http://127.0.0.1:${PORT}/health`);
   console.log(`[ios-setup] test server ready — SITE_ROOT=${tmpRoot}`);
 
+  const tunnel = new LambdaTunnel();
+  await tunnel.start({
+    user: process.env.LT_USERNAME,
+    key: process.env.LT_ACCESS_KEY,
+    tunnelName: 'rkr-blog'
+  });
+  console.log('[ios-setup] LT tunnel started');
+
   return async () => {
+    await tunnel.stop();
+    console.log('[ios-setup] LT tunnel stopped');
     server.kill('SIGTERM');
     console.log('[ios-setup] test server stopped');
   };
