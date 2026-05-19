@@ -56,3 +56,5 @@ Format: **item** — _revisit when:_ trigger.
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
 - **Flaky: `editor: offline ops bake drains on reconnect`** — save-btn disabled check races `ensureLocalState`. _Revisit when:_ seen failing again; add explicit wait for network idle before the disabled assertion.
+- **Flaky: `editor: rotate single image then save edits`** — 404 on `loadOriginal` / preview during rotate races OPFS-to-server drain under CI load. _Revisit when:_ seen failing outside CI load conditions; add explicit drain-wait.
+- **Flaky: `editor: online-save 409 surfaces conflict`** — mtime-bump + 409 path is timing-sensitive; fails under CI server load. _Revisit when:_ seen failing locally; increase server-response timeouts.

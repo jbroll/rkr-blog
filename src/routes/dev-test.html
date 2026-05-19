@@ -938,10 +938,12 @@ async function level18() {
 
   // --- applyRotate 90° equivalent ---
   // 4×2 canvas: left half red (x<2), right half blue.
-  // After 90° CW: out is 2×4. Red was on left (x<2) of input.
-  // Formula: out(ox, oy) = in(oy, ih-1-ox) where ih=2.
-  //   out(0,0) = in(0, 1) = blue  (top-left of output = right-top of input)
-  //   out(1,0) = in(0, 0) = red   (top-right of output = left-top of input)
+  // After 90° CW rotate(π/2): out is 2×4.
+  // src pixel center (ix-1.5, iy-0.5) → screen (1.5-iy, ix+0.5).
+  //   iy=1 row → screen col x=0; iy=0 row → screen col x=1.
+  //   out(0,0) = src(0,1) = red   (src bottom-left → out top-left)
+  //   out(0,3) = src(3,1) = blue  (src bottom-right → out bottom-left)
+  //   out(1,0) = src(0,0) = red   (src top-left → out top-right)
   try {
     const src = makeTestCanvas(4, 2, (ctx) => {
       ctx.fillStyle = '#f00'; ctx.fillRect(0, 0, 2, 2); // left half red
@@ -954,8 +956,9 @@ async function level18() {
     ctx.translate(out.width / 2, out.height / 2);
     ctx.rotate(Math.PI / 2); // 90° CW (same as applyRotate)
     ctx.drawImage(src, -src.width / 2, -src.height / 2);
-    // out(0,0) should be blue; out(1,0) should be red.
-    results.push(sameColor(px(out, 0, 0), [0, 0, 255, 255], 'transform:rotate-90-top-left'));
+    // src bottom-left (red) → out(0,0); src bottom-right (blue) → out(0,3)
+    results.push(sameColor(px(out, 0, 0), [255, 0, 0, 255], 'transform:rotate-90-top-left'));
+    results.push(sameColor(px(out, 0, 3), [0, 0, 255, 255], 'transform:rotate-90-bottom-left'));
     results.push(sameColor(px(out, 1, 0), [255, 0, 0, 255], 'transform:rotate-90-top-right'));
   } catch(e) { results.push(fail('transform:rotate-90', e)); }
 

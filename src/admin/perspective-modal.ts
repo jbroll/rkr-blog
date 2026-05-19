@@ -8,7 +8,7 @@
 import { computeHomography, type Point, perspectiveOutputSize } from '../lib/canvas-math.ts';
 import { type LocalEditState, localMutate } from '../lib/image-edit-ops.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
-import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
+import { getPipelineCache, loadOriginal, webpOrJpeg } from './canvas-loaders';
 import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 
@@ -60,7 +60,7 @@ export async function openPerspective(
   }
   let blob: Blob;
   try {
-    blob = await canvasToBlob(canvas, 'image/webp', 0.95);
+    blob = await webpOrJpeg(canvas);
   } catch (err) {
     setStatus(`perspective: ${(err as Error).message}`);
     return;

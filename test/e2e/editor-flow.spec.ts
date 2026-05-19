@@ -465,7 +465,16 @@ test('editor: rotate + flip + resample chain saves three ops', async ({ page }) 
   });
   await expect(page.locator('#rkr-image-edits li')).toHaveCount(4);
 
-  // Save commits all three ops to the sidecar in one /commit POST.
+  // 5. Tilt (arbitrary rotation — exercises non-90° canvas path and
+  //    tilt input↔slider sync handler).
+  await page.locator('#rkr-image-tilt-input').fill('15');
+  // Slider syncs on 'input' event dispatched by fill.
+  await expect(page.locator('#rkr-image-tilt-slider')).toHaveValue('15');
+  await page.locator('#rkr-image-tilt-btn').click();
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/^rotate/, { timeout: 5_000 });
+  await expect(page.locator('#rkr-image-edits li')).toHaveCount(5);
+
+  // Save commits all five ops to the sidecar in one /commit POST.
   await page.locator('#rkr-image-save-btn').click();
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, {
     timeout: 10_000

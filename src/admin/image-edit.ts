@@ -4,7 +4,7 @@
 import { isDirty, type LocalEditState } from '../lib/image-edit-ops.ts';
 import { validateOps } from '../lib/ops-validation.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
-import { canvasToBlob, getPipelineCache, loadOriginal } from './canvas-loaders';
+import { getPipelineCache, loadOriginal, webpOrJpeg } from './canvas-loaders';
 import { setStatus } from './dom.ts';
 import { getState } from './online-state.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
@@ -139,7 +139,7 @@ async function postCommit(
 ): Promise<{ ops: SidecarOp[]; redoStack: SidecarOp[]; updatedAt: string | null }> {
   const fd = new FormData();
   fd.append('ops', JSON.stringify({ ops, redoStack }));
-  if (bake) fd.append('bake', bake, `${id}.webp`);
+  if (bake) fd.append('bake', bake, `${id}.${bake.type === 'image/jpeg' ? 'jpg' : 'webp'}`);
   const res = await fetch(`/admin/sidecar/${id}/commit`, { method: 'POST', body: fd });
   if (!res.ok) throw new Error(`commit: ${res.status} ${await res.text()}`);
   return (await res.json()) as {
@@ -210,13 +210,7 @@ async function renderBakeBlob(id: string, ops: readonly SidecarOp[]): Promise<Bl
     },
     ops as SidecarOp[]
   );
-  const blob = await canvasToBlob(canvas, 'image/webp', 0.95);
-  // iOS WebKit doesn't support WebP canvas encoding — fall back to JPEG.
-  // The server accepts both and re-encodes JPEG→WebP before storing.
-  if (blob.type !== 'image/webp') {
-    return canvasToBlob(canvas, 'image/jpeg', 0.95);
-  }
-  return blob;
+  return webpOrJpeg(canvas);
 }
 
 export function dirtyImageStates(): Array<[string, LocalEditState]> {

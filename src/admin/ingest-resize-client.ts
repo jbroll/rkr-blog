@@ -19,12 +19,14 @@
 // SVG, animated GIF, and other decodable-but-wrong-to-re-encode types return
 // null so the caller falls back to raw upload as before.
 
+import { supportsWebP } from './canvas-loaders';
+
 const MAX_LONG_EDGE = 3200;
 const WEBP_QUALITY = 0.82;
 
 export interface ClientResizeResult {
   blob: Blob;
-  ext: 'webp' | 'png';
+  ext: 'webp' | 'jpg';
   width: number;
   height: number;
 }
@@ -87,17 +89,13 @@ export async function resizeForUpload(file: File): Promise<ClientResizeResult | 
   ctx.drawImage(bitmap, 0, 0, outW, outH);
   bitmap.close();
 
+  const mime = supportsWebP ? 'image/webp' : 'image/jpeg';
+  const ext = supportsWebP ? 'webp' : 'jpg';
   let blob: Blob;
   try {
-    blob = await canvas.convertToBlob({ type: 'image/webp', quality: WEBP_QUALITY });
+    blob = await canvas.convertToBlob({ type: mime, quality: WEBP_QUALITY });
   } catch {
-    // Browser doesn't support WebP encoder (very rare in 2026).
     return null;
   }
-  // iOS WebKit silently produces PNG when asked for WebP. Accept the actual
-  // format so the upload path uses the correct ext and MIME type.
-  if (blob.type === 'image/webp') return { blob, ext: 'webp', width: outW, height: outH };
-  if (blob.type === 'image/png') return { blob, ext: 'png', width: outW, height: outH };
-  // Unexpected format — fall back to raw upload.
-  return null;
+  return { blob, ext, width: outW, height: outH };
 }
