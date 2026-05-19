@@ -795,6 +795,206 @@ async function level15() {
   return results;
 }
 
+// ── Level 16: crypto.randomUUID + TextEncoder/TextDecoder ────────────────────
+// crypto.randomUUID is used by opfs.ts (message correlation IDs) and draft.ts.
+// TextEncoder/TextDecoder are used by opfs-worker.ts to encode/decode file data.
+async function level16() {
+  section('Level 16 — crypto + text codecs');
+  const results = [];
+
+  // crypto.randomUUID
+  try {
+    if (typeof crypto === 'undefined' || typeof crypto.randomUUID !== 'function') {
+      results.push({ name: 'crypto.randomUUID', ok: false, detail: 'unavailable — OPFS messaging and draft IDs will break' });
+    } else {
+      const id = crypto.randomUUID();
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (uuidRe.test(id)) {
+        results.push(pass('crypto.randomUUID', id));
+      } else {
+        results.push({ name: 'crypto.randomUUID', ok: false, detail: `bad format: ${id}` });
+      }
+    }
+  } catch(e) { results.push(fail('crypto.randomUUID', e)); }
+
+  // TextEncoder
+  try {
+    const enc = new TextEncoder();
+    const bytes = enc.encode('hello');
+    const expected = [104, 101, 108, 108, 111]; // UTF-8 for 'hello'
+    const match = bytes.length === 5 && expected.every((b, i) => bytes[i] === b);
+    if (match) {
+      results.push(pass('TextEncoder', `${bytes.length} bytes ok`));
+    } else {
+      results.push({ name: 'TextEncoder', ok: false, detail: `got [${Array.from(bytes)}]` });
+    }
+  } catch(e) { results.push(fail('TextEncoder', e)); }
+
+  // TextDecoder
+  try {
+    const dec = new TextDecoder();
+    const decoded = dec.decode(new Uint8Array([104, 101, 108, 108, 111]));
+    if (decoded === 'hello') {
+      results.push(pass('TextDecoder', 'round-trip ok'));
+    } else {
+      results.push({ name: 'TextDecoder', ok: false, detail: `got "${decoded}"` });
+    }
+  } catch(e) { results.push(fail('TextDecoder', e)); }
+
+  return results;
+}
+
+// ── Level 17: Blob URL + HTMLImageElement decode round-trip ──────────────────
+// Tests URL.createObjectURL → new Image() load → drawImage → getImageData.
+// This is the exact path canvas-loaders.ts uses in loadOriginal when it decodes
+// the master image into an HTMLImageElement for the canvas pipeline.
+async function level17() {
+  section('Level 17 — Blob URL + HTMLImageElement decode');
+  const results = [];
+
+  try {
+    // Create a source canvas with a known colour (pure red).
+    const src = document.createElement('canvas');
+    src.width = 8; src.height = 8;
+    src.getContext('2d').fillStyle = '#ff0000';
+    src.getContext('2d').fillRect(0, 0, 8, 8);
+
+    // Export as PNG blob.
+    const blob = await new Promise((res, rej) =>
+      src.toBlob(b => b ? res(b) : rej(new Error('null blob')), 'image/png')
+    );
+    results.push(pass('blobURL:source-blob', `${blob.size}B`));
+
+    // Wrap as object URL and load via HTMLImageElement.
+    const blobUrl = URL.createObjectURL(blob);
+    const img = await new Promise((res, rej) => {
+      const el = new Image();
+      el.onload = () => res(el);
+      el.onerror = () => rej(new Error('Image decode failed'));
+      el.src = blobUrl;
+    });
+    URL.revokeObjectURL(blobUrl);
+    results.push(pass('blobURL:Image-load', `${img.naturalWidth}×${img.naturalHeight}`));
+
+    // Draw onto a new canvas and read a pixel.
+    const out = document.createElement('canvas');
+    out.width = img.naturalWidth; out.height = img.naturalHeight;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(4, 4, 1, 1).data; // [r, g, b, a]
+
+    if (px[0] === 255 && px[1] === 0 && px[2] === 0 && px[3] === 255) {
+      results.push(pass('blobURL:getImageData', `pixel=[${px[0]},${px[1]},${px[2]},${px[3]}] ✓`));
+    } else {
+      results.push({ name: 'blobURL:getImageData', ok: false,
+        detail: `pixel=[${px[0]},${px[1]},${px[2]},${px[3]}] expected [255,0,0,255]` });
+    }
+  } catch(e) { results.push(fail('blobURL:pipeline', e)); }
+
+  return results;
+}
+
+// ── Level 18: canvas 2D transform correctness ────────────────────────────────
+// Exercises the same transform patterns used by applyRotate, applyFlip, and
+// applyCrop in canvas.ts. Pixel-level verification catches bugs in the 2D
+// context transform stack on older Android WebViews and obscure environments.
+async function level18() {
+  section('Level 18 — canvas 2D transform correctness');
+  const results = [];
+
+  function makeTestCanvas(w, h, fillFn) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    fillFn(c.getContext('2d'), w, h);
+    return c;
+  }
+  function px(canvas, x, y) {
+    return Array.from(canvas.getContext('2d').getImageData(x, y, 1, 1).data);
+  }
+  function sameColor(a, b, label) {
+    const ok = a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+    return ok
+      ? pass(label, `[${a}] ✓`)
+      : { name: label, ok: false, detail: `got [${a}] expected [${b}]` };
+  }
+
+  // --- applyCrop equivalent ---
+  // 10×10 canvas: left half red (x<5), right half blue.
+  // Crop to x=5, y=0, w=5, h=10 → all pixels should be blue.
+  try {
+    const src = makeTestCanvas(10, 10, (ctx) => {
+      ctx.fillStyle = '#f00'; ctx.fillRect(0, 0, 5, 10);
+      ctx.fillStyle = '#00f'; ctx.fillRect(5, 0, 5, 10);
+    });
+    const out = document.createElement('canvas');
+    out.width = 5; out.height = 10;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(src, 5, 0, 5, 10, 0, 0, 5, 10); // same as applyCrop
+    results.push(sameColor(px(out, 2, 5), [0, 0, 255, 255], 'transform:crop'));
+  } catch(e) { results.push(fail('transform:crop', e)); }
+
+  // --- applyRotate 90° equivalent ---
+  // 4×2 canvas: left half red (x<2), right half blue.
+  // After 90° CW: out is 2×4. Red was on left (x<2) of input.
+  // Formula: out(ox, oy) = in(oy, ih-1-ox) where ih=2.
+  //   out(0,0) = in(0, 1) = blue  (top-left of output = right-top of input)
+  //   out(1,0) = in(0, 0) = red   (top-right of output = left-top of input)
+  try {
+    const src = makeTestCanvas(4, 2, (ctx) => {
+      ctx.fillStyle = '#f00'; ctx.fillRect(0, 0, 2, 2); // left half red
+      ctx.fillStyle = '#00f'; ctx.fillRect(2, 0, 2, 2); // right half blue
+    });
+    const out = document.createElement('canvas');
+    out.width = src.height; // 2
+    out.height = src.width; // 4
+    const ctx = out.getContext('2d');
+    ctx.translate(out.width / 2, out.height / 2);
+    ctx.rotate(Math.PI / 2); // 90° CW (same as applyRotate)
+    ctx.drawImage(src, -src.width / 2, -src.height / 2);
+    // out(0,0) should be blue; out(1,0) should be red.
+    results.push(sameColor(px(out, 0, 0), [0, 0, 255, 255], 'transform:rotate-90-top-left'));
+    results.push(sameColor(px(out, 1, 0), [255, 0, 0, 255], 'transform:rotate-90-top-right'));
+  } catch(e) { results.push(fail('transform:rotate-90', e)); }
+
+  // --- applyFlip horizontal equivalent ---
+  // 10×4 canvas: left half red (x<5), right half blue.
+  // After flip horizontal: left half becomes blue, right half red.
+  try {
+    const src = makeTestCanvas(10, 4, (ctx) => {
+      ctx.fillStyle = '#f00'; ctx.fillRect(0, 0, 5, 4);
+      ctx.fillStyle = '#00f'; ctx.fillRect(5, 0, 5, 4);
+    });
+    const out = document.createElement('canvas');
+    out.width = src.width; out.height = src.height;
+    const ctx = out.getContext('2d');
+    ctx.translate(src.width, 0);
+    ctx.scale(-1, 1); // same as applyFlip horizontal
+    ctx.drawImage(src, 0, 0);
+    results.push(sameColor(px(out, 2, 2), [0, 0, 255, 255], 'transform:flip-h-left-now-blue'));
+    results.push(sameColor(px(out, 7, 2), [255, 0, 0, 255], 'transform:flip-h-right-now-red'));
+  } catch(e) { results.push(fail('transform:flip-h', e)); }
+
+  // --- applyFlip vertical equivalent ---
+  // 4×10 canvas: top half red (y<5), bottom half blue.
+  // After flip vertical: top becomes blue, bottom becomes red.
+  try {
+    const src = makeTestCanvas(4, 10, (ctx) => {
+      ctx.fillStyle = '#f00'; ctx.fillRect(0, 0, 4, 5);
+      ctx.fillStyle = '#00f'; ctx.fillRect(0, 5, 4, 5);
+    });
+    const out = document.createElement('canvas');
+    out.width = src.width; out.height = src.height;
+    const ctx = out.getContext('2d');
+    ctx.translate(0, src.height);
+    ctx.scale(1, -1); // same as applyFlip vertical
+    ctx.drawImage(src, 0, 0);
+    results.push(sameColor(px(out, 2, 2), [0, 0, 255, 255], 'transform:flip-v-top-now-blue'));
+    results.push(sameColor(px(out, 2, 7), [255, 0, 0, 255], 'transform:flip-v-bottom-now-red'));
+  } catch(e) { results.push(fail('transform:flip-v', e)); }
+
+  return results;
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 function display(results) {
@@ -872,6 +1072,18 @@ async function run() {
   const l15 = await level15();
   display(l15); allResults.push(...l15);
   // Level 15 is diagnostic-only — never gates the final verdict.
+
+  const l16 = await level16();
+  display(l16); allResults.push(...l16);
+  if (l16.some(r => r.ok === false)) { finish('FAIL (level 16)', allResults); return; }
+
+  const l17 = await level17();
+  display(l17); allResults.push(...l17);
+  if (l17.some(r => r.ok === false)) { finish('FAIL (level 17)', allResults); return; }
+
+  const l18 = await level18();
+  display(l18); allResults.push(...l18);
+  if (l18.some(r => r.ok === false)) { finish('FAIL (level 18)', allResults); return; }
 
   finish('PASS ✓', allResults);
 }

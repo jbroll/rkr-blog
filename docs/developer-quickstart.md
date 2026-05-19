@@ -333,6 +333,9 @@ curl http://localhost:<port>/_test/reload
 | 13 | `BroadcastChannel` send/receive round-trip (used by `online-state.ts` and `sync.ts` for cross-tab coordination) |
 | 14 | `navigator.locks.request()` acquisition and sequential exclusion (used by `opfs-schema.ts` ROOT_LOCK and `sync.ts` drain/sync locks) |
 | 15 | Platform APIs matrix (informational): `navigator.storage.estimate()` quota/usage, `serviceWorker` availability, `navigator.onLine`, `clipboard.writeText` permission state |
+| 16 | `crypto.randomUUID()` (OPFS message IDs, draft IDs), `TextEncoder`/`TextDecoder` (OPFS worker file encoding) |
+| 17 | Blob URL + `HTMLImageElement` decode round-trip: `URL.createObjectURL` → `new Image()` load → `drawImage` → `getImageData` pixel verification (mirrors `canvas-loaders.ts loadOriginal`) |
+| 18 | Canvas 2D transform correctness: `applyCrop`, `applyRotate 90°`, `applyFlipH`, `applyFlipV` — all verified with `getImageData` pixel checks (catches Android WebView transform bugs) |
 
 ### Adding new levels
 
