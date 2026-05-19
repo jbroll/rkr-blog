@@ -20,6 +20,7 @@ import sharp from 'sharp';
 import { cacheKey } from './hash.ts';
 import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, imageInfo } from './originals.ts';
+import { resamplePerspective } from './perspective-resample.ts';
 import { inscribedRect } from './rotation.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
@@ -53,13 +54,10 @@ interface FlipOp {
   axis: 'horizontal' | 'vertical';
 }
 
-/** Perspective rectify op. Sharp can't apply a homography (Canvas2D
- * setTransform is affine only and libvips has no equivalent), so the
- * client bakes the result and uploads it; the renderer only ever sees
- * this op when sourcing from `originals/` as a fallback, in which case
- * applyOp throws and the request returns an error. The op is in the
- * union so the exhaustiveness check at applyOp's `default` branch is
- * a real type-level guarantee rather than a runtime-only string match. */
+/** Perspective rectify op. Sharp has no homography operator, so
+ * renderDerivative handles this inline: it materialises the pipeline
+ * to a raw RGBA buffer, calls resamplePerspective, then restarts a
+ * new Sharp from the result. applyOp never receives this op type. */
 interface PerspectiveOp {
   type: 'perspective';
   corners: ReadonlyArray<readonly [number, number]>;
@@ -175,8 +173,27 @@ export async function renderDerivative(
     let curW = origInfo?.width ?? 0;
     let curH = origInfo?.height ?? 0;
     for (const op of ops) {
-      pipeline = applyOp(pipeline, op, { w: curW, h: curH });
-      ({ w: curW, h: curH } = nextDims(op, curW, curH));
+      if (op.type === 'perspective') {
+        // Sharp has no homography operator: materialise the pipeline so
+        // far as a raw RGBA buffer, apply the pure-JS resampler, then
+        // restart a new Sharp from the result.
+        const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
+        const result = resamplePerspective(data, info.width, info.height, op);
+        if (!result) {
+          throw new Error(
+            'renderDerivative: perspective op failed (malformed corners or singular homography)'
+          );
+        }
+        pipeline = sharp(result.buffer, {
+          raw: { width: result.width, height: result.height, channels: 4 },
+          limitInputPixels: SHARP_PIXEL_LIMIT
+        });
+        curW = result.width;
+        curH = result.height;
+      } else {
+        pipeline = applyOp(pipeline, op, { w: curW, h: curH });
+        ({ w: curW, h: curH } = nextDims(op, curW, curH));
+      }
     }
   }
   pipeline = applyVariant(pipeline, variant);
@@ -259,14 +276,9 @@ export function applyOp(
       // shorthand to spare every reader the same five-second confusion.
       return op.axis === 'horizontal' ? p.flop() : p.flip();
     case 'perspective':
-      // Client-only op: the canvas pipeline produces the rectified
-      // result and uploads it as the bake. Reaching this branch means
-      // we sourced from `originals/` as a fallback (bake missing),
-      // which we can't satisfy. Surface clearly so the operator can
-      // re-bake rather than ship a derivative that ignored the op.
-      throw new Error(
-        'renderDerivative: perspective op requires a bake (run Save edits in the editor)'
-      );
+      // renderDerivative handles perspective inline before calling applyOp,
+      // so this branch should never be reached in normal operation.
+      throw new Error('applyOp: perspective must be handled by the caller');
     default: {
       const exhaustive: never = op;
       throw new Error(`renderDerivative: unknown op type ${(exhaustive as Op).type}`);
