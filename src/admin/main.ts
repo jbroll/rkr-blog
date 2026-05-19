@@ -74,6 +74,9 @@ function mount(): void {
   const attrRedoBtn = $<HTMLButtonElement>('rkr-image-redo-btn');
   const attrResampleInput = $<HTMLInputElement>('rkr-image-resample');
   const attrResampleBtn = $<HTMLButtonElement>('rkr-image-resample-btn');
+  const attrTiltSlider = $<HTMLInputElement>('rkr-image-tilt-slider');
+  const attrTiltInput = $<HTMLInputElement>('rkr-image-tilt-input');
+  const attrTiltBtn = $<HTMLButtonElement>('rkr-image-tilt-btn');
   const attrResetBtn = $<HTMLButtonElement>('rkr-image-reset-btn');
   const attrSaveBtn = $<HTMLButtonElement>('rkr-image-save-btn');
   const attrEditsList = $<HTMLOListElement>('rkr-image-edits');
@@ -422,9 +425,12 @@ function mount(): void {
       redo: attrRedoBtn,
       reset: attrResetBtn,
       save: attrSaveBtn,
-      resample: attrResampleBtn
+      resample: attrResampleBtn,
+      tilt: attrTiltBtn
     },
     resampleInput: attrResampleInput,
+    tiltSlider: attrTiltSlider,
+    tiltInput: attrTiltInput,
     editsList: attrEditsList,
     activeImageId
   });

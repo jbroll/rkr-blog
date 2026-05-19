@@ -171,6 +171,12 @@ ${siteHead(data.site, { isAdmin: true })}
         <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
         <button type="button" id="rkr-image-resample-btn">Apply</button>
       </span>
+      <label for="rkr-image-tilt-input">Tilt (°)</label>
+      <span class="rkr-image-actions">
+        <input id="rkr-image-tilt-slider" type="range" min="-45" max="45" step="0.1" value="0" style="width:8em"/>
+        <input id="rkr-image-tilt-input" type="number" min="-45" max="45" step="0.1" value="0" style="width:4em"/>
+        <button type="button" id="rkr-image-tilt-btn">Apply</button>
+      </span>
       <span id="rkr-image-edits-label">Edits</span>
       <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
       <!-- Live preview of the image with the current edits applied,

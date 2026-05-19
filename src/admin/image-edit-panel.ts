@@ -39,6 +39,7 @@ interface ImageEditPanelButtons {
   reset: HTMLButtonElement;
   save: HTMLButtonElement;
   resample: HTMLButtonElement;
+  tilt: HTMLButtonElement;
 }
 
 export interface ImageEditPanelDeps {
@@ -46,6 +47,8 @@ export interface ImageEditPanelDeps {
   section: HTMLDivElement;
   buttons: ImageEditPanelButtons;
   resampleInput: HTMLInputElement;
+  tiltSlider: HTMLInputElement;
+  tiltInput: HTMLInputElement;
   editsList: HTMLOListElement;
   /** Read the currently-active image id (null when no cell is
    * selected). Called at click time so the latest selection is used. */
@@ -63,7 +66,16 @@ export interface ImageEditPanel {
 }
 
 export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
-  const { editor, section, buttons, resampleInput, editsList, activeImageId } = deps;
+  const {
+    editor,
+    section,
+    buttons,
+    resampleInput,
+    tiltSlider,
+    tiltInput,
+    editsList,
+    activeImageId
+  } = deps;
   // Empty-state hint shown in the cell dialog when no cell is active.
   // openCellDialog can fire with activeCellIndex===null (idx falls back
   // to 0 for caption/alt but the image-edit section stays hidden), so
@@ -192,6 +204,19 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
       ...ops.filter((o) => o.type !== 'resample'),
       { type: 'resample', w, fit: 'inside' }
     ]);
+  });
+  tiltSlider.addEventListener('input', () => {
+    tiltInput.value = tiltSlider.value;
+  });
+  tiltInput.addEventListener('input', () => {
+    const v = Math.max(-45, Math.min(45, Number(tiltInput.value) || 0));
+    tiltSlider.value = String(v);
+  });
+  buttons.tilt.addEventListener('click', () => {
+    const deg = Math.max(-45, Math.min(45, Number(tiltInput.value) || 0));
+    if (deg === 0) return;
+    const norm = ((deg % 360) + 360) % 360;
+    runEdit('tilt', (ops) => [...ops, { type: 'rotate', degrees: norm }]);
   });
   buttons.reset.addEventListener('click', () =>
     runWithState((id, s) => {
