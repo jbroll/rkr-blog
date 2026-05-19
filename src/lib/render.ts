@@ -20,6 +20,7 @@ import sharp from 'sharp';
 import { cacheKey } from './hash.ts';
 import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, imageInfo } from './originals.ts';
+import { inscribedRect } from './rotation.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
 export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';
@@ -137,6 +138,7 @@ export async function renderDerivative(
   const baked = bakePath(siteRoot, originalId);
   const useBake = await fileExists(baked);
   let sourcePath: string;
+  let origInfo: Awaited<ReturnType<typeof imageInfo>> = null;
   if (useBake) {
     sourcePath = baked;
   } else {
@@ -146,11 +148,11 @@ export async function renderDerivative(
     }
     // The file IS the source of truth for format; imageInfo finds it
     // by scanning candidate exts in originals/<aa>/<bb>/.
-    const info = await imageInfo(siteRoot, originalId);
-    if (!info) {
+    origInfo = await imageInfo(siteRoot, originalId);
+    if (!origInfo) {
       throw new Error(`renderDerivative: no original on disk for ${originalId}`);
     }
-    sourcePath = info.path;
+    sourcePath = origInfo.path;
   }
 
   // Keep libvips threads from multiplying with job concurrency
@@ -170,8 +172,11 @@ export async function renderDerivative(
   // Only apply ops when sourcing from the original — the bake already
   // has them baked in.
   if (!useBake) {
+    let curW = origInfo?.width ?? 0;
+    let curH = origInfo?.height ?? 0;
     for (const op of ops) {
-      pipeline = applyOp(pipeline, op);
+      pipeline = applyOp(pipeline, op, { w: curW, h: curH });
+      ({ w: curW, h: curH } = nextDims(op, curW, curH));
     }
   }
   pipeline = applyVariant(pipeline, variant);
@@ -197,7 +202,35 @@ export async function renderDerivative(
 
 // ---- ops & output -------------------------------------------------------
 
-export function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
+function nextDims(op: Op, w: number, h: number): { w: number; h: number } {
+  switch (op.type) {
+    case 'crop':
+      return { w: op.w, h: op.h };
+    case 'rotate': {
+      const norm = (((op.degrees ?? 0) % 360) + 360) % 360;
+      if (norm === 90 || norm === 270) return { w: h, h: w };
+      if (norm === 0 || norm === 180) return { w, h };
+      const { iw, ih } = inscribedRect(w, h, norm);
+      return { w: iw, h: ih };
+    }
+    case 'flip':
+      return { w, h };
+    case 'resample': {
+      if (op.w !== undefined && op.h !== undefined) return { w: op.w, h: op.h };
+      if (op.w !== undefined) return { w: op.w, h: h > 0 ? Math.floor((h * op.w) / w) : op.w };
+      if (op.h !== undefined) return { w: w > 0 ? Math.floor((w * op.h) / h) : op.h, h: op.h };
+      return { w, h };
+    }
+    case 'perspective':
+      return { w, h };
+  }
+}
+
+export function applyOp(
+  p: sharp.Sharp,
+  op: Op,
+  dims: { w: number; h: number } = { w: 0, h: 0 }
+): sharp.Sharp {
   switch (op.type) {
     case 'crop':
       return p.extract({ left: op.x, top: op.y, width: op.w, height: op.h });
@@ -208,8 +241,18 @@ export function applyOp(p: sharp.Sharp, op: Op): sharp.Sharp {
         fit: op.fit ?? 'inside',
         withoutEnlargement: true
       });
-    case 'rotate':
-      return p.rotate(op.degrees ?? 0);
+    case 'rotate': {
+      const norm = (((op.degrees ?? 0) % 360) + 360) % 360;
+      if (norm === 0) return p;
+      if (norm === 90 || norm === 180 || norm === 270) {
+        return p.rotate(norm);
+      }
+      // Arbitrary angle: expand then extract inscribed rect.
+      const { iw, ih, left, top } = inscribedRect(dims.w, dims.h, norm);
+      return p
+        .rotate(norm, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .extract({ left, top, width: iw, height: ih });
+    }
     case 'flip':
       // sharp.flip is vertical (top↔bottom); sharp.flop is horizontal
       // (left↔right). We expose `axis` instead of the flip/flop

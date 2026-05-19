@@ -387,6 +387,38 @@ test('renderDerivative falls back to original + applyOp when bake is absent', as
   );
 });
 
+test('renderDerivative: arbitrary rotate 15° crops to inscribed rect', async (t) => {
+  const root = freshSiteRoot(t);
+  const { id } = await ingest(root, await makeJpeg({ width: 400, height: 200 }));
+  const result = await renderDerivative({
+    siteRoot: root,
+    originalId: id,
+    ops: [{ type: 'rotate', degrees: 15 }],
+    variant: {},
+    output: { format: 'png' }
+  });
+  const meta = await sharp(result.path).metadata();
+  assert.ok((meta.width ?? 0) > 300 && (meta.width ?? 0) < 400, `width=${meta.width}`);
+  assert.ok((meta.height ?? 0) > 70 && (meta.height ?? 0) < 200, `height=${meta.height}`);
+});
+
+test('renderDerivative: arbitrary rotate 40° on landscape uses half-constrained formula', async (t) => {
+  const root = freshSiteRoot(t);
+  // 400×200 at 40°: half-constrained (H-sides binding).
+  // rw=H/(2·sin40°)≈155, rh=H/(2·cos40°)≈130
+  const { id } = await ingest(root, await makeJpeg({ width: 400, height: 200 }));
+  const result = await renderDerivative({
+    siteRoot: root,
+    originalId: id,
+    ops: [{ type: 'rotate', degrees: 40 }],
+    variant: {},
+    output: { format: 'png' }
+  });
+  const meta = await sharp(result.path).metadata();
+  assert.ok((meta.width ?? 0) > 140 && (meta.width ?? 0) <= 155, `width=${meta.width}`);
+  assert.ok((meta.height ?? 0) > 120 && (meta.height ?? 0) <= 130, `height=${meta.height}`);
+});
+
 test('renderDerivative throws on perspective op when bake is absent', async (t) => {
   // The architecture relies on the bake being present whenever ops
   // contains 'perspective' — sharp can't apply a homography. If a

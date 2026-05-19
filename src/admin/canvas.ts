@@ -20,12 +20,12 @@ import {
   computeHomography,
   computeResampleSize,
   invertMatrix3,
-  normalizeRotation,
   opsEqual,
   type Point,
   perspectiveOutputSize,
   simplifyOps
 } from '../lib/canvas-math.ts';
+import { inscribedRect } from '../lib/rotation.ts';
 import type { SidecarOp } from '../lib/sidecar-types.ts';
 
 export interface CanvasSource {
@@ -137,17 +137,33 @@ function applyCrop(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasElement {
 }
 
 function applyRotate(input: HTMLCanvasElement, op: SidecarOp): HTMLCanvasElement {
-  const norm = normalizeRotation(op.degrees);
-  if (norm === null || norm === 0) return input;
-  const swap = norm === 90 || norm === 270;
+  const degrees = Number(op.degrees ?? 0);
+  if (!Number.isFinite(degrees)) return input;
+  const norm = ((degrees % 360) + 360) % 360;
+  if (norm === 0) return input;
+
+  if (norm === 90 || norm === 180 || norm === 270) {
+    const swap = norm === 90 || norm === 270;
+    const out = document.createElement('canvas');
+    out.width = swap ? input.height : input.width;
+    out.height = swap ? input.width : input.height;
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('canvas: 2d context unavailable');
+    ctx.translate(out.width / 2, out.height / 2);
+    ctx.rotate((norm * Math.PI) / 180);
+    ctx.drawImage(input, -input.width / 2, -input.height / 2);
+    return out;
+  }
+
+  const { iw, ih } = inscribedRect(input.width, input.height, norm);
   const out = document.createElement('canvas');
-  out.width = swap ? input.height : input.width;
-  out.height = swap ? input.width : input.height;
+  out.width = iw;
+  out.height = ih;
   const ctx = out.getContext('2d');
   if (!ctx) throw new Error('canvas: 2d context unavailable');
-  // Translate to the centre, rotate, draw centred. Avoids fence-post
-  // arithmetic per quadrant.
-  ctx.translate(out.width / 2, out.height / 2);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.translate(iw / 2, ih / 2);
   ctx.rotate((norm * Math.PI) / 180);
   ctx.drawImage(input, -input.width / 2, -input.height / 2);
   return out;
