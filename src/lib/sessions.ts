@@ -87,7 +87,12 @@ export function readSessionUser(db: Db, id: string): { session: Session; user: U
 }
 
 export function touchSession(db: Db, id: string, when: string = new Date().toISOString()): void {
-  db.prepare('UPDATE sessions SET last_seen_at = ? WHERE id = ?').run(when, id);
+  const expiresAt = new Date(Date.parse(when) + SESSION_TTL_MS).toISOString();
+  db.prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?').run(
+    when,
+    expiresAt,
+    id
+  );
 }
 
 export function deleteSession(db: Db, id: string): void {

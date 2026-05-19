@@ -129,7 +129,9 @@ async function callOnce(input: SpamInput, cfg: ClassifyConfig): Promise<SpamVerd
       signal: ac.signal
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as { response?: unknown };
+    const text = await res.text();
+    if (text.length > 1_000_000) throw new Error('response body too large (>1 MB)');
+    const data = JSON.parse(text) as { response?: unknown };
     if (typeof data.response !== 'string') throw new Error('no response field');
     return parseVerdict(data.response);
   } finally {
@@ -140,6 +142,7 @@ async function callOnce(input: SpamInput, cfg: ClassifyConfig): Promise<SpamVerd
 export async function classifyComment(input: SpamInput, cfg: ClassifyConfig): Promise<SpamVerdict> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
+    if (attempt > 1) await new Promise<void>((r) => setTimeout(r, (attempt - 1) * 200));
     try {
       return await callOnce(input, cfg);
     } catch (err) {

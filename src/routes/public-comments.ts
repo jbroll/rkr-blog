@@ -33,6 +33,17 @@ export interface PublicCommentRoutesOpts {
 const MIN_FILL_MS = 3000;
 const MAX = { name: 80, email: 200, body: 5000 };
 
+// Returns true if s contains C0 control chars other than TAB/LF/CR.
+// Uses charCodeAt comparisons rather than a regex literal so biome's
+// noControlCharactersInRegex rule does not flag it.
+function hasCtrlChars(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c <= 8 || c === 11 || c === 12 || (c >= 14 && c <= 31)) return true;
+  }
+  return false;
+}
+
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
 }
@@ -71,6 +82,12 @@ export function registerPublicCommentRoutes(
 
       if (!name || !email || !text) {
         return reply.code(400).send({ error: 'name, email and body are required' });
+      }
+      if (hasCtrlChars(name)) {
+        return reply.code(400).send({ error: 'name contains invalid characters' });
+      }
+      if (text.includes('\x00')) {
+        return reply.code(400).send({ error: 'body contains invalid characters' });
       }
       if (name.length > MAX.name || email.length > MAX.email || text.length > MAX.body) {
         return reply.code(400).send({ error: 'a field exceeds its maximum length' });

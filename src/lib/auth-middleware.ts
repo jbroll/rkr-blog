@@ -12,6 +12,7 @@
 import cookiePlugin from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { adminTokenMatchesEnv } from './admin-token.ts';
+import { parseBearerToken } from './bearer.ts';
 import type { Db } from './db.ts';
 import { clearFailures, isThrottled, recordFailure, WINDOW_MS } from './login-throttle.ts';
 import { SESSION_COOKIE_NAME } from './session-constants.ts';
@@ -33,13 +34,6 @@ const BEARER_USER: User = {
   last_seen_at: null
 };
 
-function bearerTokenFromHeader(req: FastifyRequest): string | undefined {
-  const raw = req.headers.authorization;
-  if (!raw) return undefined;
-  const m = /^Bearer\s+(.+)$/i.exec(raw);
-  return m?.[1]?.trim();
-}
-
 export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Promise<void> {
   // Register the cookie plugin FIRST so its onRequest parser runs before
   // ours; otherwise req.cookies would be undefined here.
@@ -53,7 +47,7 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
     // Bearer-token path takes precedence over the cookie path. A
     // request that supplies both is treated as a bearer client (the
     // typical case is a script that doesn't carry cookies anyway).
-    const bearer = bearerTokenFromHeader(req);
+    const bearer = parseBearerToken(req.headers.authorization);
     if (bearer !== undefined) {
       // Validate the token FIRST. A correct ADMIN_TOKEN must never be
       // throttled — gating success on a per-IP failure tally lets an

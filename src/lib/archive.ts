@@ -374,13 +374,34 @@ export function importArchive(
       }
     })();
 
-    // Comments: resolve slug→post_id and export_id→new_id after reindex.
+    // Comments: two-pass to handle forward parent references robustly.
+    // Pass 1 inserts all comments with parent_id = NULL and builds the
+    // export_id → new DB id map; pass 2 wires up the parent links.
     const slugToPostId = new Map<string, number>();
     for (const row of db
       .prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts')
       .all()) {
       slugToPostId.set(row.slug, row.id);
     }
+
+    const arcComments = arc
+      .prepare<{
+        export_id: number;
+        post_slug: string;
+        parent_export_id: number | null;
+        wp_comment_id: number | null;
+        author_name: string;
+        author_email: string;
+        body: string;
+        status: string;
+        source: string;
+        spam_score: number | null;
+        spam_reason: string | null;
+        ip: string | null;
+        created_at: string;
+        classified_at: string | null;
+      }>('SELECT * FROM comments ORDER BY export_id')
+      .all();
 
     const exportIdToNewId = new Map<number, number>();
     const insertComment = db.prepare(
@@ -398,64 +419,58 @@ export function importArchive(
       'SELECT id FROM comments WHERE post_id=? AND author_email=? AND created_at=?'
     );
 
-    for (const row of arc
-      .prepare<{
-        export_id: number;
-        post_slug: string;
-        parent_export_id: number | null;
-        wp_comment_id: number | null;
-        author_name: string;
-        author_email: string;
-        body: string;
-        status: string;
-        source: string;
-        spam_score: number | null;
-        spam_reason: string | null;
-        ip: string | null;
-        created_at: string;
-        classified_at: string | null;
-      }>('SELECT * FROM comments ORDER BY export_id')
-      .all()) {
-      const postId = slugToPostId.get(row.post_slug);
-      if (postId === undefined) continue; // post not found after reindex
+    db.transaction(() => {
+      // Pass 1: insert all comments with parent_id = NULL
+      for (const row of arcComments) {
+        const postId = slugToPostId.get(row.post_slug);
+        if (postId === undefined) continue;
 
-      if (!opts.replace) {
-        // Fix 3: merge dedup — store the real existing id so reply threading works
-        if (row.wp_comment_id !== null) {
-          const existing = findByWpId.get(row.wp_comment_id);
-          if (existing) {
-            exportIdToNewId.set(row.export_id, Number(existing.id));
-            continue;
-          }
-        } else {
-          const existing = findDupe.get(postId, row.author_email, row.created_at);
-          if (existing) {
-            exportIdToNewId.set(row.export_id, Number(existing.id));
-            continue;
+        if (!opts.replace) {
+          if (row.wp_comment_id !== null) {
+            const existing = findByWpId.get(row.wp_comment_id);
+            if (existing) {
+              exportIdToNewId.set(row.export_id, Number(existing.id));
+              continue;
+            }
+          } else {
+            const existing = findDupe.get(postId, row.author_email, row.created_at);
+            if (existing) {
+              exportIdToNewId.set(row.export_id, Number(existing.id));
+              continue;
+            }
           }
         }
+
+        const result = insertComment.run(
+          postId,
+          null,
+          row.wp_comment_id ?? null,
+          row.author_name,
+          row.author_email,
+          row.body,
+          row.status,
+          row.source,
+          row.spam_score ?? null,
+          row.spam_reason ?? null,
+          row.ip ?? null,
+          row.created_at,
+          row.classified_at ?? null
+        );
+        exportIdToNewId.set(row.export_id, result.lastInsertRowid);
+        commentCount++;
       }
 
-      const parentId =
-        row.parent_export_id !== null ? (exportIdToNewId.get(row.parent_export_id) ?? null) : null;
-      const result = insertComment.run(
-        postId,
-        parentId ?? null,
-        row.wp_comment_id ?? null,
-        row.author_name,
-        row.author_email,
-        row.body,
-        row.status,
-        row.source,
-        row.spam_score ?? null,
-        row.spam_reason ?? null,
-        row.ip ?? null,
-        row.created_at,
-        row.classified_at ?? null
-      );
-      exportIdToNewId.set(row.export_id, result.lastInsertRowid);
-      commentCount++;
-    }
+      // Pass 2: wire up parent links (handles forward references)
+      const updateParent = db.prepare('UPDATE comments SET parent_id = ? WHERE id = ?');
+      for (const row of arcComments) {
+        if (row.parent_export_id === null) continue;
+        const newId = exportIdToNewId.get(row.export_id);
+        if (newId === undefined) continue; // was deduped or post not found
+        const parentNewId = exportIdToNewId.get(row.parent_export_id);
+        if (parentNewId === undefined) continue; // parent not in archive
+        updateParent.run(parentNewId, newId);
+      }
+    })();
   } finally {
     db.close();
     arc.close();

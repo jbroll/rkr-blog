@@ -225,6 +225,13 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&#039;/g, "'");
 }
 
+function yamlQuote(s: string): string {
+  return `"${s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[\r\n]/g, ' ')}"`;
+}
+
 /** Render YAML frontmatter for an imported post. Status defaults to
  * `draft` so the operator can review before publishing. */
 function renderFrontmatter(post: WpPost, tagNames: string[] = []): string {
@@ -235,15 +242,15 @@ function renderFrontmatter(post: WpPost, tagNames: string[] = []): string {
   const lines = [
     '---',
     `title: "${titleEsc}"`,
-    `slug: ${post.slug}`,
-    `date: ${post.date}`,
+    `slug: ${yamlQuote(post.slug)}`,
+    `date: ${yamlQuote(post.date)}`,
     'status: draft',
-    `source_url: ${post.link}`,
+    `source_url: ${yamlQuote(post.link)}`,
     `source_kind: wordpress`
   ];
   if (tagNames.length > 0) {
     lines.push('tags:');
-    for (const name of tagNames) lines.push(`- ${name}`);
+    for (const name of tagNames) lines.push(`- ${yamlQuote(name)}`);
   }
   lines.push('---');
   return lines.join('\n');

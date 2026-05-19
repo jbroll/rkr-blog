@@ -41,7 +41,12 @@ export function makeMailer(cfg: SmtpConfig, transport: Transport): Mailer {
         return { sent: false };
       }
       try {
-        await transport({ ...msg, to: cfg.to, from: cfg.from ?? cfg.user ?? 'rkroll' });
+        await transport({
+          ...msg,
+          subject: msg.subject.replace(/[\r\n]/g, ''),
+          to: cfg.to,
+          from: cfg.from ?? cfg.user ?? 'rkroll'
+        });
         return { sent: true };
       } catch (err) {
         process.stderr.write(`[mailer] send failed: ${(err as Error).message}\n`);

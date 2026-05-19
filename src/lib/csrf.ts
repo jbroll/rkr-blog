@@ -11,6 +11,7 @@
 // Production wiring derives allowedOrigins from PUBLIC_BASE_URL.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { parseBearerToken } from './bearer.ts';
 
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -41,8 +42,7 @@ export function registerCsrfGuard(app: FastifyInstance, opts: CsrfOptions): void
     // a session cookie to a forged cross-origin POST) doesn't apply.
     // Skip the Origin check only for well-formed Bearer token headers;
     // a bare or malformed Authorization header still gets the CSRF check.
-    const auth = request.headers.authorization;
-    if (typeof auth === 'string' && /^bearer\s+\S+$/i.test(auth)) {
+    if (parseBearerToken(request.headers.authorization) !== undefined) {
       return;
     }
 

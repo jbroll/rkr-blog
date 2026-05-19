@@ -323,5 +323,18 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
 
   await app.listen({ port, host });
   app.log.info({ host, port }, 'rkr-blog listening');
+
+  // Graceful shutdown on systemd SIGTERM or Ctrl-C SIGINT. Without
+  // this the process exits hard and in-flight renders, open DB writes,
+  // and the work queue may not flush cleanly.
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(sig, () => {
+      app.close().then(
+        () => process.exit(0),
+        () => process.exit(1)
+      );
+    });
+  }
+
   return app;
 }

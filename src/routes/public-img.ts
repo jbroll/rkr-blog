@@ -18,6 +18,7 @@ import {
   type RenderResult,
   renderDerivative
 } from '../lib/render.ts';
+import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import type { Sidecar } from '../lib/sidecar-types.ts';
@@ -199,6 +200,7 @@ export function registerPublicImgRoutes(fastify: FastifyInstance, opts: PublicIm
         return reply.code(202).send({ status: 'rendering' });
       }
 
+      setPublicSecurityHeaders(reply);
       return reply
         .type(MIME[format])
         .header('content-length', String(result.bytes))

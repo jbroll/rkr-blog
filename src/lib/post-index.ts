@@ -57,7 +57,7 @@ function doReindex(
   // This is the ground truth for "file exists" — used in the orphan step
   // to ensure a parse failure never triggers a cascade delete of comments.
   const onDiskFiles = new Set(listMarkdown(postsDir));
-  const seenSlugs = new Set<string>();
+  const slugToFile = new Map<string, string>(); // duplicate-slug detection
 
   let inserted = 0;
   let updated = 0;
@@ -84,7 +84,14 @@ function doReindex(
       // System posts (_-prefixed) are saved on disk but excluded from the
       // posts index so they never appear in the public or admin listing.
       if (slug.startsWith('_')) continue;
-      seenSlugs.add(slug);
+      if (slugToFile.has(slug)) {
+        // biome-ignore lint/suspicious/noConsole: surface duplicate slugs to reindex output
+        console.error(
+          `reindex: duplicate slug "${slug}" in ${filename} (already indexed from ${slugToFile.get(slug)}) — skipping`
+        );
+        continue;
+      }
+      slugToFile.set(slug, filename);
 
       const stat = fs.statSync(fullPath);
       const created = new Date(stat.birthtimeMs || stat.mtimeMs).toISOString();

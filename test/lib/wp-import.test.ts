@@ -804,8 +804,8 @@ test('importPost: tags resolved via fetchTagNames appear in frontmatter', async 
     }
   });
   assert.match(result.markdown, /^tags:/m);
-  assert.match(result.markdown, /- travel/);
-  assert.match(result.markdown, /- food/);
+  assert.match(result.markdown, /- "travel"/);
+  assert.match(result.markdown, /- "food"/);
 });
 
 test('importPost: no tags field → no tags in frontmatter', async (t) => {
