@@ -38,12 +38,12 @@ export async function uploadImage(file: File): Promise<UploadResponse> {
   const resized = await resizeForUpload(file);
   const blob: Blob = resized?.blob ?? file;
   const ext = resized?.ext ?? extForMime(file.type);
-  const mimeType = resized ? 'image/webp' : file.type;
+  const mimeType = resized ? resized.blob.type : file.type;
   // Re-derive the filename for the upload entry. Keep the user's
   // original stem so server logs / status messages reference what
   // they uploaded, but swap the extension to match the bytes we're
   // actually shipping so the server's `extForMime` lookup is happy.
-  const filename = resized ? swapExt(file.name, 'webp') : file.name;
+  const filename = resized ? swapExt(file.name, resized.ext) : file.name;
 
   const id = await computeContentId(blob);
   await writeBlob(`originals/${id}.${ext}`, blob);

@@ -602,14 +602,17 @@ async function level11() {
     } catch {
       blob = null;
     }
-    if (!blob || blob.type !== 'image/webp') {
-      // iOS WebKit: convertToBlob may produce PNG even when asked for WebP.
-      // This mirrors the same fallback logic that exists for bakes.
-      const fallback = blob ?? await osc.convertToBlob({ type: 'image/png' });
-      results.push({ name: 'ingest:encode-webp', ok: false,
-        detail: `WebP encode unavailable — got type=${fallback.type}` });
-    } else {
+    if (!blob) {
+      results.push({ name: 'ingest:encode-webp', ok: false, detail: 'convertToBlob returned null' });
+    } else if (blob.type === 'image/webp') {
       results.push(pass('ingest:encode-webp', `${blob.type} ${blob.size}B`));
+    } else if (blob.type === 'image/png') {
+      // iOS WebKit silently produces PNG when asked for WebP. The app now
+      // detects this and uses the correct ext/mimeType for the upload.
+      results.push(pass('ingest:encode-webp', `WebP unavailable — got PNG (iOS fallback, handled)`));
+    } else {
+      results.push({ name: 'ingest:encode-webp', ok: false,
+        detail: `unexpected type=${blob.type}` });
     }
   } catch(e) { results.push(fail('ingest:pipeline', e)); }
 

@@ -24,7 +24,7 @@ const WEBP_QUALITY = 0.82;
 
 export interface ClientResizeResult {
   blob: Blob;
-  ext: 'webp';
+  ext: 'webp' | 'png';
   width: number;
   height: number;
 }
@@ -94,5 +94,10 @@ export async function resizeForUpload(file: File): Promise<ClientResizeResult | 
     // Browser doesn't support WebP encoder (very rare in 2026).
     return null;
   }
-  return { blob, ext: 'webp', width: outW, height: outH };
+  // iOS WebKit silently produces PNG when asked for WebP. Accept the actual
+  // format so the upload path uses the correct ext and MIME type.
+  if (blob.type === 'image/webp') return { blob, ext: 'webp', width: outW, height: outH };
+  if (blob.type === 'image/png') return { blob, ext: 'png', width: outW, height: outH };
+  // Unexpected format — fall back to raw upload.
+  return null;
 }
