@@ -27,10 +27,14 @@ describe('atomicWriteWithRoot', () => {
     assert.equal(await fh.file.text(), 'world');
   });
 
-  it('throws TypeError when createSyncAccessHandle is unavailable', async () => {
+  it('falls back to createWritable when createSyncAccessHandle is unavailable', async () => {
     setNoSyncHandle(() => true);
     const root = getMockRoot() as unknown as FileSystemDirectoryHandle;
-    await assert.rejects(() => atomicWriteWithRoot(root, 'x.txt', 'y'), TypeError);
+    // Should succeed via the createWritable() fallback, not throw.
+    await atomicWriteWithRoot(root, 'x.txt', 'y');
+    const fh = getMockRoot().entries.get('x.txt');
+    assert.ok(fh?.kind === 'file');
+    assert.equal(await fh.file.text(), 'y');
   });
 
   it('propagates transient fault as non-TypeError', async () => {

@@ -133,17 +133,16 @@ export async function ensureSchema(): Promise<SchemaStatus> {
         if (floor > 0) return { ...root, nextSeq: floor + 1 };
         return root;
       });
-    } catch (err) {
-      // iOS exposes navigator.storage.getDirectory but createWritable()
-      // may be absent or non-functional on the returned handles. Treat
-      // any TypeError during the first write as a permanent capability
-      // gap and fall back to online-only mode.
-      /* v8 ignore next 5 -- iOS-only runtime failure path */
-      if (err instanceof TypeError) {
-        markOpfsUnsupported();
-        return { status: 'unsupported' };
-      }
-      throw err;
+    } catch {
+      // Any error on the very first OPFS write (createSyncAccessHandle
+      // absent on old iOS, DOMException on Safari/WebKit, etc.) means
+      // writes are non-functional. Fall back to online-only mode.
+      // markOpfsUnsupported() may have already been called by settle()
+      // if the worker flagged isCapabilityError; call it unconditionally
+      // here so isSupported() is false regardless of error origin.
+      /* v8 ignore next 3 -- runtime failure path; exercised by e2e */
+      markOpfsUnsupported();
+      return { status: 'unsupported' };
     }
     return { status: 'fresh' };
   }

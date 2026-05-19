@@ -30,7 +30,7 @@ export interface MockFile {
 }
 
 export interface MockWritable {
-  write(data: string | Blob): Promise<void>;
+  write(data: string | Blob | ArrayBuffer): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -87,7 +87,7 @@ export type GateFn = ((path: string) => Promise<void> | null) | null;
 
 export class MockWritableImpl implements MockWritable {
   #file: MockFileImpl;
-  #buf: Array<string | Blob> = [];
+  #buf: Array<string | Blob | ArrayBuffer> = [];
   #fault: () => FaultFn;
   #gate: () => GateFn;
   constructor(file: MockFileImpl, getFault: () => FaultFn, getGate: () => GateFn = () => null) {
@@ -97,7 +97,7 @@ export class MockWritableImpl implements MockWritable {
     this.#file.contents = '';
     this.#file.blob = null;
   }
-  async write(data: string | Blob): Promise<void> {
+  async write(data: string | Blob | ArrayBuffer): Promise<void> {
     if (this.#fault()?.(this.#file.path)) {
       throw new Error(`injected write fault: ${this.#file.path}`);
     }
@@ -110,6 +110,9 @@ export class MockWritableImpl implements MockWritable {
     if (last instanceof Blob) {
       this.#file.blob = last;
       this.#file.contents = '';
+    } else if (last instanceof ArrayBuffer) {
+      this.#file.contents = new TextDecoder().decode(new Uint8Array(last));
+      this.#file.blob = null;
     } else {
       this.#file.contents = this.#buf.join('');
       this.#file.blob = null;
@@ -368,7 +371,7 @@ export function installMockOpfs(): {
             id: req.id,
             ok: false,
             error: err.message,
-            isTypeError: err instanceof TypeError
+            isCapabilityError: err instanceof TypeError || err instanceof DOMException
           };
           this.onmessage?.({ data: res });
         }

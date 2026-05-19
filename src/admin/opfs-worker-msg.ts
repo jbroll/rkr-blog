@@ -9,4 +9,4 @@ export type WriteRequest =
 
 export type WriteResponse =
   | { id: string; ok: true }
-  | { id: string; ok: false; error: string; isTypeError: boolean };
+  | { id: string; ok: false; error: string; isCapabilityError: boolean };

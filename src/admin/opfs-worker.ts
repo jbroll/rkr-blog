@@ -1,7 +1,10 @@
-// Dedicated OPFS write worker. Owns atomicWrite and removeFile using
-// createSyncAccessHandle() — the correct OPFS write API for all platforms
-// including iOS 17+. Main thread dispatches via postMessage; reads stay
-// on the main thread unchanged.
+// Dedicated OPFS write worker. Owns atomicWrite and removeFile.
+// Primary path: createSyncAccessHandle() — synchronous, all platforms
+// that support it (Chrome, Firefox, Safari 16.4+ in standard contexts).
+// Fallback path: createWritable() — async writable stream available in
+// workers on Safari/WebKit and in sandboxed test environments where
+// createSyncAccessHandle() throws a DOMException. Main thread dispatches
+// via postMessage; reads stay on the main thread unchanged.
 
 import type { WriteRequest, WriteResponse } from './opfs-worker-msg.ts';
 
@@ -49,11 +52,23 @@ export async function atomicWriteWithRoot(
   const tmpName = `.${leafName}.tmp-${crypto.randomUUID()}`;
   const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
   try {
-    const sa = await (tmpHandle as MovableHandle).createSyncAccessHandle();
-    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
-    sa.write(bytes, { at: 0 });
-    sa.flush();
-    sa.close();
+    try {
+      // Preferred: synchronous access handle (lower overhead, all
+      // environments that fully support the OPFS worker API).
+      const sa = await (tmpHandle as MovableHandle).createSyncAccessHandle();
+      const bytes =
+        typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
+      sa.write(bytes, { at: 0 });
+      sa.flush();
+      sa.close();
+    } catch {
+      // createSyncAccessHandle() failed (e.g. WebKit in sandboxed/test
+      // environments throws a DOMException). Fall back to the async
+      // writable-stream API, which is also available in workers.
+      const writable = await tmpHandle.createWritable();
+      await writable.write(data);
+      await writable.close();
+    }
   } catch (err) {
     await parent.removeEntry(tmpName).catch(() => {});
     throw err;
@@ -94,7 +109,10 @@ if (typeof self !== 'undefined') {
         id: req.id,
         ok: false,
         error: err.message,
-        isTypeError: err instanceof TypeError
+        // TypeError = createSyncAccessHandle absent (old iOS).
+        // DOMException = WebKit/Safari OPFS write broken at runtime.
+        // Both mean OPFS writes are non-functional in this environment.
+        isCapabilityError: err instanceof TypeError || err instanceof DOMException
       };
       self.postMessage(res);
     }

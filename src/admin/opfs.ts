@@ -65,7 +65,7 @@ function settle(res: WriteResponse): void {
     p.resolve();
     return;
   }
-  if (res.isTypeError) markOpfsUnsupported();
+  if (res.isCapabilityError) markOpfsUnsupported();
   p.reject(new Error(res.error));
 }
 
