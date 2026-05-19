@@ -479,6 +479,80 @@ async function level9(imageId) {
   return results;
 }
 
+// ── Level 10: canvas capability matrix ──────────────────────────────────────
+// Probes browser canvas features the editor relies on. All results are
+// informational (ok: true always) — they surface platform differences
+// without gating the overall pass/fail. Safari/iOS specifics:
+//   • canvas.toBlob('image/webp') → silently produces JPEG on iOS WebKit
+//   • WebGL → available but limited to WebGL1 on older iOS; context can
+//     be lost if too many contexts exist across tabs
+//   • createImageBitmap → available iOS 15+; used by ingest-resize-client
+async function level10() {
+  section('Level 10 — canvas capability matrix');
+  const results = [];
+
+  // canvas.toBlob format matrix: what does this browser actually produce?
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 4;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#3af'; ctx.fillRect(0, 0, 4, 4);
+  for (const mime of ['image/webp', 'image/jpeg', 'image/png']) {
+    try {
+      const blob = await new Promise((res, rej) =>
+        c.toBlob(b => b ? res(b) : rej(new Error('null blob')), mime, 0.9)
+      );
+      results.push({ name: `toBlob:${mime.split('/')[1]}`, ok: true,
+        detail: `type=${blob.type} size=${blob.size}B` });
+    } catch(e) { results.push(fail(`toBlob:${mime.split('/')[1]}`, e)); }
+  }
+
+  // WebGL probe: availability + renderer string (useful for diagnosing
+  // perspective-transform failures; iOS limits max-texture-size).
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (!gl) {
+      results.push({ name: 'webgl:context', ok: true, detail: 'unavailable' });
+    } else {
+      const dbgInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer = dbgInfo
+        ? gl.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER);
+      const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      results.push({ name: 'webgl:context', ok: true, detail: `available` });
+      results.push({ name: 'webgl:renderer', ok: true, detail: String(renderer) });
+      results.push({ name: 'webgl:max-texture', ok: true, detail: `${maxTex}px` });
+      // Lose the context immediately so we don't hit the browser's limit.
+      const ext = gl.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
+    }
+  } catch(e) { results.push(fail('webgl:context', e)); }
+
+  // createImageBitmap: used by ingest-resize-client for client-side resize.
+  // iOS 15+ supports it; older iOS does not, causing silent fallback to raw upload.
+  try {
+    if (typeof createImageBitmap === 'undefined') {
+      results.push({ name: 'createImageBitmap', ok: true, detail: 'unavailable' });
+    } else {
+      const src = document.createElement('canvas');
+      src.width = 8; src.height = 8;
+      src.getContext('2d').fillRect(0, 0, 8, 8);
+      const blob = await new Promise((res, rej) =>
+        src.toBlob(b => b ? res(b) : rej(new Error('null')), 'image/png')
+      );
+      const bmp = await createImageBitmap(blob);
+      results.push({ name: 'createImageBitmap', ok: true,
+        detail: `${bmp.width}×${bmp.height}` });
+      bmp.close();
+    }
+  } catch(e) { results.push(fail('createImageBitmap', e)); }
+
+  // OffscreenCanvas: used by ingest-resize-client for off-main-thread rendering.
+  results.push({ name: 'OffscreenCanvas', ok: true,
+    detail: typeof OffscreenCanvas !== 'undefined' ? 'available' : 'unavailable' });
+
+  return results;
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 function display(results) {
@@ -532,6 +606,10 @@ async function run() {
   const l9 = await level9(commitDone ? uploadId : null);
   display(l9); allResults.push(...l9.filter(r => r.ok !== null));
   if (l9.some(r => r.ok === false)) { finish('FAIL (level 9)', allResults); return; }
+
+  const l10 = await level10();
+  display(l10); allResults.push(...l10);
+  // Level 10 is diagnostic-only — never gates the final verdict.
 
   finish('PASS ✓', allResults);
 }

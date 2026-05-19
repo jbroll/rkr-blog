@@ -275,6 +275,72 @@ SITE_ROOT=$HOME/site bin/site-admin server [--port N]
 For the operator-facing reset → seed → walk procedure (against the Fly
 demo or a local dev server), see [`RUNBOOK.md`](RUNBOOK.md).
 
+## 9. On-device browser test page
+
+`src/routes/dev-test.html` is a live in-browser test harness for APIs
+that can't be covered by Playwright's headless Chromium — OPFS storage,
+WebGL, canvas encoding, and the admin API upload/commit flow. It runs in
+real mobile browsers on real devices.
+
+### Starting the server for device testing
+
+```bash
+ENABLE_TEST_ROUTES=1 HOST=0.0.0.0 ADMIN_TOKEN=<token> npm start
+# or, if secrets.env holds the real credentials:
+set -a && . ./secrets.env && set +a
+ENABLE_TEST_ROUTES=1 HOST=0.0.0.0 ADMIN_TOKEN=dev-test npm start
+```
+
+`ENABLE_TEST_ROUTES=1` enables the `/_test*` routes.  
+`HOST=0.0.0.0` binds to all interfaces so phones/tablets on the same
+network can reach the server.
+
+### Running on a device
+
+Navigate to `http://<machine-ip>:<port>/_test?admin_token=<ADMIN_TOKEN>`
+on the target device. The page runs automatically and posts results to
+`/_test/results` (logged to stdout) and emits a final PASS / FAIL status.
+
+The `admin_token` query param is required for levels 7–9 (admin API
+tests). Without it those levels are skipped with `⊘ skipped`.
+
+### Live reload
+
+The server watches `src/routes/dev-test.html` and broadcasts a `reload`
+SSE event on every save. The test page reconnects and re-runs
+automatically. To trigger a reload manually from the terminal:
+
+```bash
+curl http://localhost:<port>/_test/reload
+```
+
+### What the levels test
+
+| Level | What it exercises |
+|-------|-------------------|
+| 1 | Raw OPFS APIs: `navigator.storage.getDirectory()`, `createWritable()` on main thread; `createSyncAccessHandle()` in a worker |
+| 2 | OPFS worker bundle present (`HEAD /static/admin/opfs-worker.js`) |
+| 3 | App's `writeFile` via the worker; read-back via `readFile` |
+| 4 | Persistence across a simulated worker restart |
+| 5 | Concurrent write race (two workers writing the same path) |
+| 6 | 1 MB write + read-back latency |
+| 7 | Admin upload: canvas JPEG → `POST /admin/upload`, id round-trip |
+| 8 | Crop commit: canvas bake (WebP or JPEG fallback) → `POST /admin/sidecar/:id/commit` |
+| 9 | Sidecar meta read-back: ops and dims persisted after commit |
+| 10 | Canvas capability matrix (informational — never gates pass/fail): `canvas.toBlob` format support, WebGL renderer/max-texture, `createImageBitmap`, `OffscreenCanvas` |
+
+### Adding new levels
+
+1. Write a `async function levelN(…)` that returns an array of result
+   objects `{ name, ok, detail }`. `ok: true` = pass, `ok: false` = fail,
+   `ok: null` = skip (filtered from the posted results).
+2. Call it in `run()` after the preceding level. Gate on `ok === false`
+   (not `!ok`) so skipped results don't abort the run.
+3. For diagnostic-only levels (like level 10) don't add a gate at all.
+
+The server logs every result JSON to stdout; the SSE client on the page
+shows results in real time.
+
 ## 9. Troubleshooting
 
 - **Sharp prebuild fails on Void.** Install libvips and rebuild:
