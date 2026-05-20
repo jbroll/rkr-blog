@@ -3,6 +3,7 @@
 // Then navigate to http://<mac-ip>:<port>/_test on the target device.
 
 import fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -32,7 +33,7 @@ export default async function devTestRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get('/_test', async (_req, reply) => {
-    reply.type('text/html; charset=utf-8').send(fs.readFileSync(HTML_FILE, 'utf8'));
+    reply.type('text/html; charset=utf-8').send(await readFile(HTML_FILE, 'utf8'));
   });
 
   app.post<{ Body: unknown }>('/_test/results', async (req, reply) => {

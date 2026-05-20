@@ -119,8 +119,8 @@ export function registerPublicCommentRoutes(
           ip: req.ip ?? null
         });
       } catch (err) {
-        // Bad parent (not found / not top-level) — treat as client error.
-        return reply.code(400).send({ error: (err as Error).message });
+        req.log.warn({ err }, 'insertWebComment failed');
+        return reply.code(400).send({ error: 'invalid parent_id' });
       }
 
       // Too-fast fill → straight to moderation, skip the classify job

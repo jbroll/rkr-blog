@@ -25,33 +25,17 @@ const SCHEMA = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE files (path TEXT PRIMARY KEY, data BLOB NOT NULL);
 CREATE TABLE comments (
-  export_id        INTEGER NOT NULL,
-  post_slug        TEXT    NOT NULL,
-  parent_export_id INTEGER NULL,
-  wp_comment_id    INTEGER NULL,
-  author_name      TEXT    NOT NULL,
-  author_email     TEXT    NOT NULL,
-  body             TEXT    NOT NULL,
-  status           TEXT    NOT NULL,
-  source           TEXT    NOT NULL,
-  spam_score       REAL    NULL,
-  spam_reason      TEXT    NULL,
-  ip               TEXT    NULL,
-  created_at       TEXT    NOT NULL,
-  classified_at    TEXT    NULL
+  export_id INTEGER NOT NULL, post_slug TEXT NOT NULL, parent_export_id INTEGER NULL,
+  wp_comment_id INTEGER NULL, author_name TEXT NOT NULL, author_email TEXT NOT NULL,
+  body TEXT NOT NULL, status TEXT NOT NULL, source TEXT NOT NULL,
+  spam_score REAL NULL, spam_reason TEXT NULL, ip TEXT NULL,
+  created_at TEXT NOT NULL, classified_at TEXT NULL
 );
 CREATE TABLE users (
-  email        TEXT PRIMARY KEY,
-  display_name TEXT,
-  role         TEXT NOT NULL,
-  created_at   TEXT NOT NULL,
-  last_seen_at TEXT
+  email TEXT PRIMARY KEY, display_name TEXT, role TEXT NOT NULL,
+  created_at TEXT NOT NULL, last_seen_at TEXT
 );
-CREATE TABLE allowed_emails (
-  email      TEXT PRIMARY KEY,
-  role       TEXT NOT NULL,
-  invited_at TEXT NOT NULL
-);
+CREATE TABLE allowed_emails (email TEXT PRIMARY KEY, role TEXT NOT NULL, invited_at TEXT NOT NULL);
 `.trim();
 
 export interface ExportStats {
@@ -67,171 +51,179 @@ export interface ImportStats {
   comments: number;
   users: number;
   invites: number;
+  orphanedParents: number;
 }
 
 // ---- export ---------------------------------------------------------------
+
+type ExportCommentRow = {
+  id: number;
+  slug: string;
+  parent_id: number | null;
+  wp_comment_id: number | null;
+  author_name: string;
+  author_email: string;
+  body: string;
+  status: string;
+  source: string;
+  spam_score: number | null;
+  spam_reason: string | null;
+  ip: string | null;
+  created_at: string;
+  classified_at: string | null;
+};
+type ExportUserRow = {
+  email: string;
+  display_name: string | null;
+  role: string;
+  created_at: string;
+  last_seen_at: string | null;
+};
 
 export function exportArchive(siteRoot: string, outPath: string): ExportStats {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   const arc = open(outPath);
-  arc.exec('PRAGMA journal_mode = DELETE');
-  arc.exec(SCHEMA);
-  const insertMeta = arc.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
-  insertMeta.run('version', ARCHIVE_VERSION);
-  insertMeta.run('exported_at', new Date().toISOString());
-  insertMeta.run('generator', 'rkr-blog');
+  try {
+    arc.exec('PRAGMA journal_mode = DELETE');
+    arc.exec(SCHEMA);
+    const insertMeta = arc.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
+    insertMeta.run('version', ARCHIVE_VERSION);
+    insertMeta.run('exported_at', new Date().toISOString());
+    insertMeta.run('generator', 'rkr-blog');
 
-  const insertFile = arc.prepare('INSERT OR REPLACE INTO files (path, data) VALUES (?, ?)');
-  let fileCount = 0;
+    const insertFile = arc.prepare('INSERT OR REPLACE INTO files (path, data) VALUES (?, ?)');
+    let fileCount = 0;
 
-  function addFile(rel: string, absPath: string): void {
-    if (!fs.existsSync(absPath)) return;
-    const data = fs.readFileSync(absPath);
-    insertFile.run(rel, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-    fileCount++;
-  }
-
-  // content/posts/*.md
-  const postsDir = path.join(siteRoot, 'content', 'posts');
-  if (fs.existsSync(postsDir)) {
-    for (const f of fs.readdirSync(postsDir)) {
-      if (f.endsWith('.md')) addFile(`content/posts/${f}`, path.join(postsDir, f));
+    function addFile(rel: string, absPath: string): void {
+      if (!fs.existsSync(absPath)) return;
+      const data = fs.readFileSync(absPath);
+      insertFile.run(rel, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+      fileCount++;
     }
-  }
 
-  // sidecars/*.json (flat dir)
-  const sidecarsDir = path.join(siteRoot, 'sidecars');
-  if (fs.existsSync(sidecarsDir)) {
-    for (const f of fs.readdirSync(sidecarsDir)) {
-      if (f.endsWith('.json')) addFile(`sidecars/${f}`, path.join(sidecarsDir, f));
+    // content/posts/*.md
+    const postsDir = path.join(siteRoot, 'content', 'posts');
+    if (fs.existsSync(postsDir)) {
+      for (const f of fs.readdirSync(postsDir)) {
+        if (f.endsWith('.md')) addFile(`content/posts/${f}`, path.join(postsDir, f));
+      }
     }
-  }
 
-  // originals/<aa>/<bb>/<id>.<ext> (2-level sharded)
-  const originalsDir = path.join(siteRoot, 'originals');
-  if (fs.existsSync(originalsDir)) {
-    for (const aa of fs.readdirSync(originalsDir)) {
-      if (aa === '.tmp') continue;
-      const aaDir = path.join(originalsDir, aa);
-      if (!fs.statSync(aaDir).isDirectory()) continue;
-      for (const bb of fs.readdirSync(aaDir)) {
-        const bbDir = path.join(aaDir, bb);
-        if (!fs.statSync(bbDir).isDirectory()) continue;
-        for (const f of fs.readdirSync(bbDir)) {
-          addFile(`originals/${aa}/${bb}/${f}`, path.join(bbDir, f));
+    // sidecars/*.json (flat dir)
+    const sidecarsDir = path.join(siteRoot, 'sidecars');
+    if (fs.existsSync(sidecarsDir)) {
+      for (const f of fs.readdirSync(sidecarsDir)) {
+        if (f.endsWith('.json')) addFile(`sidecars/${f}`, path.join(sidecarsDir, f));
+      }
+    }
+
+    // originals/<aa>/<bb>/<id>.<ext> (2-level sharded)
+    const originalsDir = path.join(siteRoot, 'originals');
+    if (fs.existsSync(originalsDir)) {
+      for (const aa of fs.readdirSync(originalsDir)) {
+        if (aa === '.tmp') continue;
+        const aaDir = path.join(originalsDir, aa);
+        if (!fs.statSync(aaDir).isDirectory()) continue;
+        for (const bb of fs.readdirSync(aaDir)) {
+          const bbDir = path.join(aaDir, bb);
+          if (!fs.statSync(bbDir).isDirectory()) continue;
+          for (const f of fs.readdirSync(bbDir)) {
+            addFile(`originals/${aa}/${bb}/${f}`, path.join(bbDir, f));
+          }
         }
       }
     }
-  }
 
-  // config/site.json
-  addFile('config/site.json', path.join(siteRoot, 'config', 'site.json'));
+    // config/site.json
+    addFile('config/site.json', path.join(siteRoot, 'config', 'site.json'));
 
-  // DB-only state: comments, users, allowed_emails
-  const dbPath = path.join(siteRoot, 'data', 'site.db');
-  if (!fs.existsSync(dbPath)) {
-    arc.close();
-    return { files: fileCount, comments: 0, users: 0, invites: 0 };
-  }
+    // DB-only state: comments, users, allowed_emails
+    const dbPath = path.join(siteRoot, 'data', 'site.db');
+    if (!fs.existsSync(dbPath)) {
+      return { files: fileCount, comments: 0, users: 0, invites: 0 };
+    }
 
-  const db = open(dbPath);
-  let commentCount = 0;
-  let userCount = 0;
-  let inviteCount = 0;
+    const db = open(dbPath);
+    let commentCount = 0;
+    let userCount = 0;
+    let inviteCount = 0;
 
-  try {
-    const insertComment = arc.prepare(
-      `INSERT INTO comments
-         (export_id, post_slug, parent_export_id, wp_comment_id,
-          author_name, author_email, body,
-          status, source, spam_score, spam_reason, ip,
-          created_at, classified_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    );
-    for (const row of db
-      .prepare<{
-        id: number;
-        slug: string;
-        parent_id: number | null;
-        wp_comment_id: number | null;
-        author_name: string;
-        author_email: string;
-        body: string;
-        status: string;
-        source: string;
-        spam_score: number | null;
-        spam_reason: string | null;
-        ip: string | null;
-        created_at: string;
-        classified_at: string | null;
-      }>(
-        `SELECT c.id, p.slug, c.parent_id, c.wp_comment_id,
-                c.author_name, c.author_email, c.body,
-                c.status, c.source, c.spam_score, c.spam_reason, c.ip,
-                c.created_at, c.classified_at
-         FROM comments c JOIN posts p ON c.post_id = p.id
-         ORDER BY c.id`
-      )
-      .all()) {
-      insertComment.run(
-        row.id,
-        row.slug,
-        row.parent_id ?? null,
-        row.wp_comment_id ?? null,
-        row.author_name,
-        row.author_email,
-        row.body,
-        row.status,
-        row.source,
-        row.spam_score ?? null,
-        row.spam_reason ?? null,
-        row.ip ?? null,
-        row.created_at,
-        row.classified_at ?? null
+    try {
+      const insertComment = arc.prepare(
+        `INSERT INTO comments
+           (export_id, post_slug, parent_export_id, wp_comment_id,
+            author_name, author_email, body,
+            status, source, spam_score, spam_reason, ip,
+            created_at, classified_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       );
-      commentCount++;
-    }
+      for (const row of db
+        .prepare<ExportCommentRow>(
+          `SELECT c.id, p.slug, c.parent_id, c.wp_comment_id,
+                  c.author_name, c.author_email, c.body,
+                  c.status, c.source, c.spam_score, c.spam_reason, c.ip,
+                  c.created_at, c.classified_at
+           FROM comments c JOIN posts p ON c.post_id = p.id
+           ORDER BY c.id`
+        )
+        .all()) {
+        insertComment.run(
+          row.id,
+          row.slug,
+          row.parent_id ?? null,
+          row.wp_comment_id ?? null,
+          row.author_name,
+          row.author_email,
+          row.body,
+          row.status,
+          row.source,
+          row.spam_score ?? null,
+          row.spam_reason ?? null,
+          row.ip ?? null,
+          row.created_at,
+          row.classified_at ?? null
+        );
+        commentCount++;
+      }
 
-    const insertUser = arc.prepare(
-      'INSERT OR REPLACE INTO users (email, display_name, role, created_at, last_seen_at) VALUES (?,?,?,?,?)'
-    );
-    for (const row of db
-      .prepare<{
-        email: string;
-        display_name: string | null;
-        role: string;
-        created_at: string;
-        last_seen_at: string | null;
-      }>('SELECT email, display_name, role, created_at, last_seen_at FROM users')
-      .all()) {
-      insertUser.run(
-        row.email,
-        row.display_name ?? null,
-        row.role,
-        row.created_at,
-        row.last_seen_at ?? null
+      const insertUser = arc.prepare(
+        'INSERT OR REPLACE INTO users (email, display_name, role, created_at, last_seen_at) VALUES (?,?,?,?,?)'
       );
-      userCount++;
+      for (const row of db
+        .prepare<ExportUserRow>(
+          'SELECT email, display_name, role, created_at, last_seen_at FROM users'
+        )
+        .all()) {
+        insertUser.run(
+          row.email,
+          row.display_name ?? null,
+          row.role,
+          row.created_at,
+          row.last_seen_at ?? null
+        );
+        userCount++;
+      }
+
+      const insertInvite = arc.prepare(
+        'INSERT OR REPLACE INTO allowed_emails (email, role, invited_at) VALUES (?,?,?)'
+      );
+      for (const row of db
+        .prepare<{ email: string; role: string; invited_at: string }>(
+          'SELECT email, role, invited_at FROM allowed_emails'
+        )
+        .all()) {
+        insertInvite.run(row.email, row.role, row.invited_at);
+        inviteCount++;
+      }
+    } finally {
+      db.close();
     }
 
-    const insertInvite = arc.prepare(
-      'INSERT OR REPLACE INTO allowed_emails (email, role, invited_at) VALUES (?,?,?)'
-    );
-    for (const row of db
-      .prepare<{ email: string; role: string; invited_at: string }>(
-        'SELECT email, role, invited_at FROM allowed_emails'
-      )
-      .all()) {
-      insertInvite.run(row.email, row.role, row.invited_at);
-      inviteCount++;
-    }
+    return { files: fileCount, comments: commentCount, users: userCount, invites: inviteCount };
   } finally {
-    db.close();
     arc.close();
   }
-
-  return { files: fileCount, comments: commentCount, users: userCount, invites: inviteCount };
 }
 
 // ---- import ---------------------------------------------------------------
@@ -315,7 +307,14 @@ export function importArchive(
   }
 
   // --- rebuild posts/tags/fts index from restored markdown ---
-  runReindex(siteRoot);
+  try {
+    runReindex(siteRoot);
+  } catch (err) {
+    arc.close();
+    throw new Error(
+      `importArchive: runReindex failed after files were written — partial import; re-run to complete. Cause: ${(err as Error).message}`
+    );
+  }
 
   // --- restore DB-only state ---
   const dbPath = path.join(siteRoot, 'data', 'site.db');
@@ -324,6 +323,7 @@ export function importArchive(
   let commentCount = 0;
   let userCount = 0;
   let inviteCount = 0;
+  let orphanedParents = 0;
 
   try {
     db.transaction(() => {
@@ -342,13 +342,9 @@ export function importArchive(
            last_seen_at = excluded.last_seen_at`
       );
       for (const row of arc
-        .prepare<{
-          email: string;
-          display_name: string | null;
-          role: string;
-          created_at: string;
-          last_seen_at: string | null;
-        }>('SELECT email, display_name, role, created_at, last_seen_at FROM users')
+        .prepare<ExportUserRow>(
+          'SELECT email, display_name, role, created_at, last_seen_at FROM users'
+        )
         .all()) {
         upsertUser.run(
           row.email,
@@ -467,7 +463,10 @@ export function importArchive(
         const newId = exportIdToNewId.get(row.export_id);
         if (newId === undefined) continue; // was deduped or post not found
         const parentNewId = exportIdToNewId.get(row.parent_export_id);
-        if (parentNewId === undefined) continue; // parent not in archive
+        if (parentNewId === undefined) {
+          orphanedParents++; // parent was filtered/dropped — child's parent_id stays NULL
+          continue;
+        }
         updateParent.run(parentNewId, newId);
       }
     })();
@@ -481,7 +480,8 @@ export function importArchive(
     filesSkipped: skipped,
     comments: commentCount,
     users: userCount,
-    invites: inviteCount
+    invites: inviteCount,
+    orphanedParents
   };
 }
 

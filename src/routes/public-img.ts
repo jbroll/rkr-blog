@@ -157,6 +157,9 @@ export function registerPublicImgRoutes(fastify: FastifyInstance, opts: PublicIm
       // gauge + the semaphore slot are taken only by the
       // originating request — duplicate awaiters ride along.
       let renderPromise = inflightRenders.get(filename);
+      if (!renderPromise && inflightRenders.size >= 64) {
+        return reply.code(503).header('retry-after', '5').send({ status: 'busy' });
+      }
       if (!renderPromise) {
         noteLiveRender(1);
         renderPromise = (async () => {

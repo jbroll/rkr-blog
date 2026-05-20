@@ -44,8 +44,8 @@ export function makeMailer(cfg: SmtpConfig, transport: Transport): Mailer {
         await transport({
           ...msg,
           subject: msg.subject.replace(/[\r\n]/g, ''),
-          to: cfg.to,
-          from: cfg.from ?? cfg.user ?? 'rkroll'
+          to: cfg.to.replace(/[\r\n]/g, ''),
+          from: (cfg.from ?? cfg.user ?? 'rkroll').replace(/[\r\n]/g, '')
         });
         return { sent: true };
       } catch (err) {

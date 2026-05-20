@@ -16,6 +16,7 @@ Format: **item** — _revisit when:_ trigger.
   pivot.
 - **Provider media fetches follow redirects without per-hop SSRF re-validation** — trusted single-author model; `url-safety.ts` guards the initial URL only. _Revisit when:_ opening authoring to untrusted/multi-author posters.
 - **Slug rename + comment orphan cascade** — renaming a .md file AND changing its `slug` field simultaneously triggers the orphan-delete path and CASCADE-deletes that post's comments. _Revisit when:_ a migration or bulk-rename operation needs comment preservation; fix: update the slug column first (reindex), then rename the file.
+- **Integration OAuth PKCE verifier in browser cookie** — gdrive + onedrive integration flows store the PKCE `code_verifier` in a JSON-serialised cookie (primary auth flow already moved this server-side). State is also not bound to session userId. _Revisit when:_ cloud-drive integrations are used in a multi-user context or security posture requires it; fix: mirror the `pendingFlows` Map pattern from `auth.ts`.
 
 ## Editor & figures
 
@@ -47,6 +48,7 @@ Format: **item** — _revisit when:_ trigger.
 - **Module-level mutable singletons** — `liveInflight` + `events` emitter in `src/lib/jobs.ts`, resolved-theme cache in `config.ts` are process-singletons (fine for single-instance deploy). _Revisit when:_ moving to multi-process/multi-instance.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
+- **GC never reclaims orphaned originals** — `originals/<aa>/<bb>/<id>.<ext>` files accumulate forever if their posts are deleted. _Revisit when:_ disk usage becomes a concern; fix requires a cross-referencing pass between originals/ and all sidecar files.
 
 
 ## Test coverage

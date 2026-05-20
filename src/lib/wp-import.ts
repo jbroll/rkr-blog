@@ -229,7 +229,7 @@ function yamlQuote(s: string): string {
   return `"${s
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
-    .replace(/[\r\n]/g, ' ')}"`;
+    .replace(/[\r\n\t]/g, ' ')}"`;
 }
 
 /** Render YAML frontmatter for an imported post. Status defaults to
@@ -239,11 +239,13 @@ function renderFrontmatter(post: WpPost, tagNames: string[] = []): string {
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"');
+  const slug = post.slug || String(post.id);
+  const date = post.date || new Date().toISOString().slice(0, 10);
   const lines = [
     '---',
     `title: "${titleEsc}"`,
-    `slug: ${yamlQuote(post.slug)}`,
-    `date: ${yamlQuote(post.date)}`,
+    `slug: ${yamlQuote(slug)}`,
+    `date: ${yamlQuote(date)}`,
     'status: draft',
     `source_url: ${yamlQuote(post.link)}`,
     `source_kind: wordpress`
