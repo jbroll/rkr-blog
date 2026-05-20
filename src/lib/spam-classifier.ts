@@ -63,11 +63,20 @@ function buildPrompt(c: SpamInput): string {
 }
 
 function parseVerdict(modelText: string): SpamVerdict {
-  // The model may wrap JSON in stray text; grab the first {...} block.
-  // Greedy match is safe because format:'json' pins one object; removing format:'json' or enabling streaming would break this.
-  const m = modelText.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('no JSON object in model output');
-  const parsed = JSON.parse(m[0]) as Record<string, unknown>;
+  // Try the whole text first (format:'json' normally gives a bare object).
+  // Fall back to extracting the first {...} block so stray preamble/suffix
+  // from a misconfigured model doesn't break parsing. Greedy extraction
+  // from first '{' to last '}' was the prior approach but fails when the
+  // model emits trailing JSON fragments after the primary object.
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(modelText.trim()) as Record<string, unknown>;
+  } catch {
+    const start = modelText.indexOf('{');
+    const end = modelText.lastIndexOf('}');
+    if (start === -1 || end <= start) throw new Error('no JSON object in model output');
+    parsed = JSON.parse(modelText.slice(start, end + 1)) as Record<string, unknown>;
+  }
   const verdict = parsed.verdict === 'spam' ? 'spam' : parsed.verdict === 'ham' ? 'ham' : null;
   if (verdict === null) throw new Error('missing verdict field');
   const scoreRaw = typeof parsed.score === 'number' ? parsed.score : verdict === 'spam' ? 1 : 0;

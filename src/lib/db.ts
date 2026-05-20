@@ -110,6 +110,7 @@ export function open(filepath: string): Db {
     },
 
     pragma(name, value) {
+      if (!/^[a-z_][a-z0-9_]*$/i.test(name)) throw new Error(`invalid pragma name: ${name}`);
       if (value === undefined) {
         const row = raw.prepare(`PRAGMA ${name}`).get();
         if (!row) return undefined;
@@ -119,7 +120,9 @@ export function open(filepath: string): Db {
         if (keys.length === 1 && first !== undefined) return obj[first];
         return obj;
       }
-      raw.exec(`PRAGMA ${name} = ${value}`);
+      const safeVal =
+        typeof value === 'number' ? String(value) : `'${String(value).replace(/'/g, "''")}'`;
+      raw.exec(`PRAGMA ${name} = ${safeVal}`);
       return undefined;
     },
 

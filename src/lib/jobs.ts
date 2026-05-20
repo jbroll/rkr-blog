@@ -214,6 +214,12 @@ export function workQueue({
   concurrency = Math.max(1, os.cpus().length),
   drainAndExit = false
 }: WorkQueueArgs): WorkQueueController {
+  // Recover jobs that were left in state='running' by a prior worker crash.
+  // Re-queue only those under the attempt cap; permanently-failed ones stay.
+  db.prepare(
+    `UPDATE jobs SET state='queued', updated_at=? WHERE state='running' AND attempts < ?`
+  ).run(new Date().toISOString(), MAX_JOB_ATTEMPTS);
+
   let stopped = false;
   let inflight = 0;
   let wakeResolve: (() => void) | null = null;

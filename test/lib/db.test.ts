@@ -96,6 +96,20 @@ test('pragma(name) reads and pragma(name, value) sets', () => {
     assert.equal(db.pragma('foreign_keys'), 1);
     db.pragma('foreign_keys', 0);
     assert.equal(db.pragma('foreign_keys'), 0);
+    // string value path (quoted in the SQL) — use locking_mode as it
+    // accepts a string and works on :memory: databases
+    db.pragma('locking_mode', 'exclusive');
+    assert.equal(db.pragma('locking_mode'), 'exclusive');
+  } finally {
+    db.close();
+  }
+});
+
+test('pragma(name) rejects invalid names', () => {
+  const db = open(':memory:');
+  try {
+    assert.throws(() => db.pragma('bad name'), /invalid pragma name/);
+    assert.throws(() => db.pragma('bad;name'), /invalid pragma name/);
   } finally {
     db.close();
   }

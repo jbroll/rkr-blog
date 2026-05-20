@@ -35,6 +35,6 @@ export function makeNotifyHandler(
       `Comment: ${base}/${post.slug}#comment-${c.id}`,
       `Moderate: ${base}/admin/comments`
     ].join('\n');
-    await mailer.sendMail({ to: '', subject, text });
+    await mailer.sendMail({ subject, text });
   };
 }

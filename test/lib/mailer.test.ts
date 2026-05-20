@@ -8,7 +8,7 @@ test('envMailer no-ops (sent:false) when SMTP env is unset', async () => {
   delete process.env.SMTP_HOST;
   delete process.env.NOTIFY_TO;
   try {
-    const r = await envMailer().sendMail({ to: 'x', subject: 's', text: 't' });
+    const r = await envMailer().sendMail({ subject: 's', text: 't' });
     assert.deepEqual(r, { sent: false });
   } finally {
     if (prev.h !== undefined) process.env.SMTP_HOST = prev.h;
@@ -20,7 +20,7 @@ test('no-op + sent:false when unconfigured', async () => {
   const m = makeMailer({ host: undefined, to: undefined }, async () => {
     throw new Error('transport must not be called when unconfigured');
   });
-  assert.deepEqual(await m.sendMail({ to: 'x', subject: 's', text: 't' }), {
+  assert.deepEqual(await m.sendMail({ subject: 's', text: 't' }), {
     sent: false
   });
 });
@@ -33,7 +33,7 @@ test('configured: calls transport with the message, returns sent:true', async ()
       calls.push(msg);
     }
   );
-  const r = await m.sendMail({ to: 'owner@b', subject: 'S', text: 'B' });
+  const r = await m.sendMail({ subject: 'S', text: 'B' });
   assert.deepEqual(r, { sent: true });
   assert.equal(calls.length, 1);
   assert.match(JSON.stringify(calls[0]), /"subject":"S"/);
@@ -43,7 +43,7 @@ test('transport throw is swallowed → sent:false (never throws)', async () => {
   const m = makeMailer({ host: 'h', to: 'o' }, async () => {
     throw new Error('smtp down');
   });
-  assert.deepEqual(await m.sendMail({ to: 'o', subject: 's', text: 't' }), {
+  assert.deepEqual(await m.sendMail({ subject: 's', text: 't' }), {
     sent: false
   });
 });

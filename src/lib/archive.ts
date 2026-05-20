@@ -72,6 +72,22 @@ type ExportCommentRow = {
   created_at: string;
   classified_at: string | null;
 };
+type ArcCommentRow = {
+  export_id: number;
+  post_slug: string;
+  parent_export_id: number | null;
+  wp_comment_id: number | null;
+  author_name: string;
+  author_email: string;
+  body: string;
+  status: string;
+  source: string;
+  spam_score: number | null;
+  spam_reason: string | null;
+  ip: string | null;
+  created_at: string;
+  classified_at: string | null;
+};
 type ExportUserRow = {
   email: string;
   display_name: string | null;
@@ -325,6 +341,8 @@ export function importArchive(
   let inviteCount = 0;
   let orphanedParents = 0;
 
+  const arcComments = arc.prepare<ArcCommentRow>('SELECT * FROM comments ORDER BY export_id').all();
+
   try {
     db.transaction(() => {
       if (opts.replace) {
@@ -368,54 +386,35 @@ export function importArchive(
         upsertInvite.run(row.email, row.role, row.invited_at);
         inviteCount++;
       }
-    })();
 
-    // Comments: two-pass to handle forward parent references robustly.
-    // Pass 1 inserts all comments with parent_id = NULL and builds the
-    // export_id → new DB id map; pass 2 wires up the parent links.
-    const slugToPostId = new Map<string, number>();
-    for (const row of db
-      .prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts')
-      .all()) {
-      slugToPostId.set(row.slug, row.id);
-    }
+      // Two-pass comment insert: pass 1 builds export_id → new id map,
+      // pass 2 wires parent links (handles forward references).
+      const slugToPostId = new Map<string, number>();
+      for (const row of db
+        .prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts')
+        .all()) {
+        slugToPostId.set(row.slug, row.id);
+      }
 
-    const arcComments = arc
-      .prepare<{
-        export_id: number;
-        post_slug: string;
-        parent_export_id: number | null;
-        wp_comment_id: number | null;
-        author_name: string;
-        author_email: string;
-        body: string;
-        status: string;
-        source: string;
-        spam_score: number | null;
-        spam_reason: string | null;
-        ip: string | null;
-        created_at: string;
-        classified_at: string | null;
-      }>('SELECT * FROM comments ORDER BY export_id')
-      .all();
+      const exportIdToNewId = new Map<number, number>();
+      // Only update parent_id for freshly inserted rows; touching a
+      // deduped pre-existing row would silently overwrite its real parent.
+      const freshlyInserted = new Set<number>();
+      const insertComment = db.prepare(
+        `INSERT INTO comments
+           (post_id, parent_id, wp_comment_id,
+            author_name, author_email, body,
+            status, source, spam_score, spam_reason, ip,
+            created_at, classified_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      );
+      const findByWpId = db.prepare<{ id: number }>(
+        'SELECT id FROM comments WHERE wp_comment_id = ?'
+      );
+      const findDupe = db.prepare<{ id: number }>(
+        'SELECT id FROM comments WHERE post_id=? AND author_email=? AND created_at=?'
+      );
 
-    const exportIdToNewId = new Map<number, number>();
-    const insertComment = db.prepare(
-      `INSERT INTO comments
-         (post_id, parent_id, wp_comment_id,
-          author_name, author_email, body,
-          status, source, spam_score, spam_reason, ip,
-          created_at, classified_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    );
-    const findByWpId = db.prepare<{ id: number }>(
-      'SELECT id FROM comments WHERE wp_comment_id = ?'
-    );
-    const findDupe = db.prepare<{ id: number }>(
-      'SELECT id FROM comments WHERE post_id=? AND author_email=? AND created_at=?'
-    );
-
-    db.transaction(() => {
       // Pass 1: insert all comments with parent_id = NULL
       for (const row of arcComments) {
         const postId = slugToPostId.get(row.post_slug);
@@ -453,15 +452,17 @@ export function importArchive(
           row.classified_at ?? null
         );
         exportIdToNewId.set(row.export_id, result.lastInsertRowid);
+        freshlyInserted.add(row.export_id);
         commentCount++;
       }
 
-      // Pass 2: wire up parent links (handles forward references)
+      // Pass 2: wire up parent links; freshly-inserted rows only.
       const updateParent = db.prepare('UPDATE comments SET parent_id = ? WHERE id = ?');
       for (const row of arcComments) {
         if (row.parent_export_id === null) continue;
+        if (!freshlyInserted.has(row.export_id)) continue;
         const newId = exportIdToNewId.get(row.export_id);
-        if (newId === undefined) continue; // was deduped or post not found
+        if (newId === undefined) continue;
         const parentNewId = exportIdToNewId.get(row.parent_export_id);
         if (parentNewId === undefined) {
           orphanedParents++; // parent was filtered/dropped — child's parent_id stays NULL

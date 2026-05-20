@@ -127,11 +127,15 @@ export function inviteEmail(
 
 export function removeInvite(db: Db, email: string): boolean {
   const e = normalizeEmail(email);
-  const r = db.prepare('DELETE FROM allowed_emails WHERE email = ?').run(e);
-  // Invalidate any active sessions for this user so revocation takes effect immediately
-  const user = db.prepare<{ id: number }>('SELECT id FROM users WHERE email = ?').get(e);
-  if (user) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
-  return r.changes > 0;
+  let removed = false;
+  db.transaction(() => {
+    const r = db.prepare('DELETE FROM allowed_emails WHERE email = ?').run(e);
+    removed = r.changes > 0;
+    // Invalidate any active sessions for this user so revocation takes effect immediately
+    const user = db.prepare<{ id: number }>('SELECT id FROM users WHERE email = ?').get(e);
+    if (user) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+  })();
+  return removed;
 }
 
 export function listInvites(db: Db): AllowedEmail[] {

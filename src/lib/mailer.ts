@@ -7,8 +7,9 @@ import nodemailer from 'nodemailer';
 // Internal (not exported): no external consumer needs the shape;
 // the public surface is Mailer / makeMailer / envMailer. Keeping it
 // unexported avoids a knip "unused export" until a consumer exists.
+// `to` is intentionally absent: the recipient is always cfg.to (NOTIFY_TO
+// env), not caller-supplied, so the field would be dead on every call site.
 interface MailMessage {
-  to: string;
   subject: string;
   text: string;
 }
@@ -23,7 +24,7 @@ interface SmtpConfig {
   from?: string;
   to?: string;
 }
-type Transport = (msg: MailMessage & { from: string }) => Promise<void>;
+type Transport = (msg: MailMessage & { from: string; to: string }) => Promise<void>;
 
 let warned = false;
 function warnOnce(m: string): void {

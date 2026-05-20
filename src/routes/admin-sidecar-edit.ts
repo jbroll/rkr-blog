@@ -243,22 +243,21 @@ export function registerSidecarEditRoutes(
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
 
-      // Write the bake (or unlink the existing one), then write the
-      // sidecar. POSIX gives per-file atomic rename but not multi-file
-      // atomicity; back-to-back writes minimize the inconsistent
-      // window. The pre-existing /ops + /bake split had the same
-      // exposure across separate requests — this just reduces it to
-      // adjacent FS operations.
+      // Write ordering: sidecar committed before bake renamed into place.
+      // A crash after sidecar rename but before bake rename leaves a stale
+      // bake tmp (GC sweeps *.tmp); the renderer falls through to recompute
+      // from ops — correct. The reverse ordering (bake first) would leave
+      // new pixels under old ops with no fallback.
       const finalBakePath = bakePath(siteRoot, id);
+      let bakeTmp: string | null = null;
       if (bakeBuf !== null) {
         await fs.promises.mkdir(path.dirname(finalBakePath), { recursive: true });
-        const tmp = `${finalBakePath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+        bakeTmp = `${finalBakePath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
         try {
-          await fs.promises.writeFile(tmp, bakeBuf);
-          await fs.promises.rename(tmp, finalBakePath);
+          await fs.promises.writeFile(bakeTmp, bakeBuf);
         } catch (err) {
-          /* c8 ignore start -- writeFile/rename failure under normal volumes */
-          await fs.promises.unlink(tmp).catch(() => {});
+          /* c8 ignore start -- writeFile failure under normal volumes */
+          await fs.promises.unlink(bakeTmp).catch(() => {});
           req.log.error({ err, id }, 'bake write failed');
           return reply.code(500).send({ error: 'bake write failed' });
           /* c8 ignore stop */
@@ -277,9 +276,21 @@ export function registerSidecarEditRoutes(
         await sidecarWrite(siteRoot, id, sidecar);
       } catch (err) {
         /* c8 ignore start -- IO failure on rename is hard to fault-inject */
+        if (bakeTmp) await fs.promises.unlink(bakeTmp).catch(() => {});
         req.log.error({ err, id }, 'sidecar write failed');
         return reply.code(500).send({ error: 'sidecar write failed' });
         /* c8 ignore stop */
+      }
+
+      if (bakeTmp !== null) {
+        try {
+          await fs.promises.rename(bakeTmp, finalBakePath);
+        } catch (err) {
+          /* c8 ignore start -- rename failure; renderer will recompute from ops */
+          await fs.promises.unlink(bakeTmp).catch(() => {});
+          req.log.warn({ err, id }, 'bake rename failed — renderer will recompute');
+          /* c8 ignore stop */
+        }
       }
 
       for (const name of staleNames) {
