@@ -66,7 +66,6 @@ export async function openPerspective(
     return;
   }
   const stageUrl = URL.createObjectURL(blob);
-  stageImg.src = stageUrl;
 
   // Initial handle positions: the four image corners in canvas pixel
   // space. Drag-to-reposition runs in stage pixel space; we convert at
@@ -173,10 +172,18 @@ export async function openPerspective(
   }
   activePersp = { corners, canvasW: canvas.width, canvasH: canvas.height, dispose };
 
+  // Assign onload BEFORE setting src so a cache hit doesn't fire load
+  // before the handler is attached. Fallback below handles that case.
   stageImg.onload = (): void => {
     repaint();
     status.textContent = `${canvas.width}×${canvas.height} current`;
   };
+  stageImg.src = stageUrl;
+  // Fallback: if the blob URL resolved synchronously from cache, the
+  // load event already fired before our handler was set.
+  if (stageImg.complete && stageImg.naturalWidth > 0) {
+    stageImg.onload(new Event('load'));
+  }
 
   // Refresh on resize (browser zoom, viewport changes).
   const onResize = (): void => repaint();

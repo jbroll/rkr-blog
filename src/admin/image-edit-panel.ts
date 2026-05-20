@@ -206,7 +206,8 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     ]);
   });
   tiltSlider.addEventListener('input', () => {
-    tiltInput.value = tiltSlider.value;
+    const v = Math.max(-45, Math.min(45, Number(tiltSlider.value)));
+    tiltInput.value = String(v);
   });
   tiltInput.addEventListener('input', () => {
     const v = Math.max(-45, Math.min(45, Number(tiltInput.value) || 0));
@@ -216,7 +217,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     const deg = Math.max(-45, Math.min(45, Number(tiltInput.value) || 0));
     if (deg === 0) return;
     const norm = ((deg % 360) + 360) % 360;
-    runEdit('tilt', (ops) => [...ops, { type: 'rotate', degrees: norm }]);
+    runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: norm }]);
   });
   buttons.reset.addEventListener('click', () =>
     runWithState((id, s) => {

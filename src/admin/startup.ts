@@ -222,7 +222,13 @@ async function populateTagsDatalist(): Promise<void> {
     const res = await fetch('/admin/api/tags?q=');
     if (!res.ok) return;
     const tags = (await res.json()) as { name: string }[];
-    list.innerHTML = tags.map((t) => `<option value="${t.name}"></option>`).join('');
+    list.replaceChildren(
+      ...tags.map((t) => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        return opt;
+      })
+    );
   } catch {
     // Non-critical — just means no suggestions appear.
   }

@@ -54,7 +54,8 @@ export async function openCropper(
     return;
   }
   const stageUrl = URL.createObjectURL(blob);
-  stageImg.src = stageUrl;
+  // Assign onload BEFORE setting src so a cache hit doesn't fire load
+  // before the handler is attached. Fallback below handles that case.
   stageImg.onload = (): void => {
     if (activeCropper) activeCropper.destroy();
     activeCropper = new Cropper(stageImg, {
@@ -86,6 +87,12 @@ export async function openCropper(
       onSaved();
     };
   };
+  stageImg.src = stageUrl;
+  // Fallback: if the blob URL resolved synchronously from cache, the
+  // load event already fired before our handler was set.
+  if (stageImg.complete && stageImg.naturalWidth > 0) {
+    stageImg.onload(new Event('load'));
+  }
 
   cancelBtn.onclick = (): void => {
     closeCropper();

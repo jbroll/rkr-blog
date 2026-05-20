@@ -46,6 +46,11 @@ function getWorker(): Worker {
       type: 'module'
     });
     worker.onerror = () => {
+      // Drain all pending requests so callers don't hang forever.
+      for (const { reject } of pending.values()) {
+        reject(new Error('opfs worker crashed'));
+      }
+      pending.clear();
       markOpfsUnsupported();
       worker = null;
     };

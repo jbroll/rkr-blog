@@ -165,7 +165,9 @@ export function webpOrJpeg(canvas: HTMLCanvasElement, quality = 0.95): Promise<B
 
 function setEditorImageSrc(editor: Editor, id: string, src: string): void {
   const dom = editor.view.dom as HTMLElement;
-  for (const img of dom.querySelectorAll<HTMLImageElement>(`img.rkr-image[data-id="${id}"]`)) {
+  for (const img of dom.querySelectorAll<HTMLImageElement>(
+    `img.rkr-image[data-id="${CSS.escape(id)}"]`
+  )) {
     img.src = src;
   }
 }
