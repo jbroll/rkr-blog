@@ -314,25 +314,31 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
       allowedOrigins: [new URL(publicBaseUrl).origin]
     }
   });
-  app.addHook('onClose', () => {
-    db.close();
-  });
-
   const port = opts.port ?? cfg.port;
   const host = opts.host ?? cfg.host;
 
   await app.listen({ port, host });
   app.log.info({ host, port }, 'rkr-blog listening');
 
-  // Graceful shutdown on systemd SIGTERM or Ctrl-C SIGINT. Without
-  // this the process exits hard and in-flight renders, open DB writes,
-  // and the work queue may not flush cleanly.
+  // Graceful shutdown on systemd SIGTERM or Ctrl-C SIGINT. app.close()
+  // runs onClose hooks (which stop the work queue) before we close the
+  // DB — order matters because the worker still touches the DB during
+  // ctrl.stop(). A 30-second hard deadline prevents a hung worker from
+  // keeping the process alive indefinitely.
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     process.once(sig, () => {
-      app.close().then(
-        () => process.exit(0),
-        () => process.exit(1)
-      );
+      const deadline = setTimeout(() => process.exit(1), 30_000);
+      deadline.unref();
+      app
+        .close()
+        .then(
+          () => db.close(),
+          () => db.close()
+        )
+        .then(
+          () => process.exit(0),
+          () => process.exit(1)
+        );
     });
   }
 

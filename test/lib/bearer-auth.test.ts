@@ -132,7 +132,9 @@ test('bearer: token of wrong length still returns 401 cleanly', async (t) => {
   const res = await app.inject({
     method: 'POST',
     url: '/admin/posts',
-    headers: { authorization: 'Bearer x' },
+    // Include a same-origin Origin so CSRF doesn't fire before auth.
+    // The token is wrong, so auth still rejects with 401.
+    headers: { authorization: 'Bearer x', origin: 'http://localhost' },
     payload: POST_PAYLOAD
   });
   assert.equal(res.statusCode, 401);
@@ -166,7 +168,8 @@ test('bearer: ADMIN_TOKEN unset → bearer header is rejected', async (t) => {
   const res = await app.inject({
     method: 'POST',
     url: '/admin/posts',
-    headers: { authorization: 'Bearer anything' },
+    // Include a same-origin Origin so CSRF doesn't fire before auth.
+    headers: { authorization: 'Bearer anything', origin: 'http://localhost' },
     payload: POST_PAYLOAD
   });
   assert.equal(res.statusCode, 401);
@@ -204,7 +207,8 @@ test('bearer: repeated wrong tokens against a mutating route eventually 429 (not
     const res = await app.inject({
       method: 'POST',
       url: '/admin/reindex',
-      headers: { authorization: 'Bearer wrong-guess' }
+      // Include a same-origin Origin so CSRF passes and auth/throttle runs.
+      headers: { authorization: 'Bearer wrong-guess', origin: 'http://localhost' }
     });
     if (res.statusCode === 429) {
       saw429 = true;
@@ -227,7 +231,7 @@ test('bearer: a valid token still works and is not throttled after prior failure
     const bad = await app.inject({
       method: 'POST',
       url: '/admin/reindex',
-      headers: { authorization: 'Bearer nope' }
+      headers: { authorization: 'Bearer nope', origin: 'http://localhost' }
     });
     assert.equal(bad.statusCode, 401);
   }
@@ -256,7 +260,7 @@ test('a correct bearer token is NEVER throttled even after the IP hit the failur
     await app.inject({
       method: 'POST',
       url: '/admin/reindex',
-      headers: { authorization: `Bearer wrong-${i}` }
+      headers: { authorization: `Bearer wrong-${i}`, origin: 'http://localhost' }
     });
   }
   const res = await app.inject({
@@ -275,7 +279,7 @@ test('wrong bearer tokens still eventually 429 (brute-force defense intact)', as
     const r = await app.inject({
       method: 'POST',
       url: '/admin/reindex',
-      headers: { authorization: `Bearer wrong-${i}` }
+      headers: { authorization: `Bearer wrong-${i}`, origin: 'http://localhost' }
     });
     if (r.statusCode === 429) {
       saw429 = true;

@@ -54,13 +54,13 @@ test('runGc deletes orphan cache files; idempotent on second run', async (t) => 
   const staleTmp = path.join(cacheDir, `${r.id}.deadbeef0001.webp.aabbccdd.tmp`);
   fs.writeFileSync(staleTmp, Buffer.alloc(0));
 
-  const first = await runGc(root);
+  const first = await runGc(root, { tmpMinAgeMs: 0 });
   assert.equal(first.deleted, 2, 'orphan + stale .tmp removed');
   assert.equal(first.kept, validCount, 'all valid derivatives preserved');
   assert.equal(fs.existsSync(path.join(cacheDir, orphan)), false);
   assert.equal(fs.existsSync(staleTmp), false);
 
-  const second = await runGc(root);
+  const second = await runGc(root, { tmpMinAgeMs: 0 });
   assert.equal(second.deleted, 0, 'second run is a no-op');
   assert.equal(second.kept, validCount);
 });
@@ -78,7 +78,7 @@ test('runGc sweeps originals/.tmp leftovers (crashed ingest)', async (t) => {
   fs.writeFileSync(path.join(tmpDir, 'ingest-deadbeef.bin'), Buffer.alloc(4));
   fs.writeFileSync(path.join(tmpDir, 'ingest-feedface.bin'), Buffer.alloc(4));
 
-  const result = await runGc(root);
+  const result = await runGc(root, { tmpMinAgeMs: 0 });
   assert.equal(result.deleted, 2, 'both ingest leftovers removed');
   assert.deepEqual(fs.readdirSync(tmpDir), [], 'tmp dir empty after sweep');
 });
@@ -94,7 +94,7 @@ test('runGc sweeps *.tmp recursively under bakes/ and sidecars/', async (t) => {
   const sidecarDir = path.join(root, 'sidecars');
   fs.writeFileSync(path.join(sidecarDir, 'pending.json.tmp'), Buffer.alloc(4));
 
-  const result = await runGc(root);
+  const result = await runGc(root, { tmpMinAgeMs: 0 });
   assert.equal(result.deleted, 2, 'two .tmp files removed across bakes + sidecars');
   assert.equal(fs.existsSync(path.join(bakeDir, 'abc123.webp')), true, '.webp preserved');
   assert.equal(fs.existsSync(path.join(bakeDir, 'abc123.webp.crash.tmp')), false);

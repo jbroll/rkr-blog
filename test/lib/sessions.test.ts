@@ -148,6 +148,26 @@ test('pruneExpired removes only sessions past expiry', () => {
   }
 });
 
+test('readSession returns null for sessions older than the 90-day hard cap', () => {
+  const db = freshDb();
+  try {
+    const user = bootstrapUser(db);
+    const s = createSession(db, { userId: user.id });
+    // Backdate created_at to 91 days ago (within rolling TTL but over the hard cap).
+    const oldDate = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('UPDATE sessions SET created_at = ? WHERE id = ?').run(oldDate, s.id);
+
+    assert.equal(readSession(db, s.id), null);
+    // The over-cap row was pruned.
+    assert.equal(
+      db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM sessions WHERE id = ?').get(s.id)?.n,
+      0
+    );
+  } finally {
+    db.close();
+  }
+});
+
 test('cascade: deleting a user removes their sessions', () => {
   const db = freshDb();
   try {

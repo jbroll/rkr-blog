@@ -23,6 +23,7 @@ import { renderDerivative } from './render.ts';
 export const events = new EventEmitter();
 
 const POLL_INTERVAL_MS = 250;
+const MAX_JOB_ATTEMPTS = 5;
 
 // Live-render gauge. Live /img requests render inline in the
 // request handler; while any are in flight, the worker pauses
@@ -79,26 +80,34 @@ interface JobRow {
   kind: JobKind;
   payload: string;
   state: 'queued' | 'running' | 'done' | 'failed';
+  attempts: number;
 }
 
 /**
  * Enqueue a job. The schema enforces `cache_key UNIQUE`, so when a row with
  * the same cacheKey already exists:
- *   - state queued or running → return the existing id (duplicate).
- *   - state done or failed    → reset that row back to queued and return its id.
+ *   - state queued or running          → return the existing id (duplicate).
+ *   - state failed, attempts exhausted → return as duplicate (poison-pill guard).
+ *   - state done or failed (retryable) → reset that row back to queued.
  */
 export function enqueue<P>(db: Db, { kind, payload, cacheKey }: EnqueueArgs<P>): EnqueueResult {
   const now = new Date().toISOString();
 
   if (cacheKey) {
     const existing = db
-      .prepare<Pick<JobRow, 'id' | 'state'>>('SELECT id, state FROM jobs WHERE cache_key = ?')
+      .prepare<Pick<JobRow, 'id' | 'state' | 'attempts'>>(
+        'SELECT id, state, attempts FROM jobs WHERE cache_key = ?'
+      )
       .get(cacheKey);
     if (existing) {
       if (existing.state === 'queued' || existing.state === 'running') {
         return { id: existing.id, duplicate: true };
       }
-      // done or failed → reset to queued so the worker picks it up again.
+      if (existing.state === 'failed' && existing.attempts >= MAX_JOB_ATTEMPTS) {
+        // Permanently failed — don't re-queue a poison-pill job forever.
+        return { id: existing.id, duplicate: true };
+      }
+      // done or failed (under attempt limit) → reset to queued.
       db.prepare(
         `UPDATE jobs SET state='queued', payload=?, error=NULL, updated_at=?
          WHERE id=?`

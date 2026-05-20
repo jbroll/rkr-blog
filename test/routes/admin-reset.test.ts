@@ -177,10 +177,11 @@ test('POST /admin/reset without bearer returns 401', async (t) => {
 
 test('POST /admin/reset with wrong bearer returns 401', async (t) => {
   const { app } = await setup(t, { adminToken: 'super-secret' });
+  // Include a same-origin Origin so CSRF doesn't fire before auth rejects the wrong token.
   const res = await app.inject({
     method: 'POST',
     url: '/admin/reset',
-    headers: { authorization: 'Bearer wrong' }
+    headers: { authorization: 'Bearer wrong', origin: 'http://localhost' }
   });
   assert.equal(res.statusCode, 401);
 });
@@ -201,14 +202,17 @@ test('site-admin reset CLI calls the endpoint with bearer header', async (t) => 
   assert.equal(result.originals, 3);
 });
 
-test('site-admin reset CLI propagates 401 errors', async (t) => {
+test('site-admin reset CLI propagates auth errors', async (t) => {
+  // A wrong bearer token from a scripted client (no Origin header) now
+  // hits the CSRF guard before the auth check, returning 403 instead of
+  // 401. Both indicate rejection; the test verifies the CLI surfaces it.
   const { app } = await setup(t, { adminToken: 'super-secret' });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const url = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
 
   await assert.rejects(
     () => runReset({ toUrl: url, token: 'wrong', force: true, fetcher: fetch }),
-    /401/
+    /40[13]/
   );
 });
 

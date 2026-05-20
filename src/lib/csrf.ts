@@ -11,6 +11,7 @@
 // Production wiring derives allowedOrigins from PUBLIC_BASE_URL.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { adminTokenMatchesEnv } from './admin-token.ts';
 import { parseBearerToken } from './bearer.ts';
 
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -40,9 +41,12 @@ export function registerCsrfGuard(app: FastifyInstance, opts: CsrfOptions): void
     // Bearer-token clients (the WP importer, scripted admin tools)
     // don't carry cookies, so the CSRF threat (a browser auto-attaching
     // a session cookie to a forged cross-origin POST) doesn't apply.
-    // Skip the Origin check only for well-formed Bearer token headers;
-    // a bare or malformed Authorization header still gets the CSRF check.
-    if (parseBearerToken(request.headers.authorization) !== undefined) {
+    // Skip the Origin check only when the bearer token is actually the
+    // configured ADMIN_TOKEN. Any other Authorization value (wrong token,
+    // junk header) still goes through the full CSRF check — a browser
+    // cannot bypass Origin validation by sending a fake bearer header.
+    const bearer = parseBearerToken(request.headers.authorization);
+    if (bearer !== undefined && adminTokenMatchesEnv(bearer)) {
       return;
     }
 

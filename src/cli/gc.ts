@@ -25,8 +25,13 @@ export default async function gcCmd(_argv: string[]): Promise<void> {
   console.log(`gc: ${result.deleted} orphan(s) deleted (${result.kept} kept)`);
 }
 
-/** Exposed for tests. Returns counts. */
-export async function runGc(siteRoot: string): Promise<{ deleted: number; kept: number }> {
+/** Exposed for tests. Returns counts.
+ * @param tmpMinAgeMs Minimum age for a .tmp file to be deleted (default 10 min).
+ *   Tests pass 0 to delete immediately. */
+export async function runGc(
+  siteRoot: string,
+  { tmpMinAgeMs = 10 * 60 * 1000 }: { tmpMinAgeMs?: number } = {}
+): Promise<{ deleted: number; kept: number }> {
   const valid = new Set<string>();
   for (const s of await listSidecars(siteRoot)) {
     for (const v of s.variants) {
@@ -60,7 +65,10 @@ export async function runGc(siteRoot: string): Promise<{ deleted: number; kept: 
   if (fs.existsSync(cacheDir)) {
     for (const filename of fs.readdirSync(cacheDir)) {
       if (filename.endsWith('.tmp')) {
-        fs.unlinkSync(path.join(cacheDir, filename));
+        const p = path.join(cacheDir, filename);
+        const stat = fs.statSync(p, { throwIfNoEntry: false });
+        if (!stat || stat.mtimeMs > Date.now() - tmpMinAgeMs) continue;
+        fs.unlinkSync(p);
         deleted++;
         continue;
       }
@@ -78,17 +86,20 @@ export async function runGc(siteRoot: string): Promise<{ deleted: number; kept: 
   // stale .tmp is pure cleanup; the .webp files themselves stay and
   // are not gc'd here — they're cheap and the editor doesn't enumerate
   // valid bakes.
-  deleted += sweepTmp(path.join(siteRoot, 'bakes'));
+  deleted += sweepTmp(path.join(siteRoot, 'bakes'), tmpMinAgeMs);
 
   // sidecars/: flat dir. *.tmp from sidecar.write() crashes.
-  deleted += sweepTmp(path.join(siteRoot, 'sidecars'));
+  deleted += sweepTmp(path.join(siteRoot, 'sidecars'), tmpMinAgeMs);
 
   // originals/.tmp/ — ingestStream's staging dir. Anything in here
   // post-rename is a crashed ingest.
   const originalsTmp = path.join(siteRoot, 'originals', '.tmp');
   if (fs.existsSync(originalsTmp)) {
     for (const name of fs.readdirSync(originalsTmp)) {
-      fs.unlinkSync(path.join(originalsTmp, name));
+      const p = path.join(originalsTmp, name);
+      const stat = fs.statSync(p, { throwIfNoEntry: false });
+      if (!stat || stat.mtimeMs > Date.now() - tmpMinAgeMs) continue;
+      fs.unlinkSync(p);
       deleted++;
     }
   }
@@ -98,8 +109,9 @@ export async function runGc(siteRoot: string): Promise<{ deleted: number; kept: 
 
 /** Recursive sweep of `*.tmp` files under `root`. Used for cleanup of
  * 2/2-prefix-sharded directories (bakes/) and the flat sidecars/.
- * Non-tmp files are ignored — gc doesn't decide bake content lifecycle. */
-function sweepTmp(root: string): number {
+ * Non-tmp files are ignored — gc doesn't decide bake content lifecycle.
+ * Only deletes files older than `minAgeMs` to avoid racing live writes. */
+function sweepTmp(root: string, minAgeMs: number): number {
   if (!fs.existsSync(root)) return 0;
   let deleted = 0;
   const stack: string[] = [root];
@@ -110,6 +122,8 @@ function sweepTmp(root: string): number {
       if (entry.isDirectory()) {
         stack.push(full);
       } else if (entry.isFile() && entry.name.endsWith('.tmp')) {
+        const stat = fs.statSync(full, { throwIfNoEntry: false });
+        if (!stat || stat.mtimeMs > Date.now() - minAgeMs) continue;
         fs.unlinkSync(full);
         deleted++;
       }

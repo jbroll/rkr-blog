@@ -26,7 +26,7 @@ import {
 } from '../lib/login-throttle.ts';
 import { safeErr } from '../lib/safe-err.ts';
 import { SESSION_COOKIE_NAME as SESSION_COOKIE } from '../lib/session-constants.ts';
-import { createSession, deleteSession } from '../lib/sessions.ts';
+import { createSession, deleteSession, deleteUserSessions } from '../lib/sessions.ts';
 import {
   EmailLinkedError,
   findOrCreateOAuthUser,
@@ -317,7 +317,15 @@ export default async function authRoutes(
 
   fastify.post('/admin/logout', async (req, reply) => {
     const sid = readCookie(req, SESSION_COOKIE);
-    if (sid) deleteSession(db, sid);
+    if (sid) {
+      if (req.user) {
+        // Kill all sessions for this user so logout on one device
+        // invalidates concurrent sessions on other devices.
+        deleteUserSessions(db, req.user.id);
+      } else {
+        deleteSession(db, sid);
+      }
+    }
     clearCookie(reply, SESSION_COOKIE, { secure: secureCookies });
     return reply.redirect(authBust('/', 'logout'), 302);
   });

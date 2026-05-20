@@ -207,7 +207,10 @@ test('pushPost: WP fixture → target via bearer; markdown + originals land', as
   assert.match(html, /<title>Two Images/);
 });
 
-test('pushPost: wrong bearer token → /admin/posts 401, throws', async (t) => {
+test('pushPost: wrong bearer token → rejects with auth error', async (t) => {
+  // A wrong bearer token from a scripted client (no Origin header) hits
+  // the CSRF guard before the auth check, returning 403. Either 401 or
+  // 403 means rejected; the test verifies the error is surfaced.
   const target = await startTargetApp(t, 'right-token');
   const wpBaseUrl = await startWpFixture(
     t,
@@ -227,7 +230,7 @@ test('pushPost: wrong bearer token → /admin/posts 401, throws', async (t) => {
         toUrl: target.baseUrl,
         token: 'wrong-token'
       }),
-    /401/
+    /40[13]/
   );
 });
 

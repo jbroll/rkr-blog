@@ -49,10 +49,11 @@ export function resolveSavedDate(raw: unknown, filePath: string): string {
 /** Quote a string for emission as a YAML scalar. Conservative: any
  * char that could be parsed as YAML structure triggers quoting. */
 export function yamlScalar(s: string): string {
-  if (/[:#&*!|>'"%@`,[\]{}\n]/.test(s) || /^[?]\s/.test(s) || /^\s|\s$/.test(s)) {
-    return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  const safe = s.replace(/[\r\n\t]+/g, ' ');
+  if (/[:#&*!|>'"%@`,[\]{}\n]/.test(safe) || /^[?]\s/.test(safe) || /^\s|\s$/.test(safe)) {
+    return `"${safe.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
   }
-  return s;
+  return safe;
 }
 
 /**

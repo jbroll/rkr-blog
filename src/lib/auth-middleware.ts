@@ -56,6 +56,7 @@ export async function registerAuthMiddleware(app: FastifyInstance, db: Db): Prom
       // The throttle only ever gates the WRONG-token path.
       if (adminTokenMatchesEnv(bearer)) {
         req.user = BEARER_USER;
+        req.log.info({ ip: req.ip, method: req.method, url: req.url }, 'bearer auth success');
         clearFailures(req.ip);
         return;
       }

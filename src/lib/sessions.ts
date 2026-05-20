@@ -17,6 +17,7 @@ export interface Session {
 }
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const SESSION_HARD_CAP_MS = 90 * 24 * 60 * 60 * 1000; // 90 days absolute max
 const ID_BYTES = 32;
 
 export interface CreateSessionArgs {
@@ -70,6 +71,10 @@ export function readSession(db: Db, id: string): Session | null {
     .get(id);
   if (!row) return null;
   if (Date.parse(row.expires_at) < Date.now()) {
+    deleteSession(db, id);
+    return null;
+  }
+  if (Date.parse(row.created_at) + SESSION_HARD_CAP_MS < Date.now()) {
     deleteSession(db, id);
     return null;
   }
