@@ -56,6 +56,8 @@ export interface SiteConfig {
   teaserWords?: number;
   /** Email-notification verbosity for new comments. Default 'ham'. */
   commentNotify?: 'off' | 'ham' | 'queued' | 'all';
+  /** Notification recipient address. Falls back to NOTIFY_TO env when absent. */
+  notifyEmail?: string;
 }
 
 /** Blog-level defaults for the ingest-time downsample + re-encode
@@ -87,6 +89,8 @@ export interface PersistedSiteConfig {
   teaserWords?: number;
   /** Email-notification verbosity for new comments. */
   commentNotify?: 'off' | 'ham' | 'queued' | 'all';
+  /** Notification recipient address. Falls back to NOTIFY_TO env when absent. */
+  notifyEmail?: string;
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
@@ -132,6 +136,9 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   ) {
     out.commentNotify = r.commentNotify;
   }
+  if (typeof r.notifyEmail === 'string' && (r.notifyEmail === '' || isValidEmail(r.notifyEmail))) {
+    out.notifyEmail = r.notifyEmail;
+  }
   const ingest = pickPersistedIngestResize(r.ingestResize);
   if (ingest) out.ingestResize = ingest;
   return out;
@@ -152,6 +159,10 @@ function pickPersistedIngestResize(raw: unknown): PersistedIngestResize | undefi
   const wq = clampInt(r.webpQuality, INGEST_RESIZE_BOUNDS.webpQuality);
   if (wq !== undefined) out.webpQuality = wq;
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export function isValidEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 }
 
 function clampInt(v: unknown, bounds: { min: number; max: number }): number | undefined {
@@ -194,6 +205,8 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   if (persisted.bannerAboveHeader) out.bannerAboveHeader = true;
   if (persisted.teaserWords && persisted.teaserWords > 0) out.teaserWords = persisted.teaserWords;
   if (persisted.commentNotify) out.commentNotify = persisted.commentNotify;
+  const notifyEmail = persisted.notifyEmail || env.NOTIFY_TO;
+  if (notifyEmail) out.notifyEmail = notifyEmail;
   return out;
 }
 

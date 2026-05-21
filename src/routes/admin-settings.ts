@@ -16,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
+  isValidEmail,
   listAvailableThemes,
   type PersistedIngestResize,
   readPersistedSiteConfig,
@@ -112,6 +113,7 @@ export function registerAdminSettingsRoutes(
       bannerAboveHeader?: unknown;
       teaserWords?: unknown;
       commentNotify?: unknown;
+      notifyEmail?: unknown;
     };
   }>('/admin/settings', { ...guard }, async (request, reply) => {
     const body = request.body ?? {};
@@ -177,6 +179,14 @@ export function registerAdminSettingsRoutes(
     const commentNotify =
       cn === 'off' || cn === 'ham' || cn === 'queued' || cn === 'all' ? cn : undefined;
 
+    const notifyEmailRaw = typeof body.notifyEmail === 'string' ? body.notifyEmail.trim() : '';
+    if (notifyEmailRaw && !isValidEmail(notifyEmailRaw)) {
+      return reply.redirect(
+        `/admin/settings?err=${encodeURIComponent('invalid email address')}`,
+        303
+      );
+    }
+
     // Persist the form values verbatim, empty strings included.
     // siteConfig() / themeName() each treat an empty-string persisted
     // field as falsy (the `||` chain falls through to SITE_TITLE /
@@ -191,6 +201,7 @@ export function registerAdminSettingsRoutes(
       postTeaser,
       bannerAboveHeader,
       teaserWords: teaserWords.value ?? 0,
+      notifyEmail: notifyEmailRaw,
       ...(commentNotify ? { commentNotify } : {}),
       ...(ingestResize ? { ingestResize } : {})
     });

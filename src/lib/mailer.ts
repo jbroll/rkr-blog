@@ -3,12 +3,13 @@
 // top-level side effects, never throws, no-ops when unconfigured.
 
 import nodemailer from 'nodemailer';
+import { readPersistedSiteConfig } from './config.ts';
 
 // Internal (not exported): no external consumer needs the shape;
 // the public surface is Mailer / makeMailer / envMailer. Keeping it
 // unexported avoids a knip "unused export" until a consumer exists.
-// `to` is intentionally absent: the recipient is always cfg.to (NOTIFY_TO
-// env), not caller-supplied, so the field would be dead on every call site.
+// `to` is intentionally absent from MailMessage: the recipient is always
+// cfg.to, not caller-supplied, so the field would be dead on every call site.
 interface MailMessage {
   subject: string;
   text: string;
@@ -57,7 +58,8 @@ export function makeMailer(cfg: SmtpConfig, transport: Transport): Mailer {
   };
 }
 
-/** Env-backed factory (reads process.env at call time, not import). */
+/** Env-backed factory. SMTP connection params are read at call time;
+ * `to` is resolved at send time (persisted notifyEmail → NOTIFY_TO env). */
 export function envMailer(): Mailer {
   const e = process.env;
   const cfg: SmtpConfig = {
@@ -66,7 +68,9 @@ export function envMailer(): Mailer {
     user: e.SMTP_USER,
     pass: e.SMTP_PASS,
     from: e.SMTP_FROM,
-    to: e.NOTIFY_TO
+    get to() {
+      return readPersistedSiteConfig().notifyEmail || process.env.NOTIFY_TO;
+    }
   };
   /* c8 ignore start -- real SMTP I/O; exercised manually, not in the
      unit suite (mirrors the classify-handler default-transport

@@ -35,6 +35,7 @@ export interface AdminSettingsPageData extends SiteChrome {
     bannerAboveHeader?: boolean;
     teaserWords?: number;
     commentNotify?: 'off' | 'ham' | 'queued' | 'all';
+    notifyEmail?: string;
     ingestResize?: {
       maxDim?: number;
       scalePct?: number;
@@ -147,6 +148,11 @@ ${saveBtn}
       })
       .join('')}
   </select>
+
+  <label for="rkr-settings-notify-email">Notification email address</label>
+  <input id="rkr-settings-notify-email" name="notifyEmail" type="email"
+    value="${escapeAttr(data.persisted.notifyEmail ?? '')}"
+    placeholder="(uses NOTIFY_TO env if blank)"/>
 
   <h2 class="rkr-admin-settings-section">Image uploads</h2>
 

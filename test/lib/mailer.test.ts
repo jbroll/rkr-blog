@@ -16,6 +16,21 @@ test('envMailer no-ops (sent:false) when SMTP env is unset', async () => {
   }
 });
 
+test('envMailer no-ops when host set but no recipient (exercises get to() getter)', async () => {
+  const prev = { h: process.env.SMTP_HOST, t: process.env.NOTIFY_TO };
+  process.env.SMTP_HOST = 'smtp.example';
+  delete process.env.NOTIFY_TO;
+  // No site.json in test env, so notifyEmail is undefined → no-op.
+  try {
+    const r = await envMailer().sendMail({ subject: 's', text: 't' });
+    assert.deepEqual(r, { sent: false });
+  } finally {
+    if (prev.h !== undefined) process.env.SMTP_HOST = prev.h;
+    else delete process.env.SMTP_HOST;
+    if (prev.t !== undefined) process.env.NOTIFY_TO = prev.t;
+  }
+});
+
 test('no-op + sent:false when unconfigured', async () => {
   const m = makeMailer({ host: undefined, to: undefined }, async () => {
     throw new Error('transport must not be called when unconfigured');
