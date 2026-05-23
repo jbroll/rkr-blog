@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  appendRotate,
   describeOp,
   isDirty,
   type LocalEditState,
@@ -202,4 +203,42 @@ test('describeOp: unknown op type → raw type', () => {
     describeOp({ type: 'zoom-and-enhance' } as unknown as SidecarOp),
     'zoom-and-enhance'
   );
+});
+
+// appendRotate
+
+test('appendRotate: appends when no prior rotate', () => {
+  assert.deepEqual(appendRotate([], 90), [{ type: 'rotate', degrees: 90 }]);
+});
+
+test('appendRotate: merges with adjacent rotate', () => {
+  assert.deepEqual(appendRotate([{ type: 'rotate', degrees: 90 }], 90), [
+    { type: 'rotate', degrees: 180 }
+  ]);
+});
+
+test('appendRotate: drops when sum is 0', () => {
+  assert.deepEqual(appendRotate([{ type: 'rotate', degrees: 90 }], -90), []);
+});
+
+test('appendRotate: does not merge across non-rotate op', () => {
+  const ops: SidecarOp[] = [
+    { type: 'rotate', degrees: 90 },
+    { type: 'flip', axis: 'horizontal' }
+  ];
+  assert.deepEqual(appendRotate(ops, 90), [
+    { type: 'rotate', degrees: 90 },
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'rotate', degrees: 90 }
+  ]);
+});
+
+test('appendRotate: normalises negative degrees', () => {
+  assert.deepEqual(appendRotate([], -90), [{ type: 'rotate', degrees: 270 }]);
+});
+
+test('appendRotate: no-op for 0 degrees', () => {
+  assert.deepEqual(appendRotate([{ type: 'rotate', degrees: 90 }], 0), [
+    { type: 'rotate', degrees: 90 }
+  ]);
 });

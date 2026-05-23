@@ -75,6 +75,21 @@ export function localDeleteAt(s: LocalEditState, index: number): void {
   s.ops = [...s.ops.slice(0, index), ...s.ops.slice(index + 1)];
 }
 
+/** Append a rotate op, merging into the previous op if it is also a
+ * rotate. Keeps the stored ops list compact without affecting undo
+ * granularity (each call to runEdit is still one undo step). */
+export function appendRotate(ops: SidecarOp[], degrees: number): SidecarOp[] {
+  const norm = ((degrees % 360) + 360) % 360;
+  if (norm === 0) return ops;
+  const last = ops[ops.length - 1];
+  if (last?.type === 'rotate') {
+    const sum = (((Number(last.degrees) + norm) % 360) + 360) % 360;
+    const rest = ops.slice(0, -1);
+    return sum === 0 ? rest : [...rest, { type: 'rotate', degrees: sum }];
+  }
+  return [...ops, { type: 'rotate', degrees: norm }];
+}
+
 /** Human-readable label for one op, used in the edits list under the
  * image-attributes panel. Tries to format coords / dimensions in a way
  * the author can scan ("crop 400×300 @ 100,50"); falls back to the raw

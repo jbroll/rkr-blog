@@ -7,6 +7,7 @@
 import type { Editor } from '@tiptap/core';
 
 import {
+  appendRotate,
   describeOp,
   isDirty,
   type LocalEditState,
@@ -125,10 +126,12 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
 
   /** Sync the in-dialog <img> to the latest pipeline output for `id`.
    * The blob URL is owned by canvas-loaders' LRU, so we just point
-   * src at it — no revoke responsibility here. */
+   * src at it — no revoke responsibility here. Clears any pending CSS
+   * tilt preview so the final canvas result is shown unrotated. */
   function updateDialogPreview(id: string): void {
     const img = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
     if (!img) return;
+    img.style.transform = '';
     const url = getPreviewUrl(id);
     if (url) {
       img.src = url;
@@ -137,6 +140,15 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
       img.removeAttribute('src');
       img.hidden = true;
     }
+  }
+
+  /** Apply a CSS rotation to the dialog preview for instant tilt feedback
+   * without re-running the canvas pipeline. Cleared by updateDialogPreview
+   * when the canvas pipeline completes after commit. */
+  function applyTiltPreview(deg: number): void {
+    const img = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
+    if (!img) return;
+    img.style.transform = deg !== 0 ? `rotate(${deg}deg)` : '';
   }
 
   /** Mutate the active image's local state. Refuses if no image is
@@ -165,10 +177,10 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     runWithState((id, s) => void openCropper(id, s, () => refreshAfterEdit(id, s, 'crop')))
   );
   buttons.rotateL.addEventListener('click', () =>
-    runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: -90 }])
+    runEdit('rotate', (ops) => appendRotate(ops, -90))
   );
   buttons.rotateR.addEventListener('click', () =>
-    runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: 90 }])
+    runEdit('rotate', (ops) => appendRotate(ops, 90))
   );
   buttons.flipH.addEventListener('click', () =>
     runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'horizontal' }])
@@ -208,16 +220,17 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   tiltSlider.addEventListener('input', () => {
     const v = Math.max(-45, Math.min(45, Number(tiltSlider.value)));
     tiltInput.value = String(v);
+    applyTiltPreview(v);
   });
   tiltInput.addEventListener('input', () => {
     const v = Math.max(-45, Math.min(45, Number(tiltInput.value) || 0));
     tiltSlider.value = String(v);
+    applyTiltPreview(v);
   });
   buttons.tilt.addEventListener('click', () => {
     const deg = Math.max(-45, Math.min(45, Number(tiltInput.value) || 0));
     if (deg === 0) return;
-    const norm = ((deg % 360) + 360) % 360;
-    runEdit('rotate', (ops) => [...ops, { type: 'rotate', degrees: norm }]);
+    runEdit('rotate', (ops) => appendRotate(ops, deg));
   });
   buttons.reset.addEventListener('click', () =>
     runWithState((id, s) => {
