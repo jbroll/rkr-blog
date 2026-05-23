@@ -1,2 +1,0 @@
-# carousel.ts uses `export {}` to mark the file as an ES module (no re-exports).
-src/site/carousel.ts

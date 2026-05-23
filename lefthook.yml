@@ -1,6 +1,6 @@
 remotes:
   - git_url: /home/john/src/org-hooks
-    ref: v0.6.8
+    ref: v0.6.9
     configs:
       - lefthook-common.yml
       - profiles/ts.yml
