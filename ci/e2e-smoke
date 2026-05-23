@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+npm install
+npx playwright install chromium
+
+npm run --silent build:admin
+npm run --silent build:site
+npm run test:e2e
