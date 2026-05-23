@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  appendFlip,
   appendRotate,
   describeOp,
   isDirty,
@@ -203,6 +204,35 @@ test('describeOp: unknown op type → raw type', () => {
     describeOp({ type: 'zoom-and-enhance' } as unknown as SidecarOp),
     'zoom-and-enhance'
   );
+});
+
+// appendFlip
+
+test('appendFlip: appends when no prior flip', () => {
+  assert.deepEqual(appendFlip([], 'horizontal'), [{ type: 'flip', axis: 'horizontal' }]);
+});
+
+test('appendFlip: cancels adjacent same-axis flip', () => {
+  assert.deepEqual(appendFlip([{ type: 'flip', axis: 'horizontal' }], 'horizontal'), []);
+});
+
+test('appendFlip: does not cancel different-axis flip', () => {
+  assert.deepEqual(appendFlip([{ type: 'flip', axis: 'horizontal' }], 'vertical'), [
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'flip', axis: 'vertical' }
+  ]);
+});
+
+test('appendFlip: does not cancel across non-flip op', () => {
+  const ops: SidecarOp[] = [
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'rotate', degrees: 90 }
+  ];
+  assert.deepEqual(appendFlip(ops, 'horizontal'), [
+    { type: 'flip', axis: 'horizontal' },
+    { type: 'rotate', degrees: 90 },
+    { type: 'flip', axis: 'horizontal' }
+  ]);
 });
 
 // appendRotate

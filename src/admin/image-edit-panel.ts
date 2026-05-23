@@ -7,6 +7,7 @@
 import type { Editor } from '@tiptap/core';
 
 import {
+  appendFlip,
   appendRotate,
   describeOp,
   isDirty,
@@ -183,10 +184,10 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     runEdit('rotate', (ops) => appendRotate(ops, 90))
   );
   buttons.flipH.addEventListener('click', () =>
-    runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'horizontal' }])
+    runEdit('flip', (ops) => appendFlip(ops, 'horizontal'))
   );
   buttons.flipV.addEventListener('click', () =>
-    runEdit('flip', (ops) => [...ops, { type: 'flip', axis: 'vertical' }])
+    runEdit('flip', (ops) => appendFlip(ops, 'vertical'))
   );
   buttons.perspective.addEventListener('click', () =>
     runWithState(

@@ -75,6 +75,15 @@ export function localDeleteAt(s: LocalEditState, index: number): void {
   s.ops = [...s.ops.slice(0, index), ...s.ops.slice(index + 1)];
 }
 
+/** Append a flip op, cancelling it against the previous op when both
+ * flip the same axis. Keeps the stored ops list compact without
+ * affecting undo granularity (each call to runEdit is one undo step). */
+export function appendFlip(ops: SidecarOp[], axis: string): SidecarOp[] {
+  const last = ops[ops.length - 1];
+  if (last?.type === 'flip' && last.axis === axis) return ops.slice(0, -1);
+  return [...ops, { type: 'flip', axis }];
+}
+
 /** Append a rotate op, merging into the previous op if it is also a
  * rotate. Keeps the stored ops list compact without affecting undo
  * granularity (each call to runEdit is still one undo step). */
