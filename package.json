@@ -46,10 +46,10 @@
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.1",
-    "@rkr/image-edit": "*",
     "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.0.0",
     "@fastify/static": "^9.1.3",
+    "@rkr/image-edit": "file:packages/image-edit",
     "arctic": "^3.7.0",
     "fastify": "^5.0.0",
     "ipaddr.js": "^2.4.0",
@@ -117,14 +117,18 @@
           "src/core/index.ts",
           "src/canvas/index.ts"
         ],
-        "project": ["src/**/*.ts"]
+        "project": [
+          "src/**/*.ts"
+        ]
       },
       "apps/image-pwa": {
         "entry": [
           "src/main.ts",
           "src/sw.ts"
         ],
-        "project": ["src/**/*.ts"]
+        "project": [
+          "src/**/*.ts"
+        ]
       }
     }
   },

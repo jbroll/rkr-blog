@@ -16,6 +16,7 @@ set -euo pipefail
 : "${FASTIFY_APP_DATA_PATH:?FASTIFY_APP_DATA_PATH not set}"
 
 DATA_DIR="${FASTIFY_APP_DATA_PATH}/${APP_NAME}"   # e.g. /var/www/rkr-blog
+APP_DIR="${FASTIFY_APP_BASE_PATH:-/opt}/${APP_NAME}"  # e.g. /opt/rkr-blog
 PORT="${FASTIFY_APP_PORT}"
 
 cat > "${TMP_DIR}/${APP_NAME}.conf" << EOF
@@ -62,6 +63,16 @@ cat > "${TMP_DIR}/${APP_NAME}.conf" << EOF
     # Falls through to ProxyPass on cache miss.
     RewriteCond %{DOCUMENT_ROOT}/cache%{REQUEST_URI} -f
     RewriteRule ^/img/(.*)$ /cache/img/\$1 [L]
+
+    # Standalone image-editor PWA (apps/image-pwa) — static files staged at
+    # ${APP_DIR}/image-editor by fastify_app.build.post.sh. Served directly by
+    # Apache (the '!' excludes it from the proxy below). Must precede ProxyPass /.
+    Alias /image-editor ${APP_DIR}/image-editor
+    <Directory ${APP_DIR}/image-editor>
+        Options -Indexes
+        Require all granted
+    </Directory>
+    ProxyPass /image-editor !
 
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https" env=HTTPS
