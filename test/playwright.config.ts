@@ -24,6 +24,12 @@ export default defineConfig({
   retries: 1,
   reporter: process.env.CI ? 'github' : 'list',
   timeout: 30_000,
+  // Hard ceiling on the whole run. A healthy suite is ~2 min; this only fires
+  // on a hang the per-test timeout can't catch (e.g. a wedged browser launch).
+  // On timeout Playwright tears down gracefully — including killing its
+  // webServer — so a hang fails in minutes AND doesn't orphan a server on
+  // :3789 (see ci/e2e free_e2e_port) the way an external SIGKILL would.
+  globalTimeout: 8 * 60_000,
   // V8 coverage capture lives in test/e2e/coverage-fixtures.ts (per-
   // test) + test/e2e/global-teardown.ts (final report generation).
   // mcr handles source-map resolution so reports show src/admin/main.ts
