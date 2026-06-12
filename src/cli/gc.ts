@@ -25,6 +25,16 @@ export default async function gcCmd(_argv: string[]): Promise<void> {
   console.log(`gc: ${result.deleted} orphan(s) deleted (${result.kept} kept)`);
 }
 
+/** A `.tmp` file is sweepable once it is at least `minAgeMs` old. `mtimeMs` is
+ * fractional (sub-ms) while `Date.now()` is truncated to whole ms, so a file
+ * written "just now" can have an mtime a hair ABOVE a slightly-later truncated
+ * now and be misread as a future file. Flooring mtime to whole ms aligns the
+ * two clocks — without this, gc skipped freshly-written leftovers at
+ * minAgeMs=0, which made `runGc` flaky under load. */
+function tmpAgedOut(mtimeMs: number, minAgeMs: number): boolean {
+  return Math.floor(mtimeMs) <= Date.now() - minAgeMs;
+}
+
 /** Exposed for tests. Returns counts.
  * @param tmpMinAgeMs Minimum age for a .tmp file to be deleted (default 10 min).
  *   Tests pass 0 to delete immediately. */
@@ -67,7 +77,7 @@ export async function runGc(
       if (filename.endsWith('.tmp')) {
         const p = path.join(cacheDir, filename);
         const stat = fs.statSync(p, { throwIfNoEntry: false });
-        if (!stat || stat.mtimeMs > Date.now() - tmpMinAgeMs) continue;
+        if (!stat || !tmpAgedOut(stat.mtimeMs, tmpMinAgeMs)) continue;
         fs.unlinkSync(p);
         deleted++;
         continue;
@@ -98,7 +108,7 @@ export async function runGc(
     for (const name of fs.readdirSync(originalsTmp)) {
       const p = path.join(originalsTmp, name);
       const stat = fs.statSync(p, { throwIfNoEntry: false });
-      if (!stat || stat.mtimeMs > Date.now() - tmpMinAgeMs) continue;
+      if (!stat || !tmpAgedOut(stat.mtimeMs, tmpMinAgeMs)) continue;
       fs.unlinkSync(p);
       deleted++;
     }
@@ -123,7 +133,7 @@ function sweepTmp(root: string, minAgeMs: number): number {
         stack.push(full);
       } else if (entry.isFile() && entry.name.endsWith('.tmp')) {
         const stat = fs.statSync(full, { throwIfNoEntry: false });
-        if (!stat || stat.mtimeMs > Date.now() - minAgeMs) continue;
+        if (!stat || !tmpAgedOut(stat.mtimeMs, minAgeMs)) continue;
         fs.unlinkSync(full);
         deleted++;
       }
