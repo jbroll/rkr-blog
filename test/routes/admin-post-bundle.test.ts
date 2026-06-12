@@ -106,6 +106,27 @@ And gallery ::gallery{ids=[${ID_A.slice(0, 8)}, ${ID_B.slice(0, 8)}]}
   assert.equal(body.sidecars.find((s) => s.id === ID_A)?.json.original, 'unused');
 });
 
+test('GET /admin/post-bundle: surfaces subtitle + array tags when present', async (t) => {
+  const { root, app } = await setup(t);
+  const md = `---
+title: Tagged
+subtitle: A sub
+slug: tagged
+date: 2026-05-09T12:00:00Z
+status: published
+tags: [alpha, beta]
+---
+
+Body, no images.
+`;
+  fs.writeFileSync(path.join(root, 'content', 'posts', 'tagged.md'), md);
+  const res = await app.inject({ method: 'GET', url: '/admin/post-bundle/tagged?manifest=1' });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json<{ subtitle?: string; tags: string[] }>();
+  assert.equal(body.subtitle, 'A sub');
+  assert.deepEqual(body.tags, ['alpha', 'beta']);
+});
+
 test('GET /admin/post-bundle/:slug?manifest=1: sidecar-only references survive (skipped from originals)', async (t) => {
   const { root, app } = await setup(t);
 

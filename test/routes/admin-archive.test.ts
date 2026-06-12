@@ -6,9 +6,11 @@ import { type TestContext, test } from 'node:test';
 import { exportArchive } from '../../src/lib/archive.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { createSession } from '../../src/lib/sessions.ts';
+import { findOrCreateOAuthUser, inviteEmail } from '../../src/lib/users.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
-import { buildMultipart } from '../helpers/multipart.ts';
+import { buildMultipart, buildMultipartParts } from '../helpers/multipart.ts';
 
 const noopAuthExchange: TokenExchange = {
   authorizationUrl: () => new URL('https://example.com/'),
@@ -207,4 +209,36 @@ test('POST /admin/import returns 400 when no file part', async (t) => {
     }
   });
   assert.equal(res.statusCode, 400);
+});
+
+test('POST /admin/import returns 400 when no file part is present', async (t) => {
+  const { app } = await setup(t);
+  const { payload, headers } = buildMultipartParts([
+    { kind: 'field', fieldName: 'note', value: 'no file here' }
+  ]);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import',
+    payload,
+    headers: { ...headers, authorization: `Bearer ${TOKEN}` }
+  });
+  assert.equal(res.statusCode, 400, res.body);
+  assert.match(res.json<{ error: string }>().error, /no file part/);
+});
+
+test('GET /admin/export 403s for a cookie-authed (non-bearer) user', async (t) => {
+  const { root, app } = await setup(t);
+  // A real logged-in user (id != 0) holds a session cookie; the bearer-only
+  // guard must reject it (exercises the !bearerOnly early-return branch).
+  const db = open(path.join(root, 'data', 'site.db'));
+  t.after(() => db.close());
+  inviteEmail(db, 'op@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'op-1', email: 'op@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/export',
+    headers: { cookie: `rkr_session=${session.id}` }
+  });
+  assert.equal(res.statusCode, 403, res.body);
 });

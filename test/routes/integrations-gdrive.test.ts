@@ -505,6 +505,84 @@ test('POST /admin/import/gdrive 415s when Drive returns non-image content-type',
   assert.match(res.json<ErrorBody>().error, /content-type/);
 });
 
+// ---- GET /admin/integrations/gdrive/fetch (raw bytes for the PWA) ----
+
+async function connectedFetchApp(t: TestContext, driveFetcher: typeof fetch) {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    gdrive: { exchange: stubExchange(), driveFetcher }
+  });
+  t.after(() => app.close());
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_gdrive_state=${stateCookie}` }
+  });
+  return { app, sessionCookie };
+}
+
+test('GET /admin/integrations/gdrive/fetch streams raw image bytes (no re-encode)', async (t) => {
+  const jpeg = await makeJpeg();
+  const { app, sessionCookie } = await connectedFetchApp(
+    t,
+    stubDriveFetcher('cat.jpg', 'image/jpeg', jpeg)
+  );
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/fetch?fileId=fake-id',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.match(res.headers['content-type'] as string, /^image\/jpeg/);
+  // Raw passthrough — bytes are the original JPEG, not the WebP the import re-encodes to.
+  assert.equal(res.rawPayload.length, jpeg.length);
+});
+
+test('GET /admin/integrations/gdrive/fetch 400s on missing fileId', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/fetch',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('GET /admin/integrations/gdrive/fetch 412s when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/fetch?fileId=x',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 412);
+});
+
+test('GET /admin/integrations/gdrive/fetch 415s on non-image content-type', async (t) => {
+  const { app, sessionCookie } = await connectedFetchApp(
+    t,
+    stubDriveFetcher('notes.txt', 'text/plain', Buffer.from('hello'))
+  );
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/fetch?fileId=x',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 415);
+});
+
 // Avoid unused-import warning when Readable type-imports stay around.
 test.after(() => {
   void Readable;

@@ -840,6 +840,83 @@ test('POST /admin/import/onedrive 400s when ingest fails', async (t) => {
   assert.equal(res.statusCode, 400);
 });
 
+// ---- GET /admin/integrations/onedrive/fetch (raw bytes for the PWA) ----
+
+async function connectedFetchApp(t: TestContext, graphFetcher: typeof fetch) {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher }
+  });
+  t.after(() => app.close());
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+  return { app, sessionCookie };
+}
+
+test('GET /admin/integrations/onedrive/fetch streams raw image bytes (no re-encode)', async (t) => {
+  const jpeg = await makeJpeg();
+  const { app, sessionCookie } = await connectedFetchApp(
+    t,
+    stubGraphFetcher('photo.jpg', 'image/jpeg', jpeg)
+  );
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/fetch?fileId=ms-id',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.match(res.headers['content-type'] as string, /^image\/jpeg/);
+  assert.equal(res.rawPayload.length, jpeg.length);
+});
+
+test('GET /admin/integrations/onedrive/fetch 400s on missing fileId', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/fetch',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('GET /admin/integrations/onedrive/fetch 412s when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/fetch?fileId=x',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 412);
+});
+
+test('GET /admin/integrations/onedrive/fetch 415s on non-image content-type', async (t) => {
+  const { app, sessionCookie } = await connectedFetchApp(
+    t,
+    stubGraphFetcher('notes.txt', 'text/plain', Buffer.from('hello'))
+  );
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/fetch?fileId=x',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 415);
+});
+
 test.after(() => {
   void Readable;
 });

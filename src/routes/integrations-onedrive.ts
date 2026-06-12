@@ -40,7 +40,12 @@ import {
 import { ingestStream } from '../lib/originals.ts';
 import { safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
-import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
+import {
+  type ProviderCallbackQuery,
+  type ProviderImportBody,
+  REMOTE_IMPORT_MAX_BYTES,
+  streamImageWithCap
+} from './integrations-shared.ts';
 
 const PROVIDER = 'onedrive';
 // AUTH_SCOPES go in the connect authorization URL (consent screen).
@@ -365,7 +370,7 @@ export default async function integrationsOnedriveRoutes(
         transform(chunk: Buffer, _enc, cb) {
           bytes += chunk.length;
           /* c8 ignore next 3 -- testing 50 MiB limit requires impractical stream size */
-          if (bytes > ONEDRIVE_MAX_BYTES) {
+          if (bytes > REMOTE_IMPORT_MAX_BYTES) {
             cb(new Error('streamed bytes exceeded limit'));
             return;
           }
@@ -397,11 +402,41 @@ export default async function integrationsOnedriveRoutes(
       }
     }
   );
-}
 
-/** Mirrors GDRIVE_MAX_BYTES + URL_FETCH_MAX_BYTES — keeps every
- * remote-import path bounded by the same per-request size cap. */
-const ONEDRIVE_MAX_BYTES = 50 * 1024 * 1024;
+  // Stream a OneDrive file's raw bytes to the browser for the standalone editor
+  // (reuses the import path's token-refresh + fetchOneDriveFile; no stored blob).
+  fastify.get<{ Querystring: { fileId?: string } }>(
+    '/admin/integrations/onedrive/fetch',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const fileId = req.query?.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim()) {
+        return reply.code(400).send({ error: 'fileId is required' });
+      }
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(412).send({ error: 'onedrive not connected' });
+      let drive: Awaited<ReturnType<typeof fetchOneDriveFile>>;
+      try {
+        drive = await fetchOneDriveFile(fresh.access_token, fileId, {
+          ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, fileId }, 'onedrive fetch failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+      if (!/^image\//i.test(drive.contentType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be image/*; got ${drive.contentType}` });
+      }
+      return streamImageWithCap(reply, drive.body, drive.contentType, REMOTE_IMPORT_MAX_BYTES);
+    }
+  );
+}
 
 /**
  * Read the user's onedrive token; if expired and a refresh token

@@ -28,7 +28,12 @@ import {
 import { ingestStream } from '../lib/originals.ts';
 import { safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
-import type { ProviderCallbackQuery, ProviderImportBody } from './integrations-shared.ts';
+import {
+  type ProviderCallbackQuery,
+  type ProviderImportBody,
+  REMOTE_IMPORT_MAX_BYTES,
+  streamImageWithCap
+} from './integrations-shared.ts';
 
 const PROVIDER = 'gdrive';
 const SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
@@ -225,7 +230,7 @@ export default async function integrationsGdriveRoutes(
       const limiter = new Transform({
         transform(chunk: Buffer, _enc, cb) {
           bytes += chunk.length;
-          if (bytes > GDRIVE_MAX_BYTES) {
+          if (bytes > REMOTE_IMPORT_MAX_BYTES) {
             cb(new Error('streamed bytes exceeded limit'));
             return;
           }
@@ -257,11 +262,41 @@ export default async function integrationsGdriveRoutes(
       }
     }
   );
-}
 
-/** Mirrors URL_FETCH_MAX_BYTES in src/routes/admin.ts; keeps the two
- * remote-import paths bounded by the same per-request size cap. */
-const GDRIVE_MAX_BYTES = 50 * 1024 * 1024;
+  // Stream a Drive file's raw bytes to the browser for the standalone editor
+  // (reuses the import path's token-refresh + fetchDriveFile; no stored blob).
+  fastify.get<{ Querystring: { fileId?: string } }>(
+    '/admin/integrations/gdrive/fetch',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const fileId = req.query?.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim()) {
+        return reply.code(400).send({ error: 'fileId is required' });
+      }
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(412).send({ error: 'gdrive not connected' });
+      let drive: Awaited<ReturnType<typeof fetchDriveFile>>;
+      try {
+        drive = await fetchDriveFile(fresh.access_token, fileId, {
+          ...(opts.driveFetcher ? { fetcher: opts.driveFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, fileId }, 'drive fetch failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+      if (!/^image\//i.test(drive.contentType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be image/*; got ${drive.contentType}` });
+      }
+      return streamImageWithCap(reply, drive.body, drive.contentType, REMOTE_IMPORT_MAX_BYTES);
+    }
+  );
+}
 
 /**
  * Read the user's gdrive token; if expired and a refresh token exists,
