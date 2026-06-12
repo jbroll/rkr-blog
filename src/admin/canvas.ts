@@ -12,6 +12,7 @@
 // original's full resolution when the source decodes; the browser
 // scales the resulting <img> to fit the editor frame.
 
+import type { SidecarOp } from '@rkr/image-edit';
 // SidecarOp lives in lib/sidecar-types.ts (a pure type module — no
 // node:fs / node:crypto, safe for the browser bundle). Callers import
 // from there directly; canvas.ts uses it internally.
@@ -19,14 +20,13 @@ import {
   clampInt,
   computeHomography,
   computeResampleSize,
+  inscribedRect,
   invertMatrix3,
   opsEqual,
   type Point,
   perspectiveOutputSize,
   simplifyOps
-} from '../lib/canvas-math.ts';
-import { inscribedRect } from '../lib/rotation.ts';
-import type { SidecarOp } from '../lib/sidecar-types.ts';
+} from '@rkr/image-edit';
 
 export interface CanvasSource {
   /** The decoded source pixels — anything `drawImage` accepts. */

@@ -4,7 +4,7 @@
 // main.ts owns the active-cell state and calls `activateForId`
 // after each selection / click change.
 
-import type { Editor } from '@tiptap/core';
+import type { SidecarOp } from '@rkr/image-edit';
 
 import {
   appendFlip,
@@ -16,8 +16,8 @@ import {
   localMutate,
   localRedo,
   localUndo
-} from '../lib/image-edit-ops.ts';
-import type { SidecarOp } from '../lib/sidecar-types.ts';
+} from '@rkr/image-edit';
+import type { Editor } from '@tiptap/core';
 import { getPreviewUrl, refreshImagePreview } from './canvas-loaders';
 import { openCropper } from './cropper-modal';
 import { setStatus } from './dom';

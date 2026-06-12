@@ -13,14 +13,13 @@ import path from 'node:path';
 import type { Readable } from 'node:stream';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import type { Sidecar, SidecarResizeRecord } from '@rkr/image-edit';
+import { FORMAT_TO_EXT, SHARP_INGEST_PIXEL_LIMIT } from '@rkr/image-edit';
 import sharp from 'sharp';
-
 import { readPersistedSiteConfig } from './config.ts';
-import { FORMAT_TO_EXT, SHARP_INGEST_PIXEL_LIMIT } from './image-constants.ts';
 import type { ResizeResult } from './ingest-resize.ts';
 import { resizeAndEncode } from './ingest-resize.ts';
 import { read as sidecarRead, write as sidecarWrite } from './sidecar.ts';
-import type { Sidecar, SidecarResizeRecord } from './sidecar-types.ts';
 
 // Default derivative set on first ingest. Matches the image widget
 // defaults (spec.md §5 sidecar schema). Caller can rewrite via POST

@@ -10,11 +10,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
+import type { SidecarOp } from '@rkr/image-edit';
 import sharp from 'sharp';
-
 import { bakePath, ingestStream } from '../../src/lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../../src/lib/sidecar.ts';
-import type { SidecarOp } from '../../src/lib/sidecar-types.ts';
 import { imageDimensions } from '../../src/lib/widget-helpers.ts';
 
 function freshSiteRoot(t: TestContext): string {

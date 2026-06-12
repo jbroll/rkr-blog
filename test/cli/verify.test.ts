@@ -4,13 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
+import type { Sidecar } from '@rkr/image-edit';
 import sharp from 'sharp';
-
 import { runVerify } from '../../src/cli/verify.ts';
 import { sha256File } from '../../src/lib/hash.ts';
 import { ingestStream, originalPath } from '../../src/lib/originals.ts';
 import { write as sidecarWrite } from '../../src/lib/sidecar.ts';
-import type { Sidecar } from '../../src/lib/sidecar-types.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-cli-verify-'));

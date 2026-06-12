@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateOps } from '../../src/lib/ops-validation.ts';
+import { validateOps } from '@rkr/image-edit';
 
 test('perspective op whose output area exceeds the pixel limit is rejected', () => {
   const corners = [

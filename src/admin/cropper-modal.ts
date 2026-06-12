@@ -4,9 +4,9 @@
 // them in that same space, so crop appends cleanly after prior
 // rotates / flips / earlier crops.
 
+import type { SidecarOp } from '@rkr/image-edit';
+import { type LocalEditState, localMutate } from '@rkr/image-edit';
 import Cropper from 'cropperjs';
-import { type LocalEditState, localMutate } from '../lib/image-edit-ops.ts';
-import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { getPipelineCache, loadOriginal, webpOrJpeg } from './canvas-loaders';
 import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';

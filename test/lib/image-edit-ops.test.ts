@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-
+import type { SidecarOp } from '@rkr/image-edit';
 import {
   appendFlip,
   appendRotate,
@@ -11,8 +11,7 @@ import {
   localMutate,
   localRedo,
   localUndo
-} from '../../src/lib/image-edit-ops.ts';
-import type { SidecarOp } from '../../src/lib/sidecar-types.ts';
+} from '@rkr/image-edit';
 
 const ROT90: SidecarOp = { type: 'rotate', degrees: 90 };
 const FLIPH: SidecarOp = { type: 'flip', axis: 'horizontal' };

@@ -18,14 +18,13 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import sharp from 'sharp';
-
 import {
   DEFAULT_INGEST_RESIZE,
   FORMAT_TO_EXT,
   INGEST_RESIZE_BOUNDS,
   SHARP_INGEST_PIXEL_LIMIT
-} from './image-constants.ts';
+} from '@rkr/image-edit';
+import sharp from 'sharp';
 
 interface ResizeOptions {
   /** Long-edge pixel cap. Image is shrunk so max(width,height) ≤ maxDim.

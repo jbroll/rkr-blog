@@ -15,13 +15,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { inscribedRect, SHARP_PIXEL_LIMIT } from '@rkr/image-edit';
 import sharp from 'sharp';
-
 import { cacheKey } from './hash.ts';
-import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, imageInfo } from './originals.ts';
 import { resamplePerspective } from './perspective-resample.ts';
-import { inscribedRect } from './rotation.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
 export type OutputFormat = 'webp' | 'avif' | 'jpeg' | 'png';

@@ -12,9 +12,9 @@
 // under full / bleed; `caption` / `matrix` under inline) are silently
 // ignored. The directive should be cheap to author.
 
+import type { Sidecar } from '@rkr/image-edit';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
-import type { Sidecar } from '../lib/sidecar-types.ts';
 import {
   extractDirectiveCaption,
   extractImageIdsAndAlts,

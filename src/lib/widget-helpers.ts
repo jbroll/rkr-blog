@@ -8,16 +8,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-
+import type { Sidecar } from '@rkr/image-edit';
+import { SHARP_PIXEL_LIMIT } from '@rkr/image-edit';
 import sharp from 'sharp';
-
 import { cacheKey } from './hash.ts';
-import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
 import { bakePath, imageInfo } from './originals.ts';
 import { resamplePerspective } from './perspective-resample.ts';
 import { listSidecarIds } from './posts.ts';
 import { applyOp, type Op, type OutputFormat } from './render.ts';
-import type { Sidecar } from './sidecar-types.ts';
 import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;

@@ -1,6 +1,6 @@
 // Pin an existing post into OPFS for offline editing (spec-offline §6).
 
-import type { Sidecar } from '../lib/sidecar-types.ts';
+import type { Sidecar } from '@rkr/image-edit';
 import { readMeta, updateMeta } from './draft.ts';
 import { listDir, readBlob, writeBlob, writeJson } from './opfs.ts';
 import { mutateRoot, OPFS_DIRS } from './opfs-schema.ts';

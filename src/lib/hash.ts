@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import type { Readable } from 'node:stream';
 
-import { type CanonicalValue, canonicalJson } from './canonical-json.ts';
+import { type CanonicalValue, canonicalJson } from '@rkr/image-edit';
 
 export interface CacheKeyArgs {
   originalId: string;

@@ -14,10 +14,9 @@
 // future-clamp compare savePost uses.
 
 import fs from 'node:fs';
-
-import { canonicalJson } from '../lib/canonical-json.ts';
+import type { Sidecar } from '@rkr/image-edit';
+import { canonicalJson } from '@rkr/image-edit';
 import { sidecarPath } from '../lib/sidecar.ts';
-import type { Sidecar } from '../lib/sidecar-types.ts';
 
 /** The sidecar's current updated_at (file mtime) as an ISO string, or
  * null when the sidecar file is absent. Echoed by /meta as the

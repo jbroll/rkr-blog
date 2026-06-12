@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { Sidecar } from './sidecar-types.ts';
+import type { Sidecar } from '@rkr/image-edit';
 
 export const CURRENT_VERSION = 1;
 const SHA256_HEX = /^[0-9a-f]{64}$/;

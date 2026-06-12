@@ -1,7 +1,7 @@
 // Pure types + coalescing for the outbox. OPFS-coupled side lives
 // in src/admin/outbox.ts; ops table is in spec-offline §5.
 
-import type { SidecarOp } from './sidecar-types.ts';
+import type { SidecarOp } from '@rkr/image-edit';
 
 /** @public */
 export type OutboxOp = 'upload' | 'commitImageEdit' | 'savePost';

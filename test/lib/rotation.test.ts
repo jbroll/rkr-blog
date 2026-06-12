@@ -1,7 +1,7 @@
 // test/lib/rotation.test.ts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inscribedRect } from '../../src/lib/rotation.ts';
+import { inscribedRect } from '@rkr/image-edit';
 
 test('inscribedRect: identity at 0°', () => {
   assert.deepEqual(inscribedRect(1920, 1080, 0), { iw: 1920, ih: 1080, left: 0, top: 0 });

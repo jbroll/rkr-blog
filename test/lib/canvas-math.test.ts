@@ -18,7 +18,7 @@ import {
   type Point,
   perspectiveOutputSize,
   simplifyOps
-} from '../../src/lib/canvas-math.ts';
+} from '@rkr/image-edit';
 
 test('computeResampleSize: w only (downscale, preserves aspect)', () => {
   // 800×600 bounded by w=400 → scale 0.5; h follows.

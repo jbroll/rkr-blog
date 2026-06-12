@@ -6,10 +6,12 @@
   "exports": {
     ".": {
       "types": "./dist/core/index.d.ts",
+      "development": "./src/core/index.ts",
       "default": "./dist/core/index.js"
     },
     "./canvas": {
       "types": "./dist/canvas/index.d.ts",
+      "development": "./src/canvas/index.ts",
       "default": "./dist/canvas/index.js"
     }
   },

@@ -9,9 +9,9 @@
 // admin strip is rendered (isAdmin: true) because the page is gated
 // behind requireUser.
 
+import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import { TEASER_WORDS_BOUNDS } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '../lib/image-constants.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 
-import { canonicalJson } from '../../src/lib/canonical-json.ts';
+import { canonicalJson } from '@rkr/image-edit';
 import { cacheKey, sha256File, sha256Stream } from '../../src/lib/hash.ts';
 
 // ---- canonicalJson -----------------------------------------------------

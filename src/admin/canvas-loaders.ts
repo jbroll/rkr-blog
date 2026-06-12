@@ -3,9 +3,8 @@
 // Avoids a server round-trip per click. Falls back to the server-baked
 // preview when the browser can't decode the format (notably HEIC).
 
+import type { SidecarOp } from '@rkr/image-edit';
 import type { Editor } from '@tiptap/core';
-
-import type { SidecarOp } from '../lib/sidecar-types.ts';
 import { PipelineCache } from './canvas';
 import { setStatus } from './dom';
 import { readLocalOriginal } from './local-thumb';

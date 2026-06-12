@@ -6,8 +6,8 @@
 // wall-clock budget; past that it returns 202 and the client retries.
 
 import fs from 'node:fs';
+import type { Sidecar } from '@rkr/image-edit';
 import type { FastifyInstance } from 'fastify';
-
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { enqueue, noteLiveRender } from '../lib/jobs.ts';
@@ -21,7 +21,6 @@ import {
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
-import type { Sidecar } from '../lib/sidecar-types.ts';
 import { imageDimensions } from '../lib/widget-helpers.ts';
 
 // Smallest source dimension the derivative pipeline will accept.

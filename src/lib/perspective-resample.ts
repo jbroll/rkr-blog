@@ -18,8 +18,12 @@
 //      the editor's UI clamps drag handles to the image rect, so
 //      corners are always within bounds at op-emit time.
 
-import { computeHomography, invertMatrix3, perspectiveOutputSize } from './canvas-math.ts';
-import { SHARP_PIXEL_LIMIT } from './image-constants.ts';
+import {
+  computeHomography,
+  invertMatrix3,
+  perspectiveOutputSize,
+  SHARP_PIXEL_LIMIT
+} from '@rkr/image-edit';
 
 export interface PerspectiveResult {
   buffer: Buffer;

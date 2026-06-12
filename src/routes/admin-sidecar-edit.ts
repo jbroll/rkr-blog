@@ -13,14 +13,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-
+import { SHARP_PIXEL_LIMIT, validateOps } from '@rkr/image-edit';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import sharp from 'sharp';
-
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import type { Db } from '../lib/db.ts';
-import { SHARP_PIXEL_LIMIT } from '../lib/image-constants.ts';
-import { validateOps } from '../lib/ops-validation.ts';
 import { bakePath, imageInfo } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
 import { readIdempotencyKey } from './admin-idempotency.ts';

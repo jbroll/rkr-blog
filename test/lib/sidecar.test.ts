@@ -3,9 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
-
+import type { Sidecar } from '@rkr/image-edit';
 import { CURRENT_VERSION, read, sidecarPath, validate, write } from '../../src/lib/sidecar.ts';
-import type { Sidecar } from '../../src/lib/sidecar-types.ts';
 
 const HEX64 = 'a'.repeat(64);
 

@@ -3,10 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
-
+import type { Sidecar } from '@rkr/image-edit';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
-import type { Sidecar } from '../../src/lib/sidecar-types.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {

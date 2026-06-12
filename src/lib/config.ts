@@ -3,9 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
+import { INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import { writeFileAtomicSync } from './atomic-write.ts';
-import { INGEST_RESIZE_BOUNDS } from './image-constants.ts';
 
 /** Bounds for the teaser word-limit setting. 0 disables truncation;
  * the upper bound is a sanity cap (a lede longer than this is not a

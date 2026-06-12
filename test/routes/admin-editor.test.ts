@@ -4,11 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
+import type { SidecarOp } from '@rkr/image-edit';
 import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
-
 import { ingestStream } from '../../src/lib/originals.ts';
-import type { SidecarOp } from '../../src/lib/sidecar-types.ts';
 import { buildApp } from '../../src/server.ts';
 import { buildMultipartParts } from '../helpers/multipart.ts';
 
