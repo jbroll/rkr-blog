@@ -4,6 +4,10 @@
   "description": "Single-author CMS with photo-first content model.",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
@@ -15,8 +19,8 @@
     "test": "node --test --no-warnings=ExperimentalWarning --experimental-strip-types 'test/**/*.test.ts'",
     "test:coverage": "c8 --include='src/**/*.ts' --exclude='src/admin/**' --exclude='**/*.test.ts' --reporter=text --check-coverage --per-file --lines=90 --branches=75 --functions=90 -- node --no-warnings=ExperimentalWarning --experimental-strip-types --test 'test/**/*.test.ts'",
     "test:coverage:report": "c8 --include='src/**/*.ts' --exclude='src/admin/**' --exclude='**/*.test.ts' --reporter=text --reporter=text-summary -- node --no-warnings=ExperimentalWarning --experimental-strip-types --test 'test/**/*.test.ts'",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit",
-    "type-check": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit && npm run typecheck -w @rkr/image-edit && npm run typecheck -w @rkr/image-pwa",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.browser.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && npm run typecheck -w @rkr/image-edit && npm run typecheck -w @rkr/image-pwa",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "knip": "knip",
@@ -30,7 +34,8 @@
     "check": "npm run typecheck && biome check && npm run test:coverage",
     "build:admin": "rm -rf static/admin && esbuild src/admin/main.ts src/admin/posts-list.ts src/admin/settings-page.ts --bundle --splitting --format=esm --target=es2022 --outdir=static/admin --entry-names=[name] --minify --sourcemap && esbuild src/admin/opfs-worker.ts --bundle --format=esm --target=es2022 --outdir=static/admin --entry-names=[name] --minify --sourcemap",
     "build:site": "rm -rf static/site && esbuild src/site/lightbox.ts src/site/carousel.ts src/site/img-retry.ts src/site/copy-link.ts src/site/comment-form.ts src/site/sw-unregister.ts src/site/sw-admin.ts src/site/sw-admin-register.ts --bundle --splitting --format=esm --target=es2022 --outdir=static/site --sourcemap --minify",
-    "build": "npm run build:admin && npm run build:site",
+    "build:packages": "npm run build -w @rkr/image-edit",
+    "build": "npm run build:packages && npm run build:admin && npm run build:site",
     "clean:admin": "rm -rf static/admin",
     "clean:site": "rm -rf static/site",
     "setup": "bash scripts/setup.sh",
@@ -60,49 +65,67 @@
     "yaml": "^2.5.0"
   },
   "knip": {
-    "entry": [
-      "src/cli/init.ts",
-      "src/cli/migrate.ts",
-      "src/cli/render.ts",
-      "src/cli/gc.ts",
-      "src/cli/server.ts",
-      "src/cli/user.ts",
-      "src/cli/import-wp.ts",
-      "src/cli/reset.ts",
-      "src/cli/jobs.ts",
-      "src/cli/fix-wp-dates.ts",
-      "src/cli/export.ts",
-      "src/cli/import.ts",
-      "src/admin/opfs-worker.ts",
-      "src/admin/posts-list.ts",
-      "src/admin/settings-page.ts",
-      "src/site/carousel.ts",
-      "src/site/copy-link.ts",
-      "src/site/comment-form.ts",
-      "src/site/img-retry.ts",
-      "src/site/sw-unregister.ts",
-      "src/site/sw-admin.ts",
-      "src/site/sw-admin-register.ts",
-      "scripts/check-bundle-size.ts",
-      "scripts/check-orientation.mjs",
-      "test/**/*.test.ts",
-      "test/e2e/**/*.spec.ts",
-      "test/playwright.config.ts",
-      "bin/site-admin",
-      "src/lib/comments.ts"
-    ],
-    "ignore": [
-      "src/admin/css.d.ts",
-      "src/site/css.d.ts",
-      ".claude/**",
-      ".claire/**"
-    ],
     "ignoreBinaries": [
       "lefthook"
     ],
     "ignoreDependencies": [
       "typescript-language-server"
-    ]
+    ],
+    "workspaces": {
+      ".": {
+        "entry": [
+          "src/cli/init.ts",
+          "src/cli/migrate.ts",
+          "src/cli/render.ts",
+          "src/cli/gc.ts",
+          "src/cli/server.ts",
+          "src/cli/user.ts",
+          "src/cli/import-wp.ts",
+          "src/cli/reset.ts",
+          "src/cli/jobs.ts",
+          "src/cli/fix-wp-dates.ts",
+          "src/cli/export.ts",
+          "src/cli/import.ts",
+          "src/admin/opfs-worker.ts",
+          "src/admin/posts-list.ts",
+          "src/admin/settings-page.ts",
+          "src/site/carousel.ts",
+          "src/site/copy-link.ts",
+          "src/site/comment-form.ts",
+          "src/site/img-retry.ts",
+          "src/site/sw-unregister.ts",
+          "src/site/sw-admin.ts",
+          "src/site/sw-admin-register.ts",
+          "scripts/check-bundle-size.ts",
+          "scripts/check-orientation.mjs",
+          "test/**/*.test.ts",
+          "test/e2e/**/*.spec.ts",
+          "test/playwright.config.ts",
+          "bin/site-admin",
+          "src/lib/comments.ts"
+        ],
+        "ignore": [
+          "src/admin/css.d.ts",
+          "src/site/css.d.ts",
+          ".claude/**",
+          ".claire/**"
+        ]
+      },
+      "packages/image-edit": {
+        "entry": [
+          "src/core/index.ts",
+          "src/canvas/index.ts"
+        ],
+        "project": ["src/**/*.ts"]
+      },
+      "apps/image-pwa": {
+        "entry": [
+          "src/main.ts",
+          "src/sw.ts"
+        ],
+        "project": ["src/**/*.ts"]
+      }
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",

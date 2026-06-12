@@ -4,6 +4,10 @@ node_modules/
 static/admin/
 static/site/
 
+# Workspace package/app build artifacts
+packages/*/dist/
+apps/*/dist/
+
 # c8 coverage output (test:coverage / test:coverage:report)
 coverage/
 .nyc_output/

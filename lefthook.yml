@@ -25,8 +25,9 @@ pre-commit:
     # e2e-tests: build admin+site bundles before running Playwright.
     # Glob narrowed to admin/site source so lib/routes/bin changes skip E2E.
     e2e-tests:
-      glob: "src/{admin,site}/**/*.ts"
+      glob: "{src/admin,src/site,packages/image-edit/src,apps/image-pwa/src}/**/*.ts"
       run: |
+        npm run --silent build:packages
         npm run --silent build:admin
         npm run --silent build:site
         SCI=/home/john/src/simple-ci/sci
@@ -49,8 +50,8 @@ pre-commit:
     # Exempt SW/worker files: they run in isolated threads that Playwright's
     # V8 coverage cannot instrument (no JS coverage events on worker threads).
     coverage-ratchet-e2e:
-      glob: "src/{admin,site}/**/*.ts"
-      exclude: '(sw-admin|sw-admin-register|opfs-worker|opfs-worker-msg)\.ts$'
+      glob: "{src/admin,src/site,packages/image-edit/src,apps/image-pwa/src}/**/*.ts"
+      exclude: '(sw-admin|sw-admin-register|opfs-worker|opfs-worker-msg|sw)\.ts$'
       env:
         COVERAGE_E2E_LCOV: coverage/e2e/lcov.info
         COVERAGE_E2E_BASELINE: scripts/coverage-baseline.json
@@ -59,7 +60,7 @@ pre-commit:
     # Runs after e2e-tests (bundles already built at that point).
     bundle-size-ratchet:
       depends_on: [e2e-tests]
-      glob: "src/{admin,site}/**/*.ts"
+      glob: "{src/admin,src/site,packages/image-edit/src,apps/image-pwa/src}/**/*.ts"
       run: |
         node --no-warnings=ExperimentalWarning --experimental-strip-types \
           scripts/check-bundle-size.ts

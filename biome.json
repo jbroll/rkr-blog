@@ -13,6 +13,8 @@
       "test/**/*.js",
       "test/**/*.ts",
       "scripts/**/*.ts",
+      "packages/*/src/**/*.ts",
+      "apps/*/src/**/*.ts",
       "bin/server.js",
       "bin/site-admin",
       "!!**/.claude",

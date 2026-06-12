@@ -1,0 +1,23 @@
+{
+  "name": "@rkr/image-edit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    },
+    "./canvas": {
+      "types": "./dist/canvas/index.d.ts",
+      "default": "./dist/canvas/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.core.json && tsc -p tsconfig.canvas.json",
+    "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.canvas.json"
+  }
+}

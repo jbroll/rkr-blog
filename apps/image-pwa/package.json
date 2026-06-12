@@ -1,0 +1,10 @@
+{
+  "name": "@rkr/image-pwa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --splitting --format=esm --target=es2022 --outdir=dist --minify --sourcemap && esbuild src/sw.ts --bundle --format=esm --target=es2022 --outdir=dist --minify --sourcemap",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
