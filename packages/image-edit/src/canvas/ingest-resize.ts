@@ -19,7 +19,7 @@
 // SVG, animated GIF, and other decodable-but-wrong-to-re-encode types return
 // null so the caller falls back to raw upload as before.
 
-import { supportsWebP } from './canvas-loaders';
+import { supportsWebP } from './encode.ts';
 
 const MAX_LONG_EDGE = 3200;
 const WEBP_QUALITY = 0.82;

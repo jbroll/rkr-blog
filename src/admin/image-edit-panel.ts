@@ -17,9 +17,19 @@ import {
   localRedo,
   localUndo
 } from '@rkr/image-edit';
+import {
+  type CanvasSource,
+  openCropper,
+  openPerspective,
+  type PipelineCache
+} from '@rkr/image-edit/canvas';
 import type { Editor } from '@tiptap/core';
-import { getPreviewUrl, refreshImagePreview } from './canvas-loaders';
-import { openCropper } from './cropper-modal';
+import {
+  getPipelineCache,
+  getPreviewUrl,
+  loadOriginal,
+  refreshImagePreview
+} from './canvas-loaders';
 import { setStatus } from './dom';
 import {
   ensureLocalState,
@@ -27,7 +37,6 @@ import {
   persistImageState,
   saveImageEdits
 } from './image-edit';
-import { openPerspective } from './perspective-modal';
 
 interface ImageEditPanelButtons {
   crop: HTMLButtonElement;
@@ -174,8 +183,33 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     fn(id, s);
   }
 
+  /** The package modals take a decoded source + pipeline (no data-layer
+   * coupling); resolve them here from the blog's id-based loaders, then run
+   * `open`. Surfaces load failures on the editor status line. */
+  async function withCanvasSource(
+    id: string,
+    open: (source: CanvasSource, pipeline: PipelineCache) => Promise<void>
+  ): Promise<void> {
+    try {
+      const img = await loadOriginal(id);
+      const source: CanvasSource = {
+        drawable: img,
+        width: img.naturalWidth,
+        height: img.naturalHeight
+      };
+      await open(source, getPipelineCache(id));
+    } catch (err) {
+      setStatus(`edit: ${(err as Error).message}`, true);
+    }
+  }
+
   buttons.crop.addEventListener('click', () =>
-    runWithState((id, s) => void openCropper(id, s, () => refreshAfterEdit(id, s, 'crop')))
+    runWithState(
+      (id, s) =>
+        void withCanvasSource(id, (source, pipeline) =>
+          openCropper(source, pipeline, s, () => refreshAfterEdit(id, s, 'crop'), setStatus)
+        )
+    )
   );
   buttons.rotateL.addEventListener('click', () =>
     runEdit('rotate', (ops) => appendRotate(ops, -90))
@@ -191,7 +225,16 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   );
   buttons.perspective.addEventListener('click', () =>
     runWithState(
-      (id, s) => void openPerspective(id, s, () => refreshAfterEdit(id, s, 'perspective'))
+      (id, s) =>
+        void withCanvasSource(id, (source, pipeline) =>
+          openPerspective(
+            source,
+            pipeline,
+            s,
+            () => refreshAfterEdit(id, s, 'perspective'),
+            setStatus
+          )
+        )
     )
   );
   buttons.undo.addEventListener('click', () =>

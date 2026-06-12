@@ -5,17 +5,17 @@
 // current-canvas (post-prior-ops) space. The canvas pipeline's
 // applyPerspective then runs a WebGL homography to rectify.
 
-import type { SidecarOp } from '@rkr/image-edit';
 import {
   computeHomography,
   type LocalEditState,
   localMutate,
   type Point,
-  perspectiveOutputSize
+  perspectiveOutputSize,
+  type SidecarOp
 } from '@rkr/image-edit';
-import { getPipelineCache, loadOriginal, webpOrJpeg } from './canvas-loaders';
-import { openModal } from './dialog-focus';
-import { $, setStatus } from './dom';
+import type { CanvasSource, PipelineCache } from './canvas.ts';
+import { $, openModal, type StatusFn } from './dom-helpers.ts';
+import { webpOrJpeg } from './encode.ts';
 
 interface PerspSession {
   /** Canvas-pixel coords of the four handles, in tl/tr/br/bl order. */
@@ -29,10 +29,16 @@ interface PerspSession {
 
 let activePersp: PerspSession | null = null;
 
+/** Open the perspective-rectify dialog over the current post-ops canvas. Host
+ * supplies the decoded `source` + its `pipeline` and an `onStatus` sink; on save
+ * it appends a perspective op to `s` and calls `onSaved`. The host page must
+ * declare the `rkr-persp-*` dialog markup (incl. the SVG overlay). */
 export async function openPerspective(
-  id: string,
+  source: CanvasSource,
+  pipeline: PipelineCache,
   s: LocalEditState,
-  onSaved: () => void
+  onSaved: () => void,
+  onStatus: StatusFn = () => {}
 ): Promise<void> {
   const dialog = $<HTMLDialogElement>('rkr-persp-modal');
   const stage = $<HTMLDivElement>('rkr-persp-stage');
@@ -42,7 +48,7 @@ export async function openPerspective(
   const cancelBtn = $<HTMLButtonElement>('rkr-persp-cancel');
   const saveBtn = $<HTMLButtonElement>('rkr-persp-save');
   if (!svg) {
-    setStatus('perspective: SVG overlay missing');
+    onStatus('perspective: SVG overlay missing');
     return;
   }
   const svgEl: SVGSVGElement = svg;
@@ -50,24 +56,16 @@ export async function openPerspective(
   // Build the post-ops canvas (current-state baseline for perspective).
   let canvas: HTMLCanvasElement;
   try {
-    const original = await loadOriginal(id);
-    canvas = getPipelineCache(id).apply(
-      {
-        drawable: original,
-        width: original.naturalWidth,
-        height: original.naturalHeight
-      },
-      s.ops
-    );
+    canvas = pipeline.apply(source, s.ops);
   } catch (err) {
-    setStatus(`perspective: ${(err as Error).message}`);
+    onStatus(`perspective: ${(err as Error).message}`);
     return;
   }
   let blob: Blob;
   try {
     blob = await webpOrJpeg(canvas);
   } catch (err) {
-    setStatus(`perspective: ${(err as Error).message}`);
+    onStatus(`perspective: ${(err as Error).message}`);
     return;
   }
   const stageUrl = URL.createObjectURL(blob);

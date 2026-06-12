@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # E2E job (sci-tiered tier-2 pushes this as <wt>/ci/e2e, in parallel with
-# ci/test). Builds the bundles, runs Playwright (emitting coverage/e2e/lcov.info
-# for the union ratchet), then the bespoke admin/site E2E-coverage check.
+# ci/test). Builds the bundles and runs Playwright, emitting
+# coverage/e2e/lcov.info which sci-tiered scp's for the union coverage ratchet.
+# (The bespoke check-e2e-coverage.ts was removed in b644581 when this repo
+# migrated coverage gating to org-hooks; don't reintroduce it.)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,8 +14,3 @@ npm run --silent build:packages
 npm run --silent build:admin
 npm run --silent build:site
 npm run test:e2e
-
-admin_site_files=$(find src/admin src/site -name '*.ts' | tr '\n' ' ')
-# shellcheck disable=SC2086
-node --no-warnings=ExperimentalWarning --experimental-strip-types \
-  scripts/check-e2e-coverage.ts $admin_site_files

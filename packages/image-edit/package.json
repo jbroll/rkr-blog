@@ -21,5 +21,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.core.json && tsc -p tsconfig.canvas.json",
     "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.canvas.json"
+  },
+  "dependencies": {
+    "cropperjs": "^1.6.2"
   }
 }

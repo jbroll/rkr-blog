@@ -20,8 +20,8 @@
 // corrupt files) now throw so the author sees a clear error rather than
 // a silent raw-upload that would cause coord divergence.
 
+import { resizeForUpload } from '@rkr/image-edit/canvas';
 import { computeContentId, extForMime } from '../lib/content-id.ts';
-import { resizeForUpload } from './ingest-resize-client.ts';
 import { writeBlob } from './opfs.ts';
 import { append as outboxAppend } from './outbox.ts';
 import { markPendingUpload } from './pending-uploads.ts';

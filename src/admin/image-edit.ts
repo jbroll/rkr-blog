@@ -1,9 +1,10 @@
 // In-memory edit state per image id, fetch/save against the server
-// or queue offline. Pure mutators live in src/lib/image-edit-ops.ts.
+// or queue offline. Pure mutators live in @rkr/image-edit.
 
 import type { SidecarOp } from '@rkr/image-edit';
 import { isDirty, type LocalEditState, validateOps } from '@rkr/image-edit';
-import { getPipelineCache, loadOriginal, webpOrJpeg } from './canvas-loaders';
+import { webpOrJpeg } from '@rkr/image-edit/canvas';
+import { getPipelineCache, loadOriginal } from './canvas-loaders';
 import { setStatus } from './dom.ts';
 import { getState } from './online-state.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';

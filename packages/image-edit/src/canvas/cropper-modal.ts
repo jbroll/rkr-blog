@@ -4,19 +4,24 @@
 // them in that same space, so crop appends cleanly after prior
 // rotates / flips / earlier crops.
 
-import type { SidecarOp } from '@rkr/image-edit';
-import { type LocalEditState, localMutate } from '@rkr/image-edit';
+import { type LocalEditState, localMutate, type SidecarOp } from '@rkr/image-edit';
 import Cropper from 'cropperjs';
-import { getPipelineCache, loadOriginal, webpOrJpeg } from './canvas-loaders';
-import { openModal } from './dialog-focus';
-import { $, setStatus } from './dom';
+import type { CanvasSource, PipelineCache } from './canvas.ts';
+import { $, openModal, type StatusFn } from './dom-helpers.ts';
+import { webpOrJpeg } from './encode.ts';
 
 let activeCropper: Cropper | null = null;
 
+/** Open the crop dialog over the current post-ops canvas. The host supplies
+ * the decoded `source` + its `pipeline` (so this stays free of any data-layer
+ * coupling) and an `onStatus` sink; on save it appends a crop op to `s` and
+ * calls `onSaved`. The host page must declare the `rkr-crop-*` dialog markup. */
 export async function openCropper(
-  id: string,
+  source: CanvasSource,
+  pipeline: PipelineCache,
   s: LocalEditState,
-  onSaved: () => void
+  onSaved: () => void,
+  onStatus: StatusFn = () => {}
 ): Promise<void> {
   const dialog = $<HTMLDialogElement>('rkr-crop-modal');
   const stageImg = $<HTMLImageElement>('rkr-crop-img');
@@ -25,24 +30,16 @@ export async function openCropper(
   const saveBtn = $<HTMLButtonElement>('rkr-crop-save');
 
   if (!s.sourceWidth || !s.sourceHeight) {
-    setStatus('crop: source image has no recorded dimensions', true);
+    onStatus('crop: source image has no recorded dimensions', true);
     return;
   }
 
   status.textContent = 'loading…';
   let canvas: HTMLCanvasElement;
   try {
-    const original = await loadOriginal(id);
-    canvas = getPipelineCache(id).apply(
-      {
-        drawable: original,
-        width: original.naturalWidth,
-        height: original.naturalHeight
-      },
-      s.ops
-    );
+    canvas = pipeline.apply(source, s.ops);
   } catch (err) {
-    setStatus(`crop: ${(err as Error).message}`, true);
+    onStatus(`crop: ${(err as Error).message}`, true);
     return;
   }
 
@@ -50,7 +47,7 @@ export async function openCropper(
   try {
     blob = await webpOrJpeg(canvas);
   } catch (err) {
-    setStatus(`crop: ${(err as Error).message}`, true);
+    onStatus(`crop: ${(err as Error).message}`, true);
     return;
   }
   const stageUrl = URL.createObjectURL(blob);
