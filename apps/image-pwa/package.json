@@ -6,5 +6,9 @@
   "scripts": {
     "build": "esbuild src/main.ts --bundle --splitting --format=esm --target=es2022 --outdir=dist --minify --sourcemap && esbuild src/sw.ts --bundle --format=esm --target=es2022 --outdir=dist --minify --sourcemap",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@rkr/image-edit": "*",
+    "cropperjs": "^1.6.2"
   }
 }

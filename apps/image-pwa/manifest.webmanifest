@@ -1,0 +1,9 @@
+{
+  "name": "Image Editor",
+  "short_name": "ImageEdit",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1b1d21",
+  "theme_color": "#1b1d21"
+}

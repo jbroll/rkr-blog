@@ -1,0 +1,187 @@
+:root {
+  --rkr-bg: #1b1d21;
+  --rkr-text: #e8e8ea;
+  --rkr-muted: #9aa0a6;
+  --rkr-rule: #3a3d42;
+  --rkr-link: #5b9dff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--rkr-bg);
+  color: var(--rkr-text);
+}
+
+.app-bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--rkr-rule);
+}
+.app-bar h1 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.app-bar .pick {
+  cursor: pointer;
+  color: var(--rkr-link);
+}
+.app-bar .pick input {
+  display: none;
+}
+#status {
+  margin-left: auto;
+  color: var(--rkr-muted);
+  font-size: 0.9rem;
+}
+#status.is-error {
+  color: #ff6b6b;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--rkr-rule);
+}
+.toolbar .spacer {
+  flex: 1;
+}
+.toolbar button,
+.toolbar select {
+  padding: 0.3rem 0.7rem;
+  background: #2a2d32;
+  color: var(--rkr-text);
+  border: 1px solid var(--rkr-rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.toolbar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--rkr-muted);
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 1.5rem;
+}
+.stage #empty {
+  color: var(--rkr-muted);
+}
+.stage #preview {
+  max-width: 100%;
+  max-height: 80vh;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Modal shells (mirrors the blog admin dialog styles) ─────────────── */
+#rkr-crop-modal,
+#rkr-persp-modal {
+  border: 1px solid var(--rkr-rule);
+  border-radius: 6px;
+  padding: 0;
+  width: min(80vw, 60rem);
+  max-width: 95vw;
+  max-height: 90vh;
+  background: var(--rkr-bg);
+  color: var(--rkr-text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+#rkr-crop-modal::backdrop,
+#rkr-persp-modal::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+#rkr-crop-modal h2,
+#rkr-persp-modal h2 {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border-bottom: 1px solid var(--rkr-rule);
+}
+#rkr-crop-modal .rkr-crop-stage {
+  height: 60vh;
+  max-height: 32rem;
+  background: color-mix(in srgb, var(--rkr-text) 90%, var(--rkr-bg));
+}
+#rkr-crop-modal .rkr-crop-stage img {
+  display: block;
+  max-width: 100%;
+}
+#rkr-crop-modal .rkr-crop-actions,
+#rkr-persp-modal .rkr-persp-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem;
+  border-top: 1px solid var(--rkr-rule);
+  justify-content: flex-end;
+}
+#rkr-crop-status,
+#rkr-persp-status {
+  flex: 1;
+  color: var(--rkr-muted);
+  font-size: 0.9rem;
+}
+#rkr-crop-modal button,
+#rkr-persp-modal button {
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+}
+#rkr-persp-modal .rkr-persp-stage {
+  position: relative;
+  height: 60vh;
+  max-height: 32rem;
+  background: color-mix(in srgb, var(--rkr-text) 90%, var(--rkr-bg));
+  overflow: hidden;
+}
+#rkr-persp-modal .rkr-persp-stage img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 100%;
+  max-height: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+#rkr-persp-modal .rkr-persp-stage svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#rkr-persp-modal .rkr-persp-handle {
+  position: absolute;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: -0.625rem 0 0 -0.625rem;
+  background: var(--rkr-link);
+  border: 2px solid var(--rkr-bg);
+  border-radius: 50%;
+  cursor: grab;
+  box-shadow: 0 0 0 1px var(--rkr-rule);
+  touch-action: none;
+}
+#rkr-persp-modal .rkr-persp-handle:active {
+  cursor: grabbing;
+}

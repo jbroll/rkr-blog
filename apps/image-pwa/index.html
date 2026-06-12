@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1b1d21" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./dist/main.css" />
+    <title>Image Editor</title>
+  </head>
+  <body>
+    <header class="app-bar">
+      <h1>Image Editor</h1>
+      <label class="pick">
+        Open image…
+        <input id="file" type="file" accept="image/*" />
+      </label>
+      <span id="status"></span>
+    </header>
+
+    <div id="toolbar" class="toolbar" hidden></div>
+
+    <main class="stage">
+      <p id="empty">Pick or drop an image to start editing.</p>
+      <img id="preview" alt="edited image preview" hidden />
+    </main>
+
+    <!-- Crop dialog — element ids match @rkr/image-edit/canvas openCropper. -->
+    <dialog id="rkr-crop-modal" aria-labelledby="rkr-crop-modal-title">
+      <h2 id="rkr-crop-modal-title">Crop image</h2>
+      <div class="rkr-crop-stage">
+        <img id="rkr-crop-img" alt="" />
+      </div>
+      <div class="rkr-crop-actions">
+        <span id="rkr-crop-status"></span>
+        <button type="button" id="rkr-crop-cancel">Cancel</button>
+        <button type="button" id="rkr-crop-save">Save crop</button>
+      </div>
+    </dialog>
+
+    <!-- Perspective dialog — element ids match openPerspective. -->
+    <dialog id="rkr-persp-modal" aria-labelledby="rkr-persp-modal-title">
+      <h2 id="rkr-persp-modal-title">Perspective rectify</h2>
+      <div class="rkr-persp-stage" id="rkr-persp-stage">
+        <img id="rkr-persp-img" alt="" />
+        <svg id="rkr-persp-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="rkr-persp-actions">
+        <span id="rkr-persp-status">Drag the four handles to the corners of the region to straighten</span>
+        <button type="button" id="rkr-persp-cancel">Cancel</button>
+        <button type="button" id="rkr-persp-save">Save perspective</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="./dist/main.js"></script>
+  </body>
+</html>

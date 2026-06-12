@@ -47,3 +47,6 @@ lefthook-local.yml
 
 # agent worktrees (harness-managed, never tracked)
 .claude/worktrees/
+
+# Playwright MCP scratch
+.playwright-mcp/
