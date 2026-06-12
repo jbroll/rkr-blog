@@ -1,66 +1,19 @@
+# Zero-override tiered gate — ALL hook logic lives in org-hooks
+# (profiles/sci-tiered.yml): hygiene, secrets, format-lint, dup-types,
+# no-reexports, size-caps, typecheck, knip, circular, and the tier-2 GPU
+# dispatch (unit + e2e in parallel via simple-ci, fail-fast, union coverage
+# ratchet). This repo carries NO local pre-commit block by design — see the
+# header of sci-tiered.yml for why local overrides are unsafe to merge.
+#
+# Repo-specific wiring instead lives where it belongs:
+#   - CI jobs:      ci/test (unit + bundle-size), ci/e2e (Playwright)
+#   - npm scripts:  type-check (all tsconfigs), knip (workspace map)
+#   - env knobs:    lefthook-rc.sh (ORG_HOOKS, optional DPDM_CIRCULAR, etc.)
 remotes:
   - git_url: /home/john/src/org-hooks
-    ref: v0.6.9
+    ref: main
+    refetch: true
     configs:
-      - lefthook-common.yml
-      - profiles/ts.yml
-      - profiles/sci.yml
-      - profiles/coverage.yml
+      - profiles/sci-tiered.yml
 
 rc: /home/john/src/rkr-blog/lefthook-rc.sh
-
-pre-commit:
-  commands:
-    # ts-deadcode: use knip:gate (--no-progress) for clean hook output.
-    ts-deadcode:
-      glob: "*.{ts,js,json}"
-      run: npm run knip:gate
-
-    # unit-tests: rkr-blog node tests are fast — run locally with c8 thresholds.
-    # c8 --check-coverage enforces hard per-file thresholds; no lcov ratchet needed.
-    unit-tests:
-      glob: "*.{ts,js,json}"
-      run: npm run test:coverage
-
-    # e2e-tests: build admin+site bundles before running Playwright.
-    # Glob narrowed to admin/site source so lib/routes/bin changes skip E2E.
-    e2e-tests:
-      glob: "{src/admin,src/site,packages/image-edit/src,apps/image-pwa/src}/**/*.ts"
-      run: |
-        npm run --silent build:packages
-        npm run --silent build:admin
-        npm run --silent build:site
-        SCI=/home/john/src/simple-ci/sci
-        WT=$(basename "$(git rev-parse --show-toplevel)")
-        if test -x "$SCI"; then
-          job=$("$SCI" push "${WT}/ci/e2e-smoke")
-          echo "  e2e  queued ($job)"
-          "$SCI" wait "$job"
-          E2E_LCOV=${COVERAGE_E2E_LCOV:-coverage/e2e/lcov.info}
-          if ci_host=$("$SCI" host 2>/dev/null) && [ -n "$ci_host" ]; then
-            worktree="ci-worktrees/${WT}-${job}"
-            mkdir -p "$(dirname "$E2E_LCOV")"
-            scp -q "$ci_host:$worktree/$E2E_LCOV" "$E2E_LCOV" 2>/dev/null || true
-          fi
-        else
-          npm run test:e2e
-        fi
-
-    # E2E coverage ratchet for browser code (admin + site).
-    # Exempt SW/worker files: they run in isolated threads that Playwright's
-    # V8 coverage cannot instrument (no JS coverage events on worker threads).
-    coverage-ratchet-e2e:
-      glob: "{src/admin,src/site,packages/image-edit/src,apps/image-pwa/src}/**/*.ts"
-      exclude: '(sw-admin|sw-admin-register|opfs-worker|opfs-worker-msg|sw)\.ts$'
-      env:
-        COVERAGE_E2E_LCOV: coverage/e2e/lcov.info
-        COVERAGE_E2E_BASELINE: scripts/coverage-baseline.json
-
-    # Bundle-size ratchet: admin+site totals must not grow >10% per commit.
-    # Runs after e2e-tests (bundles already built at that point).
-    bundle-size-ratchet:
-      depends_on: [e2e-tests]
-      glob: "{src/admin,src/site,packages/image-edit/src,apps/image-pwa/src}/**/*.ts"
-      run: |
-        node --no-warnings=ExperimentalWarning --experimental-strip-types \
-          scripts/check-bundle-size.ts
