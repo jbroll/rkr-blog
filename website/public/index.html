@@ -13,30 +13,32 @@
            (matches the app's default.css theme)
            ======================================== */
         :root {
-            --accent: #cf222e;
-            --accent-hover: #a40e26;
-            --accent-soft: #fbeceb;
-            --accent-border: #f1c7c3;
+            /* Per-site accent = rkr-blog fuchsia; canvas/ink/muted/line are
+               the shared rkroll-family palette (cf. checklist, drop-notes). */
+            --accent: #c026d3;
+            --accent-hover: #a21caf;
+            --accent-soft: #fdf4ff;
+            --accent-border: #f5d0fe;
 
-            --bg-page: #fdfdfb;
+            --bg-page: #d6dce3;
             --bg-card: #ffffff;
-            --bg-soft: #ebeae4;
-            --text-primary: #1f2328;
+            --bg-soft: #e6eaef;
+            --text-primary: #111827;
             --text-secondary: #5b6573;
             --text-muted: #8b939e;
-            --border-color: #e2e1db;
-            --shadow-color: rgba(31, 35, 40, 0.08);
+            --border-color: #e2e5ea;
+            --shadow-color: rgba(17, 24, 39, 0.08);
 
             --nav-bg: #ffffff;
-            --footer-bg: #1f2328;
-            --footer-text: #b7bcc4;
+            --footer-bg: #111827;
+            --footer-text: #9ca3af;
 
-            --illustration-bg: #f4f3ee;
+            --illustration-bg: #eef1f5;
             --illustration-card-bg: #ffffff;
-            --illustration-card-border: #e2e1db;
-            --illustration-text: #3a414a;
+            --illustration-card-border: #e2e5ea;
+            --illustration-text: #374151;
             --illustration-text-muted: #5b6573;
-            --illustration-text-faint: #98a0aa;
+            --illustration-text-faint: #9ca3af;
         }
 
         body {
@@ -125,7 +127,7 @@
     </section>
 
     <!-- Features -->
-    <section id="features" class="py-12" style="background-color: var(--bg-soft);">
+    <section id="features" class="py-12" style="background-color: var(--bg-page);">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
 

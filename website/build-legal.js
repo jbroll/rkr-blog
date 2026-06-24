@@ -32,19 +32,19 @@ const brand = {
 // Shared palette + prose styling, matching index.html (crimson on warm paper).
 const styles = `
         :root {
-            --accent: #cf222e;
-            --accent-hover: #a40e26;
-            --accent-soft: #fbeceb;
-            --bg-page: #fdfdfb;
+            --accent: #c026d3;
+            --accent-hover: #a21caf;
+            --accent-soft: #fdf4ff;
+            --bg-page: #d6dce3;
             --bg-card: #ffffff;
-            --bg-soft: #ebeae4;
-            --text-primary: #1f2328;
+            --bg-soft: #e6eaef;
+            --text-primary: #111827;
             --text-secondary: #5b6573;
             --text-muted: #8b939e;
-            --border-color: #e2e1db;
+            --border-color: #e2e5ea;
             --nav-bg: #ffffff;
-            --footer-bg: #1f2328;
-            --footer-text: #b7bcc4;
+            --footer-bg: #111827;
+            --footer-text: #9ca3af;
         }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-page); color: var(--text-primary); }
         .prose h1 { font-size: 2rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1rem; }

@@ -1,23 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="rkr-blog">
   <!-- browser/post card: photo-first writing -->
-  <rect x="6" y="9" width="52" height="46" rx="7" fill="#ffffff" stroke="#e2e1db" stroke-width="2"/>
+  <rect x="6" y="9" width="52" height="46" rx="7" fill="#ffffff" stroke="#e2e5ea" stroke-width="2"/>
   <!-- title bar -->
-  <path d="M6 16a7 7 0 0 1 7-7h38a7 7 0 0 1 7 7v3H6z" fill="#fbeceb"/>
-  <circle cx="14" cy="14" r="1.8" fill="#cf222e"/>
+  <path d="M6 16a7 7 0 0 1 7-7h38a7 7 0 0 1 7 7v3H6z" fill="#fae8ff"/>
+  <circle cx="14" cy="14" r="1.8" fill="#ef4444"/>
   <circle cx="20" cy="14" r="1.8" fill="#d8a200"/>
   <circle cx="26" cy="14" r="1.8" fill="#2ea44f"/>
   <!-- photo tile with mountains + sun -->
-  <rect x="12" y="25" width="22" height="16" rx="2.5" fill="#fbeceb" stroke="#f1c7c3" stroke-width="1.5"/>
-  <circle cx="18.5" cy="30.5" r="2.2" fill="#cf222e"/>
-  <path d="M13.5 39.5l5-6 3.5 4 4-5 6 7z" fill="#cf222e" opacity="0.85"/>
+  <rect x="12" y="25" width="22" height="16" rx="2.5" fill="#fae8ff" stroke="#f5d0fe" stroke-width="1.5"/>
+  <circle cx="18.5" cy="30.5" r="2.2" fill="#c026d3"/>
+  <path d="M13.5 39.5l5-6 3.5 4 4-5 6 7z" fill="#c026d3" opacity="0.85"/>
   <!-- text lines -->
-  <rect x="38" y="26" width="14" height="3" rx="1.5" fill="#d8d6cf"/>
-  <rect x="38" y="32" width="14" height="3" rx="1.5" fill="#e4e2db"/>
-  <rect x="12" y="46" width="28" height="3" rx="1.5" fill="#e4e2db"/>
+  <rect x="38" y="26" width="14" height="3" rx="1.5" fill="#cdd3da"/>
+  <rect x="38" y="32" width="14" height="3" rx="1.5" fill="#e2e5ea"/>
+  <rect x="12" y="46" width="28" height="3" rx="1.5" fill="#e2e5ea"/>
   <!-- pencil accent -->
   <g transform="rotate(45 47 45)">
-    <rect x="44.5" y="35" width="5" height="17" rx="1" fill="#cf222e"/>
-    <path d="M44.5 52l2.5 4 2.5-4z" fill="#1f2328"/>
-    <rect x="44.5" y="35" width="5" height="3" rx="1" fill="#f7b7b1"/>
+    <rect x="44.5" y="35" width="5" height="17" rx="1" fill="#c026d3"/>
+    <path d="M44.5 52l2.5 4 2.5-4z" fill="#111827"/>
+    <rect x="44.5" y="35" width="5" height="3" rx="1" fill="#f5d0fe"/>
   </g>
 </svg>
