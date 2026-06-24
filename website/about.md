@@ -15,5 +15,6 @@ when connectivity returns. No ads, no tracking.
 
 ---
 
-**By** [rkroll.com](https://rkroll.com) — a software project based in
-Schenectady, New York. Questions? Reach us at {{brand.supportEmail}}.
+**By** [rkroll.com](https://rkroll.com) — a software company based in
+Schenectady, New York.<br>
+Questions? Reach us at {{brand.supportEmail}}.
