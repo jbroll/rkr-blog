@@ -4,7 +4,9 @@
  * Run with: node website/build-legal.js
  *
  * Sources: about.md / privacy.md / terms.md (edit these).
- * Output:  about.html / privacy.html / terms.html (generated; do not edit).
+ * Output:  public/about.html / public/privacy.html / public/terms.html
+ *          (generated; do not edit). Only public/ is deployed to the web
+ *          root, so the markdown sources and this script stay private.
  *
  * Supported tokens in markdown:
  *   {{brand.name}}         -> rkr-blog
@@ -157,8 +159,8 @@ function generatePage(mdFile, htmlFile, title) {
     .join('\n')
     .replace(/\n+$/, '')}\n`;
 
-  writeFileSync(join(__dirname, htmlFile), clean);
-  console.log(`Generated ${htmlFile} from ${mdFile}`);
+  writeFileSync(join(__dirname, 'public', htmlFile), clean);
+  console.log(`Generated public/${htmlFile} from ${mdFile}`);
 }
 
 generatePage('about.md', 'about.html', 'About');
