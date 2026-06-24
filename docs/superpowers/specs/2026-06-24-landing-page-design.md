@@ -19,8 +19,10 @@ addition.
 - **App domain:** unchanged (`rkr-blog.rkroll.com`).
 - **Shape:** checklist-style single `index.html` (hero → feature-card grid
   → footer) plus `about` / `privacy` / `terms` legal pages.
-- **Tech:** Tailwind via CDN, no build step (legal pages use a copied
-  `build-legal.js` md→html generator).
+- **Tech:** Tailwind via CDN, no build step. Legal pages are
+  hand-authored static HTML (single brand, short pages — no `marked`
+  dependency, no generator; `marked` is not installed and a standalone
+  build script would trip the `knip` gate).
 - **Palette:** crimson `#cf222e` accent on warm paper (`#fdfdfb`),
   matching the app's `default.css` theme. Light-only; same `setTheme`
   console hook the siblings ship.
@@ -69,12 +71,11 @@ warm-paper palette.
 
 ### 2. Legal pages
 
-`about.md`, `privacy.md`, `terms.md` as markdown sources, compiled to
-`about.html` / `privacy.html` / `terms.html` by a `build-legal.js`
-copied from `wicketmap/website` (closest existing template). Privacy
-copy must reflect the app's actual data handling: reader comments,
-Google OAuth sign-in for authors, owner email notifications, and the
-optional LLM-based spam filter.
+`about.html`, `privacy.html`, `terms.html` — hand-authored static HTML
+sharing the index page's nav/footer chrome and a `.prose` content block.
+No markdown sources, no generator. Privacy copy must reflect the app's
+actual data handling: reader comments, Google OAuth sign-in for authors,
+owner email notifications, and the optional LLM-based spam filter.
 
 ### 3. `website/deploy.conf`
 
@@ -109,10 +110,10 @@ same way).
 
 ## Testing
 
-- Static page: open `website/index.html` locally; verify layout at mobile
+- Static pages: open `website/index.html` locally; verify layout at mobile
   and desktop widths, nav toggle works, all feature cards render, footer
-  links resolve to the generated legal pages.
-- `build-legal.js`: run it; confirm `*.html` regenerate from `*.md`.
+  links resolve to the legal pages, and each legal page renders with the
+  shared chrome.
 
 ## Deploy sequence (runbook addition)
 
