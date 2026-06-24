@@ -99,6 +99,7 @@
           "src/site/sw-admin-register.ts",
           "scripts/check-bundle-size.ts",
           "scripts/check-orientation.mjs",
+          "website/build-legal.js",
           "test/**/*.test.ts",
           "test/e2e/**/*.spec.ts",
           "test/playwright.config.ts",
@@ -146,6 +147,7 @@
     "dpdm": "^4.0.1",
     "esbuild": "^0.28.0",
     "knip": "^6.12.1",
+    "marked": "^18.0.5",
     "monocart-coverage-reports": "^2.12.11",
     "typescript": "^6.0.3",
     "typescript-language-server": "^4.4.1"

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="rkr-blog — photo-first, offline-first blogging you can self-host. Bring in photos from anywhere, arrange them in rich layouts, publish.">
+    <title>rkr-blog</title>
+    <link rel="icon" type="image/svg+xml" href="rkr-blog-icon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ========================================
+           COLOR SYSTEM — crimson on warm paper
+           (matches the app's default.css theme)
+           ======================================== */
+        :root {
+            --accent: #cf222e;
+            --accent-hover: #a40e26;
+            --accent-soft: #fbeceb;
+            --accent-border: #f1c7c3;
+
+            --bg-page: #fdfdfb;
+            --bg-card: #ffffff;
+            --bg-soft: #ebeae4;
+            --text-primary: #1f2328;
+            --text-secondary: #5b6573;
+            --text-muted: #8b939e;
+            --border-color: #e2e1db;
+            --shadow-color: rgba(31, 35, 40, 0.08);
+
+            --nav-bg: #ffffff;
+            --footer-bg: #1f2328;
+            --footer-text: #b7bcc4;
+
+            --illustration-bg: #f4f3ee;
+            --illustration-card-bg: #ffffff;
+            --illustration-card-border: #e2e1db;
+            --illustration-text: #3a414a;
+            --illustration-text-muted: #5b6573;
+            --illustration-text-faint: #98a0aa;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-primary);
+        }
+
+        .hero-bg { background-color: var(--bg-page); }
+
+        .feature-card {
+            background-color: var(--bg-card);
+            border-color: var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px var(--shadow-color);
+        }
+
+        .feature-icon-bg { background-color: var(--accent-soft); }
+        .feature-icon { color: var(--accent); }
+
+        .illustration-area { background-color: var(--illustration-bg); }
+        .illustration-card {
+            background-color: var(--illustration-card-bg);
+            border-color: var(--illustration-card-border);
+        }
+        .illustration-text { color: var(--illustration-text); }
+        .illustration-text-muted { color: var(--illustration-text-muted); }
+        .illustration-text-faint { color: var(--illustration-text-faint); }
+        .accent { color: var(--accent); }
+        .accent-bg { background-color: var(--accent); }
+
+        /* Offset anchor links for the sticky navbar */
+        [id] { scroll-margin-top: 80px; }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="shadow-sm sticky top-0 z-50" style="background-color: var(--nav-bg);">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <a href="index.html" class="flex items-center gap-2">
+                    <img src="rkr-blog-icon.svg" alt="rkr-blog" class="h-9">
+                    <span class="text-xl font-bold" style="color: var(--text-primary);">rkr-blog</span>
+                </a>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="hover:opacity-80" style="color: var(--text-secondary);">Features</a>
+                    <a href="about.html" class="hover:opacity-80" style="color: var(--text-secondary);">About</a>
+                </div>
+                <button id="mobile-menu-button" class="md:hidden p-2" style="color: var(--text-primary);" aria-label="Toggle menu">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </div>
+            <!-- Mobile menu -->
+            <div id="mobile-menu" class="hidden md:hidden py-3" style="border-top: 1px solid var(--border-color);">
+                <div class="flex flex-col space-y-3">
+                    <a href="#features" class="hover:opacity-80 px-2 py-1" style="color: var(--text-secondary);">Features</a>
+                    <a href="about.html" class="hover:opacity-80 px-2 py-1" style="color: var(--text-secondary);">About</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <script>
+        document.getElementById('mobile-menu-button').addEventListener('click', function() {
+            document.getElementById('mobile-menu').classList.toggle('hidden');
+        });
+    </script>
+
+    <!-- Hero -->
+    <section class="hero-bg py-16 md:py-24">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <span class="inline-block text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-5" style="background-color: var(--accent-soft); color: var(--accent);">Self-hosted</span>
+            <h1 class="text-4xl md:text-6xl font-bold mb-6 tracking-tight" style="color: var(--text-primary);">
+                Photo-first blogging,<br><span class="accent">offline-first</span>
+            </h1>
+            <p class="text-lg md:text-xl max-w-2xl mx-auto" style="color: var(--text-secondary);">
+                Bring in photos from your desktop, Google Drive, OneDrive, or any URL;
+                arrange them in rich layouts; publish. No markup, no plugins, no external
+                services — and it all works offline.
+            </p>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="py-12" style="background-color: var(--bg-soft);">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                <!-- 1: Photo-first authoring -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Photo-first authoring</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Import from local files, any URL, Google Drive, or OneDrive — duplicates stored once.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div class="illustration-card rounded border px-2 py-1.5 text-[11px] flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full accent-bg"></span><span class="illustration-text-muted">Local files</span>
+                            </div>
+                            <div class="illustration-card rounded border px-2 py-1.5 text-[11px] flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full accent-bg"></span><span class="illustration-text-muted">Any URL</span>
+                            </div>
+                            <div class="illustration-card rounded border px-2 py-1.5 text-[11px] flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full accent-bg"></span><span class="illustration-text-muted">Google Drive</span>
+                            </div>
+                            <div class="illustration-card rounded border px-2 py-1.5 text-[11px] flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full accent-bg"></span><span class="illustration-text-muted">OneDrive</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2: Six image layouts -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Six image layouts</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Justified rows, masonry, grid, carousel, full-bleed, and inline — pick from the toolbar.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="illustration-card rounded border px-2 py-1 text-[10px] illustration-text-muted">Justified</span>
+                            <span class="illustration-card rounded border px-2 py-1 text-[10px] illustration-text-muted">Masonry</span>
+                            <span class="illustration-card rounded border px-2 py-1 text-[10px] illustration-text-muted">Grid</span>
+                            <span class="illustration-card rounded border px-2 py-1 text-[10px] illustration-text-muted">Carousel</span>
+                            <span class="illustration-card rounded border px-2 py-1 text-[10px] illustration-text-muted">Full-bleed</span>
+                            <span class="illustration-card rounded border px-2 py-1 text-[10px] illustration-text-muted">Inline</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3: Non-destructive editing -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Non-destructive editing</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Crop, rotate, flip, resize, correct perspective — as named steps you can undo. The original is never overwritten.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex flex-col gap-1 text-[11px]">
+                            <div class="illustration-card rounded border px-2 py-1 flex justify-between"><span class="illustration-text">Crop</span><span class="accent">step 1</span></div>
+                            <div class="illustration-card rounded border px-2 py-1 flex justify-between"><span class="illustration-text">Rotate 90°</span><span class="accent">step 2</span></div>
+                            <div class="illustration-card rounded border px-2 py-1 flex justify-between"><span class="illustration-text-muted">Perspective</span><span class="illustration-text-faint">step 3</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4: Works offline -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Works offline</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Write and edit without a connection. Changes sync automatically when you're back; pinned posts stay available locally.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex items-center gap-2">
+                            <div class="illustration-card rounded border px-2 py-1.5 flex-1 text-[11px]">
+                                <span class="illustration-text-muted">Editing offline…</span>
+                            </div>
+                            <span class="text-[10px] accent font-medium">2 pending</span>
+                            <svg class="w-4 h-4 accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5: Reader comments -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Reader comments</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Anonymous comments with an optional LLM spam filter, a moderation queue, and email notifications to you.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex flex-col gap-1.5">
+                            <div class="illustration-card rounded border px-2 py-1.5 text-[11px] flex justify-between items-center">
+                                <span class="illustration-text-muted">"Great shot!"</span><span class="text-[9px] px-1.5 py-0.5 rounded" style="background-color: var(--accent-soft); color: var(--accent);">approved</span>
+                            </div>
+                            <div class="illustration-card rounded border px-2 py-1.5 text-[11px] flex justify-between items-center">
+                                <span class="illustration-text-faint">spammy link…</span><span class="text-[9px] px-1.5 py-0.5 rounded" style="background-color: var(--bg-soft); color: var(--text-muted);">held</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6: Fast by default -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Fast by default</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Every image is served in multiple sizes and modern formats, so each browser and screen gets the right file.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex items-center justify-center gap-2">
+                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] font-mono illustration-text-muted">avif</span>
+                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] font-mono illustration-text-muted">webp</span>
+                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] font-mono illustration-text-muted">jpeg</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7: Search, tags, themes -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Search, tags &amp; themes</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Full-text search across every post, taggable and filterable, with eight built-in themes to switch between.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="illustration-card rounded-full border px-2.5 py-1 text-[10px] accent">#travel</span>
+                            <span class="illustration-card rounded-full border px-2.5 py-1 text-[10px] illustration-text-muted">#photos</span>
+                            <span class="illustration-card rounded-full border px-2.5 py-1 text-[10px] illustration-text-muted">#notes</span>
+                            <span class="illustration-card rounded-full border px-2.5 py-1 text-[10px] illustration-text-faint">+5 more</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8: Self-hosted -->
+                <div class="feature-card p-4 rounded-lg border">
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Self-hosted</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Runs on any Node 22 host with SQLite and Google sign-in. No other services required — your data stays on your server.</p>
+                        </div>
+                    </div>
+                    <div class="illustration-area rounded-lg p-3 mt-2">
+                        <div class="flex items-center justify-center gap-2">
+                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] illustration-text-muted">Node 22</span>
+                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] illustration-text-muted">SQLite</span>
+                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] illustration-text-muted">Google OAuth</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-6" style="background-color: var(--footer-bg); color: var(--footer-text);">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <p class="text-sm">&copy; 2026 <a href="https://rkroll.com" class="hover:text-white">rkroll.com</a></p>
+                    <a href="about.html" class="text-sm hover:text-white">About</a>
+                    <a href="privacy.html" class="text-sm hover:text-white">Privacy</a>
+                    <a href="terms.html" class="text-sm hover:text-white">Terms</a>
+                </div>
+                <p class="text-sm" style="color: var(--text-muted);">Photo-first, offline-first blogging.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
