@@ -68,3 +68,8 @@ Format: **item** — _revisit when:_ trigger.
 - **Flaky: `editor: offline ops bake drains on reconnect`** — save-btn disabled check races `ensureLocalState`. _Revisit when:_ seen failing again; add explicit wait for network idle before the disabled assertion.
 - **Flaky: `editor: rotate single image then save edits`** — 404 on `loadOriginal` / preview during rotate races OPFS-to-server drain under CI load. _Revisit when:_ seen failing outside CI load conditions; add explicit drain-wait.
 - **Flaky: `editor: online-save 409 surfaces conflict`** — mtime-bump + 409 path is timing-sensitive; fails under CI server load. _Revisit when:_ seen failing locally; increase server-response timeouts.
+
+## Website (marketing site)
+
+- **No app CTA on the landing page** — `website/` ships no "Try it" / sign-up button because the app has no public entry flow. _Revisit when:_ the app gains a public entry/sign-up flow; wire CTAs in `index.html` nav/hero/footer to the app domain.
+- **Unknown paths fall back to `index.html` (200, not 404)** — the static Apache vhost serves `index.html` for any missing path, so e.g. `/deploy.conf` returns the homepage instead of 404. Harmless (no real file is exposed) but not ideal for a non-SPA. _Revisit when:_ it matters for SEO/correctness; drop the fallback for this static vhost.
