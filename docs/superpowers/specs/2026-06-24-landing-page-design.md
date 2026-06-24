@@ -19,10 +19,12 @@ addition.
 - **App domain:** unchanged (`rkr-blog.rkroll.com`).
 - **Shape:** checklist-style single `index.html` (hero → feature-card grid
   → footer) plus `about` / `privacy` / `terms` legal pages.
-- **Tech:** Tailwind via CDN, no build step. Legal pages are
-  hand-authored static HTML (single brand, short pages — no `marked`
-  dependency, no generator; `marked` is not installed and a standalone
-  build script would trip the `knip` gate).
+- **Tech:** Tailwind via CDN. Legal pages follow the sibling-site
+  pattern: markdown sources (`about.md` / `privacy.md` / `terms.md`)
+  compiled to HTML by a `build-legal.js` generator using `marked`
+  (added as a devDependency; `build-legal.js` is registered as a `knip`
+  entry so the gauntlet stays green). `index.html` itself is
+  hand-authored, as in the templates.
 - **Palette:** crimson `#cf222e` accent on warm paper (`#fdfdfb`),
   matching the app's `default.css` theme. Light-only; same `setTheme`
   console hook the siblings ship.
@@ -71,11 +73,13 @@ warm-paper palette.
 
 ### 2. Legal pages
 
-`about.html`, `privacy.html`, `terms.html` — hand-authored static HTML
-sharing the index page's nav/footer chrome and a `.prose` content block.
-No markdown sources, no generator. Privacy copy must reflect the app's
-actual data handling: reader comments, Google OAuth sign-in for authors,
-owner email notifications, and the optional LLM-based spam filter.
+`about.md`, `privacy.md`, `terms.md` markdown sources, compiled to
+`about.html` / `privacy.html` / `terms.html` by `website/build-legal.js`
+(adapted from the sibling sites, trimmed to single-brand and recolored to
+the crimson/paper palette). The generated pages share the index page's
+nav/footer chrome and a `.prose` content block. Privacy copy must reflect
+the app's actual data handling: reader comments, Google OAuth sign-in for
+authors, owner email notifications, and the optional LLM-based spam filter.
 
 ### 3. `website/deploy.conf`
 
@@ -114,6 +118,10 @@ same way).
   and desktop widths, nav toggle works, all feature cards render, footer
   links resolve to the legal pages, and each legal page renders with the
   shared chrome.
+- `build-legal.js`: run `node website/build-legal.js`; confirm the three
+  `*.html` regenerate from `*.md` with the crimson/paper chrome.
+- Gauntlet: `knip` reports no unused file/dependency after `marked` is
+  added and `build-legal.js` is registered as an entry.
 
 ## Deploy sequence (runbook addition)
 

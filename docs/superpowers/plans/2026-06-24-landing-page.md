@@ -13,7 +13,7 @@
 - **Palette:** crimson accent `#cf222e` (hover `#a40e26`), warm paper page bg `#fdfdfb`, card bg `#ffffff`, secondary surface `#ebeae4`, ink text `#1f2328`, muted `#5b6573`, border `#e2e1db`. Footer dark `#1f2328`.
 - **No app CTA** anywhere (no "Try Free" / "Open App" buttons or links to the app).
 - **Tailwind via CDN only** — `<script src="https://cdn.tailwindcss.com"></script>`. No build, no bundler.
-- **Gauntlet-safe:** keep everything under `website/`. biome/tsc/knip use allowlist includes that exclude `website/`, so do NOT add `.ts`/build `.js`/npm deps. Pure `.html`, `.png`, `.conf` only.
+- **Gauntlet-safe:** keep page artifacts under `website/`. biome/tsc use allowlist includes that exclude `website/`. The only repo-root touches are: add `marked` devDependency, and register `website/build-legal.js` in the knip `"."` workspace `entry` array (so it isn't flagged unused and `marked` counts as used).
 - **eof gate:** every file ends with exactly one trailing newline, no trailing whitespace per line.
 - Copy: brand name "rkr-blog"; owner site "rkroll.com" (Schenectady, New York); contact `john@rkroll.com`.
 
@@ -109,34 +109,38 @@ Expected: count ≥ 8, "no app link OK", "no CTA OK".
 
 ---
 
-### Task 3: Legal pages — about / privacy / terms
+### Task 3: Legal pages — markdown sources + generator (follow templates)
 
 **Files:**
-- Create: `website/about.html`
-- Create: `website/privacy.html`
-- Create: `website/terms.html`
+- Modify: `package.json` (add `marked` devDep; add `website/build-legal.js` to knip `"."` entry)
+- Create: `website/build-legal.js`
+- Create: `website/about.md`, `website/privacy.md`, `website/terms.md`
+- Generated: `website/about.html`, `website/privacy.html`, `website/terms.html`
 
 **Interfaces:**
-- Consumes: the nav + footer chrome and `<style>` block from `index.html` (copy verbatim, drop the hero/grid; swap content for a `max-w-4xl` white `.prose` card).
+- `build-legal.js` wraps each page in the SAME nav + footer chrome and `<style>` palette block as `index.html` (drop hero/grid; content = a `max-w-4xl` white `.prose` card). It substitutes a small `brand` object (`name`, `supportEmail`, `websiteUrl`) for `{{brand.x}}` tokens, single-brand (no runtime dual-brand script, no `public/` copy). Output is whitespace-trimmed per line with one trailing newline (eof gate).
 
-Content requirements:
-- **about.html** — what rkr-blog is (1–2 short paragraphs from the README), "By rkroll.com — Schenectady, New York", contact `john@rkroll.com`, links to Privacy/Terms.
-- **privacy.html** — must state actual data handling: reader comments are collected and stored; authors sign in via Google OAuth (email collected); the owner receives email notifications of new comments; an optional, configurable LLM may process comment text for spam filtering; self-hosted so data lives on the operator's own server; no third-party analytics/ad trackers. Contact `john@rkroll.com`.
-- **terms.html** — short plain-language terms: provided as-is, no warranty; acceptable-use for comments; the operator runs the instance; contact `john@rkroll.com`.
+Content requirements (markdown sources):
+- **about.md** — what rkr-blog is (1–2 short paragraphs from the README), "By rkroll.com — Schenectady, New York", contact `{{brand.supportEmail}}`, links to Privacy/Terms.
+- **privacy.md** — must state actual data handling: reader comments are collected and stored; authors sign in via Google OAuth (email collected); the owner receives email notifications of new comments; an optional, configurable LLM may process comment text for spam filtering; self-hosted so data lives on the operator's own server; no third-party analytics/ad trackers. Contact `{{brand.supportEmail}}`.
+- **terms.md** — short plain-language terms: provided as-is, no warranty; acceptable-use for comments; the operator runs the instance; contact `{{brand.supportEmail}}`.
 
-Each page: same `<head>` palette/style + nav (with a `Home` link back to `index.html`) + `.prose` content card + footer.
-
-- [ ] **Step 1: Write the three HTML files** sharing index's chrome.
-- [ ] **Step 2: Verify**
+- [ ] **Step 1:** `npm install --save-dev marked`
+- [ ] **Step 2:** Add `"website/build-legal.js"` to the knip `"."` workspace `entry` array in `package.json`.
+- [ ] **Step 3:** Write `website/build-legal.js` (adapt from `checklist/website/build-legal.js`, trimmed to single-brand + recolored to the crimson/paper palette so it matches `index.html`).
+- [ ] **Step 4:** Write `about.md`, `privacy.md`, `terms.md`.
+- [ ] **Step 5: Generate** — `node website/build-legal.js`
+- [ ] **Step 6: Verify**
 
 ```bash
-for f in about privacy terms; do grep -q '.prose' website/$f.html && grep -q 'rkr-blog-icon.png' website/$f.html && echo "$f OK"; done
+for f in about privacy terms; do grep -q 'prose' website/$f.html && grep -q 'rkr-blog-icon.png' website/$f.html && echo "$f OK"; done
 grep -qi 'comment' website/privacy.html && grep -qi 'oauth\|google' website/privacy.html && echo "privacy content OK"
+npx knip 2>&1 | tail -5   # expect no unused file/dep for website/build-legal.js or marked
 ```
-Expected: three `OK` lines + "privacy content OK".
+Expected: three `OK` lines + "privacy content OK" + clean knip.
 
-- [ ] **Step 3: Render check** — open each legal page in the browser; confirm shared chrome + readable prose, footer cross-links resolve.
-- [ ] **Step 4: Commit** — `feat(website): about/privacy/terms legal pages`
+- [ ] **Step 7: Render check** — open each legal page in the browser; confirm shared chrome + readable prose, footer cross-links resolve.
+- [ ] **Step 8: Commit** — `feat(website): legal pages (markdown + build-legal.js)`
 
 ---
 
@@ -149,7 +153,7 @@ Expected: three `OK` lines + "privacy content OK".
 
 ## Deviations from spec
 
-- Spec component #2 originally called for a `build-legal.js` md→html generator (sibling pattern). Dropped: `marked` is not installed and a standalone build `.js` under `website/` would be flagged by the `knip` gate. Legal pages are hand-authored static HTML instead (single brand, 3 short pages — simpler, gauntlet-safe). Spec updated to match.
+- None material. Legal pages follow the sibling-site markdown + `build-legal.js` pattern (per user direction). `marked` is added as a devDependency and `build-legal.js` is registered as a knip entry to keep the gauntlet green; the generator is trimmed to single-brand and recolored. Spec updated to match.
 
 ## Self-review
 
