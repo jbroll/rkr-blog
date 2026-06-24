@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="rkr-blog — photo-first, offline-first blogging you can self-host. Bring in photos from anywhere, arrange them in rich layouts, publish.">
+    <meta name="description" content="rkr-blog — photo-first, offline-first blogging. Bring in photos from anywhere, arrange them in rich layouts, and publish. No ads, no tracking.">
     <title>rkr-blog</title>
     <link rel="icon" type="image/svg+xml" href="rkr-blog-icon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ========================================
-           COLOR SYSTEM — crimson on warm paper
-           (matches the app's default.css theme)
+           COLOR SYSTEM — rkroll family palette
+           (shared canvas/ink/line; fuchsia accent)
            ======================================== */
         :root {
             /* Per-site accent = rkr-blog fuchsia; canvas/ink/muted/line are
@@ -114,14 +114,14 @@
     <!-- Hero -->
     <section class="hero-bg py-16 md:py-24">
         <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <span class="inline-block text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-5" style="background-color: var(--accent-soft); color: var(--accent);">Self-hosted</span>
+            <span class="inline-block text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-5" style="background-color: var(--accent-soft); color: var(--accent);">No ads · No tracking</span>
             <h1 class="text-4xl md:text-6xl font-bold mb-6 tracking-tight" style="color: var(--text-primary);">
                 Photo-first blogging,<br><span class="accent">offline-first</span>
             </h1>
             <p class="text-lg md:text-xl max-w-2xl mx-auto" style="color: var(--text-secondary);">
-                Bring in photos from your desktop, Google Drive, OneDrive, or any URL;
-                arrange them in rich layouts; publish. No markup, no plugins, no external
-                services — and it all works offline.
+                Bring in photos from your desktop, Google Drive, OneDrive, or any URL,
+                arrange them in rich layouts, and publish — no markup, no plugins. Keep
+                writing offline; everything syncs when you're back. No ads, no tracking.
             </p>
         </div>
     </section>
@@ -140,8 +140,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Photo-first authoring</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Import from local files, any URL, Google Drive, or OneDrive — duplicates stored once.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Photos from anywhere</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Pull photos in from your desktop, any URL, Google Drive, or OneDrive — duplicates are stored once.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -171,8 +171,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Six image layouts</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Justified rows, masonry, grid, carousel, full-bleed, and inline — pick from the toolbar.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Six photo layouts</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Justified rows, masonry, grid, carousel, full-bleed, and inline — pick the arrangement from the toolbar.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -187,7 +187,7 @@
                     </div>
                 </div>
 
-                <!-- 3: Non-destructive editing -->
+                <!-- 3: Edit photos in the post -->
                 <div class="feature-card p-4 rounded-lg border">
                     <div class="flex items-start gap-3 mb-3">
                         <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
@@ -196,8 +196,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Non-destructive editing</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Crop, rotate, flip, resize, correct perspective — as named steps you can undo. The original is never overwritten.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Edit photos in the post</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Crop, straighten, rotate, and fix perspective right where they sit — every step is reversible and the original is never touched.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -218,8 +218,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Works offline</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Write and edit without a connection. Changes sync automatically when you're back; pinned posts stay available locally.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Write anywhere, even offline</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Keep writing and editing with no connection. Your drafts sync automatically the moment you're back online.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -235,7 +235,7 @@
                     </div>
                 </div>
 
-                <!-- 5: Reader comments -->
+                <!-- 5: Comments, spam-screened -->
                 <div class="feature-card p-4 rounded-lg border">
                     <div class="flex items-start gap-3 mb-3">
                         <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
@@ -244,8 +244,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Reader comments</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Anonymous comments with an optional LLM spam filter, a moderation queue, and email notifications to you.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Comments, spam-screened</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Readers comment anonymously. Optional automatic spam screening and a moderation queue keep you in control, with an email when a new comment arrives.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -260,7 +260,7 @@
                     </div>
                 </div>
 
-                <!-- 6: Fast by default -->
+                <!-- 6: Fast galleries -->
                 <div class="feature-card p-4 rounded-lg border">
                     <div class="flex items-start gap-3 mb-3">
                         <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
@@ -269,8 +269,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Fast by default</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Every image is served in multiple sizes and modern formats, so each browser and screen gets the right file.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Fast galleries</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Readers get sharp photos that load instantly — each image is served at the right size and a modern format for their screen.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -282,7 +282,7 @@
                     </div>
                 </div>
 
-                <!-- 7: Search, tags, themes -->
+                <!-- 7: Search & tags -->
                 <div class="feature-card p-4 rounded-lg border">
                     <div class="flex items-start gap-3 mb-3">
                         <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
@@ -291,8 +291,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Search, tags &amp; themes</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Full-text search across every post, taggable and filterable, with eight built-in themes to switch between.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Search &amp; tags</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Full-text search across every post, plus tags your readers can browse and filter by.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
@@ -305,24 +305,26 @@
                     </div>
                 </div>
 
-                <!-- 8: Self-hosted -->
+                <!-- 8: Make it yours -->
                 <div class="feature-card p-4 rounded-lg border">
                     <div class="flex items-start gap-3 mb-3">
                         <div class="w-14 h-14 feature-icon-bg rounded-xl flex items-center justify-center flex-shrink-0">
                             <svg class="w-7 h-7 feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Self-hosted</h3>
-                            <p class="text-base" style="color: var(--text-secondary);">Runs on any Node 22 host with SQLite and Google sign-in. No other services required — your data stays on your server.</p>
+                            <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Make it yours</h3>
+                            <p class="text-base" style="color: var(--text-secondary);">Eight built-in themes, plus your own title, tagline, and about page — set it all from settings, no code.</p>
                         </div>
                     </div>
                     <div class="illustration-area rounded-lg p-3 mt-2">
-                        <div class="flex items-center justify-center gap-2">
-                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] illustration-text-muted">Node 22</span>
-                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] illustration-text-muted">SQLite</span>
-                            <span class="illustration-card rounded border px-2.5 py-1.5 text-[11px] illustration-text-muted">Google OAuth</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="illustration-card rounded border px-2.5 py-1 text-[10px] accent">Newsprint</span>
+                            <span class="illustration-card rounded border px-2.5 py-1 text-[10px] illustration-text-muted">Tufte</span>
+                            <span class="illustration-card rounded border px-2.5 py-1 text-[10px] illustration-text-muted">Solarized</span>
+                            <span class="illustration-card rounded border px-2.5 py-1 text-[10px] illustration-text-muted">Dracula</span>
+                            <span class="illustration-card rounded border px-2.5 py-1 text-[10px] illustration-text-faint">+4 more</span>
                         </div>
                     </div>
                 </div>
