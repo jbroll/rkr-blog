@@ -16,6 +16,16 @@ set -euo pipefail
 : "${FASTIFY_APP_DATA_PATH:?FASTIFY_APP_DATA_PATH not set}"
 
 DATA_DIR="${FASTIFY_APP_DATA_PATH}/${APP_NAME}"   # e.g. /var/www/rkr-blog
+
+# SITE_ROOT comes from the site's env file and must name the same directory
+# the systemd unit owns. A mismatch yields a service that starts and then
+# cannot write — expensive to diagnose, cheap to catch here.
+: "${SITE_ROOT:?SITE_ROOT not set — deploy/sites/<site>.env must set it}"
+if [[ "$SITE_ROOT" != "$DATA_DIR" ]]; then
+  echo "apache.build.post: SITE_ROOT ($SITE_ROOT) != ${FASTIFY_APP_DATA_PATH}/${APP_NAME} ($DATA_DIR)" >&2
+  exit 1
+fi
+
 APP_DIR="${FASTIFY_APP_BASE_PATH:-/opt}/${APP_NAME}"  # e.g. /opt/rkr-blog
 PORT="${FASTIFY_APP_PORT}"
 

@@ -62,3 +62,12 @@ test('vhost redirects an alias host to the canonical domain over https', () => {
   assert.ok(conf.includes('RewriteCond %{HTTP_HOST} !^stockademade\\.com$ [NC]'));
   assert.ok(conf.includes('RewriteRule ^(.*)$ https://stockademade.com$1 [R=301,L]'));
 });
+
+test('hook rejects a SITE_ROOT that does not match APP_NAME', () => {
+  assert.throws(() => runHook({ ...BASE, SITE_ROOT: '/var/www/wrong-name' }), /SITE_ROOT/);
+});
+
+test('hook accepts a SITE_ROOT that matches APP_NAME', () => {
+  const conf = runHook({ ...BASE, SITE_ROOT: '/var/www/rkr-blog' });
+  assert.ok(conf.includes('DocumentRoot /var/www/rkr-blog'));
+});
