@@ -35,7 +35,7 @@ function readEnvKeyAsHookWould(relPath: string, key: string): string | undefined
   let value: string | undefined;
   for (const line of contents.split('\n')) {
     const m = line.match(re);
-    if (m) value = m[1].replace(/[ \t]+$/, '');
+    if (m?.[1] !== undefined) value = m[1].replace(/[ \t]+$/, '');
   }
   return value;
 }
