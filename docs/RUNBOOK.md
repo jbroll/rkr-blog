@@ -3,6 +3,54 @@
 Procedures for the live-site operator, not the day-to-day developer.
 Day-to-day setup is in [`developer-quickstart.md`](developer-quickstart.md).
 
+## Deploying a site
+
+Three sites run from this one tree, each as its own systemd service.
+
+| Site | Domain | `APP_NAME` | Port |
+|---|---|---|---|
+| demo | rkr-blog.rkroll.com | `rkr-blog` | 3000 |
+| roll-along | roll-along.rkroll.com | `roll-along` | 3001 |
+| stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3002 |
+
+```bash
+# the demo site — deploy.conf defaults to it
+~/src/deploy.sh/deploy.sh update .
+
+# any other site
+DEPLOY_SH_CONF=deploy/sites/roll-along.conf ~/src/deploy.sh/deploy.sh update .
+```
+
+Never pass a `user@host` argument; each site config sets `REMOTE_HOST` to
+the VPS, and an argument overrides it.
+
+### First deploy of a new site
+
+1. Create a Google OAuth client for the host, authorised redirect URI
+   `https://<domain>/auth/google/callback`. One client per host.
+2. `cp deploy/secrets.env.example deploy/secrets/<site>.secrets.env` and
+   fill it in; generate `ADMIN_TOKEN` with `openssl rand -hex 32`.
+3. Point DNS at the VPS — certbot's webroot challenge needs the name to
+   resolve before `init` runs.
+4. `DEPLOY_SH_CONF=deploy/sites/<site>.conf ~/src/deploy.sh/deploy.sh init .`
+5. Verify: the unit is active, `https://<domain>/` returns 200, Google
+   sign-in reaches the admin, and **the other sites are still up** — an
+   `init` reloads Apache, so a broken vhost takes every site with it.
+6. Confirm the sites are not sharing configuration:
+
+   ```bash
+   sudo grep -hE '^(SITE_ROOT|PUBLIC_BASE_URL|ADMIN_TOKEN|GOOGLE_CLIENT_ID)=' \
+     /etc/rkr-blog.env /etc/<site>.env | sort | uniq -d
+   ```
+
+   Expected: no output. Any duplicate line means two sites share a value
+   they must not — most damagingly `SITE_ROOT`, which would have them
+   writing over each other.
+
+Server-side paths all derive from `APP_NAME`: app `/opt/<APP_NAME>`, data
+`/var/www/<APP_NAME>`, env `/etc/<APP_NAME>.env`, unit
+`<APP_NAME>.service`.
+
 ## Reset → seed → walk
 
 The end-to-end "wipe a site, repopulate from a WordPress source, verify

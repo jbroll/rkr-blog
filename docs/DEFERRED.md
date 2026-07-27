@@ -18,6 +18,15 @@ Format: **item** — _revisit when:_ trigger.
 - **Slug rename + comment orphan cascade** — renaming a .md file AND changing its `slug` field simultaneously triggers the orphan-delete path and CASCADE-deletes that post's comments. _Revisit when:_ a migration or bulk-rename operation needs comment preservation; fix: update the slug column first (reindex), then rename the file.
 - **Integration OAuth PKCE verifier in browser cookie** — gdrive + onedrive integration flows store the PKCE `code_verifier` in a JSON-serialised cookie (primary auth flow already moved this server-side). State is also not bound to session userId. _Revisit when:_ cloud-drive integrations are used in a multi-user context or security posture requires it; fix: mirror the `pendingFlows` Map pattern from `auth.ts`.
 
+## Deployment
+
+- **Legacy WordPress permalinks 404** — both migrated sites used
+  `/%year%/%monthnum%/%day%/%postname%/`; rkr-blog serves `/:slug`.
+  Import preserves slugs, so breakage is limited to ~47 in-content links
+  (29 roll-along, 18 stockademade) plus external inbound links. _Revisit
+  when:_ those links matter; fix is a `GET /:y/:m/:d/:slug` route that
+  301s to `/:slug` when the slug is a published post.
+
 ## Editor & figures
 
 - **parseHTML doesn't recover attrs** (9b) — rendered-HTML/clipboard

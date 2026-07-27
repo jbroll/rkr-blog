@@ -23,7 +23,7 @@ if [[ -f "$config_env" ]]; then
   else
     cp "$config_env" "$secrets_env"
   fi
-  echo "  fastify_app.build.post: merged config.env into secrets.env"
+  echo "  fastify_app.build.post: merged $SITE_ENV_FILE into secrets.env"
 fi
 
 # --- Workspace package on the remote ---------------------------------------
