@@ -10,10 +10,11 @@ set -euo pipefail
 git -C "$PROJECT_DIR" rev-parse HEAD > "$TMP_DIR/app/git-hash"
 echo "  fastify_app.build.post: git-hash = $(cat "$TMP_DIR/app/git-hash")"
 
-# Merge config.env (non-secrets, git-tracked) into the build's secrets.env.
-# config.env lines are written first so that secrets.env values win on any
+# Merge $SITE_ENV_FILE (non-secrets, git-tracked) into the build's secrets.env.
+# $SITE_ENV_FILE lines are written first so that secrets.env values win on any
 # collision (e.g. if a non-secret key appears in both files).
-config_env="$PROJECT_DIR/deploy/config.env"
+: "${SITE_ENV_FILE:?SITE_ENV_FILE not set — deploy/sites/<site>.conf must export it}"
+config_env="$PROJECT_DIR/$SITE_ENV_FILE"
 secrets_env="$TMP_DIR/app/secrets.env"
 if [[ -f "$config_env" ]]; then
   if [[ -f "$secrets_env" ]]; then
