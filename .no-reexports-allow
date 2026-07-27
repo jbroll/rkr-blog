@@ -1,0 +1,11 @@
+# Intentional public barrels — the two files package.json "exports" declares as
+# @rkr/image-edit's entry points ("." and "./canvas"). Consumers import the
+# package specifier, never its internal layout, so these re-exports are the
+# package boundary rather than avoidable indirection.
+#
+# Both use named re-exports, so the public surface stays explicit and a leaf
+# module cannot widen it by adding an export. Nothing else in this repo is
+# allowed a barrel — src/ has zero.
+
+packages/image-edit/src/canvas/index.ts
+packages/image-edit/src/core/index.ts
