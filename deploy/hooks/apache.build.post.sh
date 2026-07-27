@@ -14,15 +14,25 @@ set -euo pipefail
 : "${DOMAIN_NAME:?DOMAIN_NAME not set}"
 : "${FASTIFY_APP_PORT:?FASTIFY_APP_PORT not set}"
 : "${FASTIFY_APP_DATA_PATH:?FASTIFY_APP_DATA_PATH not set}"
+: "${PROJECT_DIR:?PROJECT_DIR not set}"
+: "${SITE_ENV_FILE:?SITE_ENV_FILE not set — deploy/sites/<site>.conf must export it}"
 
 DATA_DIR="${FASTIFY_APP_DATA_PATH}/${APP_NAME}"   # e.g. /var/www/rkr-blog
 
-# SITE_ROOT comes from the site's env file and must name the same directory
-# the systemd unit owns. A mismatch yields a service that starts and then
-# cannot write — expensive to diagnose, cheap to catch here.
-: "${SITE_ROOT:?SITE_ROOT not set — deploy/sites/<site>.env must set it}"
-if [[ "$SITE_ROOT" != "$DATA_DIR" ]]; then
-  echo "apache.build.post: SITE_ROOT ($SITE_ROOT) != ${FASTIFY_APP_DATA_PATH}/${APP_NAME} ($DATA_DIR)" >&2
+# SITE_ROOT lives in the site's env file ($SITE_ENV_FILE), not the shell
+# environment — deploy.sh sources <site>.conf but never that file. It must
+# name the same directory the systemd unit owns; a mismatch yields a service
+# that starts and then cannot write — expensive to diagnose, cheap to catch
+# here. Read as data (not sourced): the file may carry comments and other
+# keys we must not execute.
+site_env_path="$PROJECT_DIR/$SITE_ENV_FILE"
+site_root="$(grep -E '^SITE_ROOT=' "$site_env_path" 2>/dev/null | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
+if [[ -z "$site_root" ]]; then
+  echo "apache.build.post: $SITE_ENV_FILE has no SITE_ROOT= line — it must set SITE_ROOT" >&2
+  exit 1
+fi
+if [[ "$site_root" != "$DATA_DIR" ]]; then
+  echo "apache.build.post: SITE_ROOT ($site_root) in $SITE_ENV_FILE != ${FASTIFY_APP_DATA_PATH}/${APP_NAME} ($DATA_DIR)" >&2
   exit 1
 fi
 
