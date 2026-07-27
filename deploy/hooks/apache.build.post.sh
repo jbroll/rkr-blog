@@ -26,6 +26,10 @@ DATA_DIR="${FASTIFY_APP_DATA_PATH}/${APP_NAME}"   # e.g. /var/www/rkr-blog
 # here. Read as data (not sourced): the file may carry comments and other
 # keys we must not execute.
 site_env_path="$PROJECT_DIR/$SITE_ENV_FILE"
+if [[ ! -f "$site_env_path" ]]; then
+  echo "apache.build.post: $SITE_ENV_FILE does not exist" >&2
+  exit 1
+fi
 site_root="$(grep -E '^SITE_ROOT=' "$site_env_path" 2>/dev/null | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
 if [[ -z "$site_root" ]]; then
   echo "apache.build.post: $SITE_ENV_FILE has no SITE_ROOT= line — it must set SITE_ROOT" >&2
@@ -50,7 +54,7 @@ if [[ -n "$ALIASES" ]]; then
   done
   # Escape dots for the regex-matched Host check.
   canonical_re="${DOMAIN_NAME//./\\.}"
-  REDIRECT_BLOCK="    # Canonical host: send every alias to \${DOMAIN_NAME}.
+  REDIRECT_BLOCK="    # Canonical host: send every alias to ${DOMAIN_NAME}.
     RewriteCond %{HTTP_HOST} !^${canonical_re}\$ [NC]
     RewriteRule ^(.*)\$ https://${DOMAIN_NAME}\$1 [R=301,L]
 "

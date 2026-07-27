@@ -118,6 +118,47 @@ test('hook rejects a site env file with no SITE_ROOT line at all', () => {
   assertHookFails(BASE, 'PUBLIC_BASE_URL=https://rkr-blog.rkroll.com', /SITE_ROOT/);
 });
 
+test('hook reports a missing site env file honestly, not as "no SITE_ROOT= line"', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vhost-'));
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vhost-project-'));
+  const siteEnvRelPath = 'deploy/sites/does-not-exist.env';
+  assert.throws(
+    () =>
+      execFileSync('bash', [HOOK], {
+        env: {
+          PATH: process.env.PATH ?? '',
+          TMP_DIR: tmp,
+          FASTIFY_APP_DATA_PATH: '/var/www',
+          FASTIFY_APP_BASE_PATH: '/opt',
+          PROJECT_DIR: projectDir,
+          SITE_ENV_FILE: siteEnvRelPath,
+          ...BASE
+        },
+        encoding: 'utf8'
+      }),
+    (err: unknown) => {
+      const stderr = (err as { stderr?: string }).stderr ?? '';
+      return /does not exist/.test(stderr) && !/has no SITE_ROOT= line/.test(stderr);
+    }
+  );
+});
+
+test('vhost redirect comment names the real domain, not a literal placeholder', () => {
+  const conf = runHook(
+    {
+      ...BASE,
+      APP_NAME: 'stockademade',
+      DOMAIN_NAME: 'stockademade.com',
+      FASTIFY_APP_PORT: '3002',
+      APACHE_SERVER_ALIASES: 'www.stockademade.com'
+    },
+    'SITE_ROOT=/var/www/stockademade'
+  );
+  assert.ok(conf.includes('# Canonical host: send every alias to stockademade.com.'));
+  const placeholder = ['$', '{DOMAIN_NAME}'].join('');
+  assert.ok(!conf.includes(placeholder));
+});
+
 test('hook fails the way a real deploy would when SITE_ROOT is set only in the shell environment, not the site env file', () => {
   // This is the bug that shipped: deploy.sh sources <site>.conf but never
   // <site>.env, so the real deploy shell never has SITE_ROOT set — only the

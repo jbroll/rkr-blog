@@ -6,9 +6,24 @@ set -euo pipefail
 
 : "${PROJECT_DIR:?PROJECT_DIR not set}"
 : "${TMP_DIR:?TMP_DIR not set}"
+: "${APP_NAME:?APP_NAME not set}"
+: "${FASTIFY_APP_DATA_PATH:?FASTIFY_APP_DATA_PATH not set}"
 
 git -C "$PROJECT_DIR" rev-parse HEAD > "$TMP_DIR/app/git-hash"
 echo "  fastify_app.build.post: git-hash = $(cat "$TMP_DIR/app/git-hash")"
+
+# The secrets file is operator-created and gitignored (see
+# deploy/secrets.env.example) — it does not exist until someone runs it
+# through that template. Without this check a missing file is silently
+# dropped: node_app/build.sh's `[[ -f ]]` copy is a no-op, the merge below
+# falls back to the site env alone, and the site comes up with no
+# GOOGLE_CLIENT_*/ADMIN_TOKEN and no error anywhere.
+: "${FASTIFY_APP_SECRETS_FILE:?FASTIFY_APP_SECRETS_FILE not set — deploy/sites/<site>.conf must export it}"
+secrets_src="$PROJECT_DIR/$FASTIFY_APP_SECRETS_FILE"
+if [[ ! -f "$secrets_src" ]]; then
+  echo "fastify_app.build.post: missing secrets file $FASTIFY_APP_SECRETS_FILE — create it from deploy/secrets.env.example before deploying" >&2
+  exit 1
+fi
 
 # Merge $SITE_ENV_FILE (non-secrets, git-tracked) into the build's secrets.env.
 # $SITE_ENV_FILE lines are written first so that secrets.env values win on any
@@ -24,6 +39,24 @@ if [[ -f "$config_env" ]]; then
     cp "$config_env" "$secrets_env"
   fi
   echo "  fastify_app.build.post: merged $SITE_ENV_FILE into secrets.env"
+fi
+
+# Re-check SITE_ROOT on the artifact that actually ships: the merged
+# secrets.env, not $SITE_ENV_FILE alone. apache.build.post.sh's guard runs
+# earlier in DEPLOY_TYPES and cannot see this file — and a SITE_ROOT line in
+# the secrets file (last-wins, same as systemd's EnvironmentFile parsing)
+# would silently override the value that guard approved.
+if [[ -f "$secrets_env" ]]; then
+  merged_site_root="$(grep -E '^SITE_ROOT=' "$secrets_env" | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
+  expected_site_root="${FASTIFY_APP_DATA_PATH}/${APP_NAME}"
+  if [[ -z "$merged_site_root" ]]; then
+    echo "fastify_app.build.post: merged secrets.env has no SITE_ROOT= line — it must set SITE_ROOT" >&2
+    exit 1
+  fi
+  if [[ "$merged_site_root" != "$expected_site_root" ]]; then
+    echo "fastify_app.build.post: effective SITE_ROOT ($merged_site_root) in merged secrets.env != ${expected_site_root}" >&2
+    exit 1
+  fi
 fi
 
 # --- Workspace package on the remote ---------------------------------------

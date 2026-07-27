@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -18,6 +19,25 @@ function loadConfig(relPath: string): Record<string, string> {
     if (eq > 0) vars[line.slice(0, eq)] = line.slice(eq + 1);
   }
   return vars;
+}
+
+/**
+ * Read a KEY= line from a site .env file the way production reads it:
+ * deploy/hooks/*.build.post.sh grep the file as data — nothing sources it.
+ * `set -a; source` (bash) strips quotes that grep+cut leave in place, so a
+ * value like SITE_ROOT="/var/www/x" can pass a bash-sourced assertion and
+ * still fail the hook. Mirrors the parse in apache.build.post.sh /
+ * fastify_app.build.post.sh: last match wins, trailing whitespace trimmed.
+ */
+function readEnvKeyAsHookWould(relPath: string, key: string): string | undefined {
+  const contents = fs.readFileSync(path.join(REPO, relPath), 'utf8');
+  const re = new RegExp(`^${key}=(.*)$`, 'm');
+  let value: string | undefined;
+  for (const line of contents.split('\n')) {
+    const m = line.match(re);
+    if (m) value = m[1].replace(/[ \t]+$/, '');
+  }
+  return value;
 }
 
 test('rkr-blog site config exports the expected identity', () => {
@@ -64,19 +84,25 @@ test('stockademade site config uses the apex domain with a www alias', () => {
   assert.equal(c.APACHE_SERVER_ALIASES, 'www.stockademade.com');
 });
 
-test('every site config uses a distinct port and app name', () => {
+test('every site config uses a distinct port, app name, env file, secrets file, and domain', () => {
   const sites = ['rkr-blog', 'roll-along', 'stockademade'].map((s) =>
     loadConfig(`deploy/sites/${s}.conf`)
   );
   const ports = sites.map((c) => c.FASTIFY_APP_PORT);
   const names = sites.map((c) => c.APP_NAME);
+  const siteEnvFiles = sites.map((c) => c.SITE_ENV_FILE);
+  const secretsFiles = sites.map((c) => c.FASTIFY_APP_SECRETS_FILE);
+  const domains = sites.map((c) => c.DOMAIN_NAME);
   assert.equal(new Set(ports).size, 3);
   assert.equal(new Set(names).size, 3);
+  assert.equal(new Set(siteEnvFiles).size, 3);
+  assert.equal(new Set(secretsFiles).size, 3);
+  assert.equal(new Set(domains).size, 3);
 });
 
-test('every site env file sets SITE_ROOT to /var/www/<APP_NAME>', () => {
+test('every site env file sets SITE_ROOT to /var/www/<APP_NAME>, parsed the way the hooks parse it', () => {
   for (const site of ['rkr-blog', 'roll-along', 'stockademade']) {
-    const env = loadConfig(`deploy/sites/${site}.env`);
-    assert.equal(env.SITE_ROOT, `/var/www/${site}`);
+    const siteRoot = readEnvKeyAsHookWould(`deploy/sites/${site}.env`, 'SITE_ROOT');
+    assert.equal(siteRoot, `/var/www/${site}`);
   }
 });

@@ -31,7 +31,10 @@ the VPS, and an argument overrides it.
 2. `cp deploy/secrets.env.example deploy/secrets/<site>.secrets.env` and
    fill it in; generate `ADMIN_TOKEN` with `openssl rand -hex 32`.
 3. Point DNS at the VPS — certbot's webroot challenge needs the name to
-   resolve before `init` runs.
+   resolve before `init` runs. If the site has `APACHE_SERVER_ALIASES`
+   (e.g. stockademade's `www.`), that alias needs an A record too:
+   certbot requests the apex and the alias as one SAN cert, so a missing
+   alias record fails issuance and leaves the vhost SSL-stripped.
 4. `DEPLOY_SH_CONF=deploy/sites/<site>.conf ~/src/deploy.sh/deploy.sh init .`
 5. Verify: the unit is active, `https://<domain>/` returns 200, Google
    sign-in reaches the admin, and **the other sites are still up** — an
