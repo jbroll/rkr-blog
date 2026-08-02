@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # reseed-from-roll-along.sh — reset a rkr-blog target and re-seed it
-# from roll-along.rkroll.com (the WordPress source for this project).
+# from the WordPress source for this project.
+#
+# DEAD: roll-along.rkroll.com now serves this app, not the WordPress
+# site it was imported from, so WP_BASE below no longer resolves to a WP
+# install and running this would re-import the app from itself. Point
+# WP_BASE at an archive before using it.
 #
 # WP source is hardcoded by design — this script is the operator's
 # one-shot for "wipe the demo and repopulate with the canonical seed."

@@ -43,11 +43,12 @@ function readEnvKeyAsHookWould(relPath: string, key: string): string | undefined
 test('rkr-blog site config exports the expected identity', () => {
   const c = loadConfig('deploy/sites/rkr-blog.conf');
   assert.equal(c.APP_NAME, 'rkr-blog');
-  assert.equal(c.DOMAIN_NAME, 'rkr-blog.rkroll.com');
+  assert.equal(c.DOMAIN_NAME, 'roll-along.rkroll.com');
   assert.equal(c.REMOTE_HOST, 'rkr-blog.rkroll.com');
   assert.equal(c.FASTIFY_APP_PORT, '3000');
   assert.equal(c.SITE_ENV_FILE, 'deploy/sites/rkr-blog.env');
   assert.equal(c.FASTIFY_APP_SECRETS_FILE, 'deploy/secrets/rkr-blog.secrets.env');
+  assert.equal(c.APACHE_SERVER_ALIASES, 'rkr-blog.rkroll.com');
 });
 
 test('rkr-blog site config inherits shared settings from common.conf', () => {
@@ -65,17 +66,6 @@ test('root deploy.conf shim resolves to the rkr-blog site', () => {
   assert.equal(c.FASTIFY_APP_PORT, '3000');
 });
 
-test('roll-along site config exports the expected identity', () => {
-  const c = loadConfig('deploy/sites/roll-along.conf');
-  assert.equal(c.APP_NAME, 'roll-along');
-  assert.equal(c.DOMAIN_NAME, 'roll-along.rkroll.com');
-  assert.equal(c.REMOTE_HOST, 'rkr-blog.rkroll.com');
-  assert.equal(c.FASTIFY_APP_PORT, '3001');
-  assert.equal(c.SITE_ENV_FILE, 'deploy/sites/roll-along.env');
-  assert.equal(c.FASTIFY_APP_SECRETS_FILE, 'deploy/secrets/roll-along.secrets.env');
-  assert.equal(c.APACHE_SERVER_ALIASES, undefined);
-});
-
 test('stockademade site config uses the apex domain with a www alias', () => {
   const c = loadConfig('deploy/sites/stockademade.conf');
   assert.equal(c.APP_NAME, 'stockademade');
@@ -84,24 +74,32 @@ test('stockademade site config uses the apex domain with a www alias', () => {
   assert.equal(c.APACHE_SERVER_ALIASES, 'www.stockademade.com');
 });
 
+const SITES = ['rkr-blog', 'stockademade'];
+
 test('every site config uses a distinct port, app name, env file, secrets file, and domain', () => {
-  const sites = ['rkr-blog', 'roll-along', 'stockademade'].map((s) =>
-    loadConfig(`deploy/sites/${s}.conf`)
-  );
+  const sites = SITES.map((s) => loadConfig(`deploy/sites/${s}.conf`));
   const ports = sites.map((c) => c.FASTIFY_APP_PORT);
   const names = sites.map((c) => c.APP_NAME);
   const siteEnvFiles = sites.map((c) => c.SITE_ENV_FILE);
   const secretsFiles = sites.map((c) => c.FASTIFY_APP_SECRETS_FILE);
   const domains = sites.map((c) => c.DOMAIN_NAME);
-  assert.equal(new Set(ports).size, 3);
-  assert.equal(new Set(names).size, 3);
-  assert.equal(new Set(siteEnvFiles).size, 3);
-  assert.equal(new Set(secretsFiles).size, 3);
-  assert.equal(new Set(domains).size, 3);
+  assert.equal(new Set(ports).size, SITES.length);
+  assert.equal(new Set(names).size, SITES.length);
+  assert.equal(new Set(siteEnvFiles).size, SITES.length);
+  assert.equal(new Set(secretsFiles).size, SITES.length);
+  assert.equal(new Set(domains).size, SITES.length);
+});
+
+test('no hostname is claimed by two vhosts', () => {
+  const hostnames = SITES.flatMap((s) => {
+    const c = loadConfig(`deploy/sites/${s}.conf`);
+    return [c.DOMAIN_NAME, ...(c.APACHE_SERVER_ALIASES ?? '').split(/\s+/).filter(Boolean)];
+  });
+  assert.equal(new Set(hostnames).size, hostnames.length);
 });
 
 test('every site env file sets SITE_ROOT to /var/www/<APP_NAME>, parsed the way the hooks parse it', () => {
-  for (const site of ['rkr-blog', 'roll-along', 'stockademade']) {
+  for (const site of SITES) {
     const siteRoot = readEnvKeyAsHookWould(`deploy/sites/${site}.env`, 'SITE_ROOT');
     assert.equal(siteRoot, `/var/www/${site}`);
   }

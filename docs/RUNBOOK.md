@@ -5,20 +5,23 @@ Day-to-day setup is in [`developer-quickstart.md`](developer-quickstart.md).
 
 ## Deploying a site
 
-Three sites run from this one tree, each as its own systemd service.
+Two sites run from this one tree, each as its own systemd service.
 
 | Site | Domain | `APP_NAME` | Port |
 |---|---|---|---|
-| demo | rkr-blog.rkroll.com | `rkr-blog` | 3000 |
-| roll-along | roll-along.rkroll.com | `roll-along` | 3001 |
+| roll-along | roll-along.rkroll.com (`rkr-blog.rkroll.com` 301s to it) | `rkr-blog` | 3000 |
 | stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3002 |
 
+`APP_NAME` is `rkr-blog`, not `roll-along` — it names the unit and the
+server-side paths, and predates the domain move. Renaming it would move
+`/var/www/rkr-blog` and orphan the site's data.
+
 ```bash
-# the demo site — deploy.conf defaults to it
+# roll-along — deploy.conf defaults to it
 ~/src/deploy.sh/deploy.sh update .
 
 # any other site
-DEPLOY_SH_CONF=deploy/sites/roll-along.conf ~/src/deploy.sh/deploy.sh update .
+DEPLOY_SH_CONF=deploy/sites/stockademade.conf ~/src/deploy.sh/deploy.sh update .
 ```
 
 Never pass a `user@host` argument; each site config sets `REMOTE_HOST` to
@@ -175,19 +178,10 @@ slugs, so it covers every published post — useful well beyond the
 
 ### 4. End-to-end smoke (full cycle)
 
-For the canonical seed (`roll-along.rkroll.com` → target), the
-reset+copy step is bundled into one script:
-
-```bash
-TARGET=https://rkr-blog.fly.dev   # or http://127.0.0.1:3000
-ADMIN_TOKEN=...                   # bearer matching the target
-
-scripts/reseed-from-roll-along.sh "$TARGET" 3
-scripts/walk-site.sh "$TARGET"
-```
-
-The WP source is hardcoded in the reseed script — for a different WP
-source, fall back to the three-step form:
+The canonical seed script is dead: `roll-along.rkroll.com` now serves
+this app rather than the WordPress site it imported from, so
+`reseed-from-roll-along.sh` would re-import the app from itself. Repoint
+`WP_BASE` at an archive, or use the three-step form:
 
 ```bash
 bin/site-admin reset --to "$TARGET" --token "$ADMIN_TOKEN" --force

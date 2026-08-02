@@ -3,7 +3,7 @@
 Static landing page for rkr-blog, served at `rkr-blog-www.rkroll.com`. Part
 of the rkroll family of sibling sites (`checklist`, `drop-notes`,
 `wicketmap`). The blog application itself is a separate deploy
-(`../deploy.conf`, `rkr-blog.rkroll.com`) and is not affected by anything
+(`../deploy.conf`, `roll-along.rkroll.com`) and is not affected by anything
 here.
 
 ## Contents
