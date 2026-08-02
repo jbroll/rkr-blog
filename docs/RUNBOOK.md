@@ -30,7 +30,12 @@ the VPS, and an argument overrides it.
 ### First deploy of a new site
 
 1. Create a Google OAuth client for the host, authorised redirect URI
-   `https://<domain>/auth/google/callback`. One client per host.
+   `https://<domain>/admin/auth/google/callback`. One client per host.
+   The Drive and OneDrive integrations add
+   `https://<domain>/admin/integrations/gdrive/callback` and
+   `.../onedrive/callback` on their own clients. All three derive from
+   `PUBLIC_BASE_URL`, so changing a site's domain means re-authorising
+   every one of them.
 2. `cp deploy/secrets.env.example deploy/secrets/<site>.secrets.env` and
    fill it in; generate `ADMIN_TOKEN` with `openssl rand -hex 32`.
 3. Point DNS at the VPS — certbot's webroot challenge needs the name to
