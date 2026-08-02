@@ -443,7 +443,9 @@ function makeGoogleExchange(): TokenExchange {
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const baseUrl = adminBaseUrl();
   if (!clientId || !clientSecret || !baseUrl) {
-    throw new Error('GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and PUBLIC_BASE_URL must be set');
+    throw new Error(
+      'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and ADMIN_BASE_URL (or PUBLIC_BASE_URL) must be set'
+    );
   }
   const redirectURI = new URL('/admin/auth/google/callback', baseUrl).toString();
   const google = new Google(clientId, clientSecret, redirectURI);

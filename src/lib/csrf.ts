@@ -8,7 +8,8 @@
 // State-safe methods (GET, HEAD, OPTIONS) are not checked — those are
 // not supposed to mutate state and the OAuth callback uses GET.
 //
-// Production wiring derives allowedOrigins from PUBLIC_BASE_URL.
+// Production wiring derives allowedOrigins from PUBLIC_BASE_URL and
+// ADMIN_BASE_URL — one origin unless the deployment splits the two.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { adminTokenMatchesEnv } from './admin-token.ts';

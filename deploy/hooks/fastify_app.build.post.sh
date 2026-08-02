@@ -60,16 +60,15 @@ if [[ -f "$secrets_env" ]]; then
 fi
 
 # Same last-wins trap for the hostnames. These are non-secret config and
-# belong in $SITE_ENV_FILE; a stale copy in the secrets file would silently
+# belong in $SITE_ENV_FILE; a copy in the secrets file would silently
 # reinstate an old domain, breaking permalinks and the CSRF allowlist with
-# nothing in the deploy output to show for it.
-if [[ -f "$secrets_env" && -f "$config_env" ]]; then
+# nothing in the deploy output to show for it. Checked against the secrets
+# file directly, not the merged artifact: a key that appears ONLY in the
+# secrets file is just as wrong, and the merge would hide it.
+if [[ -f "$secrets_src" ]]; then
   for key in PUBLIC_BASE_URL ADMIN_BASE_URL; do
-    from_site="$(grep -E "^${key}=" "$config_env" | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
-    [[ -z "$from_site" ]] && continue
-    merged_value="$(grep -E "^${key}=" "$secrets_env" | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
-    if [[ "$merged_value" != "$from_site" ]]; then
-      echo "fastify_app.build.post: effective ${key} ($merged_value) != ${from_site} from $SITE_ENV_FILE — remove the ${key} line from $FASTIFY_APP_SECRETS_FILE" >&2
+    if grep -qE "^${key}=" "$secrets_src"; then
+      echo "fastify_app.build.post: $FASTIFY_APP_SECRETS_FILE sets ${key} — it is non-secret config and wins the merge, silently overriding $SITE_ENV_FILE. Remove the line." >&2
       exit 1
     fi
   done

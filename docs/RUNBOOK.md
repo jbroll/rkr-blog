@@ -24,7 +24,7 @@ and finish on one host: the OAuth state cookie is host-only, so a flow
 begun on the public host loses it when the provider returns to the admin
 host and the callback 400s.
 
-Four settings have to agree, and the tests in
+These settings have to agree, and the tests in
 `test/deploy/site-config.test.ts` check that they do:
 
 | Setting | Where | roll-along |

@@ -124,3 +124,36 @@ test('hook accepts a merged secrets.env whose effective SITE_ROOT matches APP_NA
     }
   );
 });
+
+test('hook rejects a secrets file that sets PUBLIC_BASE_URL, even matching the site env', () => {
+  const { run } = runHook({
+    siteEnvContents: 'SITE_ROOT=/var/www/rkr-blog\nPUBLIC_BASE_URL=https://read.test\n',
+    secretsFileContents: 'ADMIN_TOKEN=x\nPUBLIC_BASE_URL=https://read.test\n'
+  });
+  assert.throws(
+    () => run(),
+    (err: unknown) => /sets PUBLIC_BASE_URL/.test(stderrOf(err))
+  );
+});
+
+test('hook rejects an ADMIN_BASE_URL present only in the secrets file', () => {
+  const { run } = runHook({
+    siteEnvContents: 'SITE_ROOT=/var/www/rkr-blog\n',
+    secretsFileContents: 'ADMIN_TOKEN=x\nADMIN_BASE_URL=https://admin.test\n'
+  });
+  assert.throws(
+    () => run(),
+    (err: unknown) => /sets ADMIN_BASE_URL/.test(stderrOf(err))
+  );
+});
+
+test('hook leaves OLLAMA_BASE_URL in the secrets file alone', () => {
+  const { run } = runHook({
+    siteEnvContents: 'SITE_ROOT=/var/www/rkr-blog\n',
+    secretsFileContents: 'ADMIN_TOKEN=x\nOLLAMA_BASE_URL=https://ollama.test\n'
+  });
+  assert.throws(
+    () => run(),
+    (err: unknown) => !/BASE_URL/.test(stderrOf(err))
+  );
+});

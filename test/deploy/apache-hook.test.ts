@@ -181,20 +181,44 @@ test('APACHE_CANONICAL_REDIRECT=no serves aliases directly instead of 301ing the
   assert.ok(!conf.includes('RewriteRule ^(.*)$ https://roll-along.rkroll.com$1 [R=301,L]'));
 });
 
-test('APACHE_ADMIN_HOST sends /admin on any other host to the admin host', () => {
+test('APACHE_ADMIN_HOST sends /admin and /login on any other host to the admin host', () => {
   const conf = runHook(SPLIT, 'SITE_ROOT=/var/www/rkr-blog');
   assert.ok(conf.includes('RewriteCond %{HTTP_HOST} !^rkr-blog\\.rkroll\\.com$ [NC]'));
   assert.ok(
-    conf.includes('RewriteRule ^(/admin(?:/.*)?)$ https://rkr-blog.rkroll.com$1 [R=301,L]')
+    conf.includes(
+      'RewriteRule ^(/(?:admin|login)(?:/.*)?)$ https://rkr-blog.rkroll.com$1 [R=308,L]'
+    )
   );
+});
+
+test('the admin redirect is a 308 so a cross-host POST keeps its method and body', () => {
+  const conf = runHook(SPLIT, 'SITE_ROOT=/var/www/rkr-blog');
+  const rule = conf.split('\n').find((l) => l.includes('admin|login')) ?? '';
+  assert.ok(rule.includes('[R=308,L]'), `expected 308, got: ${rule}`);
+});
+
+test('an admin host combined with the canonical redirect is rejected as a bounce loop', () => {
+  assertHookFails(
+    { ...SPLIT, APACHE_CANONICAL_REDIRECT: 'yes' },
+    'SITE_ROOT=/var/www/rkr-blog',
+    /bounce \/admin between the hosts/
+  );
+});
+
+test('an admin host equal to DOMAIN_NAME is allowed alongside the canonical redirect', () => {
+  const conf = runHook(
+    { ...SPLIT, APACHE_CANONICAL_REDIRECT: 'yes', APACHE_ADMIN_HOST: 'roll-along.rkroll.com' },
+    'SITE_ROOT=/var/www/rkr-blog'
+  );
+  assert.ok(conf.includes('RewriteRule ^(.*)$ https://roll-along.rkroll.com$1 [R=301,L]'));
 });
 
 test('the admin redirect precedes the image cache fast-path', () => {
   const conf = runHook(SPLIT, 'SITE_ROOT=/var/www/rkr-blog');
-  assert.ok(conf.indexOf('/admin(?:/.*)?') < conf.indexOf('RewriteRule ^/img/'));
+  assert.ok(conf.indexOf('admin|login') < conf.indexOf('RewriteRule ^/img/'));
 });
 
 test('no admin redirect is emitted when APACHE_ADMIN_HOST is unset', () => {
   const conf = runHook(BASE, 'SITE_ROOT=/var/www/rkr-blog');
-  assert.ok(!conf.includes('/admin(?:/.*)?'));
+  assert.ok(!conf.includes('admin|login'));
 });

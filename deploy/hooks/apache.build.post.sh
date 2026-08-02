@@ -65,13 +65,24 @@ fi
 # Sign-in lives on one hostname even when readers are served from several: the
 # OAuth state cookie is host-only, so a flow that starts on the public host and
 # returns to the admin host loses it and the callback 400s.
+#
+# /login is pinned alongside /admin because it is linked from every public
+# page's header and its token form POSTs to /admin/auth/token-login — landing
+# on the public host would bounce that POST cross-host.
+#
+# 308, not 301: 301 lets a browser downgrade POST to GET, which would silently
+# drop the body of a login or logout submission and 404 on a POST-only route.
 ADMIN_HOST="${APACHE_ADMIN_HOST:-}"
 if [[ -n "$ADMIN_HOST" ]]; then
+  if [[ "$ADMIN_HOST" != "$DOMAIN_NAME" && "${APACHE_CANONICAL_REDIRECT:-yes}" != "no" ]]; then
+    echo "apache.build.post: APACHE_ADMIN_HOST ($ADMIN_HOST) differs from DOMAIN_NAME ($DOMAIN_NAME) while APACHE_CANONICAL_REDIRECT is on — the two rules would bounce /admin between the hosts forever. Set APACHE_CANONICAL_REDIRECT=no." >&2
+    exit 1
+  fi
   admin_re="${ADMIN_HOST//./\\.}"
   REDIRECT_BLOCK+="    # Admin surface is ${ADMIN_HOST} only — the OAuth state
     # cookie is host-only, so sign-in must start and finish on one host.
     RewriteCond %{HTTP_HOST} !^${admin_re}\$ [NC]
-    RewriteRule ^(/admin(?:/.*)?)\$ https://${ADMIN_HOST}\$1 [R=301,L]
+    RewriteRule ^(/(?:admin|login)(?:/.*)?)\$ https://${ADMIN_HOST}\$1 [R=308,L]
 "
 fi
 

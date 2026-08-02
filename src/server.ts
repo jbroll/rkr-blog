@@ -21,6 +21,7 @@ sharp.concurrency(1);
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
 import {
+  adminBaseUrl,
   allowedOrigins,
   paths,
   publicBaseUrl,
@@ -77,8 +78,9 @@ export interface BuildAppOpts {
     skipGate?: boolean;
     /** CSRF allow-list. When set, every state-changing request must have a
      * matching Origin/Referer. Production startServer derives this from
-     * PUBLIC_BASE_URL; tests pass ['http://localhost'] (or whatever they
-     * use as a synthetic origin). When undefined, CSRF check is skipped. */
+     * PUBLIC_BASE_URL + ADMIN_BASE_URL; tests pass ['http://localhost'] (or
+     * whatever they use as a synthetic origin). When undefined, CSRF check
+     * is skipped. */
     allowedOrigins?: string[];
     /** Override the per-IP rate cap on /admin/auth/token-login. Default
      * is the route's own (5 per 5 minutes); the e2e runner raises it. */
@@ -221,9 +223,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     // into 404s for unconfigured deployments.
     const gdriveConfigured =
       opts.gdrive?.exchange !== undefined ||
-      (process.env.GOOGLE_CLIENT_ID &&
-        process.env.GOOGLE_CLIENT_SECRET &&
-        process.env.PUBLIC_BASE_URL);
+      (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && adminBaseUrl());
     if (gdriveConfigured) {
       await app.register(integrationsGdriveRoutes, {
         db: opts.db,
@@ -239,9 +239,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     // PUBLIC_BASE_URL; tests inject opts.onedrive.exchange directly.
     const onedriveConfigured =
       opts.onedrive?.exchange !== undefined ||
-      (process.env.MICROSOFT_CLIENT_ID &&
-        process.env.MICROSOFT_CLIENT_SECRET &&
-        process.env.PUBLIC_BASE_URL);
+      (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && adminBaseUrl());
     if (onedriveConfigured) {
       await app.register(integrationsOnedriveRoutes, {
         db: opts.db,

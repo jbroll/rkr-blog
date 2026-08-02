@@ -479,7 +479,7 @@ function makeOneDriveExchange(): OneDriveTokenExchange {
   const tenant = process.env.MICROSOFT_TENANT_ID ?? 'common';
   if (!clientId || !clientSecret || !baseUrl) {
     throw new Error(
-      'MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, and PUBLIC_BASE_URL must be set'
+      'MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, and ADMIN_BASE_URL (or PUBLIC_BASE_URL) must be set'
     );
   }
   const redirectURI = new URL('/admin/integrations/onedrive/callback', baseUrl).toString();
