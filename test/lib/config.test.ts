@@ -7,7 +7,8 @@ import { afterEach, type TestContext, test } from 'node:test';
 import {
   _resetThemeNameCache,
   adminBaseUrl,
-  allowedOrigins,
+  csrfAllowedOrigins,
+  csrfPublicOnlyOrigins,
   listAvailableThemes,
   paths,
   publicBaseUrl,
@@ -282,23 +283,30 @@ test('both base URLs are undefined when nothing is configured', () => {
   assert.equal(adminBaseUrl({}), undefined);
 });
 
-test('allowedOrigins collapses to one origin when public and admin match', () => {
-  assert.deepEqual(allowedOrigins({ PUBLIC_BASE_URL: 'https://ex.test' }), ['https://ex.test']);
+test('unsplit deployment: the single origin has full access, nothing is public-only', () => {
+  const env = { PUBLIC_BASE_URL: 'https://ex.test' };
+  assert.deepEqual(csrfAllowedOrigins(env), ['https://ex.test']);
+  assert.deepEqual(csrfPublicOnlyOrigins(env), []);
 });
 
-test('allowedOrigins lists both origins for a split deployment, public first', () => {
-  assert.deepEqual(
-    allowedOrigins({ PUBLIC_BASE_URL: 'https://read.test', ADMIN_BASE_URL: 'https://admin.test' }),
-    ['https://read.test', 'https://admin.test']
-  );
+test('split deployment: only the admin origin gets full access', () => {
+  const env = { PUBLIC_BASE_URL: 'https://read.test', ADMIN_BASE_URL: 'https://admin.test' };
+  assert.deepEqual(csrfAllowedOrigins(env), ['https://admin.test']);
+  assert.deepEqual(csrfPublicOnlyOrigins(env), ['https://read.test']);
 });
 
-test('allowedOrigins strips any path, keeping bare origins', () => {
-  assert.deepEqual(allowedOrigins({ PUBLIC_BASE_URL: 'https://ex.test:8443/sub' }), [
-    'https://ex.test:8443'
-  ]);
+test('hostnames differing only by path are the same origin, so nothing is public-only', () => {
+  const env = { PUBLIC_BASE_URL: 'https://ex.test/blog', ADMIN_BASE_URL: 'https://ex.test' };
+  assert.deepEqual(csrfAllowedOrigins(env), ['https://ex.test']);
+  assert.deepEqual(csrfPublicOnlyOrigins(env), []);
 });
 
-test('allowedOrigins is empty when nothing is configured', () => {
-  assert.deepEqual(allowedOrigins({}), []);
+test('origins keep a non-default port and drop any path', () => {
+  const env = { PUBLIC_BASE_URL: 'https://ex.test:8443/sub' };
+  assert.deepEqual(csrfAllowedOrigins(env), ['https://ex.test:8443']);
+});
+
+test('both origin lists are empty when nothing is configured', () => {
+  assert.deepEqual(csrfAllowedOrigins({}), []);
+  assert.deepEqual(csrfPublicOnlyOrigins({}), []);
 });

@@ -8,8 +8,10 @@
 // State-safe methods (GET, HEAD, OPTIONS) are not checked — those are
 // not supposed to mutate state and the OAuth callback uses GET.
 //
-// Production wiring derives allowedOrigins from PUBLIC_BASE_URL and
-// ADMIN_BASE_URL — one origin unless the deployment splits the two.
+// Production wiring derives its origins from ADMIN_BASE_URL and
+// PUBLIC_BASE_URL. They are the same origin unless the deployment splits
+// its hostnames, in which case the reader origin is confined to paths
+// outside /admin.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { adminTokenMatchesEnv } from './admin-token.ts';
@@ -20,6 +22,14 @@ const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 export interface CsrfOptions {
   /** Origins that may initiate state-changing requests. e.g. ['https://example.com'] */
   allowedOrigins: string[];
+  /**
+   * Origins confined to the reader-facing surface: allowed everywhere
+   * except under /admin. Set only when a deployment serves readers and
+   * the admin from different hostnames — otherwise a page on the reader
+   * host (a comment body, say) could forge an admin POST, and a shared
+   * registrable domain means SameSite=Lax won't stop it either.
+   */
+  publicOnlyOrigins?: string[];
 }
 
 /**
@@ -29,6 +39,9 @@ export interface CsrfOptions {
  */
 export function registerCsrfGuard(app: FastifyInstance, opts: CsrfOptions): void {
   const allowed = new Set(opts.allowedOrigins.map(normaliseOrigin).filter(Boolean) as string[]);
+  const publicOnly = new Set(
+    (opts.publicOnlyOrigins ?? []).map(normaliseOrigin).filter(Boolean) as string[]
+  );
   if (allowed.size === 0) {
     // Misconfiguration: registering with no origins would block every
     // POST, which is almost certainly not what the caller wants. Throw
@@ -56,11 +69,19 @@ export function registerCsrfGuard(app: FastifyInstance, opts: CsrfOptions): void
       reply.code(403).send({ error: 'cross-origin request blocked: missing Origin/Referer' });
       return reply;
     }
-    if (!allowed.has(claimed)) {
-      reply.code(403).send({ error: `cross-origin request blocked: ${claimed}` });
-      return reply;
-    }
+    if (allowed.has(claimed)) return;
+    if (publicOnly.has(claimed) && !isAdminPath(request.url)) return;
+    reply.code(403).send({ error: `cross-origin request blocked: ${claimed}` });
+    return reply;
   });
+}
+
+/** Whether a raw request URL targets the admin surface. Collapses repeated
+ * slashes and lowercases before matching: Fastify's router would 404 those
+ * variants anyway, and erring toward "admin" only ever tightens the check. */
+function isAdminPath(rawUrl: string): boolean {
+  const path = (rawUrl.split(/[?#]/)[0] ?? '').replace(/\/{2,}/g, '/').toLowerCase();
+  return path === '/admin' || path.startsWith('/admin/');
 }
 
 function pickClaimedOrigin(request: FastifyRequest): string | null {

@@ -40,6 +40,11 @@ Keeping `ADMIN_BASE_URL` on the original hostname is what lets the Google
 and Microsoft clients stay as they are — every `redirect_uri` is built
 from it. Moving it means re-authorising all three callbacks.
 
+The CSRF guard follows the same split: the admin origin may POST
+anywhere, the reader origin only outside `/admin`. Both hostnames sit
+under `rkroll.com`, so `SameSite=Lax` would not stop a page on the
+reader host from forging an admin POST on its own.
+
 Neither base URL may appear in `deploy/secrets/<site>.secrets.env`:
 secrets win the merge, so a stale copy there silently overrides the site
 env. `fastify_app.build.post.sh` fails the deploy if it finds one.

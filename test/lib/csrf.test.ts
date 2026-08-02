@@ -88,3 +88,65 @@ test('csrf: origin normalization (default port stripped)', async () => {
   });
   assert.equal(res.statusCode, 200);
 });
+
+async function makeSplitApp(): Promise<FastifyInstance> {
+  const app = Fastify();
+  registerCsrfGuard(app, {
+    allowedOrigins: ['https://admin.test'],
+    publicOnlyOrigins: ['https://read.test']
+  });
+  app.post('/:slug/comments', async () => ({ ok: true }));
+  app.post('/admin/reset', async () => ({ ok: true }));
+  app.post('/admin', async () => ({ ok: true }));
+  return app;
+}
+
+async function post(app: FastifyInstance, url: string, origin: string): Promise<number> {
+  const res = await app.inject({ method: 'POST', url, headers: { origin } });
+  return res.statusCode;
+}
+
+test('csrf: a public-only origin may post outside /admin', async () => {
+  const app = await makeSplitApp();
+  assert.equal(await post(app, '/hello/comments', 'https://read.test'), 200);
+});
+
+test('csrf: a public-only origin is blocked under /admin', async () => {
+  const app = await makeSplitApp();
+  assert.equal(await post(app, '/admin/reset', 'https://read.test'), 403);
+  assert.equal(await post(app, '/admin', 'https://read.test'), 403);
+});
+
+test('csrf: the admin origin reaches both surfaces', async () => {
+  const app = await makeSplitApp();
+  assert.equal(await post(app, '/admin/reset', 'https://admin.test'), 200);
+  assert.equal(await post(app, '/hello/comments', 'https://admin.test'), 200);
+});
+
+test('csrf: an unrelated origin is blocked on both surfaces', async () => {
+  const app = await makeSplitApp();
+  assert.equal(await post(app, '/hello/comments', 'https://attacker.example'), 403);
+  assert.equal(await post(app, '/admin/reset', 'https://attacker.example'), 403);
+});
+
+test('csrf: /admin detection survives a query string, case, and doubled slashes', async () => {
+  const app = await makeSplitApp();
+  for (const url of ['/admin/reset?x=1', '/Admin/reset', '//admin/reset', '/admin/reset#frag']) {
+    const res = await app.inject({
+      method: 'POST',
+      url,
+      headers: { origin: 'https://read.test' }
+    });
+    assert.equal(res.statusCode, 403, `expected 403 for ${url}, got ${res.statusCode}`);
+  }
+});
+
+test('csrf: a path merely starting with the letters "admin" is not the admin surface', async () => {
+  const app = Fastify();
+  registerCsrfGuard(app, {
+    allowedOrigins: ['https://admin.test'],
+    publicOnlyOrigins: ['https://read.test']
+  });
+  app.post('/administrivia/comments', async () => ({ ok: true }));
+  assert.equal(await post(app, '/administrivia/comments', 'https://read.test'), 200);
+});

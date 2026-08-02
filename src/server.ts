@@ -22,7 +22,8 @@ import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
 import {
   adminBaseUrl,
-  allowedOrigins,
+  csrfAllowedOrigins,
+  csrfPublicOnlyOrigins,
   paths,
   publicBaseUrl,
   type SiteConfig,
@@ -82,6 +83,9 @@ export interface BuildAppOpts {
      * whatever they use as a synthetic origin). When undefined, CSRF check
      * is skipped. */
     allowedOrigins?: string[];
+    /** Origins confined to paths outside /admin. Set only when the reader
+     * and admin hostnames differ; see registerCsrfGuard. */
+    publicOnlyOrigins?: string[];
     /** Override the per-IP rate cap on /admin/auth/token-login. Default
      * is the route's own (5 per 5 minutes); the e2e runner raises it. */
     tokenLoginRateMax?: number;
@@ -204,7 +208,10 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
   // populated, then register the auth flow routes.
   if (opts.db && opts.auth) {
     if (opts.auth.allowedOrigins && opts.auth.allowedOrigins.length > 0) {
-      registerCsrfGuard(app, { allowedOrigins: opts.auth.allowedOrigins });
+      registerCsrfGuard(app, {
+        allowedOrigins: opts.auth.allowedOrigins,
+        ...(opts.auth.publicOnlyOrigins ? { publicOnlyOrigins: opts.auth.publicOnlyOrigins } : {})
+      });
     }
     await registerAuthMiddleware(app, opts.db);
     await app.register(authRoutes, {
@@ -316,7 +323,8 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
     db,
     auth: {
       secureCookies: true,
-      allowedOrigins: allowedOrigins()
+      allowedOrigins: csrfAllowedOrigins(),
+      publicOnlyOrigins: csrfPublicOnlyOrigins()
     }
   });
   const port = opts.port ?? cfg.port;

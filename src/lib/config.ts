@@ -248,12 +248,19 @@ export function adminBaseUrl(env: Env = process.env): string | undefined {
   return stripTrailingSlash(env.ADMIN_BASE_URL) ?? publicBaseUrl(env);
 }
 
-/** Origins allowed to make state-changing requests: readers POST comments
- * from the public host, the admin POSTs from the admin host. Deduped, since
- * the two are the same origin unless the deployment splits them. */
-export function allowedOrigins(env: Env = process.env): string[] {
-  const urls = [publicBaseUrl(env), adminBaseUrl(env)].filter((u) => u !== undefined);
-  return [...new Set(urls.map((u) => new URL(u).origin))];
+/** Origins allowed to make any state-changing request, /admin included. */
+export function csrfAllowedOrigins(env: Env = process.env): string[] {
+  const admin = adminBaseUrl(env);
+  return admin ? [new URL(admin).origin] : [];
+}
+
+/** Origins allowed only outside /admin: the reader-facing host, and only
+ * when it is a different origin from the admin host. */
+export function csrfPublicOnlyOrigins(env: Env = process.env): string[] {
+  const url = publicBaseUrl(env);
+  if (!url) return [];
+  const origin = new URL(url).origin;
+  return csrfAllowedOrigins(env).includes(origin) ? [] : [origin];
 }
 
 function stripTrailingSlash(v: string | undefined): string | undefined {
