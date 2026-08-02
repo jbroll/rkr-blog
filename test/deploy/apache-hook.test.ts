@@ -166,3 +166,35 @@ test('hook fails the way a real deploy would when SITE_ROOT is set only in the s
   // must NOT satisfy the guard.
   assertHookFails({ ...BASE, SITE_ROOT: '/var/www/rkr-blog' }, '', /SITE_ROOT/);
 });
+
+const SPLIT = {
+  ...BASE,
+  DOMAIN_NAME: 'roll-along.rkroll.com',
+  APACHE_SERVER_ALIASES: 'rkr-blog.rkroll.com',
+  APACHE_CANONICAL_REDIRECT: 'no',
+  APACHE_ADMIN_HOST: 'rkr-blog.rkroll.com'
+};
+
+test('APACHE_CANONICAL_REDIRECT=no serves aliases directly instead of 301ing them', () => {
+  const conf = runHook(SPLIT, 'SITE_ROOT=/var/www/rkr-blog');
+  assert.ok(conf.includes('ServerAlias rkr-blog.rkroll.com'));
+  assert.ok(!conf.includes('RewriteRule ^(.*)$ https://roll-along.rkroll.com$1 [R=301,L]'));
+});
+
+test('APACHE_ADMIN_HOST sends /admin on any other host to the admin host', () => {
+  const conf = runHook(SPLIT, 'SITE_ROOT=/var/www/rkr-blog');
+  assert.ok(conf.includes('RewriteCond %{HTTP_HOST} !^rkr-blog\\.rkroll\\.com$ [NC]'));
+  assert.ok(
+    conf.includes('RewriteRule ^(/admin(?:/.*)?)$ https://rkr-blog.rkroll.com$1 [R=301,L]')
+  );
+});
+
+test('the admin redirect precedes the image cache fast-path', () => {
+  const conf = runHook(SPLIT, 'SITE_ROOT=/var/www/rkr-blog');
+  assert.ok(conf.indexOf('/admin(?:/.*)?') < conf.indexOf('RewriteRule ^/img/'));
+});
+
+test('no admin redirect is emitted when APACHE_ADMIN_HOST is unset', () => {
+  const conf = runHook(BASE, 'SITE_ROOT=/var/www/rkr-blog');
+  assert.ok(!conf.includes('/admin(?:/.*)?'));
+});

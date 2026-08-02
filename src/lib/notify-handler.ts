@@ -4,6 +4,7 @@
 // has no auto-retry — a thrown handler would sit 'failed' forever).
 
 import { getCommentById, getPostMetaById } from './comments.ts';
+import { adminBaseUrl, publicBaseUrl } from './config.ts';
 import type { Db } from './db.ts';
 import type { Mailer } from './mailer.ts';
 
@@ -21,7 +22,8 @@ export function makeNotifyHandler(
     if (!c || (c.status !== 'published' && c.status !== 'queued')) return;
     const post = getPostMetaById(db, c.post_id);
     if (!post) return;
-    const base = (process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
+    const base = publicBaseUrl() ?? '';
+    const admin = adminBaseUrl() ?? '';
     const subject =
       c.status === 'queued'
         ? `[moderation] Held comment on "${post.title}" by ${c.author_name}`
@@ -33,7 +35,7 @@ export function makeNotifyHandler(
       c.body,
       '',
       `Comment: ${base}/${post.slug}#comment-${c.id}`,
-      `Moderate: ${base}/admin/comments`
+      `Moderate: ${admin}/admin/comments`
     ].join('\n');
     await mailer.sendMail({ subject, text });
   };

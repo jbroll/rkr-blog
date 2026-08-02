@@ -49,6 +49,29 @@ test('rkr-blog site config exports the expected identity', () => {
   assert.equal(c.SITE_ENV_FILE, 'deploy/sites/rkr-blog.env');
   assert.equal(c.FASTIFY_APP_SECRETS_FILE, 'deploy/secrets/rkr-blog.secrets.env');
   assert.equal(c.APACHE_SERVER_ALIASES, 'rkr-blog.rkroll.com');
+  assert.equal(c.APACHE_CANONICAL_REDIRECT, 'no');
+  assert.equal(c.APACHE_ADMIN_HOST, 'rkr-blog.rkroll.com');
+});
+
+test('the admin host is served by the vhost that pins it', () => {
+  const c = loadConfig('deploy/sites/rkr-blog.conf');
+  const served = [c.DOMAIN_NAME, ...(c.APACHE_SERVER_ALIASES ?? '').split(/\s+/)];
+  assert.ok(
+    served.includes(c.APACHE_ADMIN_HOST as string),
+    'APACHE_ADMIN_HOST must be the domain or one of its aliases, or the cert will not cover it'
+  );
+});
+
+test('ADMIN_BASE_URL matches the hostname Apache pins /admin to', () => {
+  const c = loadConfig('deploy/sites/rkr-blog.conf');
+  const adminBase = readEnvKeyAsHookWould('deploy/sites/rkr-blog.env', 'ADMIN_BASE_URL');
+  assert.equal(adminBase, `https://${c.APACHE_ADMIN_HOST}`);
+});
+
+test('PUBLIC_BASE_URL matches the canonical domain', () => {
+  const c = loadConfig('deploy/sites/rkr-blog.conf');
+  const publicBase = readEnvKeyAsHookWould('deploy/sites/rkr-blog.env', 'PUBLIC_BASE_URL');
+  assert.equal(publicBase, `https://${c.DOMAIN_NAME}`);
 });
 
 test('rkr-blog site config inherits shared settings from common.conf', () => {

@@ -24,6 +24,7 @@ import { Transform } from 'node:stream';
 import { generateCodeVerifier, generateState, MicrosoftEntraId, type OAuth2Tokens } from 'arctic';
 import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
+import { adminBaseUrl } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import {
   fetchOneDriveFile,
@@ -472,7 +473,7 @@ async function ensureFresh(
 function makeOneDriveExchange(): OneDriveTokenExchange {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-  const baseUrl = process.env.PUBLIC_BASE_URL;
+  const baseUrl = adminBaseUrl();
   // Tenant: 'common' supports both personal and work accounts; admins
   // can pin to a specific tenant or 'organizations' / 'consumers'.
   const tenant = process.env.MICROSOFT_TENANT_ID ?? 'common';

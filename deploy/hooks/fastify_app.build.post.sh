@@ -59,6 +59,22 @@ if [[ -f "$secrets_env" ]]; then
   fi
 fi
 
+# Same last-wins trap for the hostnames. These are non-secret config and
+# belong in $SITE_ENV_FILE; a stale copy in the secrets file would silently
+# reinstate an old domain, breaking permalinks and the CSRF allowlist with
+# nothing in the deploy output to show for it.
+if [[ -f "$secrets_env" && -f "$config_env" ]]; then
+  for key in PUBLIC_BASE_URL ADMIN_BASE_URL; do
+    from_site="$(grep -E "^${key}=" "$config_env" | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
+    [[ -z "$from_site" ]] && continue
+    merged_value="$(grep -E "^${key}=" "$secrets_env" | tail -n1 | cut -d= -f2- | sed -e 's/[[:space:]]*$//' || true)"
+    if [[ "$merged_value" != "$from_site" ]]; then
+      echo "fastify_app.build.post: effective ${key} ($merged_value) != ${from_site} from $SITE_ENV_FILE — remove the ${key} line from $FASTIFY_APP_SECRETS_FILE" >&2
+      exit 1
+    fi
+  done
+fi
+
 # --- Workspace package on the remote ---------------------------------------
 # @rkr/image-edit is a file: dependency; node_app/build.sh has already bundled
 # its built dist into .bundled-deps and stripped it from the shipped

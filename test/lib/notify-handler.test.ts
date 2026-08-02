@@ -54,6 +54,22 @@ test('published comment → email with permalink + admin link', async (t) => {
   assert.match(m0.text, /https:\/\/ex\.test\/admin\/comments/);
 });
 
+test('split deployment: permalink uses the public host, moderate link the admin host', async (t) => {
+  const { db, commentId } = seed(t, 'published');
+  const { sent, mailer } = capturing();
+  process.env.PUBLIC_BASE_URL = 'https://read.test';
+  process.env.ADMIN_BASE_URL = 'https://admin.test';
+  t.after(() => {
+    process.env.PUBLIC_BASE_URL = 'https://ex.test';
+    delete process.env.ADMIN_BASE_URL;
+  });
+  await makeNotifyHandler(mailer)({ commentId }, { siteRoot: '/x', db });
+  const m0 = sent[0];
+  assert.ok(m0);
+  assert.match(m0.text, /Comment: https:\/\/read\.test\/hello#comment-/);
+  assert.match(m0.text, /Moderate: https:\/\/admin\.test\/admin\/comments/);
+});
+
 test('queued comment → moderation subject', async (t) => {
   const { db, commentId } = seed(t, 'queued');
   const { sent, mailer } = capturing();

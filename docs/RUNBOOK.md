@@ -9,12 +9,40 @@ Two sites run from this one tree, each as its own systemd service.
 
 | Site | Domain | `APP_NAME` | Port |
 |---|---|---|---|
-| roll-along | roll-along.rkroll.com (`rkr-blog.rkroll.com` 301s to it) | `rkr-blog` | 3000 |
+| roll-along | roll-along.rkroll.com, admin on rkr-blog.rkroll.com | `rkr-blog` | 3000 |
 | stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3002 |
 
 `APP_NAME` is `rkr-blog`, not `roll-along` — it names the unit and the
 server-side paths, and predates the domain move. Renaming it would move
 `/var/www/rkr-blog` and orphan the site's data.
+
+### Split public / admin hostnames
+
+roll-along serves both its hostnames directly — no canonical redirect —
+with only `/admin` pinned to `rkr-blog.rkroll.com`. Sign-in has to start
+and finish on one host: the OAuth state cookie is host-only, so a flow
+begun on the public host loses it when the provider returns to the admin
+host and the callback 400s.
+
+Four settings have to agree, and the tests in
+`test/deploy/site-config.test.ts` check that they do:
+
+| Setting | Where | roll-along |
+|---|---|---|
+| `DOMAIN_NAME` | `<site>.conf` | `roll-along.rkroll.com` |
+| `APACHE_SERVER_ALIASES` | `<site>.conf` | `rkr-blog.rkroll.com` |
+| `APACHE_CANONICAL_REDIRECT` | `<site>.conf` | `no` — serve aliases, don't 301 them |
+| `APACHE_ADMIN_HOST` | `<site>.conf` | `rkr-blog.rkroll.com` — must be the domain or one of its aliases, or the cert won't cover it |
+| `PUBLIC_BASE_URL` | `<site>.env` | `https://roll-along.rkroll.com` |
+| `ADMIN_BASE_URL` | `<site>.env` | `https://rkr-blog.rkroll.com` |
+
+Keeping `ADMIN_BASE_URL` on the original hostname is what lets the Google
+and Microsoft clients stay as they are — every `redirect_uri` is built
+from it. Moving it means re-authorising all three callbacks.
+
+Neither base URL may appear in `deploy/secrets/<site>.secrets.env`:
+secrets win the merge, so a stale copy there silently overrides the site
+env. `fastify_app.build.post.sh` fails the deploy if it finds one.
 
 ```bash
 # roll-along — deploy.conf defaults to it
@@ -34,8 +62,8 @@ the VPS, and an argument overrides it.
    The Drive and OneDrive integrations add
    `https://<domain>/admin/integrations/gdrive/callback` and
    `.../onedrive/callback` on their own clients. All three derive from
-   `PUBLIC_BASE_URL`, so changing a site's domain means re-authorising
-   every one of them.
+   `ADMIN_BASE_URL` (which defaults to `PUBLIC_BASE_URL`), so changing a
+   site's admin hostname means re-authorising every one of them.
 2. `cp deploy/secrets.env.example deploy/secrets/<site>.secrets.env` and
    fill it in; generate `ADMIN_TOKEN` with `openssl rand -hex 32`.
 3. Point DNS at the VPS — certbot's webroot challenge needs the name to

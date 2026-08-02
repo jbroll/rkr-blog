@@ -20,7 +20,14 @@ sharp.concurrency(1);
 
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
-import { paths, type SiteConfig, serverConfig, siteConfig } from './lib/config.ts';
+import {
+  allowedOrigins,
+  paths,
+  publicBaseUrl,
+  type SiteConfig,
+  serverConfig,
+  siteConfig
+} from './lib/config.ts';
 import { registerCsrfGuard } from './lib/csrf.ts';
 import { type Db, open } from './lib/db.ts';
 import type { IdTokenVerifier } from './lib/google-jwt.ts';
@@ -301,8 +308,8 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
   const p = paths();
   const db = bootDb(p.db);
 
-  const publicBaseUrl = process.env.PUBLIC_BASE_URL;
-  if (!publicBaseUrl) {
+  const publicUrl = publicBaseUrl();
+  if (!publicUrl) {
     throw new Error('PUBLIC_BASE_URL must be set (used for OAuth callback + CSRF allowlist)');
   }
   const app = await buildApp({
@@ -311,7 +318,7 @@ export async function startServer(opts: StartServerOpts = {}): Promise<FastifyIn
     db,
     auth: {
       secureCookies: true,
-      allowedOrigins: [new URL(publicBaseUrl).origin]
+      allowedOrigins: allowedOrigins()
     }
   });
   const port = opts.port ?? cfg.port;

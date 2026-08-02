@@ -16,6 +16,7 @@ import { Transform } from 'node:stream';
 import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from 'arctic';
 import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
+import { adminBaseUrl } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { fetchDriveFile } from '../lib/google-drive.ts';
 import {
@@ -331,7 +332,7 @@ async function ensureFresh(
 function makeDriveExchange(): DriveTokenExchange {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const baseUrl = process.env.PUBLIC_BASE_URL;
+  const baseUrl = adminBaseUrl();
   if (!clientId || !clientSecret || !baseUrl) {
     throw new Error('GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and PUBLIC_BASE_URL must be set');
   }

@@ -6,8 +6,11 @@ import { afterEach, type TestContext, test } from 'node:test';
 
 import {
   _resetThemeNameCache,
+  adminBaseUrl,
+  allowedOrigins,
   listAvailableThemes,
   paths,
+  publicBaseUrl,
   readPersistedSiteConfig,
   serverConfig,
   siteConfig,
@@ -254,4 +257,48 @@ test('commentNotify: an invalid value is dropped (never persisted)', (t) => {
   writePersistedSiteConfig({ commentNotify: 'bogus' as never }, env);
   assert.equal(readPersistedSiteConfig(env).commentNotify, undefined);
   assert.equal(siteConfig(env).commentNotify, undefined);
+});
+
+test('adminBaseUrl falls back to the public origin when ADMIN_BASE_URL is unset', () => {
+  const env = { PUBLIC_BASE_URL: 'https://ex.test' };
+  assert.equal(publicBaseUrl(env), 'https://ex.test');
+  assert.equal(adminBaseUrl(env), 'https://ex.test');
+});
+
+test('adminBaseUrl overrides the public origin for a split deployment', () => {
+  const env = { PUBLIC_BASE_URL: 'https://read.test', ADMIN_BASE_URL: 'https://admin.test' };
+  assert.equal(publicBaseUrl(env), 'https://read.test');
+  assert.equal(adminBaseUrl(env), 'https://admin.test');
+});
+
+test('both base URLs drop trailing slashes so callers can concatenate paths', () => {
+  const env = { PUBLIC_BASE_URL: 'https://read.test//', ADMIN_BASE_URL: 'https://admin.test/' };
+  assert.equal(publicBaseUrl(env), 'https://read.test');
+  assert.equal(adminBaseUrl(env), 'https://admin.test');
+});
+
+test('both base URLs are undefined when nothing is configured', () => {
+  assert.equal(publicBaseUrl({}), undefined);
+  assert.equal(adminBaseUrl({}), undefined);
+});
+
+test('allowedOrigins collapses to one origin when public and admin match', () => {
+  assert.deepEqual(allowedOrigins({ PUBLIC_BASE_URL: 'https://ex.test' }), ['https://ex.test']);
+});
+
+test('allowedOrigins lists both origins for a split deployment, public first', () => {
+  assert.deepEqual(
+    allowedOrigins({ PUBLIC_BASE_URL: 'https://read.test', ADMIN_BASE_URL: 'https://admin.test' }),
+    ['https://read.test', 'https://admin.test']
+  );
+});
+
+test('allowedOrigins strips any path, keeping bare origins', () => {
+  assert.deepEqual(allowedOrigins({ PUBLIC_BASE_URL: 'https://ex.test:8443/sub' }), [
+    'https://ex.test:8443'
+  ]);
+});
+
+test('allowedOrigins is empty when nothing is configured', () => {
+  assert.deepEqual(allowedOrigins({}), []);
 });

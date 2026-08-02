@@ -54,9 +54,24 @@ if [[ -n "$ALIASES" ]]; then
   done
   # Escape dots for the regex-matched Host check.
   canonical_re="${DOMAIN_NAME//./\\.}"
-  REDIRECT_BLOCK="    # Canonical host: send every alias to ${DOMAIN_NAME}.
+  if [[ "${APACHE_CANONICAL_REDIRECT:-yes}" != "no" ]]; then
+    REDIRECT_BLOCK="    # Canonical host: send every alias to ${DOMAIN_NAME}.
     RewriteCond %{HTTP_HOST} !^${canonical_re}\$ [NC]
     RewriteRule ^(.*)\$ https://${DOMAIN_NAME}\$1 [R=301,L]
+"
+  fi
+fi
+
+# Sign-in lives on one hostname even when readers are served from several: the
+# OAuth state cookie is host-only, so a flow that starts on the public host and
+# returns to the admin host loses it and the callback 400s.
+ADMIN_HOST="${APACHE_ADMIN_HOST:-}"
+if [[ -n "$ADMIN_HOST" ]]; then
+  admin_re="${ADMIN_HOST//./\\.}"
+  REDIRECT_BLOCK+="    # Admin surface is ${ADMIN_HOST} only — the OAuth state
+    # cookie is host-only, so sign-in must start and finish on one host.
+    RewriteCond %{HTTP_HOST} !^${admin_re}\$ [NC]
+    RewriteRule ^(/admin(?:/.*)?)\$ https://${ADMIN_HOST}\$1 [R=301,L]
 "
 fi
 

@@ -9,7 +9,7 @@ import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from '
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { adminTokenMatchesEnv } from '../lib/admin-token.ts';
-import { siteConfig } from '../lib/config.ts';
+import { adminBaseUrl, siteConfig } from '../lib/config.ts';
 import { escapeText } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import {
@@ -441,7 +441,7 @@ ${tokenForm}
 function makeGoogleExchange(): TokenExchange {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const baseUrl = process.env.PUBLIC_BASE_URL;
+  const baseUrl = adminBaseUrl();
   if (!clientId || !clientSecret || !baseUrl) {
     throw new Error('GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and PUBLIC_BASE_URL must be set');
   }

@@ -600,7 +600,8 @@ Per-deployment environment surface:
 | `HOST` | `127.0.0.1` | listen interface (front proxy reverse-proxies) |
 | `SITE_TITLE` | `rkroll` | header title + `<title>` suffix |
 | `SITE_TAGLINE` | (none) | optional subtitle |
-| `PUBLIC_BASE_URL` | (required) | used to build OAuth redirect URI |
+| `PUBLIC_BASE_URL` | (required) | origin readers see; permalinks in comment notifications, and part of the CSRF allowlist |
+| `ADMIN_BASE_URL` | `PUBLIC_BASE_URL` | origin the admin UI and every OAuth `redirect_uri` live on; set only when readers and admin are served from different hostnames |
 | `GOOGLE_CLIENT_ID` | (required) | Google OAuth |
 | `GOOGLE_CLIENT_SECRET` | (required) | Google OAuth |
 | `ADMIN_TOKEN` | (unset) | when set, enables `Authorization: Bearer` admin auth for scripted clients (WP importer push mode); leave unset to disable |

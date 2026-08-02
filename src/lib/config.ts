@@ -233,6 +233,34 @@ export function paths(env: Env = process.env): Paths {
   };
 }
 
+/** Origin visitors see. Canonical for permalinks and comment notifications. */
+export function publicBaseUrl(env: Env = process.env): string | undefined {
+  return stripTrailingSlash(env.PUBLIC_BASE_URL);
+}
+
+/** Origin the admin UI and every OAuth `redirect_uri` live on.
+ *
+ * Split from publicBaseUrl so a site can serve readers on one hostname while
+ * sign-in stays on another: the OAuth state cookie is host-only, so a flow
+ * that starts on the public host and returns to the admin host loses it.
+ * Defaults to the public origin — only a split deployment sets ADMIN_BASE_URL. */
+export function adminBaseUrl(env: Env = process.env): string | undefined {
+  return stripTrailingSlash(env.ADMIN_BASE_URL) ?? publicBaseUrl(env);
+}
+
+/** Origins allowed to make state-changing requests: readers POST comments
+ * from the public host, the admin POSTs from the admin host. Deduped, since
+ * the two are the same origin unless the deployment splits them. */
+export function allowedOrigins(env: Env = process.env): string[] {
+  const urls = [publicBaseUrl(env), adminBaseUrl(env)].filter((u) => u !== undefined);
+  return [...new Set(urls.map((u) => new URL(u).origin))];
+}
+
+function stripTrailingSlash(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  return v.replace(/\/+$/, '');
+}
+
 export function serverConfig(env: Env = process.env): ServerConfig {
   return {
     port: Number(env.PORT || 3000),
