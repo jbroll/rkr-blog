@@ -23,14 +23,14 @@ import {
   listPosts
 } from './wp-rest.ts';
 
-interface ListPostsOpts {
+export interface ListPostsOpts {
   page?: number;
   perPage?: number;
   /** WP status: `publish`, `draft`, or `any`. */
   status?: string;
 }
 
-interface ListCommentsOpts {
+export interface ListCommentsOpts {
   page?: number;
   perPage?: number;
 }
