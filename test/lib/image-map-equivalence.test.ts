@@ -68,12 +68,13 @@ More prose.
   await writeBlob(`originals/${id}.jpg`, new Blob([new Uint8Array(bytes)]));
 
   const { buildImageMapFromOpfs } = await import('../../src/admin/image-map-opfs.ts');
-  const serverHtml = await renderPostHtml(parsePost(body).ast, {
-    images: await buildImageMap(root, body),
+  const { ast } = parsePost(body);
+  const serverHtml = await renderPostHtml(ast, {
+    images: await buildImageMap(root, ast),
     widgets: registry()
   });
-  const clientHtml = await renderPostHtml(parsePost(body).ast, {
-    images: await buildImageMapFromOpfs(body, {
+  const clientHtml = await renderPostHtml(ast, {
+    images: await buildImageMapFromOpfs(ast, {
       decode: async () => ({ width: 900, height: 300 }),
       toUrl: () => 'blob:x'
     }),

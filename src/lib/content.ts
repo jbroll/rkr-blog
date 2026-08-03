@@ -101,14 +101,6 @@ export function serializePost(parsed: ParsedPost): string {
   return String(makeProcessor().stringify(parsed.ast));
 }
 
-/** Serialize a slice of a post body back to markdown — the source text
- * for just those nodes. Attribute syntax is normalized (see the
- * round-trip notes), so this is for callers that read content out of
- * the text, not for round-tripping it back to disk. */
-export function serializeNodes(nodes: RootContent[]): string {
-  return String(makeProcessor().stringify({ type: 'root', children: nodes }));
-}
-
 /** Render the post body (everything after frontmatter) to HTML. */
 export async function renderPostHtml(ast: Root, ctx: RenderCtx): Promise<string> {
   let out = '';

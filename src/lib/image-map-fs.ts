@@ -5,6 +5,7 @@ import type { Sidecar } from '@rkr/image-edit';
 import { SHARP_PIXEL_LIMIT } from '@rkr/image-edit';
 import sharp from 'sharp';
 
+import { collectFigureIds, type FigureIdSource } from './figure-ids.ts';
 import { cacheKey } from './hash.ts';
 import { resolveIds } from './id-resolve.ts';
 import type { ImageMap, ImageSource } from './image-map.ts';
@@ -14,13 +15,11 @@ import { listSidecarIds } from './posts.ts';
 import { applyOp, type Op } from './render.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
-const ID_TOKEN = /\b[0-9a-fA-F]{6,64}\b/g;
-
-/** Every image the post body could reference, resolved and measured
- * before rendering starts. Reads run concurrently; the renderer then
- * does no I/O at all. */
-export async function buildImageMap(siteRoot: string, body: string): Promise<ImageMap> {
-  const raws = [...new Set((body.match(ID_TOKEN) ?? []).map((s) => s.toLowerCase()))];
+/** Every image the given nodes render, resolved and measured before
+ * rendering starts. Reads run concurrently; the renderer then does no
+ * I/O at all. */
+export async function buildImageMap(siteRoot: string, source: FigureIdSource): Promise<ImageMap> {
+  const raws = collectFigureIds(source);
   if (raws.length === 0) return new Map();
   const known = listSidecarIds(siteRoot);
   const resolved = resolveIds(raws, known);

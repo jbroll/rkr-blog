@@ -1,10 +1,11 @@
 // Client half of the image prepass (docs/spec-offline.md §6): the same
-// scan the server runs, sourced from OPFS. sharp isn't available here,
+// prepass the server runs, sourced from OPFS. sharp isn't available here,
 // so a missing bake falls back to the sidecar's recorded dimensions —
 // layout is slightly off until the bake syncs.
 
 import type { Sidecar } from '@rkr/image-edit';
 
+import { collectFigureIds, type FigureIdSource } from '../lib/figure-ids.ts';
 import { resolveIds } from '../lib/id-resolve.ts';
 import type { ImageMap, ImageSource } from '../lib/image-map.ts';
 import { listDir, readBlob, readJson } from './opfs.ts';
@@ -15,7 +16,6 @@ import { OPFS_DIRS } from './opfs-schema.ts';
 export const MISSING_IMAGE_URL =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-const ID_TOKEN = /\b[0-9a-fA-F]{6,64}\b/g;
 const ORIGINAL_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic'];
 
 export interface OpfsMapOpts {
@@ -31,13 +31,13 @@ async function decodeSize(blob: Blob): Promise<{ width: number; height: number }
 }
 
 export async function buildImageMapFromOpfs(
-  body: string,
+  source: FigureIdSource,
   opts: OpfsMapOpts = {}
 ): Promise<ImageMap> {
   const decode = opts.decode ?? decodeSize;
   const toUrl = opts.toUrl ?? ((b: Blob) => URL.createObjectURL(b));
 
-  const raws = [...new Set((body.match(ID_TOKEN) ?? []).map((s) => s.toLowerCase()))];
+  const raws = collectFigureIds(source);
   if (raws.length === 0) return new Map();
 
   const known = (await listDir(OPFS_DIRS.SIDECARS))

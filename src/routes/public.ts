@@ -23,13 +23,7 @@ import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
-import {
-  escapeText,
-  parsePost,
-  type RenderCtx,
-  renderPostHtml,
-  serializeNodes
-} from '../lib/content.ts';
+import { escapeText, parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
@@ -81,17 +75,17 @@ async function extractPostBanner(ast: Root, ctx: RenderCtx): Promise<string | nu
   return html;
 }
 
-/** Markdown source of exactly what a teaser renders — the hero
- * ::figure and the lede paragraph after it. The index measures the
- * images in this slice only; scanning the whole post would open (and
- * self-heal a bake for) every image in it, and one broken image
- * anywhere would cost the index its teaser. */
-function teaserSource(ast: Root): string {
+/** Exactly what a teaser renders — the hero ::figure and the lede
+ * paragraph after it. The index measures the images in these nodes
+ * only; measuring the whole post would open (and self-heal a bake
+ * for) every image in it, and one broken image anywhere would cost
+ * the index its teaser. */
+function teaserNodes(ast: Root): RootContent[] {
   const heroIdx = heroFigureIndex(ast);
-  if (heroIdx === -1) return '';
+  if (heroIdx === -1) return [];
   const hero = ast.children[heroIdx] as RootContent;
   const lede = ast.children.slice(heroIdx + 1).find((n) => n.type === 'paragraph');
-  return serializeNodes(lede ? [hero, lede] : [hero]);
+  return lede ? [hero, lede] : [hero];
 }
 
 /** First remaining top-level paragraph rendered to inline HTML (links /
@@ -172,16 +166,16 @@ export default async function publicRoutes(
       let siteBannerFigureFound = false;
       if (fs.existsSync(siteBannerPath)) {
         try {
-          const raw = await fs.promises.readFile(siteBannerPath, 'utf8');
-          const { ast } = parsePost(raw);
+          const { ast } = parsePost(await fs.promises.readFile(siteBannerPath, 'utf8'));
           const figureNode = ast.children.find(
             (n): n is LeafDirective =>
               n.type === 'leafDirective' && (n as LeafDirective).name === 'figure'
           ) as LeafDirective | undefined;
           if (figureNode) {
             siteBannerFigureFound = true;
-            indexBannerHtml = await widgets.dispatch('figure', figureNode as DirectiveNode, {
-              images: await buildImageMap(siteRoot, raw),
+            const dir = figureNode as DirectiveNode;
+            indexBannerHtml = await widgets.dispatch('figure', dir, {
+              images: await buildImageMap(siteRoot, dir),
               widgets
             });
           }
@@ -198,7 +192,7 @@ export default async function publicRoutes(
           children: []
         };
         indexBannerHtml = await widgets.dispatch('figure', bannerNode, {
-          images: await buildImageMap(siteRoot, site.bannerImageId),
+          images: await buildImageMap(siteRoot, bannerNode),
           widgets
         });
       }
@@ -216,7 +210,7 @@ export default async function publicRoutes(
         try {
           const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
           const { ast } = parsePost(rawTop);
-          const ctx = { images: await buildImageMap(siteRoot, teaserSource(ast)), widgets };
+          const ctx = { images: await buildImageMap(siteRoot, teaserNodes(ast)), widgets };
           const bannerHtml = await extractPostBanner(ast, ctx);
           const excerptHtml = bannerHtml
             ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
@@ -284,14 +278,12 @@ export default async function publicRoutes(
         .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
     };
     let parsed: ReturnType<typeof parsePost>;
-    let aboutRaw: string;
     try {
-      aboutRaw = await fs.promises.readFile(filePath, 'utf8');
-      parsed = parsePost(aboutRaw);
+      parsed = parsePost(await fs.promises.readFile(filePath, 'utf8'));
     } catch {
       return send404();
     }
-    const ctx = { images: await buildImageMap(siteRoot, aboutRaw), widgets };
+    const ctx = { images: await buildImageMap(siteRoot, parsed.ast), widgets };
     const bannerHtml = await extractPostBanner(parsed.ast, ctx);
     const bodyHtml = await renderPostHtml(parsed.ast, ctx);
     setPublicSecurityHeaders(reply);
@@ -418,7 +410,7 @@ export default async function publicRoutes(
       const fullPath = path.join(siteRoot, row.path);
       const raw = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parsePost(raw);
-      const ctx = { images: await buildImageMap(siteRoot, raw), widgets };
+      const ctx = { images: await buildImageMap(siteRoot, parsed.ast), widgets };
       const bannerHtml = await extractPostBanner(parsed.ast, ctx);
       const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 

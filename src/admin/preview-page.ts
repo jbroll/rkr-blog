@@ -48,10 +48,10 @@ export async function renderPreviewDocument(input: PreviewInput): Promise<string
   const snapshot = resolveSnapshot(input.snapshot);
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
-  const images = await buildImageMapFromOpfs(input.markdown);
   const parsed = parsePost(
     `---\ntitle: ${JSON.stringify(input.title)}\nslug: ${JSON.stringify(input.slug)}\n---\n\n${input.markdown}`
   );
+  const images = await buildImageMapFromOpfs(parsed.ast);
   const bodyHtml = await renderPostHtml(parsed.ast, { images, widgets });
 
   return renderPostPage({

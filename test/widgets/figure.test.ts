@@ -63,8 +63,9 @@ function makeNode(attributes: Record<string, string>): DirectiveNode {
 async function dispatch(root: string, attrs: Record<string, string>): Promise<string> {
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
-  const images = await buildImageMap(root, attrs.ids ?? '');
-  return widgets.dispatch('figure', makeNode(attrs), { images, widgets });
+  const node = makeNode(attrs);
+  const images = await buildImageMap(root, node);
+  return widgets.dispatch('figure', node, { images, widgets });
 }
 
 test('::figure 1x1 default — single image, defaults applied', async (t) => {

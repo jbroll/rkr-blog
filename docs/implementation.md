@@ -597,6 +597,13 @@ unresolvable, and the widget renders an HTML comment
 
 Gather first, then render:
 
+- Both prepasses take mdast nodes, not markdown text.
+  `collectFigureIds` (`src/lib/figure-ids.ts`) walks them for `::figure`
+  directives and reads each `ids` attribute with
+  `extractImageIdsAndAlts` — the same parse the figure widget renders
+  from, so the map's keys and the widget's lookups agree by
+  construction. A hex token in prose or a code block is not a
+  directive attribute, so it is never resolved, measured, or baked.
 - `src/lib/image-map-fs.ts` builds the map from disk — sidecars,
   on-disk dimensions, `/img/<id>.<oph>.<fmt>` URLs.
 - `src/admin/image-map-opfs.ts` builds the same shape from OPFS —
@@ -604,6 +611,12 @@ Gather first, then render:
   values, since there's no sharp in the browser.
 - `src/lib/id-resolve.ts` holds the one copy of the id-prefix
   resolution rule both prepasses call.
+
+Callers pass whatever subtree they are about to render: a whole `Root`
+for `/about` and `/:slug`, the hero figure plus lede for the index
+teaser, the single `::figure` node for the site banner. The
+`bannerImageId` fallback builds its figure node first and hands over
+that node, so the id path is the same one every other caller takes.
 
 An injected filesystem port into the renderer was considered and
 rejected: it wraps the reads rather than removing them, and leaves the

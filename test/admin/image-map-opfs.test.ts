@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 
+import { parsePost } from '../../src/lib/content.ts';
 import { installMockOpfs } from './opfs-mock.ts';
 
 const { resetMockOpfs } = installMockOpfs();
+
+function body(markdown: string) {
+  return parsePost(`---\ntitle: t\nslug: s\n---\n\n${markdown}`).ast;
+}
 
 const ID = 'c'.repeat(64);
 const SIDECAR = {
@@ -36,7 +41,7 @@ test('client prepass: pinned original yields a blob: URL', async () => {
   const { buildImageMapFromOpfs } = await import('../../src/admin/image-map-opfs.ts');
   await seedSidecar();
   await seedBlob(`originals/${ID}.jpg`);
-  const map = await buildImageMapFromOpfs(`::figure{ids="${ID}"}`, opts);
+  const map = await buildImageMapFromOpfs(body(`::figure{ids="${ID}"}`), opts);
   const src = map.get(ID);
   assert.ok(src);
   assert.equal(src.urlFor(640, 'webp', 85), 'blob:fake');
@@ -48,7 +53,7 @@ test('client prepass: no OPFS bytes yields the placeholder URL', async () => {
     '../../src/admin/image-map-opfs.ts'
   );
   await seedSidecar();
-  const map = await buildImageMapFromOpfs(`::figure{ids="${ID}"}`, opts);
+  const map = await buildImageMapFromOpfs(body(`::figure{ids="${ID}"}`), opts);
   assert.equal(map.get(ID)?.urlFor(640, 'webp', 85), MISSING_IMAGE_URL);
 });
 
@@ -59,14 +64,22 @@ test('client prepass: ops present + bake missing falls back to sidecar metadata 
     metadata: { width: 111, height: 222 }
   });
   await seedBlob(`originals/${ID}.jpg`);
-  const map = await buildImageMapFromOpfs(`::figure{ids="${ID}"}`, opts);
+  const map = await buildImageMapFromOpfs(body(`::figure{ids="${ID}"}`), opts);
   assert.deepEqual({ w: map.get(ID)?.width, h: map.get(ID)?.height }, { w: 111, h: 222 });
+});
+
+test('client prepass: a hex token in prose is not an image reference', async () => {
+  const { buildImageMapFromOpfs } = await import('../../src/admin/image-map-opfs.ts');
+  await seedSidecar();
+  await seedBlob(`originals/${ID}.jpg`);
+  const map = await buildImageMapFromOpfs(body('The commit cccccccc shipped it.'), opts);
+  assert.equal(map.size, 0);
 });
 
 test('client prepass: a prefix reference is keyed by the prefix', async () => {
   const { buildImageMapFromOpfs } = await import('../../src/admin/image-map-opfs.ts');
   await seedSidecar();
   await seedBlob(`originals/${ID}.jpg`);
-  const map = await buildImageMapFromOpfs('::figure{ids="cccccccc"}', opts);
+  const map = await buildImageMapFromOpfs(body('::figure{ids="cccccccc"}'), opts);
   assert.ok(map.get('cccccccc'));
 });

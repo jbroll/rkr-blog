@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { idCount, singleId } from '../../src/lib/figure-ids.ts';
+import { collectFigureIds, idCount, singleId } from '../../src/lib/figure-ids.ts';
 
 test('idCount: empty / undefined → 0', () => {
   assert.equal(idCount(undefined), 0);
@@ -43,4 +43,36 @@ test('singleId: leading comma → empty first segment is returned trimmed', () =
   // Documents the gate-on-idCount=1 contract: caller is expected to
   // verify the count first; singleId is permissive about edge inputs.
   assert.equal(singleId(',abc'), '');
+});
+
+test('collectFigureIds: figure directives at any depth, in order, deduplicated', () => {
+  const figure = (ids: string) => ({
+    type: 'leafDirective',
+    name: 'figure',
+    attributes: { ids },
+    children: []
+  });
+  const tree = {
+    type: 'root',
+    children: [
+      figure('AAAAAA, bbbbbb'),
+      { type: 'code', value: 'color: #cccccc;' },
+      {
+        type: 'blockquote',
+        children: [
+          { type: 'paragraph', children: [{ type: 'text', value: 'dddddd' }, figure('bbbbbb')] }
+        ]
+      },
+      { type: 'leafDirective', name: 'note', attributes: { ids: 'eeeeee' }, children: [] },
+      { type: 'leafDirective', name: 'figure', children: [] }
+    ]
+  };
+  assert.deepEqual(collectFigureIds(tree).sort(), ['aaaaaa', 'bbbbbb']);
+});
+
+test('collectFigureIds: accepts a node array and a bare node', () => {
+  const node = { type: 'leafDirective', name: 'figure', attributes: { ids: 'abcdef' } };
+  assert.deepEqual(collectFigureIds(node), ['abcdef']);
+  assert.deepEqual(collectFigureIds([node]), ['abcdef']);
+  assert.deepEqual(collectFigureIds([]), []);
 });
