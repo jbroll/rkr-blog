@@ -521,6 +521,43 @@ from the WP REST API and inserts them as `published` / `source='wp-import'`.
 Idempotent: `wp_comment_id` has a UNIQUE constraint. Threads deeper than
 one level are flattened to top-level.
 
+### Content sources
+
+`src/lib/wp-source.ts` defines `WpSource`: the set of reads the import
+pipeline needs from a WordPress site — posts, pages, comments, site
+info, featured media, images, tag names. Two implementations:
+
+- `restSource` (same file) wraps the REST client in `src/lib/wp-rest.ts`.
+- `sqliteSource` (`src/lib/wp-sqlite.ts`) reads a `mariadb-dump` file
+  converted to SQLite by `src/lib/wp-dump.ts`, plus the site's
+  `wp-content/uploads` tree on disk. No network access.
+
+`importPost` and `pushPost` already accepted injectable `fetchImage` and
+`fetchTagNames`, so neither the HTML→markdown emitter nor the push path
+knows which source it is running against. The CLI picks one from
+`--from-dump`.
+
+The backup source reads raw `post_content` (Gutenberg HTML) where the
+REST source gets `content.rendered`. The difference that matters is
+`srcset`: without it there is no way to pick the full-size image from
+the markup, so `sqliteSource` annotates each `<img src>` with
+`#wp-image-<id>` from its `wp-image-<id>` class and
+`src/lib/wp-sqlite-images.ts` resolves that id through
+`_wp_attached_file` to the original on disk. That reaches the true
+original rather than the resized variant WordPress wrote into the page.
+
+Two behaviours the backup source must preserve because the REST API
+enforced them implicitly: comments are filtered to
+`comment_approved = '1'` and `comment_type IN ('', 'comment')`, and a
+post's WordPress status decides the pushed status unless `--status` says
+otherwise — the public REST API never returned drafts, so nothing
+previously had to check.
+
+WordPress leaves `post_name` empty until a post is first published, so
+draft slugs are derived from the title via `slugify`. A slug lookup
+falls back to matching that derived value, or the slug the CLI prints
+could not be used to fetch the post.
+
 ## 13. Open decisions
 
 Pinned implementation calls; revisit if real-world data contradicts.
