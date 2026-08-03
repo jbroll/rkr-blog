@@ -529,6 +529,8 @@ import-wp list <base-url>                    list posts on a WordPress source
 import-wp post <base-url> <id-or-slug>       import one WP post + every image it references
 import-wp push <base-url> <slug> --to <url>  push one post to a remote rkr-blog via /admin
 import-wp-comments <base-url>               import approved comments from a WordPress source
+wp-dump <dump.sql> <out.db>                 convert a mysqldump file to SQLite
+import-wp … --from-dump <db> --uploads <d>  read a backup instead of a live WordPress site
 fix-wp-dates                                repair WP-imported post dates using the filename prefix as truth
 reset --to <fly-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
 user invite <email>     add to the allowlist (owner / editor role)

@@ -217,6 +217,37 @@ Output per slug: `pushed <slug> (inserted): images=N (failed=0)`.
 The target's `<target>/admin/upload` is bearer-auth only — the bearer
 token is the same `ADMIN_TOKEN` the reset step used.
 
+### Importing from a database backup
+
+When the WordPress install is gone, the importer can read a
+`mariadb-dump` file plus the site's uploads tree instead. Convert the
+dump once:
+
+```bash
+bin/site-admin wp-dump ../roll-along/db/rollalong.sql /tmp/rollalong.db
+```
+
+Then pass `--from-dump` and `--uploads` to any `import-wp` subcommand.
+The base-URL argument is still required — it labels output and supplies
+the `link` field — but nothing is fetched over the network:
+
+```bash
+UPLOADS=../roll-along/site/wp-content/uploads
+
+bin/site-admin import-wp list https://roll-along.rkroll.com \
+  --from-dump /tmp/rollalong.db --uploads "$UPLOADS" --status any
+
+bin/site-admin import-wp push https://roll-along.rkroll.com one-final-day \
+  --to https://rkr-blog.rkroll.com --from-dump /tmp/rollalong.db --uploads "$UPLOADS"
+```
+
+WordPress leaves `post_name` empty until a post is first published, so
+drafts get a slug derived from their title. `import-wp list --status
+draft` prints the derived slug; check it before pushing.
+
+`--status draft` on `push` lands the post unpublished. A WP draft is
+never published without an explicit `--status published`.
+
 ### 3. Walk (verify)
 
 `scripts/walk-site.sh` traverses every published post on the target,
