@@ -24,15 +24,37 @@ function sqliteType(mysqlType: string): string {
   return 'TEXT';
 }
 
+/** Index of the last character of the comment starting at `i`, or null if
+ * none starts there. `--` needs trailing whitespace (or end of input) so
+ * that `1--2` stays arithmetic. MySQL's `/*!… *\/` executable comments are
+ * ordinary comments here: the statements inside are ones we ignore anyway. */
+function commentEnd(text: string, i: number): number | null {
+  const c = text[i];
+  const two = text[i + 1];
+  const isLine =
+    c === '#' ||
+    (c === '-' && two === '-' && (i + 2 >= text.length || /\s/.test(text[i + 2] ?? '')));
+  if (isLine) {
+    const nl = text.indexOf('\n', i);
+    return nl === -1 ? text.length - 1 : nl - 1;
+  }
+  if (c === '/' && two === '*') {
+    const end = text.indexOf('*/', i + 2);
+    return end === -1 ? text.length - 1 : end + 1;
+  }
+  return null;
+}
+
 /** Split SQL into top-level statements, respecting ' " ` quoting and
- * backslash escapes so a `;` inside a string literal doesn't split. */
+ * backslash escapes so a `;` inside a string literal doesn't split.
+ * Comments are dropped, and their text never affects quote state. */
 function* statements(text: string): Generator<string> {
   let buf = '';
   let quote: string | null = null;
   for (let i = 0; i < text.length; i++) {
     const c = text[i] as string;
-    buf += c;
     if (quote) {
+      buf += c;
       if (c === '\\' && quote !== '`') {
         i++;
         if (i < text.length) buf += text[i];
@@ -41,6 +63,13 @@ function* statements(text: string): Generator<string> {
       }
       continue;
     }
+    const end = commentEnd(text, i);
+    if (end !== null) {
+      i = end;
+      buf += ' ';
+      continue;
+    }
+    buf += c;
     if (c === "'" || c === '"' || c === '`') quote = c;
     else if (c === ';') {
       yield buf;
@@ -163,6 +192,8 @@ function parseValues(text: string): Cell[][] {
         quoted = false;
         i++;
         if (c === ')') break;
+      } else if (' \t\r\n'.includes(c)) {
+        i++;
       } else {
         field += c;
         i++;
@@ -181,6 +212,25 @@ function bareValue(raw: string): Cell {
   return tok;
 }
 
+/** Render a dump's `(a,b,c)` column list as ``(`a`,`b`,`c`)``. Empty for a
+ * positional INSERT, where the row order is the table's own. */
+function columnList(raw: string | undefined): string {
+  if (!raw) return '';
+  const cols = raw
+    .slice(1, -1)
+    .split(',')
+    .map((c) => c.trim().replace(/^`|`$/g, ''))
+    .filter((c) => c !== '');
+  if (cols.length === 0) return '';
+  return ` (${cols.map((c) => `\`${c}\``).join(',')})`;
+}
+
+function unparseableInsert(stmt: string): string {
+  const table = /^INSERT INTO\s+`?([^`\s(]+)/i.exec(stmt)?.[1] ?? '?';
+  const excerpt = stmt.length > 160 ? `${stmt.slice(0, 160)}…` : stmt;
+  return `unparseable INSERT INTO \`${table}\`: ${excerpt}`;
+}
+
 /** Convert a dump file into a fresh SQLite database at `dbPath`.
  * Existing tables of the same name are dropped, so repeat runs are
  * idempotent. */
@@ -193,7 +243,7 @@ export function convertDump(sqlPath: string, dbPath: string): DumpStats {
     db.exec('PRAGMA foreign_keys = OFF');
     for (const stmt of statements(text)) {
       const s = stmt.trim();
-      if (!s || s.startsWith('--')) continue;
+      if (!s) continue;
       if (/^CREATE TABLE/i.test(s)) {
         const created = convertCreate(s);
         if (!created) continue;
@@ -201,12 +251,13 @@ export function convertDump(sqlPath: string, dbPath: string): DumpStats {
         db.exec(created.ddl);
         tables++;
       } else if (/^INSERT INTO/i.test(s)) {
-        const m = /^INSERT INTO\s+`([^`]+)`\s*(?:\([^)]*\))?\s*VALUES\s*([\s\S]*?);?\s*$/i.exec(s);
-        if (!m) continue;
-        const parsed = parseValues(m[2] as string);
-        if (parsed.length === 0) continue;
+        const m = /^INSERT INTO\s+`([^`]+)`\s*(\([^)]*\))?\s*VALUES\s*([\s\S]*?);?\s*$/i.exec(s);
+        const parsed = m ? parseValues(m[3] as string) : [];
+        if (!m || parsed.length === 0) throw new Error(unparseableInsert(s));
         const placeholders = (parsed[0] as Cell[]).map(() => '?').join(',');
-        const insert = db.prepare(`INSERT INTO \`${m[1]}\` VALUES (${placeholders})`);
+        const insert = db.prepare(
+          `INSERT INTO \`${m[1]}\`${columnList(m[2])} VALUES (${placeholders})`
+        );
         db.transaction(() => {
           for (const row of parsed) insert.run(...row);
         })();

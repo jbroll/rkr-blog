@@ -101,6 +101,126 @@ UNLOCK TABLES;
   assert.equal(row?.ID, 7);
 });
 
+test('convertDump: keeps a statement that follows a comment line', (t) => {
+  const { db, stats } = convert(
+    t,
+    `${POSTS_DDL}
+-- Dumping data for table \`wp_posts\`
+INSERT INTO \`wp_posts\` VALUES (1,'A','B',0,NULL);
+# hash comment
+INSERT INTO \`wp_posts\` VALUES (2,'C','D',0,NULL);
+/* block
+   comment */
+INSERT INTO \`wp_posts\` VALUES (3,'E','F',0,NULL);
+/*!40000 ALTER TABLE \`wp_posts\` ENABLE KEYS */;
+`
+  );
+  assert.equal(stats.tables, 1);
+  assert.equal(stats.rows, 3);
+  const ids = db.prepare<{ ID: number }>('SELECT ID FROM wp_posts ORDER BY ID').all();
+  assert.deepEqual(
+    ids.map((r) => r.ID),
+    [1, 2, 3]
+  );
+});
+
+test('convertDump: an apostrophe in a comment does not open a string', (t) => {
+  const { db, stats } = convert(
+    t,
+    `${POSTS_DDL}
+-- it's fine
+INSERT INTO \`wp_posts\` VALUES (1,'A','B',0,NULL);
+INSERT INTO \`wp_posts\` VALUES (2,'C','D',0,NULL);
+# don't panic
+/* isn't it */
+INSERT INTO \`wp_posts\` VALUES (3,'E','F',0,NULL);
+`
+  );
+  assert.equal(stats.rows, 3);
+  const n = db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM wp_posts').get();
+  assert.equal(n?.n, 3);
+});
+
+test('convertDump: `--` inside a value, and unspaced `--` starts no comment', (t) => {
+  const { db, stats } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES (1,'a -- b','c',5--2,NULL);
+`
+  );
+  assert.equal(stats.rows, 1);
+  const row = db
+    .prepare<{ post_title: string; menu_order: string }>(
+      'SELECT post_title, menu_order FROM wp_posts'
+    )
+    .get();
+  assert.equal(row?.post_title, 'a -- b');
+  // `--` without trailing whitespace is not a comment, so the rest of the
+  // row survives. mysqldump writes literals only; an arithmetic expression
+  // is stored verbatim rather than evaluated (SQL would make this 7).
+  assert.equal(row?.menu_order, '5--2');
+});
+
+test('convertDump: honours a named column list', (t) => {
+  const { db, stats } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` (\`ID\`,\`post_content\`,\`post_title\`) VALUES (1,'C-VAL','T-VAL');
+INSERT INTO \`wp_posts\` (ID,post_content,post_title) VALUES (2,'C2','T2');
+`
+  );
+  assert.equal(stats.rows, 2);
+  const rows = db
+    .prepare<{ ID: number; post_title: string; post_content: string }>(
+      'SELECT ID, post_title, post_content FROM wp_posts ORDER BY ID'
+    )
+    .all();
+  assert.equal(rows[0]?.post_title, 'T-VAL');
+  assert.equal(rows[0]?.post_content, 'C-VAL');
+  assert.equal(rows[1]?.post_title, 'T2');
+  assert.equal(rows[1]?.post_content, 'C2');
+});
+
+test('convertDump: drops whitespace around quoted values but keeps it inside', (t) => {
+  const { db, stats } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES ( 1, ' x ' , '  y
+z  ' , 0 , 1.5 );
+`
+  );
+  assert.equal(stats.rows, 1);
+  const row = db
+    .prepare<{ ID: number; post_title: string; post_content: string; ratio: number }>(
+      'SELECT ID, post_title, post_content, ratio FROM wp_posts'
+    )
+    .get();
+  assert.equal(row?.ID, 1);
+  assert.equal(row?.post_title, ' x ');
+  assert.equal(row?.post_content, '  y\nz  ');
+  assert.equal(row?.ratio, 1.5);
+});
+
+test('convertDump: throws on an INSERT it cannot parse', (t) => {
+  const dir = tmpdir(t);
+  const sqlPath = path.join(dir, 'dump.sql');
+  fs.writeFileSync(sqlPath, `${POSTS_DDL}\nINSERT INTO \`wp_posts\` VALUES 1,2,3;\n`);
+  assert.throws(
+    () => convertDump(sqlPath, path.join(dir, 'out.db')),
+    /unparseable INSERT INTO `wp_posts`/
+  );
+});
+
+test('convertDump: throws on an INSERT with no VALUES clause', (t) => {
+  const dir = tmpdir(t);
+  const sqlPath = path.join(dir, 'dump.sql');
+  fs.writeFileSync(sqlPath, `${POSTS_DDL}\nINSERT INTO \`wp_posts\` SELECT * FROM other;\n`);
+  assert.throws(
+    () => convertDump(sqlPath, path.join(dir, 'out.db')),
+    /unparseable INSERT INTO `wp_posts`/
+  );
+});
+
 test('convertDump: is idempotent over repeated runs', (t) => {
   const dir = tmpdir(t);
   const sqlPath = path.join(dir, 'dump.sql');

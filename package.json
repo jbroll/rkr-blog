@@ -82,7 +82,7 @@
           "src/cli/server.ts",
           "src/cli/user.ts",
           "src/cli/import-wp.ts",
-        "src/cli/wp-dump.ts",
+          "src/cli/wp-dump.ts",
           "src/cli/reset.ts",
           "src/cli/jobs.ts",
           "src/cli/fix-wp-dates.ts",
