@@ -27,6 +27,7 @@ const COMMANDS = {
   'fix-wp-dates':       () => import('../src/cli/fix-wp-dates.ts'),
   'fix-wp-titles':      () => import('../src/cli/fix-wp-titles.ts'),
   'import-wp-comments': () => import('../src/cli/import-wp-comments.ts'),
+  'wp-dump':            () => import('../src/cli/wp-dump.ts'),
   export:               () => import('../src/cli/export.ts'),
   import:               () => import('../src/cli/import.ts')
 };
