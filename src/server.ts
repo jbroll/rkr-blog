@@ -36,6 +36,7 @@ import type { IdTokenVerifier } from './lib/google-jwt.ts';
 import { workQueue } from './lib/jobs.ts';
 import { migrate } from './lib/migrate.ts';
 import { setPublicSecurityHeaders } from './lib/security-headers.ts';
+import { serverAssets } from './lib/site-assets.ts';
 import adminRoutes from './routes/admin.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
@@ -190,7 +191,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     reply
       .code(404)
       .type('text/html; charset=utf-8')
-      .send(renderNotFoundPage({ site: getSite() }));
+      .send(renderNotFoundPage({ site: getSite(), assets: serverAssets() }));
   });
 
   app.setErrorHandler((err: FastifyError, request: FastifyRequest, reply: FastifyReply) => {

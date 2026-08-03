@@ -5,6 +5,7 @@ import { renderAdminPage } from '../../src/templates/admin.ts';
 
 const base = {
   site: { title: 'rkroll' },
+  assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
   bundleUrl: '/static/admin/main.js',
   cspNonce: 'test-nonce'
 } as const;

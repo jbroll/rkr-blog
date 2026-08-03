@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { ThreadComment } from '../../src/lib/comments.ts';
+import type { ThreadComment } from '../../src/lib/comment-types.ts';
 import { renderPostPage } from '../../src/templates/post.ts';
 
 function reply(id: number): ThreadComment {
@@ -22,8 +22,10 @@ function top(id: number, replies = 0): ThreadComment {
     replies: Array.from({ length: replies }, (_, i) => reply(id * 100 + i))
   };
 }
+const assets = { theme: 'default', hash: 'abcdef012345', base: '/static' };
 const base = {
   site: { title: 'rkroll' },
+  assets,
   title: 'Hello',
   slug: 'hello',
   bodyHtml: '<p>x</p>'
@@ -67,6 +69,7 @@ test('bubble renders even when comments is undefined', () => {
 test('renderPostPage: showComments:false omits the comment bubble + form/list', () => {
   const base = {
     site: { title: 'S' },
+    assets,
     title: 'About',
     slug: '_about',
     bodyHtml: '<p>hi</p>'

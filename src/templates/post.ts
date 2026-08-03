@@ -1,6 +1,6 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
-import { countThread, type ThreadComment } from '../lib/comments.ts';
+import { countThread, type ThreadComment } from '../lib/comment-types.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { renderCommentForm, renderCommentList } from './comments.ts';
 import { icon } from './icons.ts';
@@ -37,6 +37,9 @@ export interface PostPageData extends SiteChrome {
   /** When false, render the page with no comment bubble, list, or
    * form (used by the static /about page). Default true. */
   showComments?: boolean;
+  /** When false, omit the public-page <script> tags. The offline
+   * preview renders a static document. Default true. */
+  scripts?: boolean;
 }
 
 // ISO timestamp → "May 10, 2026". UTC-pinned so a midnight-Z date
@@ -74,26 +77,31 @@ export function renderPostPage(post: PostPageData): string {
 
   const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug, post.commentNotice ? { notice: post.commentNotice } : {})}`;
   const showComments = post.showComments !== false;
-  const v = bundleVersion();
+  const a = post.assets;
+  const v = bundleVersion(a);
   const head = siteHead(post.site, { isAdmin: post.isAdmin });
   const banner = post.bannerHtml ?? '';
   const siteChrome = post.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
+  const scriptTags =
+    post.scripts === false
+      ? ''
+      : `<script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/img-retry.js${v}" defer></script>
+<script type="module" src="${a.base}/site/lightbox.js${v}" defer></script>
+<script type="module" src="${a.base}/site/carousel.js${v}" defer></script>
+<script type="module" src="${a.base}/site/copy-link.js${v}" defer></script>
+<script type="module" src="${a.base}/site/comment-form.js${v}" defer></script>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
-${stylesheetLinks()}
-${headIcons()}
-<link rel="stylesheet" href="/static/site/lightbox.css${v}"/>
+${stylesheetLinks(a)}
+${headIcons(a)}
+<link rel="stylesheet" href="${a.base}/site/lightbox.css${v}"/>
 <meta name="theme-color" content="#1a4f7f"/>
-<script type="module" src="/static/site/sw-unregister.js${v}" defer></script>
-<script type="module" src="/static/site/img-retry.js${v}" defer></script>
-<script type="module" src="/static/site/lightbox.js${v}" defer></script>
-<script type="module" src="/static/site/carousel.js${v}" defer></script>
-<script type="module" src="/static/site/copy-link.js${v}" defer></script>
-<script type="module" src="/static/site/comment-form.js${v}" defer></script>
+${scriptTags}
 </head>
 <body>
 ${siteChrome}<main id="main" tabindex="-1">

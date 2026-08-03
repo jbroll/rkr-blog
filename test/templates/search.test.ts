@@ -3,7 +3,8 @@ import { test } from 'node:test';
 
 import { renderSearchPage } from '../../src/templates/search.ts';
 
-const base = { site: { title: 'rkroll' } } as const;
+const assets = { theme: 'default', hash: 'abcdef012345', base: '/static' };
+const base = { site: { title: 'rkroll' }, assets } as const;
 
 test('prompt state when no query', () => {
   const html = renderSearchPage({ ...base, q: '', results: [] });

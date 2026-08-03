@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'node:test';
+import { test } from 'node:test';
 
-import { _resetGitHashCache } from '../../src/lib/build-info.ts';
-import { _resetThemeNameCache } from '../../src/lib/config.ts';
 import {
   bundleVersion,
   indexAdminFabs,
@@ -13,6 +11,8 @@ import {
   stylesheetLinks
 } from '../../src/templates/layout.ts';
 import { renderNotFoundPage } from '../../src/templates/not-found.ts';
+
+const assets = { theme: 'default', hash: 'abcdef012345', base: '/static' };
 
 test('renderSearchForm is a no-JS GET form with escaped, prefilled q', () => {
   const html = renderSearchForm('a "b" <x>');
@@ -26,29 +26,8 @@ test('renderSearchForm value is empty when no query given', () => {
   assert.match(renderSearchForm(), /value=""/);
 });
 
-// resolveGitHash() + themeName() are process-cached; reset between
-// tests that probe env-driven branches.
-afterEach(() => {
-  _resetGitHashCache();
-  _resetThemeNameCache();
-});
-
-test('bundleVersion: ?v=<12-char short hash> when GIT_HASH is set', () => {
-  const prev = process.env.GIT_HASH;
-  process.env.GIT_HASH = 'abcdef0123456789abcdef0123456789abcdef01';
-  try {
-    assert.equal(bundleVersion(), '?v=abcdef012345');
-  } finally {
-    if (prev === undefined) delete process.env.GIT_HASH;
-    else process.env.GIT_HASH = prev;
-  }
-});
-
-test('bundleVersion: produces a stable ?v= suffix per process', () => {
-  // Whatever the resolver returns (real hash from .git or 'unknown'),
-  // two calls in the same process return the same string. That's the
-  // SW-caching contract: one deploy = one cache key.
-  assert.equal(bundleVersion(), bundleVersion());
+test('bundleVersion: ?v=<hash> from the given AssetCtx', () => {
+  assert.equal(bundleVersion(assets), '?v=abcdef012345');
 });
 
 test('siteHead: anonymous visitor sees Login link in the header', () => {
@@ -101,40 +80,27 @@ test('postAdminFab: pencil FAB carries the URL-encoded slug', () => {
 });
 
 test('stylesheetLinks: default theme loads base + default only, prefixed by color-scheme meta', () => {
-  const prev = process.env.SITE_THEME;
-  delete process.env.SITE_THEME;
-  try {
-    const html = stylesheetLinks();
-    assert.match(html, /\/static\/base\.css/);
-    assert.match(html, /\/static\/themes\/default\.css/);
-    // Default theme is already in the default.css path; no extra layer.
-    assert.equal(html.match(/\/static\/themes\//g)?.length, 1);
-    // color-scheme meta sits ahead of the link tags so dark-mode
-    // visitors don't see a white canvas during the brief window
-    // before the external stylesheets parse — see stylesheetLinks's
-    // doc comment for the SW-bypass story this defends against.
-    assert.match(html, /<meta name="color-scheme" content="light dark"[^>]*>[\s\S]*<link/);
-  } finally {
-    if (prev !== undefined) process.env.SITE_THEME = prev;
-  }
+  const html = stylesheetLinks(assets);
+  assert.match(html, /\/static\/base\.css/);
+  assert.match(html, /\/static\/themes\/default\.css/);
+  // Default theme is already in the default.css path; no extra layer.
+  assert.equal(html.match(/\/static\/themes\//g)?.length, 1);
+  // color-scheme meta sits ahead of the link tags so dark-mode
+  // visitors don't see a white canvas during the brief window
+  // before the external stylesheets parse — see stylesheetLinks's
+  // doc comment for the SW-bypass story this defends against.
+  assert.match(html, /<meta name="color-scheme" content="light dark"[^>]*>[\s\S]*<link/);
 });
 
 test('stylesheetLinks: alternate theme layers on top of default', () => {
-  const prev = process.env.SITE_THEME;
-  process.env.SITE_THEME = 'papermod';
-  try {
-    const html = stylesheetLinks();
-    assert.match(html, /\/static\/base\.css/);
-    assert.match(html, /\/static\/themes\/default\.css/);
-    assert.match(html, /\/static\/themes\/papermod\.css/);
-    // Cascade order: default first, theme last.
-    const defaultIdx = html.indexOf('/static/themes/default.css');
-    const themeIdx = html.indexOf('/static/themes/papermod.css');
-    assert.ok(defaultIdx < themeIdx, 'default must come before the active theme');
-  } finally {
-    if (prev !== undefined) process.env.SITE_THEME = prev;
-    else delete process.env.SITE_THEME;
-  }
+  const html = stylesheetLinks({ ...assets, theme: 'papermod' });
+  assert.match(html, /\/static\/base\.css/);
+  assert.match(html, /\/static\/themes\/default\.css/);
+  assert.match(html, /\/static\/themes\/papermod\.css/);
+  // Cascade order: default first, theme last.
+  const defaultIdx = html.indexOf('/static/themes/default.css');
+  const themeIdx = html.indexOf('/static/themes/papermod.css');
+  assert.ok(defaultIdx < themeIdx, 'default must come before the active theme');
 });
 
 test('siteHead: emits Home + About nav and the correct auth control', () => {
@@ -157,13 +123,13 @@ test('siteHead: hideHomeLink omits the Home link but keeps About', () => {
 });
 
 test('renderNotFoundPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
-  const html = renderNotFoundPage({ site: { title: 'rkroll' } });
+  const html = renderNotFoundPage({ site: { title: 'rkroll' }, assets });
   assert.match(html, /\/static\/site\/sw-unregister\.js/);
   assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });
 
 test('renderNotFoundPage: admin view also uses sw-unregister.js', () => {
-  const html = renderNotFoundPage({ site: { title: 'rkroll' }, isAdmin: true });
+  const html = renderNotFoundPage({ site: { title: 'rkroll' }, isAdmin: true, assets });
   assert.match(html, /\/static\/site\/sw-unregister\.js/);
   assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });

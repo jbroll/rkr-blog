@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { ThreadComment } from '../../src/lib/comments.ts';
+import type { ThreadComment } from '../../src/lib/comment-types.ts';
 import { renderCommentForm, renderCommentList } from '../../src/templates/comments.ts';
 
 test('renderCommentList escapes author and body and nests one reply level', () => {

@@ -67,7 +67,8 @@ export interface IndexPageData extends SiteChrome {
 }
 
 export function renderIndexPage(data: IndexPageData): string {
-  const v = bundleVersion();
+  const a = data.assets;
+  const v = bundleVersion(a);
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
   const teaserHtml = !data.isAdmin && data.teaser ? renderTeaser(data.teaser) : '';
   const isAsc = data.sort === 'asc';
@@ -91,7 +92,7 @@ export function renderIndexPage(data: IndexPageData): string {
   // OPFS lookups. Only emit it for the admin view — anonymous visitors
   // never see those controls.
   const postsListScript = data.isAdmin
-    ? `<script type="module" src="/static/admin/posts-list.js${bundleVersion()}"></script>`
+    ? `<script type="module" src="${a.base}/admin/posts-list.js${v}"></script>`
     : '';
   const head = siteHead(data.site, { isAdmin: data.isAdmin, hideHomeLink: true });
   const banner = data.bannerHtml ?? '';
@@ -102,10 +103,10 @@ export function renderIndexPage(data: IndexPageData): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${escapeText(data.site.title)}</title>
-${stylesheetLinks()}
-${headIcons()}
+${stylesheetLinks(a)}
+${headIcons(a)}
 <meta name="theme-color" content="#1a4f7f"/>
-<script type="module" src="/static/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
 </head>
 <body>
 ${siteChrome}<main id="main" tabindex="-1">

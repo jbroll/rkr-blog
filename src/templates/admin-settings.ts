@@ -64,6 +64,7 @@ export interface AdminSettingsPageData extends SiteChrome {
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
+  const a = data.assets;
   const flash = data.flash?.kind === 'error' ? renderFlash(data.flash) : '';
   const saveBtn = `<button type="submit" class="rkr-admin-settings-submit" aria-label="Save settings" title="Save settings">${icon('save', 18)}</button>`;
   return `<!DOCTYPE html>
@@ -72,8 +73,8 @@ export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Settings — ${escapeText(data.site.title)}</title>
-${stylesheetLinks()}
-${headIcons()}
+${stylesheetLinks(a)}
+${headIcons(a)}
 <style>
 .rkr-admin-settings-heading-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;grid-column:1/-1}
 .rkr-admin-settings-heading{margin:0}
@@ -187,7 +188,7 @@ ${renderIntegrations(data.gdriveConnected, data.onedriveConnected)}
 </p>
 </main>
 ${siteFoot(data.site, { isAdmin: true })}
-<script type="module" src="/static/admin/settings-page.js${bundleVersion()}"></script>
+<script type="module" src="${a.base}/admin/settings-page.js${bundleVersion(a)}"></script>
 </body>
 </html>
 `;

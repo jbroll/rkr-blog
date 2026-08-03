@@ -23,6 +23,8 @@ export interface AdminPageData extends SiteChrome {
 }
 
 export function renderAdminPage(data: AdminPageData): string {
+  const a = data.assets;
+  const v = bundleVersion(a);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,16 +35,16 @@ export function renderAdminPage(data: AdminPageData): string {
      will have (figures, prose width, headings, gallery/carousel placeholders).
      Loaded BEFORE the admin overrides so the inline styles below win for
      admin chrome (toolbar, panels, body layout). -->
-${stylesheetLinks()}
-${headIcons()}
+${stylesheetLinks(a)}
+${headIcons(a)}
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
-<link rel="stylesheet" href="/static/admin/main.css"/>
+<link rel="stylesheet" href="${a.base}/admin/main.css"/>
 <style nonce="${data.cspNonce}">
 ${ADMIN_CSS_CORE}
 ${ADMIN_CSS_DIALOGS}
 </style>
-<link rel="manifest" href="/static/admin-manifest.webmanifest"/>
-<script type="module" src="/static/site/sw-admin-register.js${bundleVersion()}" defer></script>
+<link rel="manifest" href="${a.base}/admin-manifest.webmanifest"/>
+<script type="module" src="${a.base}/site/sw-admin-register.js${v}" defer></script>
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: true })}

@@ -24,6 +24,7 @@ import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { runReindex } from '../lib/post-index.ts';
+import { serverAssets } from '../lib/site-assets.ts';
 import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
 import { renderAdminPage } from '../templates/admin.ts';
@@ -118,6 +119,7 @@ export default async function adminRoutes(
       .send(
         renderAdminPage({
           site: siteConfig(),
+          assets: serverAssets(),
           bundleUrl: `/static/admin/main.js?v=${resolveGitHash().slice(0, 12)}`,
           cspNonce: nonce
         })

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { type TestContext, test } from 'node:test';
+import { countThread, type ThreadComment } from '../../src/lib/comment-types.ts';
 import {
   applyClassification,
-  countThread,
   getCommentById,
   getPostIdBySlug,
   getPostMetaById,
@@ -10,8 +10,7 @@ import {
   insertWebComment,
   listForModeration,
   listPublishedThread,
-  setCommentStatus,
-  type ThreadComment
+  setCommentStatus
 } from '../../src/lib/comments.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';

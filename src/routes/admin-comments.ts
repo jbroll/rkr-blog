@@ -9,6 +9,7 @@ import { getCommentById, listForModeration, setCommentStatus } from '../lib/comm
 import { siteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { open } from '../lib/db.ts';
+import { serverAssets } from '../lib/site-assets.ts';
 import { renderAdminCommentsPage } from '../templates/admin-comments.ts';
 
 export interface AdminCommentsRouteOpts {
@@ -33,7 +34,12 @@ export function registerAdminCommentsRoutes(
       return reply
         .type('text/html; charset=utf-8')
         .header('Cache-Control', 'private, no-store')
-        .send(renderAdminCommentsPage(listForModeration(db), siteConfig()));
+        .send(
+          renderAdminCommentsPage(listForModeration(db), {
+            site: siteConfig(),
+            assets: serverAssets()
+          })
+        );
     } finally {
       if (ownDb) db.close();
     }

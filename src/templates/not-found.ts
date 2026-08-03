@@ -18,17 +18,18 @@ export interface NotFoundPageData extends SiteChrome {
 }
 
 export function renderNotFoundPage(data: NotFoundPageData): string {
-  const v = bundleVersion();
+  const a = data.assets;
+  const v = bundleVersion(a);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Not found — ${escapeText(data.site.title)}</title>
-${stylesheetLinks()}
-${headIcons()}
+${stylesheetLinks(a)}
+${headIcons(a)}
 <meta name="theme-color" content="#1a4f7f"/>
-<script type="module" src="/static/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: data.isAdmin })}

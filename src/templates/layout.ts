@@ -9,19 +9,21 @@
 //   * The header's top-right corner: "Login" for anonymous,
 //     "Logout" for authed (POST form so CSRF/origin guards fire).
 
-import { resolveGitHash } from '../lib/build-info.ts';
-import { themeName } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { icon } from './icons.ts';
 
-/** ?v=<short-hash> suffix appended to public-side bundle / stylesheet
- * URLs so the service worker (src/site/sw.ts) treats each deploy as a
- * distinct cache key. When the git hash can't be resolved, the
- * fallback suffix is `?v=unknown` — consistent per-process, so the SW
- * still caches deterministically (the deploy can re-warm by setting
- * GIT_HASH env). */
-export function bundleVersion(): string {
-  return `?v=${resolveGitHash().slice(0, 12)}`;
+/** Everything a template needs to build an asset URL: the active
+ * theme, the build hash used as the ?v= cache-buster, and the URL
+ * prefix the assets are served from ('/static' publicly,
+ * '/admin/static' inside the admin service worker's scope). */
+export interface AssetCtx {
+  theme: string;
+  hash: string;
+  base: string;
+}
+
+export function bundleVersion(a: AssetCtx): string {
+  return `?v=${a.hash}`;
 }
 
 /** `<link>` tags for the public-side stylesheets, in cascade order:
@@ -42,26 +44,27 @@ export function bundleVersion(): string {
  * meta tag is parsed as the head streams in, before any external
  * stylesheet, and applies immediately.
  */
-export function headIcons(): string {
-  return `<link rel="icon" type="image/x-icon" href="/static/favicon.ico"/>
-<link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png"/>
-<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png"/>`;
+export function headIcons(a: AssetCtx): string {
+  const v = bundleVersion(a);
+  return `<link rel="icon" type="image/x-icon" href="${a.base}/favicon.ico${v}"/>
+<link rel="icon" type="image/png" sizes="32x32" href="${a.base}/icon-32.png${v}"/>
+<link rel="apple-touch-icon" sizes="180x180" href="${a.base}/apple-touch-icon.png${v}"/>`;
 }
 
-export function stylesheetLinks(): string {
-  const v = bundleVersion();
-  const theme = themeName();
+export function stylesheetLinks(a: AssetCtx): string {
+  const v = bundleVersion(a);
   const base = `<meta name="color-scheme" content="light dark"/>
-<link rel="stylesheet" href="/static/base.css${v}"/>
-<link rel="stylesheet" href="/static/themes/default.css${v}"/>`;
-  if (theme === 'default') return base;
+<link rel="stylesheet" href="${a.base}/base.css${v}"/>
+<link rel="stylesheet" href="${a.base}/themes/default.css${v}"/>`;
+  if (a.theme === 'default') return base;
   return `${base}
-<link rel="stylesheet" href="/static/themes/${theme}.css${v}"/>`;
+<link rel="stylesheet" href="${a.base}/themes/${a.theme}.css${v}"/>`;
 }
 
 export interface SiteChrome {
   /** Resolved site config — owner-side branding only; never per-request. */
   site: { title: string; tagline?: string };
+  assets: AssetCtx;
 }
 
 export interface HeadOpts {

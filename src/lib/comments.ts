@@ -3,6 +3,7 @@
 // here: a reply's parent must itself be top-level (SQLite can't express
 // that as a CHECK). Imported WP comments use insertImportedComment.
 
+import type { ThreadComment } from './comment-types.ts';
 import type { Db } from './db.ts';
 
 export type CommentStatus = 'pending' | 'published' | 'queued' | 'rejected';
@@ -125,21 +126,6 @@ export function applyClassification(
     return false;
   }
   return true;
-}
-
-export interface ThreadComment {
-  id: number;
-  author_name: string;
-  body: string;
-  created_at: string;
-  replies: ThreadComment[];
-}
-
-/** Total comments in a published thread (top-level + their one-level
- * replies). Replies never nest deeper (one-level threading invariant),
- * so a single pass suffices. */
-export function countThread(thread: ThreadComment[]): number {
-  return thread.reduce((n, c) => n + 1 + c.replies.length, 0);
 }
 
 /** Published comments for a post: top-level oldest-first, each with its

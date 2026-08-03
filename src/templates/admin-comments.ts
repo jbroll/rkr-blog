@@ -25,7 +25,8 @@ function row(c: ModerationRow): string {
 </li>`;
 }
 
-export function renderAdminCommentsPage(rows: ModerationRow[], site: SiteChrome['site']): string {
+export function renderAdminCommentsPage(rows: ModerationRow[], chrome: SiteChrome): string {
+  const { site, assets } = chrome;
   const list =
     rows.length === 0
       ? '<p>No comments.</p>'
@@ -33,8 +34,8 @@ export function renderAdminCommentsPage(rows: ModerationRow[], site: SiteChrome[
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Comment moderation</title>
-${stylesheetLinks()}
-${headIcons()}
+${stylesheetLinks(assets)}
+${headIcons(assets)}
 </head><body>
 ${siteHead(site, { isAdmin: true })}
 <main class="amc-wrap" id="main">

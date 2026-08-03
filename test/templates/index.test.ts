@@ -8,9 +8,12 @@ import { test } from 'node:test';
 
 import { renderIndexPage } from '../../src/templates/index.ts';
 
+const assets = { theme: 'default', hash: 'abcdef012345', base: '/static' };
+
 test('rail-controls hold the sort toggle + search form; rail renders even with no tags', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: []
@@ -33,6 +36,7 @@ test('rail-controls hold the sort toggle + search form; rail renders even with n
 test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [
@@ -54,6 +58,7 @@ test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
 test('renderIndexPage: admin view renders the posts table with status / pin / delete', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,
@@ -116,6 +121,7 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
 test('renderIndexPage: admin view, empty state', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,
@@ -134,6 +140,7 @@ test('renderIndexPage: dates show date-only when one post per day, date+time whe
   // stays date-only.
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [
@@ -158,6 +165,7 @@ test('renderIndexPage: admin date column shows publication date over updatedAt f
   // real publication date, not the import/deploy timestamp.
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,
@@ -187,6 +195,7 @@ test('renderIndexPage: admin date column shows publication date over updatedAt f
 test('renderIndexPage: admin Updated column also disambiguates same-day rows', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,
@@ -219,6 +228,7 @@ test('renderIndexPage: admin Updated column also disambiguates same-day rows', (
 test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,
@@ -242,6 +252,7 @@ test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
 test('renderIndexPage: tag rail renders when tagCounts provided', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -261,6 +272,7 @@ test('renderIndexPage: tag rail renders when tagCounts provided', () => {
 test('renderIndexPage: rail (with controls) renders but no tag pills when tagCounts is empty', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -275,6 +287,7 @@ test('renderIndexPage: rail (with controls) renders but no tag pills when tagCou
 test('renderIndexPage: rail (with controls) renders but no tag pills when tagCounts is absent', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: []
@@ -287,6 +300,7 @@ test('renderIndexPage: rail (with controls) renders but no tag pills when tagCou
 test('renderIndexPage: active tag gets aria-current and toggles off on click', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -307,6 +321,7 @@ test('renderIndexPage: active tag gets aria-current and toggles off on click', (
 test('renderIndexPage: pager preserves ?tag= when active', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 3,
     posts: [],
@@ -319,6 +334,7 @@ test('renderIndexPage: pager preserves ?tag= when active', () => {
 test('renderIndexPage: clicking inactive tag replaces active tag (OR/replace, not AND)', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -336,6 +352,7 @@ test('renderIndexPage: clicking inactive tag replaces active tag (OR/replace, no
 test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)', () => {
   const descHtml = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -349,6 +366,7 @@ test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)',
 
   const ascHtml = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -363,6 +381,7 @@ test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)',
 test('renderIndexPage: sort toggle preserves ?tag= param', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -377,6 +396,7 @@ test('renderIndexPage: sort toggle preserves ?tag= param', () => {
 test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, no text label', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,
@@ -390,6 +410,7 @@ test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, no t
 test('renderIndexPage: pager preserves ?sort= when asc', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 3,
     posts: [],
@@ -401,6 +422,7 @@ test('renderIndexPage: pager preserves ?sort= when asc', () => {
 test('renderIndexPage: bannerHtml renders below the site header by default', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -412,6 +434,7 @@ test('renderIndexPage: bannerHtml renders below the site header by default', () 
 test('renderIndexPage: bannerAboveHeader moves the banner above the site header', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     posts: [],
@@ -422,7 +445,13 @@ test('renderIndexPage: bannerAboveHeader moves the banner above the site header'
 });
 
 test('renderIndexPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
-  const html = renderIndexPage({ site: { title: 'rkroll' }, page: 1, totalPages: 1, posts: [] });
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    assets,
+    page: 1,
+    totalPages: 1,
+    posts: []
+  });
   assert.match(html, /\/static\/site\/sw-unregister\.js/);
   assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });
@@ -430,6 +459,7 @@ test('renderIndexPage: anonymous view uses sw-unregister.js, not sw-register.js'
 test('renderIndexPage: admin view also uses sw-unregister.js', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
+    assets,
     page: 1,
     totalPages: 1,
     isAdmin: true,

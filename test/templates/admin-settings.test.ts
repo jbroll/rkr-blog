@@ -6,6 +6,7 @@ import { renderAdminSettingsPage } from '../../src/templates/admin-settings.ts';
 test('renderAdminSettingsPage: form pre-fills persisted values', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: { title: 'My Blog', tagline: 'A subtitle', theme: 'papermod' },
     themes: ['default', 'papermod', 'terminal'],
     gdriveConnected: false,
@@ -34,6 +35,7 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
   // to before they decide to override.
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -49,6 +51,7 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
 test('renderAdminSettingsPage: title + tagline escape HTML', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: { title: '<script>x</script>', tagline: '" autofocus="' },
     themes: ['default'],
     gdriveConnected: false,
@@ -67,6 +70,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
   // Success is handled client-side (toast); no inline element needed.
   const ok = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -80,6 +84,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
 
   const err = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -95,6 +100,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
 test('renderAdminSettingsPage: save button is in the heading row with a disk icon', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -114,6 +120,7 @@ test('renderAdminSettingsPage: save button is in the heading row with a disk ico
 test('renderAdminSettingsPage: build chip shows the short git hash with full sha in title', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -132,6 +139,7 @@ test('renderAdminSettingsPage: build chip shows the short git hash with full sha
 test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -146,6 +154,7 @@ test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
 test('renderAdminSettingsPage: ingestResize fields show persisted values', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: { ingestResize: { maxDim: 2400, scalePct: 80, webpQuality: 70 } },
     themes: ['default'],
     gdriveConnected: false,
@@ -162,6 +171,7 @@ test('renderAdminSettingsPage: ingestResize fields show persisted values', () =>
 test('renderAdminSettingsPage: connected integration shows Disconnect button', () => {
   const htmlGdrive = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: true,
@@ -174,6 +184,7 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
 
   const htmlOnedrive = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -192,6 +203,7 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
 test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/banner/edit', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -208,6 +220,7 @@ test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/banner/e
 test('renderAdminSettingsPage: hasBanner=false shows create link to /admin/banner/edit', () => {
   const html = renderAdminSettingsPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     persisted: {},
     themes: ['default'],
     gdriveConnected: false,
@@ -225,6 +238,7 @@ test('renderAdminSettingsPage: banner section heading present in both states', (
   for (const hasBanner of [true, false]) {
     const html = renderAdminSettingsPage({
       site: { title: 'rkroll' },
+      assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
       persisted: {},
       themes: ['default'],
       gdriveConnected: false,

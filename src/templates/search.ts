@@ -28,7 +28,8 @@ export interface SearchPageData extends SiteChrome {
 }
 
 export function renderSearchPage(data: SearchPageData): string {
-  const v = bundleVersion();
+  const a = data.assets;
+  const v = bundleVersion(a);
   const head = siteHead(data.site, { isAdmin: data.isAdmin });
   const trimmed = data.q.trim();
 
@@ -55,10 +56,10 @@ export function renderSearchPage(data: SearchPageData): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Search — ${escapeText(data.site.title)}</title>
-${stylesheetLinks()}
-${headIcons()}
+${stylesheetLinks(a)}
+${headIcons(a)}
 <meta name="theme-color" content="#1a4f7f"/>
-<script type="module" src="/static/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
 </head>
 <body>
 ${head}<main id="main" tabindex="-1">

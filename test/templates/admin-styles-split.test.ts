@@ -32,6 +32,7 @@ test('admin CSS split: core + "\\n" + dialogs is byte-identical to the pre-split
 test('renderAdminPage embeds the full admin CSS verbatim inside the inline <style>', () => {
   const html = renderAdminPage({
     site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
     bundleUrl: '/static/admin/main.js',
     cspNonce: 'test-nonce'
   });

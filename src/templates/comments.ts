@@ -3,7 +3,7 @@
 // form works without JS (native POST → 303 redirect); site JS may
 // enhance it later but is not required.
 
-import type { ThreadComment } from '../lib/comments.ts';
+import type { ThreadComment } from '../lib/comment-types.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 
 // Shown after a successful submit, by both the full-page PRG redirect

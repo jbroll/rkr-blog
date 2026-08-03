@@ -29,6 +29,7 @@ import type { Db } from '../lib/db.ts';
 import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
 import { runReindex } from '../lib/post-index.ts';
 import { readSecretKey } from '../lib/secrets.ts';
+import { serverAssets } from '../lib/site-assets.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 
 const MAX_TITLE = 200;
@@ -72,6 +73,7 @@ export function registerAdminSettingsRoutes(
       return reply.type('text/html; charset=utf-8').send(
         renderAdminSettingsPage({
           site,
+          assets: serverAssets(),
           persisted,
           themes,
           flash,

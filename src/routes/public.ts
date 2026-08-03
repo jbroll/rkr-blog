@@ -28,6 +28,7 @@ import type { Db } from '../lib/db.ts';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
 import { buildFtsMatch } from '../lib/search-query.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
+import { serverAssets } from '../lib/site-assets.ts';
 import { truncateParagraph } from '../lib/teaser-truncate.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
@@ -216,6 +217,7 @@ export default async function publicRoutes(
 
       const html = renderIndexPage({
         site,
+        assets: serverAssets(),
         page: 1,
         totalPages: 1,
         posts: listRows.map((r) => ({
@@ -258,7 +260,7 @@ export default async function publicRoutes(
       return reply
         .code(404)
         .type('text/html; charset=utf-8')
-        .send(renderNotFoundPage({ site, isAdmin }));
+        .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
     };
     let parsed: ReturnType<typeof parsePost>;
     try {
@@ -275,6 +277,7 @@ export default async function publicRoutes(
     return reply.type('text/html; charset=utf-8').send(
       renderPostPage({
         site,
+        assets: serverAssets(),
         title: parsed.frontmatter.title,
         slug: '_about',
         bodyHtml,
@@ -354,7 +357,7 @@ export default async function publicRoutes(
     if (isAdmin) reply.header('Cache-Control', 'private, no-store');
     return reply
       .type('text/html; charset=utf-8')
-      .send(renderSearchPage({ site, q, results, isAdmin }));
+      .send(renderSearchPage({ site, assets: serverAssets(), q, results, isAdmin }));
   });
 
   // ---- post: GET /:slug -------------------------------------------------
@@ -374,7 +377,7 @@ export default async function publicRoutes(
         return reply
           .code(404)
           .type('text/html; charset=utf-8')
-          .send(renderNotFoundPage({ site, isAdmin }));
+          .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
       }
       const row = readIndexedPostBySlug(db, slug);
       // Authed visitors see drafts (matches the index page, which links
@@ -387,7 +390,7 @@ export default async function publicRoutes(
         return reply
           .code(404)
           .type('text/html; charset=utf-8')
-          .send(renderNotFoundPage({ site, isAdmin }));
+          .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
       }
 
       const fullPath = path.join(siteRoot, row.path);
@@ -402,6 +405,7 @@ export default async function publicRoutes(
 
       const html = renderPostPage({
         site,
+        assets: serverAssets(),
         title: parsed.frontmatter.title,
         ...(typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()
           ? { subtitle: parsed.frontmatter.subtitle }
