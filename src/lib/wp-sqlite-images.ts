@@ -13,14 +13,36 @@ interface MetaRow {
   meta_value: string;
 }
 
-/** Keep a resolved path inside `root`. `_wp_attached_file` comes from the
- * dump, so a crafted value must not be able to read outside the tree. */
+function realpath(p: string): string | null {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+/** Canonical path for `candidate` under `root`, or null when it is
+ * missing or lands outside the tree. Both the dump's
+ * `_wp_attached_file` values and the uploads tree itself come from an
+ * untrusted backup, so a `..` segment and a symlink pointing out of the
+ * tree have to be caught; comparing realpaths catches a link at any
+ * segment, not just the last. */
 function within(root: string, candidate: string): string | null {
-  const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(resolvedRoot, candidate);
-  const rel = path.relative(resolvedRoot, resolved);
+  const realRoot = realpath(root);
+  if (realRoot === null) return null;
+  const real = realpath(path.resolve(realRoot, candidate));
+  if (real === null) return null;
+  const rel = path.relative(realRoot, real);
   if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  return resolved;
+  return real;
+}
+
+function decodePath(p: string): string {
+  try {
+    return decodeURIComponent(p);
+  } catch {
+    return p;
+  }
 }
 
 /** Path under the uploads tree for a WP image URL, or null if none
@@ -36,20 +58,19 @@ export function resolveAttachmentPath(db: Db, uploadsRoot: string, url: string):
       .get(Number(idMatch[1]));
     if (row?.meta_value) {
       const p = within(uploadsRoot, row.meta_value);
-      if (p === null) return null;
-      if (fs.existsSync(p)) return p;
+      if (p !== null) return p;
     }
   }
 
   const bare = url.replace(/#.*$/, '');
   const uploadsRel = /\/wp-content\/uploads\/(.+)$/.exec(bare)?.[1];
   if (!uploadsRel) return null;
-  const decoded = decodeURIComponent(uploadsRel);
+  const decoded = decodePath(uploadsRel);
 
   const stripped = decoded.replace(/-\d+x\d+(\.[A-Za-z0-9]+)$/, '$1');
   for (const candidate of [stripped, decoded]) {
     const p = within(uploadsRoot, candidate);
-    if (p !== null && fs.existsSync(p)) return p;
+    if (p !== null) return p;
   }
   return null;
 }

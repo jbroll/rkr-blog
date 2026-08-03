@@ -150,7 +150,8 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
           .get(...params)?.n ?? 0;
       const rows = db
         .prepare<PostRow>(
-          `SELECT ${POST_COLUMNS} FROM wp_posts WHERE ${where} ORDER BY post_date DESC LIMIT ? OFFSET ?`
+          `SELECT ${POST_COLUMNS} FROM wp_posts WHERE ${where}
+            ORDER BY post_date DESC, ID DESC LIMIT ? OFFSET ?`
         )
         .all(...params, perPage, (page - 1) * perPage);
       return {
@@ -164,7 +165,9 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
       const byId = typeof idOrSlug === 'number' || /^\d+$/.test(idOrSlug);
       const row = byId
         ? db
-            .prepare<PostRow>(`SELECT ${POST_COLUMNS} FROM wp_posts WHERE ID = ?`)
+            .prepare<PostRow>(
+              `SELECT ${POST_COLUMNS} FROM wp_posts WHERE ID = ? AND post_type = 'post'`
+            )
             .get(Number(idOrSlug))
         : db
             .prepare<PostRow>(
@@ -225,7 +228,7 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
           `SELECT comment_ID, comment_post_ID, comment_parent, comment_author,
                   comment_author_url, comment_date, comment_content
              FROM wp_comments WHERE ${where}
-            ORDER BY comment_date ASC LIMIT ? OFFSET ?`
+            ORDER BY comment_date ASC, comment_ID ASC LIMIT ? OFFSET ?`
         )
         .all(perPage, (page - 1) * perPage);
       const comments: WpComment[] = rows.map((r) => ({

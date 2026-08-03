@@ -82,3 +82,68 @@ test('throws a useful error when nothing resolves', async (t) => {
     /not in the backup/
   );
 });
+
+/** `uploads/2026/05/evil.jpeg -> <root>/outside.jpeg`, as a backup from a
+ * compromised site could carry. Throws if the host refuses symlinks. */
+function plantEscapingSymlink(uploads: string): void {
+  fs.symlinkSync(
+    path.resolve(uploads, '..', 'outside.jpeg'),
+    path.join(uploads, '2026', '05', 'evil.jpeg')
+  );
+}
+
+test('rejects a symlink out of the uploads tree on the attachment route', async (t) => {
+  const { db, uploads } = fixture(t);
+  plantEscapingSymlink(uploads);
+  db.prepare('INSERT INTO wp_postmeta VALUES (?,?,?)').run(
+    98,
+    '_wp_attached_file',
+    '2026/05/evil.jpeg'
+  );
+  const url = 'https://wp.example/x.jpeg#wp-image-98';
+  assert.equal(resolveAttachmentPath(db, uploads, url), null);
+  await assert.rejects(() => sqliteImageFetcher(db, uploads)(url), /not in the backup/);
+});
+
+test('rejects a symlink out of the uploads tree on the URL-path route', async (t) => {
+  const { db, uploads } = fixture(t);
+  plantEscapingSymlink(uploads);
+  const url = 'https://wp.example/wp-content/uploads/2026/05/evil.jpeg';
+  assert.equal(resolveAttachmentPath(db, uploads, url), null);
+  await assert.rejects(() => sqliteImageFetcher(db, uploads)(url), /not in the backup/);
+});
+
+test('rejects a symlinked directory partway along the path', async (t) => {
+  const { db, uploads } = fixture(t);
+  fs.symlinkSync(path.resolve(uploads, '..'), path.join(uploads, '2026', 'out'));
+  const url = 'https://wp.example/wp-content/uploads/2026/out/outside.jpeg';
+  assert.equal(resolveAttachmentPath(db, uploads, url), null);
+  await assert.rejects(() => sqliteImageFetcher(db, uploads)(url), /not in the backup/);
+});
+
+test('a malformed percent escape is unresolvable, not a URIError', async (t) => {
+  const { db, uploads } = fixture(t);
+  const url = 'https://wp.example/wp-content/uploads/2026/05/bad%ZZ.jpg';
+  assert.equal(resolveAttachmentPath(db, uploads, url), null);
+  await assert.rejects(() => sqliteImageFetcher(db, uploads)(url), /not in the backup/);
+});
+
+test('a percent escape that decodes is resolved', async (t) => {
+  const { db, uploads } = fixture(t);
+  fs.writeFileSync(path.join(uploads, '2026', '05', 'a b.jpeg'), 'SPACED');
+  const p = resolveAttachmentPath(
+    db,
+    uploads,
+    'https://wp.example/wp-content/uploads/2026/05/a%20b.jpeg'
+  );
+  assert.equal(p && fs.readFileSync(p, 'utf8'), 'SPACED');
+});
+
+test('returns null when the uploads root itself is missing', async (t) => {
+  const { db, uploads } = fixture(t);
+  const absent = path.join(uploads, 'no-such-root');
+  assert.equal(
+    resolveAttachmentPath(db, absent, 'https://wp.example/wp-content/uploads/2026/05/photo.jpeg'),
+    null
+  );
+});

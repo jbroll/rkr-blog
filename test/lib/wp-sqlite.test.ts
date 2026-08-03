@@ -155,6 +155,39 @@ test('listPosts: paginates', async (t) => {
   assert.equal(r.posts.length, 1);
 });
 
+test('listPosts: posts sharing a post_date are each returned once across pages', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  const insert = db.prepare(
+    'INSERT INTO wp_posts (ID, post_date, post_content, post_title, post_excerpt, post_status, post_name, post_modified, post_type) VALUES (?,?,?,?,?,?,?,?,?)'
+  );
+  for (const id of [15, 16]) {
+    insert.run(
+      id,
+      '2026-05-20 00:00:00',
+      '<p>x</p>',
+      `Tied ${id}`,
+      '',
+      'publish',
+      `tied-${id}`,
+      '2026-05-20 00:00:00',
+      'post'
+    );
+  }
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+
+  const seen: number[] = [];
+  for (const page of [1, 2, 3]) {
+    const r = await src.listPosts({ perPage: 1, page });
+    assert.equal(r.total, 3);
+    assert.equal(r.posts.length, 1);
+    seen.push(r.posts[0]?.id ?? 0);
+  }
+  assert.deepEqual(seen, [16, 15, 10]);
+});
+
 test('listPosts: clamps an out-of-range perPage', async (t) => {
   const src = sqliteSource(backup(t));
   t.after(() => src.close());
@@ -188,6 +221,13 @@ test('fetchPost: by numeric id given as a string', async (t) => {
   const src = sqliteSource(backup(t));
   t.after(() => src.close());
   assert.equal((await src.fetchPost('10')).slug, 'one-final-day');
+});
+
+test('fetchPost: throws for a numeric id that is not a post', async (t) => {
+  const src = sqliteSource(backup(t));
+  t.after(() => src.close());
+  await assert.rejects(() => src.fetchPost(12), /no post/);
+  await assert.rejects(() => src.fetchPost(77), /no post/);
 });
 
 test('fetchPost: throws for an unknown slug', async (t) => {
@@ -363,6 +403,28 @@ test('listComments paginates', async (t) => {
   assert.equal(r.total, 2);
   assert.equal(r.totalPages, 2);
   assert.equal(r.comments[0]?.id, 4);
+});
+
+test('listComments: comments sharing a comment_date are each returned once across pages', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  const insert = db.prepare(
+    'INSERT INTO wp_comments (comment_ID, comment_post_ID, comment_author, comment_author_url, comment_date, comment_content, comment_approved, comment_parent) VALUES (?,?,?,?,?,?,?,?)'
+  );
+  insert.run(5, 10, 'Cal', '', '2026-05-19 00:00:00', 'Tied one', '1', 0);
+  insert.run(6, 10, 'Dot', '', '2026-05-19 00:00:00', 'Tied two', '1', 0);
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+
+  const seen: number[] = [];
+  for (const page of [1, 2, 3]) {
+    const r = await src.listComments({ perPage: 1, page });
+    assert.equal(r.total, 3);
+    assert.equal(r.comments.length, 1);
+    seen.push(r.comments[0]?.id ?? 0);
+  }
+  assert.deepEqual(seen, [1, 5, 6]);
 });
 
 test('fetchImage streams the original from the uploads tree', async (t) => {
