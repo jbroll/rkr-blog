@@ -71,7 +71,7 @@ the base spec.
                           public page assets
                                ▲
                                │
-  author  ──▶ admin SPA ◀─▶ OPFS (vfs cache) ───▶ outbox ──▶ /admin/sync/*
+  author  ──▶ admin SPA ◀─▶ OPFS (vfs cache) ───▶ outbox ──▶ write endpoints
                                                   ▲
                                                   │
                                             on `online` event
@@ -90,9 +90,16 @@ Two independent layers:
   pair with old chunks. The shell's assets are served under
   `/admin/static/` so they sit inside the worker's scope. Navigations
   are network-first (online the author gets the fresh server render);
-  `/admin/static/*` is cache-first; `/admin/api`, `/admin/sync`, and
-  `/admin/post-bundle` are not intercepted at all — the outbox owns
-  their offline behavior.
+  `/admin/static/*` is cache-first; everything else under `/admin/` —
+  `/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`,
+  `/admin/post-bundle`, `/admin/original` — is not intercepted at all,
+  since the outbox owns its offline behavior.
+
+  The shell itself is cached separately from the manifest, because it is
+  auth-gated: `cache.add()` rejects on a 401 and would atomically discard
+  every public asset queued alongside it. Install tries it and tolerates
+  failure; each successful online navigation re-caches the render, so a
+  shell missed at install time is repaired on the next visit.
 
 The server's filesystem-of-record is unchanged. SQLite remains the
 index. The browser's OPFS is a write-through cache that becomes a

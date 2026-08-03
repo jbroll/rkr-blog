@@ -26,8 +26,25 @@ export async function precacheInstall(env: SwEnv): Promise<string> {
   await cache.addAll(manifest.assets);
   // The shell is a server render, not a build artifact, so it isn't in
   // the manifest; one cached copy serves every /admin/view/* slug too.
-  await cache.add(SHELL_URL);
+  // It is also auth-gated, and add() rejects on a 401 — atomically
+  // discarding every public asset alongside it. A miss here is repaired
+  // by the first online navigation (see handleFetch).
+  await cache.add(SHELL_URL).catch(() => {});
   return manifest.hash;
+}
+
+/** The one live cache. activate() evicts every other `rkr-admin-*`, so
+ * a lookup by prefix finds the current build's. */
+async function openCurrentCache(env: SwEnv): Promise<Cache | null> {
+  const name = (await env.caches.keys()).find((n) => n.startsWith(CACHE_PREFIX));
+  return name ? env.caches.open(name) : null;
+}
+
+async function cacheShell(env: SwEnv, res: Response): Promise<void> {
+  const cache = await openCurrentCache(env);
+  // Keyed by SHELL_URL whatever the navigation's path: the shell is
+  // slug-independent, so one copy serves every /admin/view/*.
+  if (cache) await cache.put(SHELL_URL, res);
 }
 
 export async function evictOldCaches(env: SwEnv, keep: string): Promise<string[]> {
@@ -56,6 +73,14 @@ export function handleFetch(env: SwEnv, req: Request): Promise<Response> | null 
     // render, so a stale bundle survives at most one launch.
     return env
       .fetch(req)
+      .then(async (res) => {
+        // Repairs an install whose shell add was refused; also keeps the
+        // cached copy current with the deployed render. Awaited rather
+        // than fired off, so respondWith's pending promise keeps the
+        // worker alive until the write lands.
+        if (res.ok) await cacheShell(env, res.clone()).catch(() => {});
+        return res;
+      })
       .catch(() => env.caches.match(SHELL_URL, { ignoreSearch: true }))
       .then((res) => res ?? new Response('offline', { status: 503 }));
   }

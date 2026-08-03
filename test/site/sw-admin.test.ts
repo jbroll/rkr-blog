@@ -191,3 +191,70 @@ test('a POST under /admin/ is never intercepted', () => {
     null
   );
 });
+
+test('precacheInstall: a refused shell still leaves the public assets cached', async () => {
+  const e = env(okPrecache) as never as Parameters<typeof precacheInstall>[0];
+  const cache = await e.caches.open(`${CACHE_PREFIX}abcdef012345`);
+  // The shell is auth-gated; add() rejects on a 401.
+  cache.add = async () => {
+    throw new TypeError('Request failed');
+  };
+  const hash = await precacheInstall(e);
+  assert.equal(hash, 'abcdef012345');
+  assert.ok(await cache.match('/admin/static/admin/main.js?v=abcdef012345'));
+  assert.ok(await cache.match('/admin/static/base.css?v=abcdef012345'));
+  assert.equal(await cache.match(SHELL_URL), undefined);
+});
+
+test('navigation: a successful network render repairs a missing cached shell', async () => {
+  const e = env(okPrecache) as never as Parameters<typeof precacheInstall>[0];
+  const cache = await e.caches.open(`${CACHE_PREFIX}abcdef012345`);
+  cache.add = async () => {
+    throw new TypeError('Request failed');
+  };
+  await precacheInstall(e);
+  assert.equal(await cache.match(SHELL_URL), undefined);
+
+  await handleFetch(e, navRequest('https://x.test/admin/editor'));
+  const healed = await cache.match(SHELL_URL);
+  assert.ok(healed, 'shell cached from the network response');
+  assert.equal(await (healed as Response).text(), 'network:https://x.test/admin/editor');
+});
+
+test('navigation: a /admin/view/<slug> render is cached under the shell key', async () => {
+  const e = env(okPrecache) as never as Parameters<typeof precacheInstall>[0];
+  const cache = await e.caches.open(`${CACHE_PREFIX}abcdef012345`);
+  cache.add = async () => {
+    throw new TypeError('Request failed');
+  };
+  await precacheInstall(e);
+  await handleFetch(e, navRequest('https://x.test/admin/view/hello'));
+  // Slug-independent: one copy serves every preview URL.
+  assert.ok(await cache.match(SHELL_URL));
+});
+
+test('navigation: a non-2xx render is not cached', async () => {
+  const unauthorized = {
+    ...(env(okPrecache) as never as Parameters<typeof precacheInstall>[0]),
+    fetch: (async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith(PRECACHE_URL)) return new Response(JSON.stringify(PRECACHE));
+      return new Response('unauthorized', { status: 401 });
+    }) as typeof fetch
+  };
+  const cache = await unauthorized.caches.open(`${CACHE_PREFIX}abcdef012345`);
+  cache.add = async () => {
+    throw new TypeError('Request failed');
+  };
+  await precacheInstall(unauthorized);
+  const res = await handleFetch(unauthorized, navRequest('https://x.test/admin/editor'));
+  assert.equal((res as Response).status, 401);
+  assert.equal(await cache.match(SHELL_URL), undefined);
+});
+
+test('navigation: shell caching is skipped when no rkr-admin cache exists', async () => {
+  const e = env(okPrecache) as never as Parameters<typeof precacheInstall>[0];
+  const res = await handleFetch(e, navRequest('https://x.test/admin/editor'));
+  assert.equal(await (res as Response).text(), 'network:https://x.test/admin/editor');
+  assert.deepEqual(await e.caches.keys(), []);
+});
