@@ -15,7 +15,7 @@ import {
 import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts';
 import { runEviction } from './eviction.ts';
 import { hydrateLocalThumbs } from './local-thumb.ts';
-import { getState, onChange as onOnlineChange, start as startOnline } from './online-state.ts';
+import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema, mutateRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
@@ -58,10 +58,10 @@ async function runStart(editor: Editor): Promise<void> {
   // init fails or is unsupported, otherwise the sync badge stays 'online'
   // but the drain loop never fires and saves silently queue forever.
   startOnline();
-  if (getState() === 'online') {
-    const snap = captureSiteSnapshot(document);
-    if (snap) void saveSiteSnapshot(snap).catch(() => {});
-  }
+  // Worth doing offline too: the SW-cached shell is a real server
+  // render, so its title/theme/hash are valid.
+  const snap = captureSiteSnapshot(document);
+  if (snap) void saveSiteSnapshot(snap).catch(() => {});
   try {
     const schema = await ensureSchema();
     if (schema.status === 'unsupported') {

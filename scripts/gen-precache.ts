@@ -2,9 +2,17 @@
 // service worker installs into rkr-admin-<hash>. Generated because
 // esbuild's --splitting chunk names aren't knowable ahead of the build.
 //
-// Every URL carries the ?v=<hash> suffix the templates stamp — cache
-// keys include the query string, so an entry without it would never
-// match the request the page actually makes.
+// Cache keys include the query string, so each file is listed under the
+// URL it is actually requested at:
+//
+//   static/admin/**  bare. esbuild's chunks reach each other through
+//     relative imports, and relative resolution drops the query — from
+//     /admin/static/admin/main.js?v=h, './chunk-A.js' is requested with
+//     no query at all. Those names are content-hashed already.
+//   everything else  ?v=<hash>, the form the templates stamp.
+//
+// admin/main.js and admin/main.css are listed both ways: the shell
+// requests them by name with the stamp, chunks reach them without.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,31 +53,46 @@ function walk(dir: string, rel: string, out: string[]): void {
   }
 }
 
+/** Build output the shell references by name, so it is requested with
+ * the stamp as well as bare. */
+const STAMPED = ['admin/main.js', 'admin/main.css'];
+
 export function buildPrecache(repoRoot: string, hash: string): Precache {
   const staticDir = path.join(repoRoot, 'static');
-  const rels: string[] = [];
-  walk(path.join(staticDir, 'admin'), 'admin', rels);
+  const bare: string[] = [];
+  walk(path.join(staticDir, 'admin'), 'admin', bare);
+
+  // A missing file here means the build ran out of order (e.g.
+  // build:admin's precache step ran before build:site emitted the file
+  // it's referencing) — fail the build rather than ship a manifest
+  // silently missing an entry the shell requests.
+  const versioned: string[] = [];
+  for (const f of STAMPED) {
+    const abs = path.join(staticDir, f);
+    if (!fs.existsSync(abs)) throw new Error(`gen-precache: missing build output ${abs}`);
+    versioned.push(f);
+  }
 
   const themesDir = path.join(staticDir, 'themes');
   if (fs.existsSync(themesDir)) {
     for (const f of fs.readdirSync(themesDir)) {
       // The active theme is runtime config, so every sheet ships.
-      if (f.endsWith('.css')) rels.push(`themes/${f}`);
+      if (f.endsWith('.css')) versioned.push(`themes/${f}`);
     }
   }
 
   for (const f of FIXED) {
-    // A missing fixed asset means the build ran out of order (e.g.
-    // build:admin's precache step ran before build:site emitted the
-    // file it's referencing) — fail the build rather than ship a
-    // manifest silently missing an entry the shell requests.
     const abs = path.join(staticDir, f);
     if (!fs.existsSync(abs)) throw new Error(`gen-precache: missing fixed asset ${abs}`);
-    rels.push(f);
+    versioned.push(f);
   }
 
-  rels.sort();
-  return { hash, assets: rels.map((r) => `/admin/static/${r}?v=${hash}`) };
+  const assets = [
+    ...bare.map((r) => `/admin/static/${r}`),
+    ...versioned.map((r) => `/admin/static/${r}?v=${hash}`)
+  ];
+  assets.sort();
+  return { hash, assets };
 }
 
 export function writePrecache(repoRoot: string, hash: string): string {

@@ -42,7 +42,9 @@ let worker: Worker | null = null;
 /* v8 ignore next 10 -- Worker() requires a real browser */
 function getWorker(): Worker {
   if (!worker) {
-    worker = new Worker(new URL('/static/admin/opfs-worker.js', location.origin), {
+    // Inside the service worker's /admin/ scope, so it is precached and
+    // loads offline. Both static mounts serve the same bytes.
+    worker = new Worker(new URL('/admin/static/admin/opfs-worker.js', location.origin), {
       type: 'module'
     });
     worker.onerror = () => {

@@ -69,6 +69,59 @@ test('preview: site snapshot supplies theme, build hash, and site title', async 
   assert.match(html, /rkroll/);
 });
 
+/** The head + header of the admin shell the preview boots from, as
+ * much of it as captureSiteSnapshot reads. */
+function shellDocument(theme: string, hash: string): Document {
+  const sheets = ['default', ...(theme === 'default' ? [] : [theme])].map((name) => ({
+    getAttribute: () => `/admin/static/themes/${name}.css?v=${hash}`
+  }));
+  return {
+    querySelector: (sel: string) =>
+      sel === '.rkr-site-title a' ? { textContent: 'rkroll' } : null,
+    querySelectorAll: () => sheets
+  } as unknown as Document;
+}
+
+async function withDocument<T>(doc: Document, fn: () => Promise<T>): Promise<T> {
+  const g = globalThis as { document?: Document };
+  const orig = g.document;
+  g.document = doc;
+  try {
+    return await fn();
+  } finally {
+    if (orig === undefined) delete g.document;
+    else g.document = orig;
+  }
+}
+
+test('preview: with no stored snapshot the live shell supplies theme, hash, and site title', async () => {
+  const { renderPreviewDocument } = await import('../../src/admin/preview-page.ts');
+  const html = await withDocument(shellDocument('tufte', 'deadbeef1234'), () =>
+    renderPreviewDocument({ slug: 'hello', title: 'Hello', markdown: MARKDOWN, snapshot: null })
+  );
+  assert.match(html, /\/admin\/static\/themes\/tufte\.css\?v=deadbeef1234/);
+  assert.ok(!html.includes('v=unknown'), 'no asset falls back to the unknown hash');
+  assert.match(html, /rkroll/);
+});
+
+test('preview: the live shell beats a stale stored snapshot', async () => {
+  const { renderPreviewDocument } = await import('../../src/admin/preview-page.ts');
+  const html = await withDocument(shellDocument('default', 'newhash00000'), () =>
+    renderPreviewDocument({
+      slug: 'hello',
+      title: 'Hello',
+      markdown: MARKDOWN,
+      snapshot: { title: 'rkroll', tagline: 'tag', theme: 'tufte', hash: 'oldhash00000' }
+    })
+  );
+  assert.ok(!html.includes('oldhash00000'), 'stale hash not used');
+  assert.ok(!html.includes('/themes/tufte.css'), 'stale theme not used');
+  assert.match(html, /\/admin\/static\/base\.css\?v=newhash00000/);
+  // Nothing in the shell's header carries the tagline when the site has
+  // none rendered, so the stored value still fills it in.
+  assert.match(html, /tag/);
+});
+
 test('preview: no public-page scripts are referenced', async () => {
   const { renderPreviewDocument } = await import('../../src/admin/preview-page.ts');
   const html = await renderPreviewDocument({

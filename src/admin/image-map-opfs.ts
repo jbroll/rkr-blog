@@ -42,7 +42,8 @@ export async function buildImageMapFromOpfs(
 
   const known = (await listDir(OPFS_DIRS.SIDECARS))
     .filter((f) => f.endsWith('.json'))
-    .map((f) => f.slice(0, -5));
+    .map((f) => f.slice(0, -5))
+    .filter((id) => /^[0-9a-f]{64}$/.test(id));
   const resolved = resolveIds(raws, known);
 
   const entries = await Promise.all(

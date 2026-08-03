@@ -12,7 +12,7 @@ import { loadDraft, readMeta } from './draft.ts';
 import { buildImageMapFromOpfs } from './image-map-opfs.ts';
 import { listDir } from './opfs.ts';
 import { isDraftMetaFile, OPFS_DIRS, readRoot } from './opfs-schema.ts';
-import { readSiteSnapshot, type SiteSnapshot } from './site-snapshot.ts';
+import { captureSiteSnapshot, readSiteSnapshot, type SiteSnapshot } from './site-snapshot.ts';
 
 const ASSET_BASE = '/admin/static';
 
@@ -33,7 +33,19 @@ function assetsFrom(snapshot: SiteSnapshot | null): AssetCtx {
   };
 }
 
+/** The shell this page booted from carries the same chrome the stored
+ * snapshot was parsed out of, and it is current — the stored one is
+ * written by the editor, which a pin-and-read author may never open,
+ * and goes stale on every deploy until they do. */
+function resolveSnapshot(stored: SiteSnapshot | null): SiteSnapshot | null {
+  const live = typeof document === 'undefined' ? null : captureSiteSnapshot(document);
+  if (!live) return stored;
+  const tagline = live.tagline ?? stored?.tagline;
+  return { ...live, ...(tagline ? { tagline } : {}) };
+}
+
 export async function renderPreviewDocument(input: PreviewInput): Promise<string> {
+  const snapshot = resolveSnapshot(input.snapshot);
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
   const images = await buildImageMapFromOpfs(input.markdown);
@@ -44,10 +56,10 @@ export async function renderPreviewDocument(input: PreviewInput): Promise<string
 
   return renderPostPage({
     site: {
-      title: input.snapshot?.title ?? input.title,
-      ...(input.snapshot?.tagline ? { tagline: input.snapshot.tagline } : {})
+      title: snapshot?.title ?? input.title,
+      ...(snapshot?.tagline ? { tagline: snapshot.tagline } : {})
     },
-    assets: assetsFrom(input.snapshot),
+    assets: assetsFrom(snapshot),
     title: input.title,
     ...(input.subtitle ? { subtitle: input.subtitle } : {}),
     slug: input.slug,
@@ -100,17 +112,28 @@ export async function findMarkdown(slug: string): Promise<PreviewInput | null> {
 
 export async function bootPreview(): Promise<void> {
   const slug = decodeURIComponent(location.pathname.replace(/^\/admin\/view\//, ''));
-  const input = await findMarkdown(slug);
-  if (!input) {
-    document.body.textContent = `No local copy of "${slug}". Pin it while online first.`;
-    return;
+  try {
+    const input = await findMarkdown(slug);
+    if (!input) return showUnavailable(slug);
+    const html = await renderPreviewDocument(input);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Swap the whole head: the shell's admin <style> block would
+    // otherwise override the published layout it was written to frame.
+    document.head.replaceChildren();
+    for (const el of [...doc.head.children]) {
+      document.head.appendChild(document.importNode(el, true));
+    }
+    document.body.replaceChildren();
+    for (const el of [...doc.body.children]) {
+      document.body.appendChild(document.importNode(el, true));
+    }
+  } catch {
+    // A corrupt draft or an unrenderable node reads the same as no
+    // local copy from here: the post can't be shown from this device.
+    showUnavailable(slug);
   }
-  const html = await renderPreviewDocument(input);
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  // Swap the whole head: the shell's admin <style> block would
-  // otherwise override the published layout it was written to frame.
-  document.head.replaceChildren();
-  for (const el of [...doc.head.children]) document.head.appendChild(document.importNode(el, true));
-  document.body.replaceChildren();
-  for (const el of [...doc.body.children]) document.body.appendChild(document.importNode(el, true));
+}
+
+function showUnavailable(slug: string): void {
+  document.body.textContent = `No local copy of "${slug}". Pin it while online first.`;
 }

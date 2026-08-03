@@ -16,6 +16,7 @@ function fixtureRepo(t: TestContext): string {
   fs.writeFileSync(path.join(root, 'static', 'admin', 'main.js.map'), '{}');
   fs.writeFileSync(path.join(root, 'static', 'admin', 'main.css'), '/* */');
   fs.writeFileSync(path.join(root, 'static', 'admin', 'chunk-ABC123.js'), '//');
+  fs.writeFileSync(path.join(root, 'static', 'admin', 'opfs-worker.js'), '//');
   for (const name of ['default', 'tufte', 'dracula']) {
     fs.writeFileSync(path.join(root, 'static', 'themes', `${name}.css`), '/* */');
   }
@@ -33,10 +34,38 @@ function fixtureRepo(t: TestContext): string {
 
 test('buildPrecache: lists every emitted file under static/admin, sourcemaps excluded', (t) => {
   const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
-  assert.ok(assets.includes('/admin/static/admin/main.js?v=abcdef012345'));
-  assert.ok(assets.includes('/admin/static/admin/chunk-ABC123.js?v=abcdef012345'));
-  assert.ok(assets.includes('/admin/static/admin/main.css?v=abcdef012345'));
+  assert.ok(assets.includes('/admin/static/admin/main.js'));
+  assert.ok(assets.includes('/admin/static/admin/chunk-ABC123.js'));
+  assert.ok(assets.includes('/admin/static/admin/main.css'));
   assert.ok(!assets.some((a) => a.includes('.map')), 'sourcemaps excluded');
+});
+
+test('buildPrecache: split chunks are cached bare — a relative import drops the query', (t) => {
+  const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
+  assert.ok(assets.includes('/admin/static/admin/chunk-ABC123.js'));
+  assert.ok(
+    !assets.includes('/admin/static/admin/chunk-ABC123.js?v=abcdef012345'),
+    'nothing requests a chunk with a query'
+  );
+  assert.ok(
+    !assets.includes('/admin/static/admin/opfs-worker.js?v=abcdef012345'),
+    'the worker is constructed from a bare URL too'
+  );
+  assert.ok(assets.includes('/admin/static/admin/opfs-worker.js'));
+});
+
+test('buildPrecache: the two files the shell stamps by name are cached both ways', (t) => {
+  const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
+  for (const rel of ['admin/main.js', 'admin/main.css']) {
+    assert.ok(assets.includes(`/admin/static/${rel}`), `${rel} bare missing`);
+    assert.ok(assets.includes(`/admin/static/${rel}?v=abcdef012345`), `${rel} versioned missing`);
+  }
+});
+
+test('buildPrecache: a missing stamped file throws instead of being silently skipped', (t) => {
+  const root = fixtureRepo(t);
+  fs.rmSync(path.join(root, 'static', 'admin', 'main.css'));
+  assert.throws(() => buildPrecache(root, 'abcdef012345'), /main\.css/);
 });
 
 test('buildPrecache: every theme sheet is listed', (t) => {
@@ -49,12 +78,30 @@ test('buildPrecache: every theme sheet is listed', (t) => {
   }
 });
 
-test('buildPrecache: every entry carries the ?v= suffix and the /admin/static prefix', (t) => {
+test('buildPrecache: every entry sits under /admin/static, and only build output is bare', (t) => {
   const { assets, hash } = buildPrecache(fixtureRepo(t), 'abcdef012345');
   assert.equal(hash, 'abcdef012345');
   for (const a of assets) {
     assert.ok(a.startsWith('/admin/static/'), a);
-    assert.ok(a.endsWith('?v=abcdef012345'), a);
+    if (a.endsWith('?v=abcdef012345')) continue;
+    assert.ok(a.startsWith('/admin/static/admin/'), `${a} must be versioned`);
+  }
+});
+
+test('buildPrecache: assets the shell requests by a fixed name stay versioned', (t) => {
+  const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
+  for (const rel of [
+    'base.css',
+    'themes/default.css',
+    'themes/tufte.css',
+    'favicon.ico',
+    'icon-32.png',
+    'admin-manifest.webmanifest',
+    'site/sw-admin-register.js',
+    'site/lightbox.css'
+  ]) {
+    assert.ok(assets.includes(`/admin/static/${rel}?v=abcdef012345`), `${rel} missing`);
+    assert.ok(!assets.includes(`/admin/static/${rel}`), `${rel} should not be bare`);
   }
 });
 
