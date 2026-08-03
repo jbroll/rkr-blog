@@ -25,7 +25,7 @@ CREATE TABLE wp_options (option_id INTEGER PRIMARY KEY, option_name TEXT, option
 CREATE TABLE wp_comments (
   comment_ID INTEGER PRIMARY KEY, comment_post_ID INTEGER, comment_author TEXT,
   comment_author_url TEXT, comment_date TEXT, comment_content TEXT,
-  comment_approved TEXT, comment_parent INTEGER
+  comment_approved TEXT, comment_type TEXT DEFAULT '', comment_parent INTEGER
 );
 `;
 
@@ -366,6 +366,124 @@ test('fetchSiteBannerUrl picks the newest cropped- attachment', async (t) => {
   );
 });
 
+function setOptions(dbPath: string, options: Record<string, string>): void {
+  const db = open(dbPath);
+  const insert = db.prepare('INSERT INTO wp_options (option_name, option_value) VALUES (?,?)');
+  const update = db.prepare('UPDATE wp_options SET option_value = ? WHERE option_name = ?');
+  for (const [name, value] of Object.entries(options)) {
+    if (update.run(value, name).changes === 0) insert.run(name, value);
+  }
+  db.close();
+}
+
+test('link follows a date-based permalink_structure', async (t) => {
+  const fix = backup(t);
+  setOptions(fix.dbPath, { permalink_structure: '/%year%/%monthnum%/%day%/%postname%/' });
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPost(10)).link, 'https://wp.example/2026/05/18/one-final-day/');
+});
+
+test('link resolves the time and %post_id% tags', async (t) => {
+  const fix = backup(t);
+  setOptions(fix.dbPath, {
+    permalink_structure: '/%hour%%minute%%second%/%post_id%-%postname%'
+  });
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPost(10)).link, 'https://wp.example/212739/10-one-final-day');
+});
+
+test('link falls back to <base>/<slug> for an unsupported tag', async (t) => {
+  const fix = backup(t);
+  setOptions(fix.dbPath, { permalink_structure: '/%category%/%postname%/' });
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPost(10)).link, 'https://wp.example/one-final-day');
+});
+
+test('link falls back when the structure holds no tags', async (t) => {
+  const fix = backup(t);
+  setOptions(fix.dbPath, { permalink_structure: '/archives/' });
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPost(10)).link, 'https://wp.example/one-final-day');
+});
+
+test('link falls back on WP’s zero post_date', async (t) => {
+  const fix = backup(t);
+  setOptions(fix.dbPath, { permalink_structure: '/%year%/%postname%/' });
+  const db = open(fix.dbPath);
+  db.prepare('UPDATE wp_posts SET post_date = ? WHERE ID = ?').run('0000-00-00 00:00:00', 10);
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPost(10)).link, 'https://wp.example/one-final-day');
+});
+
+test('link is built from home, not siteurl, when both are set', async (t) => {
+  const fix = backup(t);
+  setOptions(fix.dbPath, {
+    home: 'https://blog.example/',
+    siteurl: 'https://wp.example/cms',
+    permalink_structure: '/%year%/%monthnum%/%day%/%postname%/'
+  });
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  const post = await src.fetchPost(10);
+  assert.equal(post.link, 'https://blog.example/2026/05/18/one-final-day/');
+  assert.equal(
+    await src.fetchFeaturedMediaUrl(77),
+    'https://wp.example/cms/wp-content/uploads/2026/05/p.jpeg#wp-image-77'
+  );
+});
+
+test('annotateImages ignores a data-src attribute before the real src', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  db.prepare(
+    'INSERT INTO wp_posts (ID, post_date, post_content, post_title, post_excerpt, post_status, post_name, post_modified, post_type) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(
+    18,
+    '2026-07-03 00:00:00',
+    '<img data-src="https://wp.example/lazy.jpeg" class="wp-image-77" src="https://wp.example/wp-content/uploads/2026/05/p-768x1024.jpeg"/>',
+    'Lazy',
+    '',
+    'draft',
+    'lazy',
+    '2026-07-03 00:00:00',
+    'post'
+  );
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  const html = (await src.fetchPost(18)).content.rendered;
+  assert.match(html, /data-src="https:\/\/wp\.example\/lazy\.jpeg"/);
+  assert.match(html, / src="[^"]*p-768x1024\.jpeg#wp-image-77"/);
+});
+
+test('fetchSiteBannerUrl ignores cropped- in the middle of a filename', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  const insertAttachment = db.prepare(
+    'INSERT INTO wp_posts (ID, post_date, post_title, post_status, post_name, post_type) VALUES (?,?,?,?,?,?)'
+  );
+  const insertMeta = db.prepare(
+    'INSERT INTO wp_postmeta (post_id, meta_key, meta_value) VALUES (?,?,?)'
+  );
+  insertAttachment.run(88, '2026-06-01 00:00:00', 'banner', 'inherit', 'banner', 'attachment');
+  insertMeta.run(88, '_wp_attached_file', '2026/06/cropped-header.jpeg');
+  insertAttachment.run(89, '2026-07-01 00:00:00', 'kayak', 'inherit', 'kayak', 'attachment');
+  insertMeta.run(89, '_wp_attached_file', '2024/04/KayakingCropped-scaled.jpeg');
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal(
+    await src.fetchSiteBannerUrl(),
+    'https://wp.example/wp-content/uploads/2026/06/cropped-header.jpeg#wp-image-88'
+  );
+});
+
 test('fetchSiteBannerUrl returns null when no cropped- attachment exists', async (t) => {
   const src = sqliteSource(backup(t));
   t.after(() => src.close());
@@ -388,6 +506,25 @@ test('listComments returns approved only, in WpComment shape', async (t) => {
     date: '2026-05-19T00:00:00',
     content: { rendered: 'Nice!' }
   });
+});
+
+test('listComments excludes an approved trackback or pingback', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  const insert = db.prepare(
+    'INSERT INTO wp_comments (comment_ID, comment_post_ID, comment_author, comment_author_url, comment_date, comment_content, comment_approved, comment_type, comment_parent) VALUES (?,?,?,?,?,?,?,?,?)'
+  );
+  insert.run(7, 10, 'Site', 'http://tb', '2026-05-19 00:00:00', 'Trackback', '1', 'trackback', 0);
+  insert.run(8, 10, 'Site', 'http://pb', '2026-05-19 00:00:00', 'Pingback', '1', 'pingback', 0);
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  const r = await src.listComments();
+  assert.equal(r.total, 1);
+  assert.deepEqual(
+    r.comments.map((c) => c.id),
+    [1]
+  );
 });
 
 test('listComments paginates', async (t) => {

@@ -65,13 +65,49 @@ function slugFor(row: PostRow): string {
 
 /** Tag each <img> src with its attachment id so the image fetcher can
  * resolve the full-size original. Idempotent: an src that already
- * carries a fragment is left alone. */
+ * carries a fragment is left alone. The leading `\s` keeps `data-src="`
+ * and friends from being mistaken for the real attribute. */
 function annotateImages(html: string): string {
   return html.replace(/<img\b[^>]*>/g, (tag) => {
     const id = /class="[^"]*\bwp-image-(\d+)\b[^"]*"/.exec(tag)?.[1];
     if (!id) return tag;
-    return tag.replace(/src="([^"#]+)"/, `src="$1#wp-image-${id}"`);
+    return tag.replace(/(\s)src="([^"#]+)"/, `$1src="$2#wp-image-${id}"`);
   });
+}
+
+const PERMALINK_TAGS = new Set([
+  '%year%',
+  '%monthnum%',
+  '%day%',
+  '%hour%',
+  '%minute%',
+  '%second%',
+  '%post_id%',
+  '%postname%'
+]);
+
+/** WP's `permalink_structure` applied to one post, or null when the
+ * structure is empty, uses a tag we cannot resolve from wp_posts alone
+ * (`%category%`, `%author%`, …), or needs a date this row does not have.
+ * Callers fall back to `<base>/<slug>` rather than emit a wrong URL. */
+function permalinkPath(structure: string, row: PostRow, slug: string): string | null {
+  const tags = structure.match(/%[^%\s/]+%/g);
+  if (!tags || tags.length === 0) return null;
+  if (tags.some((tag) => !PERMALINK_TAGS.has(tag))) return null;
+
+  const parts = /^(?!0000)(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(row.post_date);
+  const values: Record<string, string | undefined> = {
+    '%year%': parts?.[1],
+    '%monthnum%': parts?.[2],
+    '%day%': parts?.[3],
+    '%hour%': parts?.[4],
+    '%minute%': parts?.[5],
+    '%second%': parts?.[6],
+    '%post_id%': String(row.ID),
+    '%postname%': slug
+  };
+  if (tags.some((tag) => values[tag] === undefined)) return null;
+  return structure.replace(/%[^%\s/]+%/g, (tag) => values[tag] ?? tag);
 }
 
 function statusFilter(status: string | undefined): { sql: string; params: SqlParam[] } {
@@ -92,6 +128,16 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
       .get(name)?.option_value ?? '';
 
   const siteUrl = (): string => option('siteurl').replace(/\/$/, '');
+
+  /** WP builds permalinks from `home`, which differs from `siteurl` on a
+   * subdirectory install. */
+  const homeUrl = (): string => (option('home') || option('siteurl')).replace(/\/$/, '');
+
+  const permalink = (row: PostRow, slug: string): string => {
+    const base = homeUrl();
+    const rel = permalinkPath(option('permalink_structure'), row, slug);
+    return rel === null ? `${base}/${slug}` : `${base}${rel}`;
+  };
 
   const termIds = (postId: number, taxonomy: string): number[] =>
     db
@@ -128,7 +174,7 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
       title: { rendered: row.post_title },
       content: { rendered: annotateImages(row.post_content) },
       excerpt: { rendered: row.post_excerpt },
-      link: `${siteUrl()}/${slug}`,
+      link: permalink(row, slug),
       tags: termIds(row.ID, 'post_tag'),
       categories: termIds(row.ID, 'category'),
       featured_media: thumb ? Number(thumb) : 0
@@ -200,7 +246,8 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
           `SELECT p.ID AS ID, m.meta_value AS meta_value
              FROM wp_posts p
              JOIN wp_postmeta m ON m.post_id = p.ID AND m.meta_key = '_wp_attached_file'
-            WHERE p.post_type = 'attachment' AND m.meta_value LIKE '%cropped-%'
+            WHERE p.post_type = 'attachment'
+              AND (m.meta_value LIKE 'cropped-%' OR m.meta_value LIKE '%/cropped-%')
             ORDER BY p.post_date DESC
             LIMIT 1`
         )
@@ -219,7 +266,8 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
     async listComments(commentOpts: ListCommentsOpts = {}): Promise<CommentListResult> {
       const page = commentOpts.page ?? 1;
       const perPage = Math.min(500, Math.max(1, commentOpts.perPage ?? 100));
-      const where = "comment_approved = '1'";
+      // REST returns reader comments only; '' is the pre-4.x spelling of 'comment'.
+      const where = "comment_approved = '1' AND comment_type IN ('', 'comment')";
       const total =
         db.prepare<{ n: number }>(`SELECT COUNT(*) AS n FROM wp_comments WHERE ${where}`).get()
           ?.n ?? 0;
