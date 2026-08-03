@@ -40,7 +40,10 @@ function commentEnd(text: string, i: number): number | null {
   }
   if (c === '/' && two === '*') {
     const end = text.indexOf('*/', i + 2);
-    return end === -1 ? text.length - 1 : end + 1;
+    // An unterminated block comment means a truncated file. Swallowing the
+    // rest silently would report success over a near-empty database.
+    if (end === -1) throw new Error('unterminated /* comment — dump file is truncated');
+    return end + 1;
   }
   return null;
 }
@@ -225,8 +228,15 @@ function columnList(raw: string | undefined): string {
   return ` (${cols.map((c) => `\`${c}\``).join(',')})`;
 }
 
+// Any statement that carries rows. Matched broadly on purpose: a dump taken
+// with --insert-ignore or --replace must reach the unparseable-INSERT throw
+// below rather than being skipped into a silently empty database.
+const ROW_STATEMENT = /^(INSERT|REPLACE)\b/i;
+const ROW_INSERT =
+  /^(?:INSERT(?:\s+(?:LOW_PRIORITY|DELAYED|HIGH_PRIORITY|IGNORE))*|REPLACE(?:\s+(?:LOW_PRIORITY|DELAYED))*)\s+INTO\s+`([^`]+)`\s*(\([^)]*\))?\s*VALUES\s*([\s\S]*?);?\s*$/i;
+
 function unparseableInsert(stmt: string): string {
-  const table = /^INSERT INTO\s+`?([^`\s(]+)/i.exec(stmt)?.[1] ?? '?';
+  const table = /\bINTO\s+`?([^`\s(]+)/i.exec(stmt)?.[1] ?? '?';
   const excerpt = stmt.length > 160 ? `${stmt.slice(0, 160)}…` : stmt;
   return `unparseable INSERT INTO \`${table}\`: ${excerpt}`;
 }
@@ -250,8 +260,8 @@ export function convertDump(sqlPath: string, dbPath: string): DumpStats {
         db.exec(`DROP TABLE IF EXISTS \`${created.table}\``);
         db.exec(created.ddl);
         tables++;
-      } else if (/^INSERT INTO/i.test(s)) {
-        const m = /^INSERT INTO\s+`([^`]+)`\s*(\([^)]*\))?\s*VALUES\s*([\s\S]*?);?\s*$/i.exec(s);
+      } else if (ROW_STATEMENT.test(s)) {
+        const m = ROW_INSERT.exec(s);
         const parsed = m ? parseValues(m[3] as string) : [];
         if (!m || parsed.length === 0) throw new Error(unparseableInsert(s));
         const placeholders = (parsed[0] as Cell[]).map(() => '?').join(',');

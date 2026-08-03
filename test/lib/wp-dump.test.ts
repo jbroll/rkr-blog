@@ -211,6 +211,40 @@ test('convertDump: throws on an INSERT it cannot parse', (t) => {
   );
 });
 
+test('convertDump: INSERT IGNORE and REPLACE INTO load rows', (t) => {
+  const { db, stats } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT IGNORE INTO \`wp_posts\` VALUES (1,'A','B',0,NULL);
+REPLACE INTO \`wp_posts\` VALUES (2,'C','D',0,NULL);
+INSERT LOW_PRIORITY IGNORE INTO \`wp_posts\` VALUES (3,'E','F',0,NULL);
+`
+  );
+  assert.equal(stats.rows, 3);
+  const ids = db.prepare<{ ID: number }>('SELECT ID FROM wp_posts ORDER BY ID').all();
+  assert.deepEqual(
+    ids.map((r) => r.ID),
+    [1, 2, 3]
+  );
+});
+
+test('convertDump: throws on an unparseable REPLACE rather than skipping it', (t) => {
+  const dir = tmpdir(t);
+  const sqlPath = path.join(dir, 'dump.sql');
+  fs.writeFileSync(sqlPath, `${POSTS_DDL}\nREPLACE INTO \`wp_posts\` SELECT * FROM other;\n`);
+  assert.throws(
+    () => convertDump(sqlPath, path.join(dir, 'out.db')),
+    /unparseable INSERT INTO `wp_posts`/
+  );
+});
+
+test('convertDump: throws on an unterminated block comment', (t) => {
+  const dir = tmpdir(t);
+  const sqlPath = path.join(dir, 'dump.sql');
+  fs.writeFileSync(sqlPath, `${POSTS_DDL}\n/* truncated here\nINSERT INTO \`wp_posts\` VALUES (1,`);
+  assert.throws(() => convertDump(sqlPath, path.join(dir, 'out.db')), /truncated/);
+});
+
 test('convertDump: throws on an INSERT with no VALUES clause', (t) => {
   const dir = tmpdir(t);
   const sqlPath = path.join(dir, 'dump.sql');
