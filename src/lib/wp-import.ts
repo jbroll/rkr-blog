@@ -181,8 +181,8 @@ function filenameFromUrl(url: string): string {
   }
 }
 
-/* c8 ignore start -- production-only wiring; tests inject opts.fetchImage */
-function defaultImageFetcher(): (url: string) => Promise<Readable> {
+/* c8 ignore start -- production-only wiring; tests inject their own fetchers */
+export function defaultImageFetcher(): (url: string) => Promise<Readable> {
   return async (url: string) => {
     const res = await safeFetch(url, { timeoutMs: 60_000 });
     if (!res.ok) throw new Error(`image fetch ${res.status} ${url}`);
@@ -193,7 +193,7 @@ function defaultImageFetcher(): (url: string) => Promise<Readable> {
 
 /** Default WP tag resolver: fetches /wp/v2/tags?include=<ids> from the
  * same origin as `postLink` and maps each result to its `name` string. */
-function defaultTagFetcher(): (tagIds: number[], postLink: string) => Promise<string[]> {
+export function defaultTagFetcher(): (tagIds: number[], postLink: string) => Promise<string[]> {
   return async (tagIds: number[], postLink: string) => {
     const origin = new URL(postLink).origin;
     const url = `${origin}/wp-json/wp/v2/tags?include=${tagIds.join(',')}&per_page=100`;

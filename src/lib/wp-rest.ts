@@ -6,22 +6,14 @@
 // fixture server.
 
 import { safeFetch } from './url-safety.ts';
-import type { WpComment, WpPost } from './wp-import-types.ts';
-
-export interface ListResult {
-  posts: WpPost[];
-  total: number;
-  totalPages: number;
-}
-
-export interface CommentListResult {
-  comments: WpComment[];
-  total: number;
-  totalPages: number;
-}
-
-/** Fetcher signature used by listPosts / fetchPost. */
-export type WpFetcher = (url: string, init?: RequestInit) => Promise<Response>;
+import type {
+  CommentListResult,
+  ListResult,
+  WpComment,
+  WpFetcher,
+  WpPost,
+  WpSiteInfo
+} from './wp-import-types.ts';
 
 /* c8 ignore next 4 -- thin wrapper; tests inject the fetcher directly */
 const defaultWpFetcher: WpFetcher = (url) =>
@@ -104,11 +96,6 @@ export async function fetchWpSiteBannerUrl(
   // WP custom header images always have "cropped-" in their filename.
   const m = /src="([^"]*cropped-[^"]*)"/.exec(html);
   return m?.[1] ?? null;
-}
-
-export interface WpSiteInfo {
-  name: string;
-  description: string;
 }
 
 /** Fetch site title and tagline from the WP REST API root (`/wp-json/`). */

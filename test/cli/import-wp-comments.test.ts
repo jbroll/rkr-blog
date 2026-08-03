@@ -7,7 +7,7 @@ import importWpCommentsCmd, { importWpComments } from '../../src/cli/import-wp-c
 import { getPostIdBySlug, listPublishedThread } from '../../src/lib/comments.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
-import type { WpFetcher } from '../../src/lib/wp-rest.ts';
+import type { WpFetcher } from '../../src/lib/wp-import-types.ts';
 
 function setup(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-impc-'));

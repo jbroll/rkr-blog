@@ -8,7 +8,8 @@ import path from 'node:path';
 
 import { getPostIdBySlug, insertImportedComment } from '../lib/comments.ts';
 import { open } from '../lib/db.ts';
-import { listComments, listPosts, type WpFetcher } from '../lib/wp-rest.ts';
+import type { WpFetcher } from '../lib/wp-import-types.ts';
+import { listComments, listPosts } from '../lib/wp-rest.ts';
 
 export interface ImportCommentsResult {
   inserted: number;

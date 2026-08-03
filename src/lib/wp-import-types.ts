@@ -40,3 +40,23 @@ export interface HastNode {
   children?: HastNode[];
   value?: string;
 }
+
+/** Fetcher signature used by the REST client and its tests. */
+export type WpFetcher = (url: string, init?: RequestInit) => Promise<Response>;
+
+export interface ListResult {
+  posts: WpPost[];
+  total: number;
+  totalPages: number;
+}
+
+export interface CommentListResult {
+  comments: WpComment[];
+  total: number;
+  totalPages: number;
+}
+
+export interface WpSiteInfo {
+  name: string;
+  description: string;
+}

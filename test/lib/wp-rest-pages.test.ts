@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { WpFetcher } from '../../src/lib/wp-rest.ts';
+import type { WpFetcher } from '../../src/lib/wp-import-types.ts';
 import { fetchWpPage } from '../../src/lib/wp-rest.ts';
 
 const page = {
