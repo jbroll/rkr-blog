@@ -3,7 +3,7 @@
 import type { Sidecar } from '@rkr/image-edit';
 import { readMeta, updateMeta } from './draft.ts';
 import { listDir, readBlob, writeBlob, writeJson } from './opfs.ts';
-import { mutateRoot, OPFS_DIRS } from './opfs-schema.ts';
+import { isDraftMetaFile, mutateRoot, OPFS_DIRS } from './opfs-schema.ts';
 
 const META_DIR = OPFS_DIRS.META;
 
@@ -101,7 +101,7 @@ export async function pinPost(
 export async function pinnedSlugs(): Promise<Set<string>> {
   const slugs = new Set<string>();
   for (const fname of await listDir(META_DIR)) {
-    if (!fname.endsWith('.json')) continue;
+    if (!isDraftMetaFile(fname)) continue;
     const draftId = fname.replace(/\.json$/, '');
     const meta = await readMeta(draftId);
     if (meta?.slug && meta.mode === 'pinned') slugs.add(meta.slug);
@@ -117,7 +117,7 @@ export async function pinnedSlugs(): Promise<Set<string>> {
 export async function unpinSlug(slug: string): Promise<number> {
   let flipped = 0;
   for (const fname of await listDir(META_DIR)) {
-    if (!fname.endsWith('.json')) continue;
+    if (!isDraftMetaFile(fname)) continue;
     const draftId = fname.replace(/\.json$/, '');
     const meta = await readMeta(draftId);
     if (meta?.slug === slug && meta.mode === 'pinned') {

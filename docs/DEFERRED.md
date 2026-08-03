@@ -65,6 +65,7 @@ Format: **item** — _revisit when:_ trigger.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
 - **GC never reclaims orphaned originals** — `originals/<aa>/<bb>/<id>.<ext>` files accumulate forever if their posts are deleted. _Revisit when:_ disk usage becomes a concern; fix requires a cross-referencing pass between originals/ and all sidecar files.
+- **`check-bundle-size.ts --write` is documented but not implemented** — the failure message tells you to re-run with `--write` to bump the baseline; the script parses no `argv` and always exits 1 on overage regardless of the flag. _Revisit when:_ next touching this script; either implement the flag or drop it from the message.
 
 
 ## image-pwa (apps/image-pwa)

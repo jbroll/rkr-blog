@@ -5,7 +5,7 @@ import { openModal } from './dialog-focus.ts';
 import { setStatus } from './dom.ts';
 import { runEviction } from './eviction.ts';
 import { listDir, readJson, writeJson } from './opfs.ts';
-import { readRoot } from './opfs-schema.ts';
+import { isDraftMetaFile, readRoot } from './opfs-schema.ts';
 import { list as outboxList, remove as outboxRemove } from './outbox.ts';
 import { tryDrain } from './sync.ts';
 
@@ -181,7 +181,7 @@ async function onDiscardOne(d: HTMLDialogElement, seq: number): Promise<void> {
 async function collectMetas(): Promise<StoragePanelMeta[]> {
   const out: StoragePanelMeta[] = [];
   for (const fname of await listDir('meta')) {
-    if (!fname.endsWith('.json') || fname === '_root.json') continue;
+    if (!isDraftMetaFile(fname)) continue;
     const m = await readJson<StoragePanelMeta>(`meta/${fname}`);
     /* v8 ignore next -- malformed-on-disk path */
     if (m) out.push(m);

@@ -447,8 +447,18 @@ window.addEventListener('beforeunload', (ev) => {
   ev.returnValue = '';
 });
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', mount, { once: true });
-} else {
+function boot(): void {
+  if (location.pathname.startsWith('/admin/view/')) {
+    // Lazy: the preview is a separate chunk esbuild splits out, so the
+    // editor path doesn't pay for it.
+    void import('./preview-page.ts').then((m) => m.bootPreview());
+    return;
+  }
   mount();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot, { once: true });
+} else {
+  boot();
 }

@@ -15,7 +15,7 @@ import {
 import { drainCommitImageEdit, drainSavePost, drainUpload } from './drainers.ts';
 import { runEviction } from './eviction.ts';
 import { hydrateLocalThumbs } from './local-thumb.ts';
-import { onChange as onOnlineChange, start as startOnline } from './online-state.ts';
+import { getState, onChange as onOnlineChange, start as startOnline } from './online-state.ts';
 import { ensureSchema, mutateRoot } from './opfs-schema.ts';
 import {
   dropLegacyOpEntries,
@@ -27,6 +27,7 @@ import {
 import { refreshPageTitle } from './page-title.ts';
 import type { PinManifest } from './pin.ts';
 import { pinPost } from './pin.ts';
+import { captureSiteSnapshot, saveSiteSnapshot } from './site-snapshot.ts';
 import { mountStatusBadge } from './status-badge.ts';
 import { openStoragePanel } from './storage-panel.ts';
 import { discardConflictedSave, forceConflictedSave, registerDrainer, tryDrain } from './sync.ts';
@@ -57,6 +58,10 @@ async function runStart(editor: Editor): Promise<void> {
   // init fails or is unsupported, otherwise the sync badge stays 'online'
   // but the drain loop never fires and saves silently queue forever.
   startOnline();
+  if (getState() === 'online') {
+    const snap = captureSiteSnapshot(document);
+    if (snap) void saveSiteSnapshot(snap).catch(() => {});
+  }
   try {
     const schema = await ensureSchema();
     if (schema.status === 'unsupported') {

@@ -4,7 +4,7 @@ import { type EvictionPlan, type MetaSnapshot, planEviction } from '../lib/evict
 import { splitIds } from '../lib/figure-ids.ts';
 import { markdownToProse, type ProseDoc } from '../lib/prose-markdown.ts';
 import { listDir, readJson, removeFile } from './opfs.ts';
-import { OPFS_DIRS } from './opfs-schema.ts';
+import { isDraftMetaFile, OPFS_DIRS } from './opfs-schema.ts';
 import { list as outboxList } from './outbox.ts';
 
 const DRAFTS_DIR = OPFS_DIRS.DRAFTS;
@@ -118,8 +118,7 @@ export async function runEviction(now: number = Date.now()): Promise<EvictionPla
 async function collectMetas(): Promise<MetaSnapshot[]> {
   const out: MetaSnapshot[] = [];
   for (const fname of await listDir(META_DIR)) {
-    // _root.json lives in meta/ too; it's not a draft meta.
-    if (!fname.endsWith('.json') || fname === '_root.json') continue;
+    if (!isDraftMetaFile(fname)) continue;
     // Read lock BEFORE meta. The eviction planner survives a draft
     // when EITHER signal is fresh; reading the lock first means a
     // concurrent heartbeat (lock then meta) gives us at-worst a

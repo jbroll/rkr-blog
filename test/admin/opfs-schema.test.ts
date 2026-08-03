@@ -21,7 +21,7 @@ async function plantOutboxEntry(name: string): Promise<void> {
 
 // ---- imports -------------------------------------------------------
 
-const { ensureSchema, readRoot } = await import('../../src/admin/opfs-schema.ts');
+const { ensureSchema, isDraftMetaFile, readRoot } = await import('../../src/admin/opfs-schema.ts');
 
 beforeEach(() => {
   resetMockOpfs();
@@ -92,4 +92,11 @@ test('ensureSchema: corrupt _root.json (quarantined → null) with outbox entrie
     (root.nextSeq ?? 0) >= 8,
     `nextSeq must be > 7 (highest outbox seq) but got ${root.nextSeq}`
   );
+});
+
+test('isDraftMetaFile: excludes every `_`-prefixed meta-of-meta file', () => {
+  assert.equal(isDraftMetaFile('_root.json'), false);
+  assert.equal(isDraftMetaFile('_site.json'), false);
+  assert.equal(isDraftMetaFile('abc123.json'), true);
+  assert.equal(isDraftMetaFile('abc123.json.lock'), false);
 });

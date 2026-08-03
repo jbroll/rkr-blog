@@ -27,6 +27,16 @@ export const OPFS_DIRS = {
   PENDING_UPLOADS: 'pending-uploads'
 } as const;
 
+/** True for a filename in meta/ that holds a draft's own meta —
+ * false for meta-of-meta files (`_root.json`, `_site.json`, and any
+ * future `_`-prefixed addition). Every meta/ scanner (eviction,
+ * storage-panel, pin, preview) must filter through this one rule so
+ * a new `_`-prefixed file can't silently reappear as a phantom
+ * draft. */
+export function isDraftMetaFile(fname: string): boolean {
+  return fname.endsWith('.json') && !fname.startsWith('_');
+}
+
 /** @public */
 export interface OpfsRoot {
   schemaVersion: number;

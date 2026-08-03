@@ -314,6 +314,18 @@ test('/admin/editor references only /admin/static assets', async (t) => {
   assert.deepEqual(staticRefs, [], `unexpected /static refs: ${staticRefs.join(', ')}`);
 });
 
+test('/admin/view/:slug serves the same shell as /admin/editor', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+  const editor = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const view = await app.inject({ method: 'GET', url: '/admin/view/hello' });
+  assert.equal(view.statusCode, 200);
+  // Nonces differ per response; compare everything else.
+  const strip = (s: string) => s.replace(/nonce="[^"]*"/g, 'nonce="N"');
+  assert.equal(strip(view.body), strip(editor.body));
+});
+
 test('sw-admin.js under /admin/static carries Service-Worker-Allowed', async (t) => {
   // static/site/ is build:site output (gitignored) — plant a fixture
   // bundle dir instead of depending on that build having run.

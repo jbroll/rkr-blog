@@ -18,18 +18,15 @@ import type { FastifyInstance } from 'fastify';
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
-import { paths, siteConfig } from '../lib/config.ts';
+import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { ingestStream } from '../lib/originals.ts';
 import { runReindex } from '../lib/post-index.ts';
-import { serverAssets } from '../lib/site-assets.ts';
 import { slugify } from '../lib/slugify.ts';
 import { safeFetch } from '../lib/url-safety.ts';
-import { renderAdminPage } from '../templates/admin.ts';
 import { registerArchiveRoutes } from './admin-archive.ts';
 import { registerAdminCommentsRoutes } from './admin-comments.ts';
-import { buildAdminEditorCsp, makeCspNonce } from './admin-csp.ts';
 import {
   looksLikeFrontmatterDelimiter,
   resolveSavedDate,
@@ -45,6 +42,7 @@ import { registerAdminPostsRoutes } from './admin-posts.ts';
 import { prewarmVariants } from './admin-prewarm.ts';
 import { wipeRuntimeData } from './admin-reset-helpers.ts';
 import { registerAdminSettingsRoutes } from './admin-settings.ts';
+import { registerShellRoutes } from './admin-shell.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 import { registerAdminTagsRoute } from './admin-tags.ts';
 
@@ -117,25 +115,8 @@ export default async function adminRoutes(
     });
   }
 
-  fastify.get('/admin/editor', { ...guard }, async (_req, reply) => {
-    // Per-RESPONSE nonce: binds the template's inline <style> block so
-    // the CSP can drop script-src 'unsafe-inline' (see admin-csp.ts).
-    const nonce = makeCspNonce();
-    const assets = serverAssets('/admin/static');
-    return reply
-      .type('text/html; charset=utf-8')
-      .header('Content-Security-Policy', buildAdminEditorCsp(nonce))
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('Referrer-Policy', 'strict-origin-when-cross-origin')
-      .send(
-        renderAdminPage({
-          site: siteConfig(),
-          assets,
-          bundleUrl: `/admin/static/admin/main.js?v=${assets.hash}`,
-          cspNonce: nonce
-        })
-      );
-  });
+  // /admin/editor + /admin/view/:slug (same shell; see admin-shell.ts).
+  registerShellRoutes(fastify, { guard });
 
   // /admin/posts (now 301 → /) + per-row status / delete endpoints.
   // The handlers touch the filesystem + runReindex (which opens its

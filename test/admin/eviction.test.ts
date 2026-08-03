@@ -76,3 +76,20 @@ test('runEviction: an original referenced by nothing is still evicted', async ()
     'img-Y is referenced by nothing and must remain evictable'
   );
 });
+
+test('runEviction: _site.json in meta/ does not count as a draft meta (bootstrap safety)', async () => {
+  // Only meta-of-meta files present, no real draft meta — the
+  // fresh-install bootstrap guard (haveAnyMetas) must still see
+  // zero drafts and refuse to orphan-clean originals, even though
+  // _root.json and _site.json both live in meta/.
+  await writeJson('meta/_root.json', { schemaVersion: 1, deviceId: 'dev', nextSeq: 0 });
+  await writeJson('meta/_site.json', { title: 'rkroll', theme: 'default', hash: 'abc123' });
+  await seedOriginal('img-Z');
+
+  const plan = await runEviction(NOW);
+
+  assert.ok(
+    !plan.evictOriginals.includes('img-Z'),
+    'no real draft meta exists yet; bootstrap safety must keep originals'
+  );
+});
