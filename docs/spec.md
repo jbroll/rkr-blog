@@ -26,8 +26,8 @@ For local development setup, see [developer-quickstart.md](./developer-quickstar
 - Plugin / theme marketplace.
 - Multi-tenant operation.
 - Real-time collaboration.
-- WYSIWYG fidelity to the published theme inside the editor (preview
-  is not the published page).
+- WYSIWYG fidelity to the published theme inside the editing surface.
+  The published form is a separate view at `/admin/view/:slug`.
 
 ## 3. Architecture (behavioral)
 
@@ -450,8 +450,11 @@ GET    /admin/auth/google/callback    Google OAuth code exchange
 POST   /admin/auth/token-login        ADMIN_TOKEN bearer login (form)
 POST   /admin/logout                  destroy session
 
-# Admin core — admin.ts
+# Admin core — admin.ts + admin-shell.ts
 GET    /admin/editor                  editor SPA shell
+GET    /admin/view/:slug              same shell; boots the published-form preview client-side —
+                                       a server render here would show the last-saved version, not
+                                       the editor's current buffer, so online and offline would disagree
 POST   /admin/posts                   save markdown (insert or overwrite by slug)
 POST   /admin/upload                  multipart, streams to originals
 POST   /admin/reset                   wipe posts/images/cache (bearer)

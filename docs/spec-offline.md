@@ -1,11 +1,13 @@
 # rkr-blog — Offline operation specification
 
-> **Status as of 2026-05-13: shipped.** Phase 0 (PWA shell + SW),
+> **Status as of 2026-08-03: shipped.** Phase 0 (PWA shell + SW),
 > Phase 1 (OPFS + outbox + drain), Phase 2 (pin existing posts),
-> and Phase 3 (eviction + storage panel) have all landed. This
-> document is the behavioral spec; for the as-built code map see
-> `implementation.md §11 Steps 13–15`. The `IMPLEMENTATION.md`
-> sibling is the per-task ledger of how each phase was delivered.
+> and Phase 3 (eviction + storage panel) have all landed, plus the
+> admin shell offline launch and published-form preview at
+> `/admin/view/:slug` (§3, §1 goals). This document is the behavioral
+> spec; for the as-built code map see `implementation.md §11 Steps
+> 13–15`. The `IMPLEMENTATION.md` sibling is the per-task ledger of
+> how each phase was delivered.
 
 What the application does when the network is gone, and how it recovers
 when the network returns. Implementation-agnostic — an alternate stack
@@ -33,6 +35,9 @@ the base spec.
 - **Predictable storage.** Cached (auto-pulled) posts time out and
   evict; pinned (explicit) posts persist until the author unpins.
   Storage usage is visible and bounded.
+- **Offline viewing of the published form.** A pinned or locally
+  composed post renders as the published page at `/admin/view/:slug`,
+  with no network and no server render.
 - **Last-writer-wins conflict policy.** When two devices edit the
   same post offline, the loser sees a warning and chooses to discard
   or force-overwrite. **No CRDT.** This is a deliberate v2 choice
@@ -77,12 +82,17 @@ Two independent layers:
 
 - **Public-side (Phase 0)**: a service worker caches `/`, `/<slug>`,
   `/img/*`, and `/static/*` (excluding admin). No app changes.
-- **Admin-side (Phases 1-3)**: the editor reads + writes through an
-  OPFS-backed VFS. Server API calls become outbox entries when
-  offline; the outbox drains on reconnect. The admin SPA is **not**
-  service-worker-cached — the offline path is OPFS, not the SW; this
-  avoids version drift between a stale-cached SPA bundle and a fresh
-  server.
+- **Admin-side (Phases 1-3, plus the offline shell launch below)**: the
+  editor reads + writes through an OPFS-backed VFS. Server API calls
+  become outbox entries when offline; the outbox drains on reconnect.
+  The admin shell **is** service-worker-cached, in a cache keyed by the
+  build hash: one cache holds exactly one build, so new HTML can never
+  pair with old chunks. The shell's assets are served under
+  `/admin/static/` so they sit inside the worker's scope. Navigations
+  are network-first (online the author gets the fresh server render);
+  `/admin/static/*` is cache-first; `/admin/api`, `/admin/sync`, and
+  `/admin/post-bundle` are not intercepted at all — the outbox owns
+  their offline behavior.
 
 The server's filesystem-of-record is unchanged. SQLite remains the
 index. The browser's OPFS is a write-through cache that becomes a

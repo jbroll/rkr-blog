@@ -276,6 +276,9 @@ constructing the app (currently only used by tests).
 The vhost template lives at `deploy/apache.conf`. Key behaviours:
 
 - `mod_rewrite` checks whether the requested `/img/*` path exists on disk; if so it rewrites directly to the `cache/img/` file, bypassing Node entirely.
+- `/admin/static/*` is aliased to the same directory as `/static/*`. The
+  admin service worker's scope is `/admin/`, so the shell's assets have
+  to be reachable inside it; both prefixes serve identical bytes.
 - Everything else proxies to `localhost:3000`.
 - `cache/` and `static/` responses carry `Cache-Control: public, max-age=31536000, immutable`. The `immutable` flag is accurate because cache filenames are content-hashed.
 
@@ -295,7 +298,8 @@ ProseMirror + Cropper.js), ESM format with code-splitting:
 - `static/site/carousel.js` — public-page carousel runtime
 - `static/site/comment-form.js`, `copy-link.js`, `img-retry.js` — lightweight public-page helpers
 - `static/site/sw-unregister.js` — loaded on all public pages; actively unregisters any prior SW at scope `/`
-- `static/site/sw-admin.js` + `sw-admin-register.js` — admin PWA service worker and registration script
+- `static/site/sw-admin.js` (thin event wiring; the cache logic lives in `src/site/sw-admin-core.ts`, unit-tested directly in Node) + `sw-admin-register.js` — admin PWA service worker and registration script
+- `static/admin/precache.json` — the list of URLs `sw-admin.js` precaches, keyed by build hash; written by `scripts/gen-precache.ts` at the end of the top-level `build` script, not inside `build:admin` — it walks `static/site/` and `static/themes/` output, so `build:site` must already have run. Running `build:admin` alone leaves no `precache.json`.
 
 The editor converts ProseMirror → markdown locally before POSTing to
 `/admin/posts`. The server only receives markdown (validated via
@@ -579,3 +583,36 @@ Pinned implementation calls; revisit if real-world data contradicts.
 small JPEG/PNG images (under 100 KB each, varied aspect ratios, one
 with embedded EXIF orientation) live in `test/fixtures/`. They're
 committed and used by the test suite.
+
+## 15. Markdown → HTML rendering: the image map
+
+`renderPostHtml` (`src/lib/content.ts`) and every widget's `WidgetCtx`
+take a prebuilt `images: ImageMap` (`src/lib/image-map.ts`) instead of
+a `siteRoot`, so the renderer does no filesystem I/O and bundles for
+either environment — a server request handler in `src/routes/public.ts`
+or the admin preview running in the browser. The map is keyed by the
+id as written in the post, lowercased; a missing key means
+unresolvable, and the widget renders an HTML comment
+(`<!-- figure: unresolved id ... -->`) instead of a `<picture>`.
+
+Gather first, then render:
+
+- `src/lib/image-map-fs.ts` builds the map from disk — sidecars,
+  on-disk dimensions, `/img/<id>.<oph>.<fmt>` URLs.
+- `src/admin/image-map-opfs.ts` builds the same shape from OPFS —
+  `blob:` URLs, dimensions falling back to the sidecar's recorded
+  values, since there's no sharp in the browser.
+- `src/lib/id-resolve.ts` holds the one copy of the id-prefix
+  resolution rule both prepasses call.
+
+An injected filesystem port into the renderer was considered and
+rejected: it wraps the reads rather than removing them, and leaves the
+widgets async against an abstraction. Gathering first also lets the
+server resolve every image concurrently instead of serially
+mid-render, and makes `renderPostHtml` testable from a hand-written
+map with no stubs.
+
+`test/lib/image-map-equivalence.test.ts` renders one fixture post
+through both prepasses and asserts the resulting HTML matches, once
+URLs are normalized — the check that keeps the two builders honest as
+either one changes.
