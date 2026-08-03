@@ -79,7 +79,8 @@ SITE_ROOT=$HOME/site bin/site-admin user invite you@example.com --role=owner
 Without an entry on the allowlist, every login 403s. This closes the
 deployment-window takeover risk where a stranger reaching the URL
 before the operator's first login could otherwise become owner. Add
-editors the same way (`--role=editor`).
+editors the same way (`--role=editor`) — but note the role is recorded
+and not enforced, so an editor has the same access as an owner today.
 
 ## 4. Coding conventions
 
@@ -291,7 +292,7 @@ set -a && . ./secrets.env && set +a
 ENABLE_TEST_ROUTES=1 HOST=0.0.0.0 ADMIN_TOKEN=dev-test npm start
 ```
 
-`ENABLE_TEST_ROUTES=1` enables the `/_test*` routes.  
+`ENABLE_TEST_ROUTES=1` enables the `/_test*` routes.
 `HOST=0.0.0.0` binds to all interfaces so phones/tablets on the same
 network can reach the server.
 

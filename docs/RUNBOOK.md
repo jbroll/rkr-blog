@@ -5,12 +5,14 @@ Day-to-day setup is in [`developer-quickstart.md`](developer-quickstart.md).
 
 ## Deploying a site
 
-Two sites run from this one tree, each as its own systemd service.
+Two sites are configured in this tree, each as its own systemd service.
+Only roll-along is deployed — stockademade has a site config and DNS
+pointing at the VPS but no vhost or service there yet.
 
-| Site | Domain | `APP_NAME` | Port |
-|---|---|---|---|
-| roll-along | roll-along.rkroll.com, admin on rkr-blog.rkroll.com | `rkr-blog` | 3000 |
-| stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3002 |
+| Site | Domain | `APP_NAME` | Port | Deployed |
+|---|---|---|---|---|
+| roll-along | roll-along.rkroll.com, admin on rkr-blog.rkroll.com | `rkr-blog` | 3000 | yes |
+| stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3002 | no |
 
 `APP_NAME` is `rkr-blog`, not `roll-along` — it names the unit and the
 server-side paths, and predates the domain move. Renaming it would move
@@ -94,6 +96,39 @@ the VPS, and an argument overrides it.
 Server-side paths all derive from `APP_NAME`: app `/opt/<APP_NAME>`, data
 `/var/www/<APP_NAME>`, env `/etc/<APP_NAME>.env`, unit
 `<APP_NAME>.service`.
+
+## Authorized users
+
+Google sign-in on its own grants nothing. The callback resolves the
+verified identity against an invite allowlist in the site DB, and an
+uninvited email gets a 403. There is no first-login-becomes-owner
+bootstrap, so a fresh deployment has an empty allowlist and **nobody can
+sign in with Google until an invite exists** — only `ADMIN_TOKEN` login
+works. Invite your own email before your first login.
+
+```bash
+# on the VPS, as the service user, from /opt/<APP_NAME>
+bin/site-admin user invite <email> [--role owner|editor]
+bin/site-admin user list
+bin/site-admin user remove <email>
+```
+
+`user remove` deletes the allowlist row and that user's sessions in one
+transaction, so access ends immediately rather than at session expiry.
+It does not delete the user row — a re-invite restores access to the
+same account.
+
+Roles are recorded but not enforced: an `editor` invite has the same
+access as an `owner` today. See `DEFERRED.md`.
+
+Two guards worth knowing when a login is rejected:
+
+- Emails are NFKC-normalised and lowercased before every comparison, so
+  an invite and a login that differ only in Unicode form still match.
+- A new Google identity presenting an email that already belongs to a
+  user from a different provider is refused rather than silently linked
+  (`email already linked to another provider`). Cross-provider linking
+  has no UI yet.
 
 ## Reset → seed → walk
 

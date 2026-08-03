@@ -545,8 +545,14 @@ deletes everything in the cache not in the set; idempotent.
 - **Social login only.** Sign in via Google (Apple deferred). No
   passwords stored anywhere.
 - **Invite-only allowlist.** A successful Google authorization only
-  creates a user if the email is on the allowlist. Roles: `owner`
-  (everything) and `editor` (everything except user management).
+  creates a user if the email is on the allowlist; an uninvited email
+  gets a 403. There is no first-login-becomes-owner bootstrap — the
+  operator invites their own email before their first login, so nobody
+  who reaches the URL first can claim the site.
+- **Roles are recorded, not enforced.** `owner` and `editor` are stored
+  on the user and assigned from the invite, but no route consults them:
+  every admin route requires a user and nothing more. Treat an `editor`
+  invite as full admin access. See `DEFERRED.md`.
 - **Sessions:** server-side, 30-day fixed expiry from login time;
   `last_seen_at` is updated on each authenticated request but does
   not extend the expiry window. Cookie is `HttpOnly`, `Secure`,
@@ -557,7 +563,11 @@ deletes everything in the cache not in the set; idempotent.
   `SameSite=Lax` session cookie as the primary line. The cookie alone
   blocks the realistic threat model (top-level GET navigation,
   cross-site form POST); the Origin check is defense-in-depth in case
-  a future browser-quirk or extension bypasses SameSite.
+  a future browser-quirk or extension bypasses SameSite. When a
+  deployment splits its reader and admin hostnames, the reader origin
+  is confined to paths outside `/admin` — a shared registrable domain
+  means `SameSite=Lax` alone would not stop a page on the reader host
+  from forging an admin POST.
 - **Bearer-token bypass for scripted clients.** When the env var
   `ADMIN_TOKEN` is set, requests carrying `Authorization: Bearer
   <ADMIN_TOKEN>` skip the cookie path and attach a synthetic admin
