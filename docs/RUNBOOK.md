@@ -228,8 +228,10 @@ bin/site-admin wp-dump ../roll-along/db/rollalong.sql /tmp/rollalong.db
 ```
 
 Then pass `--from-dump` and `--uploads` to any `import-wp` subcommand.
-The base-URL argument is still required — it labels output and supplies
-the `link` field — but nothing is fetched over the network:
+The base-URL argument is still required, but it only labels output:
+nothing is fetched over the network, and the `source_url` in the emitted
+frontmatter comes from the backup's own recorded site URL (`home`) and
+`permalink_structure`:
 
 ```bash
 UPLOADS=../roll-along/site/wp-content/uploads
@@ -242,9 +244,10 @@ bin/site-admin import-wp push https://roll-along.rkroll.com one-final-day \
   --from-dump /tmp/rollalong.db --uploads "$UPLOADS"
 ```
 
-WordPress leaves `post_name` empty until a post is first published, so
-drafts get a slug derived from their title. `import-wp list --status
-draft` prints the derived slug; check it before pushing.
+A WordPress draft has no stored slug — WordPress leaves `post_name`
+empty until a post is first published — so `import-wp list --status
+draft` prints one derived from the title. That derived slug works
+directly with `post` and `push`.
 
 `--status draft` on `push` lands the post unpublished. A WP draft is
 never published without an explicit `--status published`.

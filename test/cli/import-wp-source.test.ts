@@ -26,7 +26,8 @@ function emptyBackup(t: TestContext): { dbPath: string; uploadsRoot: string } {
     CREATE TABLE wp_options (option_name TEXT, option_value TEXT);
     CREATE TABLE wp_comments (comment_ID INTEGER PRIMARY KEY, comment_post_ID INTEGER,
       comment_author TEXT, comment_author_url TEXT, comment_date TEXT,
-      comment_content TEXT, comment_approved TEXT, comment_parent INTEGER);
+      comment_content TEXT, comment_approved TEXT, comment_type TEXT DEFAULT '',
+      comment_parent INTEGER);
   `);
   db.close();
   const uploadsRoot = path.join(root, 'uploads');
@@ -45,12 +46,24 @@ test('resolveSource: --from-dump selects the backup source', async (t) => {
   assert.equal(r.total, 0);
 });
 
-test('resolveSource: --from-dump without --uploads is an error', (t) => {
+test('resolveSource: --from-dump without --uploads is an error when images are fetched', (t) => {
   const fix = emptyBackup(t);
   assert.throws(
     () => resolveSource(['--from-dump', fix.dbPath], 'https://wp.example'),
     /--uploads <dir> is required/
   );
+  assert.throws(
+    () => resolveSource(['--from-dump', fix.dbPath], 'https://wp.example', true),
+    /--uploads <dir> is required/
+  );
+});
+
+test('resolveSource: --uploads is optional for a caller that fetches no images', async (t) => {
+  const fix = emptyBackup(t);
+  const source = resolveSource(['--from-dump', fix.dbPath], 'https://wp.example', false);
+  t.after(() => source.close());
+  const r = await source.listComments();
+  assert.equal(r.total, 0);
 });
 
 test('resolveSource: no flags yields the REST source', () => {

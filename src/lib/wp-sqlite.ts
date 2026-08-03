@@ -184,6 +184,26 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
   const POST_COLUMNS =
     'ID, post_date, post_modified, post_content, post_title, post_excerpt, post_status, post_name';
 
+  /** WP leaves `post_name` empty until a post is first published, so a
+   * draft is only reachable by the slug `slugFor` derives from its
+   * title — the same one `listPosts` reports. A stored `post_name`
+   * always wins over a derived one. */
+  const rowBySlug = (slug: string, postType: string): PostRow | undefined => {
+    const exact = db
+      .prepare<PostRow>(
+        `SELECT ${POST_COLUMNS} FROM wp_posts WHERE post_name = ? AND post_type = ?`
+      )
+      .get(slug, postType);
+    if (exact) return exact;
+    return db
+      .prepare<PostRow>(
+        `SELECT ${POST_COLUMNS} FROM wp_posts
+          WHERE (post_name = '' OR post_name IS NULL) AND post_type = ?`
+      )
+      .all(postType)
+      .find((row) => slugFor(row) === slug);
+  };
+
   return {
     async listPosts(listOpts: ListPostsOpts = {}): Promise<ListResult> {
       const page = listOpts.page ?? 1;
@@ -215,21 +235,13 @@ export function sqliteSource(opts: SqliteSourceOpts): WpSource {
               `SELECT ${POST_COLUMNS} FROM wp_posts WHERE ID = ? AND post_type = 'post'`
             )
             .get(Number(idOrSlug))
-        : db
-            .prepare<PostRow>(
-              `SELECT ${POST_COLUMNS} FROM wp_posts WHERE post_name = ? AND post_type = 'post'`
-            )
-            .get(String(idOrSlug));
+        : rowBySlug(String(idOrSlug), 'post');
       if (!row) throw new Error(`no post "${idOrSlug}" in the backup`);
       return toWpPost(row);
     },
 
     async fetchPage(slug: string): Promise<WpPost> {
-      const row = db
-        .prepare<PostRow>(
-          `SELECT ${POST_COLUMNS} FROM wp_posts WHERE post_name = ? AND post_type = 'page'`
-        )
-        .get(slug);
+      const row = rowBySlug(slug, 'page');
       if (!row) throw new Error(`no page "${slug}" in the backup`);
       return toWpPost(row);
     },

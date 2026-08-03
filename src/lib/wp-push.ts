@@ -230,8 +230,10 @@ function stripTrailingSlash(url: string): string {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 }
 
-/** Plain WP REST fetch — same shape as wp-import.fetchPost but without
- * the safeFetch SSRF guard (the operator picked the URL). */
+/** No-source fallback kept for direct API callers and tests: a plain WP
+ * REST fetch with no safeFetch SSRF guard. CLI pushes never reach it —
+ * resolveSource always supplies a source, so they go through
+ * wp-rest.fetchPost and its guard. */
 async function fetchWpPost(
   fetcher: typeof fetch,
   baseUrl: string,
@@ -253,7 +255,9 @@ async function fetchWpPost(
   return arr[0] as WpPost;
 }
 
-/** Fetch the source URL of a WP featured media item (no safeFetch guard). */
+/** No-source fallback for direct API callers and tests: fetch the source
+ * URL of a WP featured media item, with no safeFetch guard. CLI pushes
+ * use the source's fetchFeaturedMediaUrl instead. */
 async function fetchFeaturedMediaUrlDirect(
   fetcher: typeof fetch,
   baseUrl: string,

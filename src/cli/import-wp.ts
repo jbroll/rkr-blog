@@ -306,13 +306,16 @@ function positional(args: string[], i: number): string | undefined {
 
 /** Pick the content source: a converted backup when `--from-dump` is
  * present, otherwise the live REST API at `baseUrl`. Callers must
- * `close()` the result. */
-export function resolveSource(args: string[], baseUrl: string): WpSource {
+ * `close()` the result. Pass `needsImages: false` for a caller that
+ * never fetches an image (comment import), so `--uploads` is optional
+ * there; everywhere else a missing uploads root fails here rather than
+ * per-image later. */
+export function resolveSource(args: string[], baseUrl: string, needsImages = true): WpSource {
   const dbPath = stringFlag(args, '--from-dump');
   if (!dbPath) return restSource(baseUrl);
   const uploadsRoot = stringFlag(args, '--uploads');
-  if (!uploadsRoot) throw new Error('--uploads <dir> is required with --from-dump');
-  return sqliteSource({ dbPath, uploadsRoot });
+  if (!uploadsRoot && needsImages) throw new Error('--uploads <dir> is required with --from-dump');
+  return sqliteSource({ dbPath, uploadsRoot: uploadsRoot ?? '' });
 }
 
 /* c8 ignore start -- only reached from c8-ignored list/post success paths */

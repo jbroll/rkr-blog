@@ -236,6 +236,61 @@ test('fetchPost: throws for an unknown slug', async (t) => {
   await assert.rejects(() => src.fetchPost('nope'), /no post/);
 });
 
+test('fetchPost: a draft is retrievable by the slug listPosts reports', async (t) => {
+  const src = sqliteSource(backup(t));
+  t.after(() => src.close());
+  const listed = (await src.listPosts({ status: 'draft' })).posts[0];
+  assert.equal(listed?.slug, 'a-few-days-in-stirling-scotland');
+  const post = await src.fetchPost(listed?.slug ?? '');
+  assert.equal(post.id, 11);
+  assert.equal(post.status, 'draft');
+});
+
+test('fetchPost: a stored post_name beats a derived one', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  db.prepare(
+    'INSERT INTO wp_posts (ID, post_date, post_content, post_title, post_excerpt, post_status, post_name, post_modified, post_type) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(
+    21,
+    '2026-05-21 00:00:00',
+    '<p>Published</p>',
+    'Something else',
+    '',
+    'publish',
+    'a-few-days-in-stirling-scotland',
+    '2026-05-21 00:00:00',
+    'post'
+  );
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPost('a-few-days-in-stirling-scotland')).id, 21);
+});
+
+test('fetchPage: a page with no post_name is retrievable by its derived slug', async (t) => {
+  const fix = backup(t);
+  const db = open(fix.dbPath);
+  db.prepare(
+    'INSERT INTO wp_posts (ID, post_date, post_content, post_title, post_excerpt, post_status, post_name, post_modified, post_type) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(
+    22,
+    '2026-05-22 00:00:00',
+    '<p>Draft page</p>',
+    'Contact Us',
+    '',
+    'draft',
+    '',
+    '2026-05-22 00:00:00',
+    'page'
+  );
+  db.close();
+  const src = sqliteSource(fix);
+  t.after(() => src.close());
+  assert.equal((await src.fetchPage('contact-us')).id, 22);
+  await assert.rejects(() => src.fetchPage('nope'), /no page/);
+});
+
 test('fetchPost: annotates img src with the attachment id', async (t) => {
   const src = sqliteSource(backup(t));
   t.after(() => src.close());

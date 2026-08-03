@@ -111,14 +111,12 @@ export async function importWpComments(
 export default async function importWpCommentsCmd(argv: string[]): Promise<void> {
   const baseUrl = argv[0];
   if (!baseUrl) {
-    throw new Error(
-      'usage: site-admin import-wp-comments <wp-base-url> [--from-dump <db> --uploads <dir>]'
-    );
+    throw new Error('usage: site-admin import-wp-comments <wp-base-url> [--from-dump <db>]');
   }
   /* c8 ignore start -- success path touches the real site DB; covered by importWpComments tests */
   const { paths } = await import('../lib/config.ts');
   const { resolveSource } = await import('./import-wp.ts');
-  const source = resolveSource(argv.slice(1), baseUrl);
+  const source = resolveSource(argv.slice(1), baseUrl, false);
   try {
     const r = await importWpComments(source, paths().root);
     console.log(`imported ${r.inserted} comment(s), skipped ${r.skipped}`);
