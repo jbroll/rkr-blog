@@ -20,10 +20,12 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
   if (!sub || !(SUBCOMMANDS as readonly string[]).includes(sub)) {
     throw new Error(
       `usage:
-  site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN]
+  site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN] [--status draft|published]
   site-admin import-wp list <base-url> [--page N] [--per-page N] [--status publish|draft|any]
   site-admin import-wp post <base-url> <id-or-slug> [--force]
-  site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]
+  site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status draft|published]
+
+  without --status, a WP draft is pushed as a draft on the target
 
   any subcommand may read a backup instead of a live site:
     --from-dump <db>   database written by \`site-admin wp-dump\`
@@ -38,11 +40,11 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
 }
 
 async function list(args: string[]): Promise<void> {
-  const baseUrl = args[0];
+  const baseUrl = positional(args, 0);
   if (!baseUrl) throw new Error('usage: site-admin import-wp list <base-url> [--page N]');
   const page = numberFlag(args, '--page') ?? 1;
   const perPage = numberFlag(args, '--per-page') ?? 50;
-  const status = stringFlag(args, '--status') ?? 'publish';
+  const status = statusFlag(args, WP_STATUSES) ?? 'publish';
 
   /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-rest tests */
   const source = resolveSource(args, baseUrl);
@@ -61,8 +63,8 @@ async function list(args: string[]): Promise<void> {
 }
 
 async function post(args: string[]): Promise<void> {
-  const baseUrl = args[0];
-  const idOrSlug = args[1];
+  const baseUrl = positional(args, 0);
+  const idOrSlug = positional(args, 1);
   if (!baseUrl || !idOrSlug) {
     throw new Error('usage: site-admin import-wp post <base-url> <id-or-slug> [--force]');
   }
@@ -108,11 +110,11 @@ async function post(args: string[]): Promise<void> {
 }
 
 async function push(args: string[]): Promise<void> {
-  const wpBaseUrl = args[0];
-  const slug = args[1];
+  const wpBaseUrl = positional(args, 0);
+  const slug = positional(args, 1);
   if (!wpBaseUrl || !slug) {
     throw new Error(
-      'usage: site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]'
+      'usage: site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status draft|published]'
     );
   }
   const toUrl = stringFlag(args, '--to');
@@ -125,14 +127,22 @@ async function push(args: string[]): Promise<void> {
     throw new Error('bearer token required: pass --token or set ADMIN_TOKEN env');
   }
 
-  /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-push tests */
-  const statusFlag = stringFlag(args, '--status');
-  const status: 'draft' | 'published' = statusFlag === 'draft' ? 'draft' : 'published';
+  // Omitted --status means "whatever WordPress says"; pushPost derives
+  // it from the post so a WP draft can't be published by accident.
+  const status = statusFlag(args, TARGET_STATUSES) as 'draft' | 'published' | undefined;
 
+  /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-push tests */
   console.log(`pushing ${wpBaseUrl} ${slug} → ${toUrl}`);
   const source = resolveSource(args, wpBaseUrl);
   try {
-    const result = await pushPost({ wpBaseUrl, slug, toUrl, token, status, source });
+    const result = await pushPost({
+      wpBaseUrl,
+      slug,
+      toUrl,
+      token,
+      source,
+      ...(status ? { status } : {})
+    });
 
     console.log(
       `${result.inserted ? 'created' : 'overwrote'} /${result.slug}: ${result.imagesUploaded} image(s)${
@@ -146,16 +156,17 @@ async function push(args: string[]): Promise<void> {
 }
 
 async function about(args: string[]): Promise<void> {
-  const wpBaseUrl = args[0];
+  const wpBaseUrl = positional(args, 0);
   if (!wpBaseUrl) {
     throw new Error(
-      'usage: site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN]'
+      'usage: site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN] [--status draft|published]'
     );
   }
   const toUrl = stringFlag(args, '--to');
   if (!toUrl) throw new Error('--to <target-url> is required');
   const token = stringFlag(args, '--token') ?? process.env.ADMIN_TOKEN;
   if (!token) throw new Error('bearer token required: pass --token or set ADMIN_TOKEN env');
+  const status = statusFlag(args, TARGET_STATUSES) as 'draft' | 'published' | undefined;
 
   /* c8 ignore start -- success path makes real HTTP calls */
   console.log(`==> fetching About page from ${wpBaseUrl}`);
@@ -166,8 +177,8 @@ async function about(args: string[]): Promise<void> {
       slug: 'about',
       toUrl,
       token,
-      status: 'published',
-      source
+      source,
+      ...(status ? { status } : {})
     });
     console.log(
       `${result.inserted ? 'created' : 'overwrote'} /_about: ${result.imagesUploaded} image(s)${
@@ -181,7 +192,7 @@ async function about(args: string[]): Promise<void> {
 }
 
 async function siteBanner(args: string[]): Promise<void> {
-  const wpBaseUrl = args[0];
+  const wpBaseUrl = positional(args, 0);
   if (!wpBaseUrl) {
     throw new Error(
       'usage: site-admin import-wp site-banner <wp-base-url> --to <target-url> [--token TOKEN]'
@@ -252,20 +263,45 @@ async function siteBanner(args: string[]): Promise<void> {
 
 // ---- arg helpers ------------------------------------------------------
 
+/** WP-side statuses accepted by `list --status`. */
+const WP_STATUSES = ['publish', 'draft', 'any'] as const;
+/** Statuses a post can be given on the target site. */
+const TARGET_STATUSES = ['draft', 'published'] as const;
+
 function numberFlag(args: string[], flag: string): number | undefined {
-  const i = args.indexOf(flag);
-  if (i < 0) return undefined;
-  if (i + 1 >= args.length) throw new Error(`${flag} requires a numeric value`);
-  const v = Number(args[i + 1]);
+  const raw = stringFlag(args, flag, 'a numeric value');
+  if (raw === undefined) return undefined;
+  const v = Number(raw);
   if (!Number.isFinite(v)) throw new Error(`${flag} requires a numeric value`);
   return v;
 }
 
-function stringFlag(args: string[], flag: string): string | undefined {
+function stringFlag(args: string[], flag: string, what = 'a value'): string | undefined {
   const i = args.indexOf(flag);
   if (i < 0) return undefined;
-  if (i + 1 >= args.length) throw new Error(`${flag} requires a value`);
-  return args[i + 1];
+  const v = args[i + 1];
+  if (v === undefined) throw new Error(`${flag} requires ${what}`);
+  // `--from-dump --uploads dir` would otherwise open a file named
+  // "--uploads" and fail much later with a confusing SQLite error.
+  if (v.startsWith('--')) throw new Error(`${flag} requires ${what}, got flag "${v}"`);
+  return v;
+}
+
+function statusFlag(args: string[], allowed: readonly string[]): string | undefined {
+  const v = stringFlag(args, '--status');
+  if (v === undefined) return undefined;
+  if (!allowed.includes(v)) {
+    throw new Error(`--status must be one of ${allowed.join('|')} (got "${v}")`);
+  }
+  return v;
+}
+
+function positional(args: string[], i: number): string | undefined {
+  const v = args[i];
+  if (v?.startsWith('--')) {
+    throw new Error(`expected a positional argument at position ${i + 1}, got flag "${v}"`);
+  }
+  return v;
 }
 
 /** Pick the content source: a converted backup when `--from-dump` is

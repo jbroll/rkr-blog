@@ -32,8 +32,9 @@ export interface PushOpts {
   toUrl: string;
   /** Matches ADMIN_TOKEN env on the target. */
   token: string;
-  /** Override status set on the remote post. Default: published (so the
-   * post is visible on /). The local importer always emits draft. */
+  /** Override status set on the remote post. When omitted the status is
+   * derived from the WP object: `publish` → published, anything else
+   * (draft, pending, private) → draft. */
   status?: 'draft' | 'published';
   /** Inject a custom fetch (tests use one against a loopback server). */
   fetcher?: typeof fetch;
@@ -78,7 +79,10 @@ async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
   const fetcher = opts.fetcher ?? fetch;
   const targetBase = stripTrailingSlash(opts.toUrl);
   const auth = `Bearer ${opts.token}`;
-  const status = opts.status ?? 'published';
+  // Without an explicit --status, a WP draft must land as a draft: the
+  // backup source returns unpublished posts, and publishing one is not
+  // recoverable from the operator's side.
+  const status = opts.status ?? (post.status === 'publish' ? 'published' : 'draft');
 
   // 1. Run the local importer into a tempdir (the WP object was already
   //    fetched by the caller — pushPost via fetchWpPost, pushPage via

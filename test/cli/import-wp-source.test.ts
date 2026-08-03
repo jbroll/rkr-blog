@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
-import { resolveSource } from '../../src/cli/import-wp.ts';
+import importWpCmd, { resolveSource } from '../../src/cli/import-wp.ts';
 import { open } from '../../src/lib/db.ts';
 
 function emptyBackup(t: TestContext): { dbPath: string; uploadsRoot: string } {
@@ -57,4 +57,70 @@ test('resolveSource: no flags yields the REST source', () => {
   const source = resolveSource([], 'https://wp.example');
   assert.equal(typeof source.listPosts, 'function');
   source.close();
+});
+
+// ---- flag + status validation -----------------------------------------
+
+const TO = ['--to', 'https://target.example', '--token', 'tok'];
+
+test('push: --status must be draft or published', async () => {
+  for (const bad of ['publish', 'Draft', 'typo']) {
+    await assert.rejects(
+      () => importWpCmd(['push', 'https://wp.example', 'a-slug', ...TO, '--status', bad]),
+      /--status must be one of draft\|published/,
+      `expected --status ${bad} to be rejected`
+    );
+  }
+});
+
+test('about: --status must be draft or published', async () => {
+  await assert.rejects(
+    () => importWpCmd(['about', 'https://wp.example', ...TO, '--status', 'publish']),
+    /--status must be one of draft\|published/
+  );
+});
+
+test('list: --status must be publish, draft or any', async () => {
+  await assert.rejects(
+    () => importWpCmd(['list', 'https://wp.example', '--status', 'published']),
+    /--status must be one of publish\|draft\|any/
+  );
+});
+
+test('a flag value that is itself a flag is rejected', async () => {
+  await assert.rejects(
+    () => importWpCmd(['push', 'https://wp.example', 'a-slug', '--to', '--token', 'tok']),
+    /--to requires a value, got flag "--token"/
+  );
+  await assert.rejects(
+    () => importWpCmd(['list', 'https://wp.example', '--page', '--per-page', '10']),
+    /--page requires a numeric value, got flag "--per-page"/
+  );
+  assert.throws(
+    () => resolveSource(['--from-dump', '--uploads', 'up'], 'https://wp.example'),
+    /--from-dump requires a value, got flag "--uploads"/
+  );
+});
+
+test('a positional argument that is a flag is rejected', async () => {
+  await assert.rejects(
+    () => importWpCmd(['push', '--from-dump', 'wp.db', '--uploads', 'up', ...TO]),
+    /expected a positional argument at position 1, got flag "--from-dump"/
+  );
+  await assert.rejects(
+    () => importWpCmd(['post', 'https://wp.example', '--force']),
+    /expected a positional argument at position 2, got flag "--force"/
+  );
+  await assert.rejects(
+    () => importWpCmd(['list', '--page', '2']),
+    /expected a positional argument at position 1, got flag "--page"/
+  );
+  await assert.rejects(
+    () => importWpCmd(['about', '--to', 'https://target.example']),
+    /expected a positional argument at position 1, got flag "--to"/
+  );
+  await assert.rejects(
+    () => importWpCmd(['site-banner', '--to', 'https://target.example']),
+    /expected a positional argument at position 1, got flag "--to"/
+  );
 });

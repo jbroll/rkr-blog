@@ -425,5 +425,8 @@ bump further.
   small original. The walk script reports it as a per-image failure;
   check `fly logs --app rkr-blog` for the underlying sharp error.
 - **Walk reports `posts=0`** — Either the import didn't run (check
-  `import-wp push` exit codes) or the posts landed as `draft` (default
-  is `published`; `--status draft` overrides).
+  `import-wp push` exit codes) or the posts landed as `draft`. Without
+  `--status`, the target status follows the WordPress post: `publish`
+  imports as `published`, anything else (including the drafts a
+  `--from-dump` backup exposes) as `draft`. Pass `--status published`
+  to override.

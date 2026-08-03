@@ -15,6 +15,7 @@ import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import type { WpPost } from '../../src/lib/wp-import-types.ts';
 import { pushPage, pushPost } from '../../src/lib/wp-push.ts';
+import type { WpSource } from '../../src/lib/wp-source.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import { buildApp } from '../../src/server.ts';
 
@@ -542,4 +543,242 @@ test('pushPage: WP page fixture → target slug is _about', async (t) => {
 
   assert.equal(capturedAdminPostsSlug, '_about');
   assert.equal(res.slug, '_about');
+});
+
+// ---- injected WpSource (the --from-dump path) -------------------------
+
+interface StubCalls {
+  fetchPost: Array<string | number>;
+  fetchPage: string[];
+  fetchImage: string[];
+  fetchFeaturedMediaUrl: number[];
+  fetchTagNames: Array<{ ids: number[]; link: string }>;
+  closed: number;
+}
+
+interface StubOpts {
+  imageBytes?: Buffer;
+  featuredMediaUrl?: string;
+  tagNames?: string[];
+}
+
+function stubSource(obj: WpPost, opts: StubOpts = {}): { source: WpSource; calls: StubCalls } {
+  const calls: StubCalls = {
+    fetchPost: [],
+    fetchPage: [],
+    fetchImage: [],
+    fetchFeaturedMediaUrl: [],
+    fetchTagNames: [],
+    closed: 0
+  };
+  const source: WpSource = {
+    listPosts: async () => ({ posts: [obj], total: 1, totalPages: 1 }),
+    fetchPost: async (idOrSlug) => {
+      calls.fetchPost.push(idOrSlug);
+      return obj;
+    },
+    fetchPage: async (slug) => {
+      calls.fetchPage.push(slug);
+      return obj;
+    },
+    fetchSiteInfo: async () => ({ name: 'stub', description: '' }),
+    fetchSiteBannerUrl: async () => null,
+    fetchFeaturedMediaUrl: async (mediaId) => {
+      calls.fetchFeaturedMediaUrl.push(mediaId);
+      return opts.featuredMediaUrl ?? null;
+    },
+    listComments: async () => ({ comments: [], total: 0, totalPages: 1 }),
+    fetchImage: async (url) => {
+      calls.fetchImage.push(url);
+      if (!opts.imageBytes) throw new Error(`stub has no bytes for ${url}`);
+      return Readable.from(opts.imageBytes);
+    },
+    fetchTagNames: async (ids, link) => {
+      calls.fetchTagNames.push({ ids, link });
+      return opts.tagNames ?? [];
+    },
+    close: () => {
+      calls.closed++;
+    }
+  };
+  return { source, calls };
+}
+
+const DRAFT_POST: WpPost = {
+  id: 501,
+  date: '2026-05-01T09:00:00',
+  modified: '2026-05-01T09:00:00',
+  slug: 'never-published',
+  status: 'draft',
+  title: { rendered: 'Never Published' },
+  content: { rendered: '<p>unfinished thought</p>' },
+  excerpt: { rendered: '' },
+  link: 'http://wp.example/never-published/'
+};
+
+// The source stub answers every WP call, so the base URL must never be
+// dialled — an unroutable host proves the injected source is used.
+const UNREACHABLE_WP = 'http://wp.invalid';
+
+test('pushPost via source: published WP post with no --status stays published', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const { source, calls } = stubSource({
+    ...DRAFT_POST,
+    slug: 'src-published',
+    status: 'publish',
+    title: { rendered: 'Source Published' }
+  });
+
+  const result = await pushPost({
+    wpBaseUrl: UNREACHABLE_WP,
+    slug: 'src-published',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    source
+  });
+
+  assert.equal(result.status, 'published');
+  assert.deepEqual(calls.fetchPost, ['src-published']);
+  const md = fs.readFileSync(
+    path.join(target.siteRoot, 'content', 'posts', 'src-published.md'),
+    'utf8'
+  );
+  assert.match(md, /status: published/);
+});
+
+test('pushPost via source: WP draft with no --status lands as a draft', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const { source } = stubSource(DRAFT_POST);
+
+  const result = await pushPost({
+    wpBaseUrl: UNREACHABLE_WP,
+    slug: 'never-published',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    source
+  });
+
+  assert.equal(result.status, 'draft');
+  const md = fs.readFileSync(
+    path.join(target.siteRoot, 'content', 'posts', 'never-published.md'),
+    'utf8'
+  );
+  assert.match(md, /status: draft/);
+  // A draft is not served publicly.
+  const res = await fetch(`${target.baseUrl}/never-published`);
+  assert.equal(res.status, 404);
+});
+
+test('pushPost via source: explicit status published overrides a WP draft', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const { source } = stubSource({ ...DRAFT_POST, slug: 'forced-live' });
+
+  const result = await pushPost({
+    wpBaseUrl: UNREACHABLE_WP,
+    slug: 'forced-live',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    status: 'published',
+    source
+  });
+
+  assert.equal(result.status, 'published');
+  const md = fs.readFileSync(
+    path.join(target.siteRoot, 'content', 'posts', 'forced-live.md'),
+    'utf8'
+  );
+  assert.match(md, /status: published/);
+});
+
+test("pushPost via source: the source's fetchImage, media URL and tag names are used", async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const { source, calls } = stubSource(
+    {
+      ...DRAFT_POST,
+      slug: 'src-images',
+      status: 'publish',
+      featured_media: 77,
+      tags: [3, 9],
+      content: {
+        rendered:
+          '<figure class="wp-block-image"><img src="http://wp.invalid/body.jpg" alt="body"/></figure>'
+      }
+    },
+    {
+      imageBytes: await makeJpeg(31),
+      featuredMediaUrl: 'http://wp.invalid/featured.jpg',
+      tagNames: ['Alpha', 'Beta']
+    }
+  );
+
+  const result = await pushPost({
+    wpBaseUrl: UNREACHABLE_WP,
+    slug: 'src-images',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    source
+  });
+
+  assert.deepEqual(calls.fetchFeaturedMediaUrl, [77]);
+  assert.deepEqual(calls.fetchImage, [
+    'http://wp.invalid/body.jpg',
+    'http://wp.invalid/featured.jpg'
+  ]);
+  assert.deepEqual(calls.fetchTagNames, [
+    { ids: [3, 9], link: 'http://wp.example/never-published/' }
+  ]);
+  // Body image and featured image are identical bytes here, so they
+  // share one sha256 id and upload once.
+  assert.equal(result.imagesUploaded, 1);
+  assert.equal(result.imagesFailed, 0);
+  const md = fs.readFileSync(
+    path.join(target.siteRoot, 'content', 'posts', 'src-images.md'),
+    'utf8'
+  );
+  assert.match(md, /^banner: [0-9a-f]{64}$/m);
+});
+
+test('pushPage via source: a draft About page lands as a draft _about', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const { source, calls } = stubSource({
+    ...DRAFT_POST,
+    id: 10,
+    slug: 'about',
+    title: { rendered: 'About' },
+    content: { rendered: '<p>about body</p>' }
+  });
+
+  const result = await pushPage({
+    wpBaseUrl: UNREACHABLE_WP,
+    slug: 'about',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    source
+  });
+
+  assert.deepEqual(calls.fetchPage, ['about']);
+  assert.equal(result.slug, '_about');
+  assert.equal(result.status, 'draft');
+});
+
+test('pushPage via source: explicit status published wins for the About page', async (t) => {
+  const target = await startTargetApp(t, 'tok');
+  const { source } = stubSource({
+    ...DRAFT_POST,
+    id: 11,
+    slug: 'about',
+    title: { rendered: 'About' },
+    content: { rendered: '<p>about body</p>' }
+  });
+
+  const result = await pushPage({
+    wpBaseUrl: UNREACHABLE_WP,
+    slug: 'about',
+    toUrl: target.baseUrl,
+    token: 'tok',
+    status: 'published',
+    source
+  });
+
+  assert.equal(result.status, 'published');
 });
