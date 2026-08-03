@@ -51,7 +51,8 @@ Format: **item** — _revisit when:_ trigger.
 ## Local-first / sync
 
 - **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — a concurrent other-device edit between the conflict and the force can be overwritten (explicit user action; server idempotency covers replays, not this). _Revisit when:_ multi-device editing becomes common.
-- **Offline-launched client can drain a stale bundle to a newer server** — network-first navigation narrows the window to a single launch but does not close it; the fix is a build-hash check at drain time in `/admin/sync/*`, which changes the sync contract. _Revisit when:_ a sync-breaking schema change ships.
+- **Offline-launched client can drain a stale bundle to a newer server** — network-first navigation narrows the window to a single launch but does not close it; the fix is a build-hash check at drain time in the drain routes (`/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`), which changes the sync contract. _Revisit when:_ a sync-breaking schema change ships.
+- **`admin/main.js` + `main.css` double-cached, bare and `?v=`-stamped** — ~475 KB of the ~1.2 MB precache is duplicate: relative imports reach them bare, the shell stamps them by name (`scripts/gen-precache.ts`). _Revisit when:_ precache quota pressure causes eviction.
 
 ## Image pipeline
 

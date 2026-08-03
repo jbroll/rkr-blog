@@ -607,7 +607,7 @@ Single tabular summary of every reconciliation point.
 | Two outbox entries `setOps` for the same `id` | Same coalescing as above. |
 | Image format the browser can't preview-decode (e.g. HEIC on a non-Safari) | Upload outbox entry succeeds (server has sharp); preview shows a placeholder; no failure. |
 | OPFS handle invalidated by long backgrounding | Some browsers expire handles. SPA re-acquires the root handle on every editor mount; doesn't rely on cross-load handle stability. |
-| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not: the cached shell still launches offline and OPFS drafts stay readable. Unsynced work is not lost — a drain against `/admin/sync/*` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
+| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Online, `/admin/view/:slug` is network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached shell. Unsynced work is not lost — a drain against `/admin/posts`, `/admin/upload`, or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
 
 ## 13. HTTP routes added or changed
 

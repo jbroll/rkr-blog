@@ -5,6 +5,8 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { buildPrecache } from '../../scripts/gen-precache.ts';
+import { renderAdminPage } from '../../src/templates/admin.ts';
+import { renderPostPage } from '../../src/templates/post.ts';
 
 function fixtureRepo(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-precache-'));
@@ -136,4 +138,52 @@ test('buildPrecache: webmanifest icons are excluded — the browser fetches them
     !assets.some((a) => a.includes('icon-512.png')),
     'icon-512.png should not be precached'
   );
+});
+
+/** Every href/src attribute value in the rendered HTML, so this test
+ * fails the moment a template references an asset the two hand-
+ * maintained lists (FIXED, STAMPED) in gen-precache.ts don't know
+ * about — the same failure mode as the split-chunk bug, just caught
+ * at test time instead of offline in the field. */
+function extractAssetUrls(html: string): string[] {
+  const urls: string[] = [];
+  for (const m of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+    const url = m[1];
+    if (url?.startsWith('/admin/static/')) urls.push(url);
+  }
+  return urls;
+}
+
+test('buildPrecache: every asset URL the admin + preview templates render is in the manifest', (t) => {
+  const hash = 'abcdef012345';
+  const theme = 'default';
+  const assets = { theme, hash, base: '/admin/static' };
+  const site = { title: 'Test Site' };
+
+  const adminHtml = renderAdminPage({
+    site,
+    assets,
+    bundleUrl: '/admin/static/admin/main.js?v=abcdef012345',
+    cspNonce: 'n'
+  });
+  // scripts: false matches what the preview actually requests
+  // (renderPreviewDocument in src/admin/preview-page.ts).
+  const previewHtml = renderPostPage({
+    site,
+    assets,
+    title: 'A post',
+    slug: 'a-post',
+    bodyHtml: '<p>body</p>',
+    isAdmin: true,
+    showComments: false,
+    scripts: false
+  });
+
+  const requested = new Set([...extractAssetUrls(adminHtml), ...extractAssetUrls(previewHtml)]);
+  assert.ok(requested.size > 0, 'sanity: templates emit at least one /admin/static/ URL');
+
+  const { assets: manifest } = buildPrecache(fixtureRepo(t), hash);
+  for (const url of requested) {
+    assert.ok(manifest.includes(url), `${url} is requested but not precached`);
+  }
 });

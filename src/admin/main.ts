@@ -450,8 +450,16 @@ window.addEventListener('beforeunload', (ev) => {
 function boot(): void {
   if (location.pathname.startsWith('/admin/view/')) {
     // Lazy: the preview is a separate chunk esbuild splits out, so the
-    // editor path doesn't pay for it.
-    void import('./preview-page.ts').then((m) => m.bootPreview());
+    // editor path doesn't pay for it. bootPreview's own try/catch only
+    // covers what runs after the chunk loads — a chunk-fetch failure
+    // (the exact miss this app exists to survive) needs its own catch,
+    // or it's an unhandled rejection with a bare shell and no message.
+    void import('./preview-page.ts')
+      .then((m) => m.bootPreview())
+      .catch(() => {
+        const slug = decodeURIComponent(location.pathname.replace(/^\/admin\/view\//, ''));
+        document.body.textContent = `No local copy of "${slug}". Pin it while online first.`;
+      });
     return;
   }
   mount();

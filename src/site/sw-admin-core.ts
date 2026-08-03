@@ -45,7 +45,7 @@ function isShellNavigation(url: URL, req: Request): boolean {
 }
 
 /** Returns the response promise to serve, or null to let the request
- * go to the network untouched (/admin/api, /admin/sync, /admin/post-bundle
+ * go to the network untouched (/admin/api, /admin/posts, /admin/post-bundle
  * and friends — the outbox already owns their offline behavior). */
 export function handleFetch(env: SwEnv, req: Request): Promise<Response> | null {
   const url = new URL(req.url);
