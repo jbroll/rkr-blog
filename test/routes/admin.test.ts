@@ -293,6 +293,41 @@ test('POST /admin/posts: empty slug + title → server slugifies title; subtitle
   assert.match(md, /^subtitle: a friendly subtitle$/m);
 });
 
+test('/admin/static and /static serve identical bytes', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+  const viaAdmin = await app.inject({ method: 'GET', url: '/admin/static/base.css' });
+  const viaPublic = await app.inject({ method: 'GET', url: '/static/base.css' });
+  assert.equal(viaAdmin.statusCode, 200);
+  assert.equal(viaAdmin.body, viaPublic.body);
+});
+
+test('/admin/editor references only /admin/static assets', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+  const res = await app.inject({ method: 'GET', url: '/admin/editor' });
+  assert.equal(res.statusCode, 200);
+  const srcs = [...res.body.matchAll(/(?:src|href)="(\/[^"]+)"/g)].map((m) => m[1] as string);
+  const staticRefs = srcs.filter((u) => u.startsWith('/static/'));
+  assert.deepEqual(staticRefs, [], `unexpected /static refs: ${staticRefs.join(', ')}`);
+});
+
+test('sw-admin.js under /admin/static carries Service-Worker-Allowed', async (t) => {
+  // static/site/ is build:site output (gitignored) — plant a fixture
+  // bundle dir instead of depending on that build having run.
+  const root = freshSiteRoot(t);
+  const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-sw-bundle-'));
+  fs.mkdirSync(path.join(bundleDir, 'site'), { recursive: true });
+  fs.writeFileSync(path.join(bundleDir, 'site', 'sw-admin.js'), '// test sw');
+  t.after(() => fs.rmSync(bundleDir, { recursive: true, force: true }));
+  const app = await buildApp({ siteRoot: root, adminBundleDir: path.join(bundleDir, 'admin') });
+  t.after(() => app.close());
+  const res = await app.inject({ method: 'GET', url: '/admin/static/site/sw-admin.js' });
+  assert.equal(res.headers['service-worker-allowed'], '/admin/');
+});
+
 test('POST /admin/posts: bare slug still rejected; subtitle is optional', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
   for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {

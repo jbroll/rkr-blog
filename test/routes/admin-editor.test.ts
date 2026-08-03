@@ -62,7 +62,7 @@ function writeBundle(t: TestContext): string {
   return path.join(dir, 'admin');
 }
 
-test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/main.js', async (t) => {
+test('GET /admin/editor returns the SPA shell HTML pointing at /admin/static/admin/main.js', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
@@ -72,14 +72,18 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /static/admin/mai
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<div id="rkroll-admin-root">/);
   assert.match(res.body, /<article id="rkroll-admin-article"><\/article>/);
-  assert.match(res.body, /<script type="module" src="\/static\/admin\/main\.js[^"]*"><\/script>/);
-
-  // Public theme stylesheets (base + the active theme) are loaded so
-  // the editor preview matches the rendered post.
-  assert.match(res.body, /<link rel="stylesheet" href="\/static\/base\.css(\?v=[^"]+)?"\/>/);
   assert.match(
     res.body,
-    /<link rel="stylesheet" href="\/static\/themes\/[a-z][a-z0-9-]*\.css(\?v=[^"]+)?"\/>/
+    /<script type="module" src="\/admin\/static\/admin\/main\.js[^"]*"><\/script>/
+  );
+
+  // Public theme stylesheets (base + the active theme) are loaded so
+  // the editor preview matches the rendered post; served from inside
+  // the admin service worker's scope.
+  assert.match(res.body, /<link rel="stylesheet" href="\/admin\/static\/base\.css(\?v=[^"]+)?"\/>/);
+  assert.match(
+    res.body,
+    /<link rel="stylesheet" href="\/admin\/static\/themes\/[a-z][a-z0-9-]*\.css(\?v=[^"]+)?"\/>/
   );
 
   // Security headers: TipTap is bundled into the admin entry, so

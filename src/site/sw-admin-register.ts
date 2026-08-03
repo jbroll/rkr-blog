@@ -3,7 +3,7 @@
 // 'self' CSP (no 'unsafe-inline' needed).
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker
-    .register('/static/site/sw-admin.js', { scope: '/admin/' })
+    .register('/admin/static/site/sw-admin.js', { scope: '/admin/' })
     .catch((err: unknown) => {
       console.warn('rkroll admin sw register failed:', err);
     });

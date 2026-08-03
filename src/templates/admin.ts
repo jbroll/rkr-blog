@@ -38,12 +38,12 @@ export function renderAdminPage(data: AdminPageData): string {
 ${stylesheetLinks(a)}
 ${headIcons(a)}
 <!-- Cropper.js styles (extracted from the admin bundle by esbuild). -->
-<link rel="stylesheet" href="${a.base}/admin/main.css"/>
+<link rel="stylesheet" href="${a.base}/admin/main.css${v}"/>
 <style nonce="${data.cspNonce}">
 ${ADMIN_CSS_CORE}
 ${ADMIN_CSS_DIALOGS}
 </style>
-<link rel="manifest" href="${a.base}/admin-manifest.webmanifest"/>
+<link rel="manifest" href="${a.base}/admin-manifest.webmanifest${v}"/>
 <script type="module" src="${a.base}/site/sw-admin-register.js${v}" defer></script>
 </head>
 <body>

@@ -13,12 +13,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import fastifyStatic from '@fastify/static';
+import fastifyStatic, { type SetHeadersResponse } from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
-import { resolveGitHash } from '../lib/build-info.ts';
 import { paths, siteConfig } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -92,18 +91,29 @@ export default async function adminRoutes(
   // One static handler at /static/. Public CSS lives at /static/site.css;
   // the admin bundle at /static/admin/main.js. Apache vhost (implementation.md §7)
   // already serves /static/* directly with cache headers in production.
+  // Service-Worker-Allowed lets sw-admin.js claim scope `/admin/`
+  // rather than only the directory it is served from.
+  const setHeaders = (res: SetHeadersResponse, filepath: string): void => {
+    if (filepath.endsWith(`${path.sep}site${path.sep}sw-admin.js`)) {
+      res.setHeader('Service-Worker-Allowed', '/admin/');
+    }
+  };
+
   if (fs.existsSync(staticDir)) {
     await fastify.register(fastifyStatic, {
       root: staticDir,
       prefix: '/static/',
       decorateReply: false,
-      // Service-Worker-Allowed lets sw-admin.js (served from /static/site/)
-      // claim scope `/admin/` rather than only `/static/site/`.
-      setHeaders: (res, filepath) => {
-        if (filepath.endsWith(`${path.sep}site${path.sep}sw-admin.js`)) {
-          res.setHeader('Service-Worker-Allowed', '/admin/');
-        }
-      }
+      setHeaders
+    });
+    // Same bytes, second mount: a service worker scoped to /admin/
+    // never sees a fetch for /static/*, so the shell's assets have to
+    // be reachable inside the scope.
+    await fastify.register(fastifyStatic, {
+      root: staticDir,
+      prefix: '/admin/static/',
+      decorateReply: false,
+      setHeaders
     });
   }
 
@@ -111,6 +121,7 @@ export default async function adminRoutes(
     // Per-RESPONSE nonce: binds the template's inline <style> block so
     // the CSP can drop script-src 'unsafe-inline' (see admin-csp.ts).
     const nonce = makeCspNonce();
+    const assets = serverAssets('/admin/static');
     return reply
       .type('text/html; charset=utf-8')
       .header('Content-Security-Policy', buildAdminEditorCsp(nonce))
@@ -119,8 +130,8 @@ export default async function adminRoutes(
       .send(
         renderAdminPage({
           site: siteConfig(),
-          assets: serverAssets(),
-          bundleUrl: `/static/admin/main.js?v=${resolveGitHash().slice(0, 12)}`,
+          assets,
+          bundleUrl: `/admin/static/admin/main.js?v=${assets.hash}`,
           cspNonce: nonce
         })
       );
