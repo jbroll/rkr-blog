@@ -238,7 +238,8 @@ bin/site-admin import-wp list https://roll-along.rkroll.com \
   --from-dump /tmp/rollalong.db --uploads "$UPLOADS" --status any
 
 bin/site-admin import-wp push https://roll-along.rkroll.com one-final-day \
-  --to https://rkr-blog.rkroll.com --from-dump /tmp/rollalong.db --uploads "$UPLOADS"
+  --to https://rkr-blog.rkroll.com --token "$ADMIN_TOKEN" \
+  --from-dump /tmp/rollalong.db --uploads "$UPLOADS"
 ```
 
 WordPress leaves `post_name` empty until a post is first published, so
