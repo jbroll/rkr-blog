@@ -29,7 +29,7 @@ test('dispatch invokes the widget render and returns its output', async () => {
     makeWidget('caption', (node) => `<figcaption>${node.attributes?.text ?? ''}</figcaption>`)
   );
   const html = await reg.dispatch('caption', leaf('caption', { text: 'Hi' }), {
-    siteRoot: '/dev/null',
+    images: new Map(),
     widgets: reg
   });
   assert.equal(html, '<figcaption>Hi</figcaption>');
@@ -43,12 +43,12 @@ test('dispatch supports async renders', async () => {
       return '<async/>';
     })
   );
-  const html = await reg.dispatch('async', leaf('async'), { siteRoot: '/dev/null', widgets: reg });
+  const html = await reg.dispatch('async', leaf('async'), { images: new Map(), widgets: reg });
   assert.equal(html, '<async/>');
 });
 
 test('dispatch on an unknown widget emits a comment instead of throwing', async () => {
   const reg = new WidgetRegistry();
-  const html = await reg.dispatch('nope', leaf('nope'), { siteRoot: '/dev/null', widgets: reg });
+  const html = await reg.dispatch('nope', leaf('nope'), { images: new Map(), widgets: reg });
   assert.match(html, /<!-- unknown widget: nope -->/);
 });

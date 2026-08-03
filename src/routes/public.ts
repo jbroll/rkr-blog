@@ -23,8 +23,15 @@ import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
-import { escapeText, parsePost, renderPostHtml } from '../lib/content.ts';
+import {
+  escapeText,
+  parsePost,
+  type RenderCtx,
+  renderPostHtml,
+  serializeNodes
+} from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
+import { buildImageMap } from '../lib/image-map-fs.ts';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
 import { buildFtsMatch } from '../lib/search-query.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
@@ -49,31 +56,42 @@ export interface PublicRoutesOpts {
   site?: SiteConfig;
 }
 
-/** If the post AST's first non-yaml node is a ::figure leafDirective,
- * splice it out and return its rendered HTML. The directive's own
- * attributes (justify, aspect, etc.) are preserved verbatim so the
- * author controls the banner appearance by editing the markdown.
- * Returns null when the first element is anything else. */
-async function extractPostBanner(
-  ast: Root,
-  ctx: { siteRoot: string; widgets: WidgetRegistry }
-): Promise<string | null> {
-  let firstIdx = -1;
+/** Index of the post's hero figure: the first non-yaml node, when that
+ * node is a ::figure leafDirective. -1 when it is anything else. */
+function heroFigureIndex(ast: Root): number {
   for (let i = 0; i < ast.children.length; i++) {
-    if (ast.children[i]?.type !== 'yaml') {
-      firstIdx = i;
-      break;
-    }
+    const node = ast.children[i] as RootContent;
+    if (node.type === 'yaml') continue;
+    const dir = node as unknown as DirectiveNode;
+    return node.type === 'leafDirective' && dir.name === 'figure' ? i : -1;
   }
-  if (firstIdx === -1) return null;
-  const first = ast.children[firstIdx] as RootContent;
-  if (first.type !== 'leafDirective') return null;
-  const dir = first as unknown as DirectiveNode;
-  if (dir.name !== 'figure') return null;
+  return -1;
+}
 
+/** Splice the hero ::figure out of the AST and return its rendered
+ * HTML. The directive's own attributes (justify, aspect, etc.) are
+ * preserved verbatim so the author controls the banner appearance by
+ * editing the markdown. Returns null when the post has no hero. */
+async function extractPostBanner(ast: Root, ctx: RenderCtx): Promise<string | null> {
+  const heroIdx = heroFigureIndex(ast);
+  if (heroIdx === -1) return null;
+  const dir = ast.children[heroIdx] as unknown as DirectiveNode;
   const html = await ctx.widgets.dispatch('figure', dir, ctx);
-  ast.children.splice(firstIdx, 1);
+  ast.children.splice(heroIdx, 1);
   return html;
+}
+
+/** Markdown source of exactly what a teaser renders — the hero
+ * ::figure and the lede paragraph after it. The index measures the
+ * images in this slice only; scanning the whole post would open (and
+ * self-heal a bake for) every image in it, and one broken image
+ * anywhere would cost the index its teaser. */
+function teaserSource(ast: Root): string {
+  const heroIdx = heroFigureIndex(ast);
+  if (heroIdx === -1) return '';
+  const hero = ast.children[heroIdx] as RootContent;
+  const lede = ast.children.slice(heroIdx + 1).find((n) => n.type === 'paragraph');
+  return serializeNodes(lede ? [hero, lede] : [hero]);
 }
 
 /** First remaining top-level paragraph rendered to inline HTML (links /
@@ -83,7 +101,7 @@ async function extractPostBanner(
  * (markup-preserving) before rendering. */
 async function extractFirstParagraph(
   ast: Root,
-  ctx: { siteRoot: string; widgets: WidgetRegistry },
+  ctx: RenderCtx,
   maxWords: number
 ): Promise<string | null> {
   const para = ast.children.find((n) => n.type === 'paragraph');
@@ -163,7 +181,7 @@ export default async function publicRoutes(
           if (figureNode) {
             siteBannerFigureFound = true;
             indexBannerHtml = await widgets.dispatch('figure', figureNode as DirectiveNode, {
-              siteRoot,
+              images: await buildImageMap(siteRoot, raw),
               widgets
             });
           }
@@ -179,7 +197,10 @@ export default async function publicRoutes(
           attributes: { ids: site.bannerImageId, justify: 'bleed' },
           children: []
         };
-        indexBannerHtml = await widgets.dispatch('figure', bannerNode, { siteRoot, widgets });
+        indexBannerHtml = await widgets.dispatch('figure', bannerNode, {
+          images: await buildImageMap(siteRoot, site.bannerImageId),
+          widgets
+        });
       }
 
       // Teaser: anonymous view only, behind the postTeaser toggle.
@@ -195,7 +216,7 @@ export default async function publicRoutes(
         try {
           const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
           const { ast } = parsePost(rawTop);
-          const ctx = { siteRoot, widgets };
+          const ctx = { images: await buildImageMap(siteRoot, teaserSource(ast)), widgets };
           const bannerHtml = await extractPostBanner(ast, ctx);
           const excerptHtml = bannerHtml
             ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
@@ -263,13 +284,14 @@ export default async function publicRoutes(
         .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
     };
     let parsed: ReturnType<typeof parsePost>;
+    let aboutRaw: string;
     try {
-      const raw = await fs.promises.readFile(filePath, 'utf8');
-      parsed = parsePost(raw);
+      aboutRaw = await fs.promises.readFile(filePath, 'utf8');
+      parsed = parsePost(aboutRaw);
     } catch {
       return send404();
     }
-    const ctx = { siteRoot, widgets };
+    const ctx = { images: await buildImageMap(siteRoot, aboutRaw), widgets };
     const bannerHtml = await extractPostBanner(parsed.ast, ctx);
     const bodyHtml = await renderPostHtml(parsed.ast, ctx);
     setPublicSecurityHeaders(reply);
@@ -396,7 +418,7 @@ export default async function publicRoutes(
       const fullPath = path.join(siteRoot, row.path);
       const raw = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parsePost(raw);
-      const ctx = { siteRoot, widgets };
+      const ctx = { images: await buildImageMap(siteRoot, raw), widgets };
       const bannerHtml = await extractPostBanner(parsed.ast, ctx);
       const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 

@@ -12,15 +12,11 @@
 // under full / bleed; `caption` / `matrix` under inline) are silently
 // ignored. The directive should be cheap to author.
 
-import type { Sidecar } from '@rkr/image-edit';
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import { resolveIds } from '../lib/id-resolve.ts';
-import { imageDimensions } from '../lib/image-map-fs.ts';
-import { read as sidecarRead } from '../lib/sidecar.ts';
+import type { ImageSource } from '../lib/image-map.ts';
 import {
   extractDirectiveCaption,
   extractImageIdsAndAlts,
-  getKnownIds,
   indent,
   renderPicture
 } from '../lib/widget-helpers.ts';
@@ -62,8 +58,9 @@ import {
 } from './figure-attrs.ts';
 
 interface CellInput {
-  id: string | null; // null → unresolved id; render as a placeholder comment
+  /** Id as written in the post; used for the unresolved comment. */
   rawId: string;
+  src: ImageSource | null;
   alt: string;
   caption: string | null;
 }
@@ -71,27 +68,12 @@ interface CellInput {
 function buildCells(node: DirectiveNode, ctx: WidgetCtx): CellInput[] {
   const idsAndAlts = extractImageIdsAndAlts(node.attributes?.ids, node.attributes?.alts);
   const captions = parsePerImageCaptions(node.attributes?.captions);
-  const known = getKnownIds(ctx);
-  const inputs = idsAndAlts.map((ia) => ia.id);
-  const resolved = resolveIds(inputs, known);
   return idsAndAlts.map((ia, i) => ({
-    id: resolved[i] ?? null,
     rawId: ia.id,
+    src: ctx.images.get(ia.id) ?? null,
     alt: ia.alt,
     caption: captions[i] ?? null
   }));
-}
-
-async function loadFirstSidecar(
-  cells: CellInput[],
-  ctx: WidgetCtx
-): Promise<{ id: string; sidecar: Sidecar } | null> {
-  for (const c of cells) {
-    if (!c.id) continue;
-    const s = await sidecarRead(ctx.siteRoot, c.id);
-    if (s) return { id: c.id, sidecar: s };
-  }
-  return null;
 }
 
 interface RenderShellArgs {
@@ -123,19 +105,13 @@ function renderShell(args: RenderShellArgs): string {
   return `<${tag} class="${cls}"${style}>\n${args.inner}${captionBlock}\n</${tag}>`;
 }
 
-async function renderCell(cell: CellInput, ctx: WidgetCtx): Promise<string> {
-  if (!cell.id) {
+function renderCell(cell: CellInput): string {
+  if (!cell.src) {
     return `<!-- figure: unresolved id ${escapeText(cell.rawId)} -->`;
   }
-  const sidecar = await sidecarRead(ctx.siteRoot, cell.id);
-  if (!sidecar) {
-    return `<!-- figure: no sidecar for ${escapeAttr(cell.id)} -->`;
-  }
   const alt = escapeAttr(cell.alt);
-  const picture = await renderPicture({
-    siteRoot: ctx.siteRoot,
-    id: cell.id,
-    sidecar,
+  const picture = renderPicture({
+    src: cell.src,
     variants,
     fallback,
     alt,
@@ -145,34 +121,22 @@ async function renderCell(cell: CellInput, ctx: WidgetCtx): Promise<string> {
   // Each cell carries the image's native aspect as a CSS variable for
   // CLS-friendly layout reservation in flow modes; matrix mode uses
   // the figure-level --rkr-cell-aspect instead.
-  const dims = await imageDimensions(ctx.siteRoot, cell.id, sidecar);
-  const cellAspect = (dims.width / Math.max(1, dims.height)).toFixed(4);
-  const cellAttr = ` style="--rkr-image-aspect: ${cellAspect}"`;
-  return `<div class="rkr-figure-cell"${cellAttr}>\n${indent(picture, '  ')}${cap}\n</div>`;
+  const cellAspect = (cell.src.width / Math.max(1, cell.src.height)).toFixed(4);
+  return `<div class="rkr-figure-cell" style="--rkr-image-aspect: ${cellAspect}">\n${indent(picture, '  ')}${cap}\n</div>`;
 }
 
-async function renderInline(
-  cells: CellInput[],
-  ctx: WidgetCtx,
-  justify: Justify,
-  fit: Fit
-): Promise<string> {
+function renderInlineFigure(cells: CellInput[], justify: Justify, fit: Fit): string {
   // Inline mode: only the first cell renders; the rest are dropped.
   // Caption / matrix / aspect / fit / width all ignored (spec).
   const first = cells[0];
-  if (!first?.id) {
+  if (!first?.src) {
     return '<!-- figure: inline mode requires a resolvable id -->';
   }
-  const sidecar = await sidecarRead(ctx.siteRoot, first.id);
-  if (!sidecar) return `<!-- figure: no sidecar for ${escapeAttr(first.id)} -->`;
-  const alt = escapeAttr(first.alt);
-  const picture = await renderPicture({
-    siteRoot: ctx.siteRoot,
-    id: first.id,
-    sidecar,
+  const picture = renderPicture({
+    src: first.src,
     variants,
     fallback,
-    alt
+    alt: escapeAttr(first.alt)
   });
   return renderShell({
     justify,
@@ -185,22 +149,11 @@ async function renderInline(
   });
 }
 
-async function resolveAutoAspect(
-  cells: CellInput[],
-  ctx: WidgetCtx,
-  aspectCss: string | null
-): Promise<string | null> {
+function resolveAutoAspect(cells: CellInput[], aspectCss: string | null): string | null {
   if (aspectCss !== null) return aspectCss;
-  const first = await loadFirstSidecar(cells, ctx);
+  const first = cells.find((c) => c.src !== null)?.src;
   if (!first) return null;
-  // Pull the actual on-disk dimensions of whatever the renderer will
-  // serve (bake or original). The file is the source of truth — a
-  // cropped or rotated image lays out at its real aspect without us
-  // needing to recompute anything from ops.
-  const { width, height } = await imageDimensions(ctx.siteRoot, first.id, first.sidecar);
-  const w = width || 1;
-  const h = height || 1;
-  return `${w}/${h}`;
+  return `${first.width || 1}/${first.height || 1}`;
 }
 
 function gridStyle(rows: number, cols: number): string {
@@ -210,23 +163,22 @@ function gridStyle(rows: number, cols: number): string {
   ].join('; ');
 }
 
-async function renderGrid(
+function renderGrid(
   matrix: MatrixGrid,
   cells: CellInput[],
-  ctx: WidgetCtx,
   justify: Justify,
   fit: Fit,
   widthCss: string | null,
   aspectCss: string | null,
   blockCaption: string | null
-): Promise<string> {
+): string {
   // No-overflow grid: spec says over-allocated matrices render the
   // empty cells (no auto-shrink). Excess ids beyond cell count never
   // reach this function — render() routes those to renderCarousel.
   const visibleCells = cells.slice(0, matrix.rows * matrix.cols);
-  const resolvedAspectCss = await resolveAutoAspect(visibleCells, ctx, aspectCss);
+  const resolvedAspectCss = resolveAutoAspect(visibleCells, aspectCss);
 
-  const rendered = await Promise.all(visibleCells.map((c) => renderCell(c, ctx)));
+  const rendered = visibleCells.map(renderCell);
 
   const inner = [
     `  <div class="rkr-figure-grid" style="${gridStyle(matrix.rows, matrix.cols)}">`,
@@ -256,17 +208,16 @@ async function renderGrid(
  * page; pages themselves all share the same matrix dimensions, so the
  * viewport never resizes between slides.
  */
-async function renderCarousel(
+function renderCarousel(
   matrix: MatrixGrid,
   cells: CellInput[],
-  ctx: WidgetCtx,
   justify: Justify,
   fit: Fit,
   widthCss: string | null,
   aspectCss: string | null,
   blockCaption: string | null,
   timer: number
-): Promise<string> {
+): string {
   const cellsPerPage = matrix.rows * matrix.cols;
   const pageCount = Math.ceil(cells.length / cellsPerPage);
   const pages: CellInput[][] = [];
@@ -274,22 +225,17 @@ async function renderCarousel(
     pages.push(cells.slice(i * cellsPerPage, (i + 1) * cellsPerPage));
   }
 
-  const resolvedAspectCss = await resolveAutoAspect(cells, ctx, aspectCss);
+  const resolvedAspectCss = resolveAutoAspect(cells, aspectCss);
   const pageGridStyle = gridStyle(matrix.rows, matrix.cols);
 
-  // Render pages in parallel — each page renders its cells in parallel
-  // too. ctx-level sidecar caching means the underlying FS work is
-  // bounded.
-  const renderedPages = await Promise.all(
-    pages.map(async (pageCells, pageIdx) => {
-      const renderedCells = await Promise.all(pageCells.map((c) => renderCell(c, ctx)));
-      return [
-        `    <div class="rkr-carousel-slide rkr-figure-page" data-index="${pageIdx}" role="listitem" style="${pageGridStyle}">`,
-        indent(renderedCells.join('\n'), '      '),
-        '    </div>'
-      ].join('\n');
-    })
-  );
+  const renderedPages = pages.map((pageCells, pageIdx) => {
+    const renderedCells = pageCells.map(renderCell);
+    return [
+      `    <div class="rkr-carousel-slide rkr-figure-page" data-index="${pageIdx}" role="listitem" style="${pageGridStyle}">`,
+      indent(renderedCells.join('\n'), '      '),
+      '    </div>'
+    ].join('\n');
+  });
 
   const dotsHtml = pages
     .map(
@@ -350,15 +296,14 @@ async function renderCarousel(
  * grid slots: in flow modes there's no slot to leave empty, so a
  * dropped image just shrinks the row / column count.
  */
-async function renderFlow(
+function renderFlow(
   matrix: MatrixFlow,
   cells: CellInput[],
-  ctx: WidgetCtx,
   justify: Justify,
   widthCss: string | null,
   blockCaption: string | null
-): Promise<string> {
-  const renderedCells = await Promise.all(cells.map((c) => renderCell(c, ctx)));
+): string {
+  const renderedCells = cells.map(renderCell);
 
   // The flow modes' algorithm-tunable goes on the figure-level style
   // as a CSS variable; CSS reads it. Names mirror the directive's
@@ -386,12 +331,12 @@ async function renderFlow(
   return `<figure class="${cls}"${style}>\n${inner}${captionBlock}\n</figure>`;
 }
 
-async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
+function render(node: DirectiveNode, ctx: WidgetCtx): string {
   const cells = buildCells(node, ctx);
   if (cells.length === 0) {
     return '<!-- figure: no valid ids -->';
   }
-  if (cells.every((c) => c.id === null)) {
+  if (cells.every((c) => c.src === null)) {
     return '<!-- figure: no ids resolved -->';
   }
 
@@ -403,7 +348,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const timer = parseTimer(node.attributes?.timer);
 
   if (justify === 'inline') {
-    return renderInline(cells, ctx, justify, fit);
+    return renderInlineFigure(cells, justify, fit);
   }
 
   // `width` only applies to left/right/center; full/bleed take their
@@ -418,7 +363,6 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
       return renderCarousel(
         matrix,
         cells,
-        ctx,
         justify,
         fit,
         effectiveWidth,
@@ -427,11 +371,11 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
         timer
       );
     }
-    return renderGrid(matrix, cells, ctx, justify, fit, effectiveWidth, aspectCss, blockCaption);
+    return renderGrid(matrix, cells, justify, fit, effectiveWidth, aspectCss, blockCaption);
   }
   // Flow modes — aspect / fit are ignored per spec; the layout is
   // intrinsically based on each image's native aspect.
-  return renderFlow(matrix, cells, ctx, justify, effectiveWidth, blockCaption);
+  return renderFlow(matrix, cells, justify, effectiveWidth, blockCaption);
 }
 
 const widget: Widget = { name, variants, fallback, render };

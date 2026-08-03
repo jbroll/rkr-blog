@@ -10,6 +10,7 @@ import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
 import { runReindex } from '../../src/lib/post-index.ts';
+import { read as sidecarRead, write as sidecarWrite } from '../../src/lib/sidecar.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -362,6 +363,15 @@ async function ingestOne(root: string): Promise<string> {
   return r.id;
 }
 
+async function ingestSeeded(root: string, seed: number): Promise<string> {
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpegBuf(seed)]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: `pic-${seed}.jpg` }
+  });
+  return r.id;
+}
+
 test('GET /:slug: first ::figure with justify=bleed extracted as banner, rendered before <main>, absent from body', async (t) => {
   const { root, app } = await setup(t);
   const id = await ingestOne(root);
@@ -641,6 +651,49 @@ test('GET /: postTeaser on but top post has no figure → no teaser, full list',
   assert.doesNotMatch(res.body, /class="rkr-teaser"/);
   const listStart = res.body.indexOf('<ul class="post-list">');
   assert.match(res.body.slice(listStart), /\/plain-post"/);
+});
+
+test('GET /: a broken image LATER in the top post still leaves the teaser intact', async (t) => {
+  // The teaser renders the hero figure and the lede only, so the index
+  // must not measure (or self-heal a bake for) images further down the
+  // post — one unmeasurable image there used to take the whole teaser
+  // down through the surrounding catch.
+  const { root, db } = await setup(t);
+  const heroId = await ingestOne(root);
+  const brokenId = await ingestSeeded(root, 7);
+
+  // Ops present + original gone => imageDimensions must rebuild the
+  // bake, can't find the source, and throws.
+  const sidecar = await sidecarRead(root, brokenId);
+  assert.ok(sidecar);
+  sidecar.ops = [{ type: 'crop', x: 0, y: 0, w: 100, h: 100 }];
+  await sidecarWrite(root, brokenId, sidecar);
+  fs.rmSync(path.join(root, 'originals', brokenId.slice(0, 2), brokenId.slice(2, 4)), {
+    recursive: true,
+    force: true
+  });
+
+  writePost(
+    root,
+    'top.md',
+    { slug: 'top-post', title: 'Top Post', status: 'published', date: '2026-05-15T10:00:00Z' },
+    `::figure{ids="${heroId}" justify=bleed}\n\nThis is the lede paragraph.\n\nMore body.\n\n::figure{ids="${brokenId}"}`
+  );
+  runReindex(root);
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true }
+  });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /class="rkr-teaser"/);
+  assert.match(res.body, /This is the lede paragraph\./);
+  // The broken image is never referenced by the index.
+  assert.doesNotMatch(res.body, new RegExp(brokenId));
 });
 
 test('GET /about renders _about.md without comments; 404 when absent', async (t) => {

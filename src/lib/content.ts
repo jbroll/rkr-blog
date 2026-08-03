@@ -30,6 +30,7 @@ import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 import { parse as yamlParse } from 'yaml';
 
+import type { ImageMap } from './image-map.ts';
 import { safeLinkUrl } from './safe-url.ts';
 import type { DirectiveNode, WidgetRegistry } from './widgets.ts';
 
@@ -51,7 +52,7 @@ export interface ParsedPost {
 }
 
 export interface RenderCtx {
-  siteRoot: string;
+  images: ImageMap;
   widgets: WidgetRegistry;
 }
 
@@ -98,6 +99,14 @@ export function parsePost(raw: string): ParsedPost {
 /** Serialize a parsed post back to markdown. See round-trip notes above. */
 export function serializePost(parsed: ParsedPost): string {
   return String(makeProcessor().stringify(parsed.ast));
+}
+
+/** Serialize a slice of a post body back to markdown — the source text
+ * for just those nodes. Attribute syntax is normalized (see the
+ * round-trip notes), so this is for callers that read content out of
+ * the text, not for round-tripping it back to disk. */
+export function serializeNodes(nodes: RootContent[]): string {
+  return String(makeProcessor().stringify({ type: 'root', children: nodes }));
 }
 
 /** Render the post body (everything after frontmatter) to HTML. */

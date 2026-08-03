@@ -11,6 +11,7 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
+import { buildImageMap } from '../../src/lib/image-map-fs.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
 import { type DirectiveNode, WidgetRegistry } from '../../src/lib/widgets.ts';
 import figureWidget from '../../src/widgets/figure.ts';
@@ -62,7 +63,8 @@ function makeNode(attributes: Record<string, string>): DirectiveNode {
 async function dispatch(root: string, attrs: Record<string, string>): Promise<string> {
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
-  return widgets.dispatch('figure', makeNode(attrs), { siteRoot: root, widgets });
+  const images = await buildImageMap(root, attrs.ids ?? '');
+  return widgets.dispatch('figure', makeNode(attrs), { images, widgets });
 }
 
 test('::figure 1x1 default — single image, defaults applied', async (t) => {

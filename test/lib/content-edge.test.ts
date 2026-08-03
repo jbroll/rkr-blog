@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { parsePost, renderPostHtml } from '../../src/lib/content.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
 
-const ctx = () => ({ siteRoot: '/dev/null', widgets: new WidgetRegistry() });
+const ctx = () => ({ images: new Map(), widgets: new WidgetRegistry() });
 
 async function render(body: string): Promise<string> {
   const parsed = parsePost(`---\ntitle: t\nslug: t\n---\n\n${body}\n`);

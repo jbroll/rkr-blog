@@ -1,16 +1,9 @@
-// Shared helpers used by every multi-image widget (gallery, carousel,
-// diptych/triptych) to parse `ids="…"` attributes, resolve them against
-// the sidecar set, and avoid hammering the filesystem on every render.
-// Also exports the responsive <picture> renderer that the single-image
-// and multi-image widgets all share — keeping the cache-key + srcset
-// machinery in exactly one place.
+// Attribute parsing (`ids="…"`, alts, captions) plus the responsive
+// <picture> renderer every image widget shares. Pure string work: the
+// URLs and dimensions come from the ImageSource the caller hands in.
 
-import type { Sidecar } from '@rkr/image-edit';
-import { cacheKey } from './hash.ts';
-import { imageDimensions } from './image-map-fs.ts';
-import { listSidecarIds } from './posts.ts';
-import type { OutputFormat } from './render.ts';
-import type { FallbackSpec, VariantSpec, WidgetCtx } from './widgets.ts';
+import type { ImageSource } from './image-map.ts';
+import type { FallbackSpec, VariantSpec } from './widgets.ts';
 
 const HEX_PREFIX = /^[0-9a-f]{6,64}$/;
 
@@ -94,22 +87,6 @@ export function extractImageIdsAndAlts(idsRaw: unknown, altsRaw: unknown): IdAnd
   return out;
 }
 
-/**
- * listSidecarIds() is a synchronous fs.readdirSync; calling it once per
- * widget render means N FS scans for a post with N image directives.
- * Memoize per WidgetCtx — one render of a post passes the same ctx to
- * every widget dispatch, so the cache lifetime is exactly one post.
- */
-const knownIdsByCtx = new WeakMap<WidgetCtx, string[]>();
-export function getKnownIds(ctx: WidgetCtx): string[] {
-  let cached = knownIdsByCtx.get(ctx);
-  if (!cached) {
-    cached = listSidecarIds(ctx.siteRoot);
-    knownIdsByCtx.set(ctx, cached);
-  }
-  return cached;
-}
-
 // ---- responsive picture rendering --------------------------------------
 
 const QUALITY_BY_FORMAT: Record<string, number> = {
@@ -120,21 +97,13 @@ const QUALITY_BY_FORMAT: Record<string, number> = {
 };
 
 export interface PictureArgs {
-  /** Site root for filesystem reads (the bake / original files). */
-  siteRoot: string;
-  id: string;
-  sidecar: Sidecar;
+  src: ImageSource;
   variants: VariantSpec[];
   fallback: FallbackSpec;
-  /** Alt text. Already-escaped or plain string; renderPicture inlines verbatim. */
+  /** Alt text. Already-escaped or plain string; inlined verbatim. */
   alt?: string;
-  /** loading attribute; default 'lazy'. */
   loading?: 'lazy' | 'eager';
-  /** When true, wrap the <picture> in an <a href> pointing at the
-   * largest variant + dimensional data attributes that PhotoSwipe's
-   * Lightbox plugin reads (data-pswp-width, data-pswp-height). The
-   * anchor doubles as a no-JS fallback (target=_blank to the same
-   * derivative) so the image is still reachable when JS is off. */
+  /** Wrap in the PhotoSwipe anchor (href + data-pswp-* dimensions). */
   lightbox?: boolean;
 }
 
@@ -144,54 +113,39 @@ export interface PictureArgs {
  * a JPEG `<img>` fallback. Output has no leading indent — callers wrap
  * it in their own figure / slide / cell shell and indent as needed.
  */
-export async function renderPicture(args: PictureArgs): Promise<string> {
-  const {
-    siteRoot,
-    id,
-    sidecar,
-    variants,
-    fallback,
-    alt = '',
-    loading = 'lazy',
-    lightbox = false
-  } = args;
-  const ops = sidecar.ops as Parameters<typeof cacheKey>[0]['ops'];
+export function renderPicture(args: PictureArgs): string {
+  const { src, variants, fallback, alt = '', loading = 'lazy', lightbox = false } = args;
 
+  const fbUrl = src.urlFor(fallback.w, fallback.format, fallback.quality);
   const formats = unique(variants.flatMap((v) => v.formats));
-  const sources = formats.map((format) => {
+  const sources: string[] = [];
+  const distinct = new Set<string>([fbUrl]);
+  for (const format of formats) {
     const entries = variants
       .filter((v) => v.formats.includes(format))
       .map((v) => {
-        const oph = cacheKey({
-          originalId: id,
-          ops,
-          variant: { w: v.w },
-          /* c8 ignore next -- ?? 85 unreachable: every format is in QUALITY_BY_FORMAT */
-          output: { format, quality: QUALITY_BY_FORMAT[format] ?? 85 }
-        });
-        return `/img/${id}.${oph}.${format} ${v.w}w`;
+        /* c8 ignore next -- ?? 85 unreachable: every format is in QUALITY_BY_FORMAT */
+        const url = src.urlFor(v.w, format, QUALITY_BY_FORMAT[format] ?? 85);
+        distinct.add(url);
+        return `${url} ${v.w}w`;
       });
-    return `<source type="image/${format}" srcset="${entries.join(', ')}"/>`;
-  });
+    sources.push(`<source type="image/${format}" srcset="${entries.join(', ')}"/>`);
+  }
 
-  const fbHash = cacheKey({
-    originalId: id,
-    ops,
-    variant: { w: fallback.w },
-    output: { format: fallback.format as OutputFormat, quality: fallback.quality }
-  });
-  const fbUrl = `/img/${id}.${fbHash}.${fallback.format}`;
-
-  const pictureBlock = [
-    '<picture>',
-    ...sources,
-    `<img src="${fbUrl}" alt="${alt}" loading="${loading}" decoding="async"/>`,
-    '</picture>'
-  ].join('\n');
+  // A client-side map hands back one blob: URL for every candidate;
+  // a srcset of identical URLs is noise, so collapse to the <img>.
+  const pictureBlock =
+    distinct.size === 1
+      ? `<picture>\n<img src="${fbUrl}" alt="${alt}" loading="${loading}" decoding="async"/>\n</picture>`
+      : [
+          '<picture>',
+          ...sources,
+          `<img src="${fbUrl}" alt="${alt}" loading="${loading}" decoding="async"/>`,
+          '</picture>'
+        ].join('\n');
 
   if (!lightbox) return pictureBlock;
-  const dims = await imageDimensions(siteRoot, id, sidecar);
-  return wrapLightboxAnchor(pictureBlock, { id, variants, alt, ops, dims });
+  return wrapLightboxAnchor(pictureBlock, { src, variants, alt });
 }
 
 /** Wrap a `<picture>` block in the PhotoSwipe-compatible anchor. The
@@ -202,33 +156,17 @@ export async function renderPicture(args: PictureArgs): Promise<string> {
  * so a smaller original wins. */
 function wrapLightboxAnchor(
   pictureBlock: string,
-  ctx: {
-    id: string;
-    variants: VariantSpec[];
-    alt: string;
-    ops: Parameters<typeof cacheKey>[0]['ops'];
-    dims: { width: number; height: number };
-  }
+  ctx: { src: ImageSource; variants: VariantSpec[]; alt: string }
 ): string {
-  const { id, variants, alt, ops, dims } = ctx;
+  const { src, variants, alt } = ctx;
   const widest = variants.reduce((acc, v) => (v.w > acc.w ? v : acc), variants[0] as VariantSpec);
-  // Prefer webp for the lightbox target — it's the format every modern
-  // browser supports and the smallest-bytes choice for photographic
-  // content (the typical lightbox payload).
-  const lbFormat: OutputFormat =
-    /* c8 ignore next -- 'webp' is in widest.formats for every figure-widget variant */
-    widest.formats.includes('webp') ? 'webp' : (widest.formats[0] as OutputFormat);
-  const lbHash = cacheKey({
-    originalId: id,
-    ops,
-    variant: { w: widest.w },
-    /* c8 ignore next -- ?? 85 unreachable: every format is in QUALITY_BY_FORMAT */
-    output: { format: lbFormat, quality: QUALITY_BY_FORMAT[lbFormat] ?? 85 }
-  });
-  const lbUrl = `/img/${id}.${lbHash}.${lbFormat}`;
+  /* c8 ignore next -- 'webp' is in widest.formats for every figure-widget variant */
+  const lbFormat = widest.formats.includes('webp') ? 'webp' : (widest.formats[0] as string);
+  /* c8 ignore next -- ?? 85 unreachable: every format is in QUALITY_BY_FORMAT */
+  const lbUrl = src.urlFor(widest.w, lbFormat, QUALITY_BY_FORMAT[lbFormat] ?? 85);
 
-  const srcW = dims.width || widest.w;
-  const srcH = dims.height || Math.round(widest.w / 1.5);
+  const srcW = src.width || widest.w;
+  const srcH = src.height || Math.round(widest.w / 1.5);
   const lbW = Math.min(widest.w, srcW);
   const lbH = Math.max(1, Math.round(lbW * (srcH / srcW)));
 

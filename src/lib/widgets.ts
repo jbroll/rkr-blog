@@ -4,6 +4,8 @@
 
 import type { Parent, PhrasingContent } from 'mdast';
 
+import type { ImageMap } from './image-map.ts';
+
 export interface DirectiveNode extends Parent {
   type: 'leafDirective' | 'textDirective' | 'containerDirective';
   name: string;
@@ -12,7 +14,7 @@ export interface DirectiveNode extends Parent {
 }
 
 export interface WidgetCtx {
-  siteRoot: string;
+  images: ImageMap;
   widgets: WidgetRegistry;
 }
 
