@@ -299,6 +299,28 @@ but the *new* version doesn't end up orphaned in `originals/` +
 `sidecars/`. Run `bin/site-admin gc` (against the target) to reclaim
 them; the next scheduled gc on Fly does this automatically.
 
+### 5a. Repair entity-encoded titles
+
+Posts imported before the WP importer decoded HTML entities kept
+WordPress's encoded form in their frontmatter — `title: "Day 12 &#8211;
+31 Years!"`. The renderer escapes titles on output, so the entity
+reaches the browser literally. `parsePost` deliberately does not decode
+(that would put live `<`/`>`/`"` into in-memory titles), so the fix is
+to rewrite the stored file:
+
+```bash
+# on the host, against the live content tree
+site-admin fix-wp-titles /var/www/rkr-blog --dry-run   # list every change
+site-admin fix-wp-titles /var/www/rkr-blog             # apply
+site-admin reindex                                     # refresh the SQLite index
+```
+
+Only `title:` and `subtitle:` inside the frontmatter block are touched;
+bodies are left alone. There is no provenance filter — posts pushed
+through `/admin/posts` carry no `source_kind` — so read the `--dry-run`
+output before applying. (For the same reason, `fix-wp-dates`, which does
+gate on `source_kind: wordpress`, is a no-op on pushed posts.)
+
 ### 6. Check image orientations
 
 `walk-site.sh` only HEADs each image for a 2xx — a photo rendered
