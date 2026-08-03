@@ -9,7 +9,8 @@ import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { paths } from '../lib/config.ts';
 import { importPost } from '../lib/wp-import.ts';
 import { pushPage, pushPost } from '../lib/wp-push.ts';
-import { fetchPost, fetchWpSiteBannerUrl, fetchWpSiteInfo, listPosts } from '../lib/wp-rest.ts';
+import { restSource, type WpSource } from '../lib/wp-source.ts';
+import { sqliteSource } from '../lib/wp-sqlite.ts';
 
 const SUBCOMMANDS = ['about', 'list', 'post', 'push', 'site-banner'] as const;
 type ImportWpSub = (typeof SUBCOMMANDS)[number];
@@ -20,9 +21,13 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
     throw new Error(
       `usage:
   site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN]
-  site-admin import-wp list <base-url> [--page N] [--per-page N] [--status STATUS]
+  site-admin import-wp list <base-url> [--page N] [--per-page N] [--status publish|draft|any]
   site-admin import-wp post <base-url> <id-or-slug> [--force]
-  site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]`
+  site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status STATUS]
+
+  any subcommand may read a backup instead of a live site:
+    --from-dump <db>   database written by \`site-admin wp-dump\`
+    --uploads <dir>    the backup's wp-content/uploads directory`
     );
   }
   if ((sub as ImportWpSub) === 'about') return about(argv.slice(1));
@@ -40,12 +45,17 @@ async function list(args: string[]): Promise<void> {
   const status = stringFlag(args, '--status') ?? 'publish';
 
   /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-rest tests */
-  const r = await listPosts(baseUrl, { page, perPage, status });
-  console.log(`# ${r.total} posts (page ${page}/${r.totalPages})`);
-  for (const p of r.posts) {
-    const date = p.date.slice(0, 10);
-    const title = decodeEntities(p.title.rendered);
-    console.log(`${String(p.id).padStart(5)}  ${date}  ${p.slug.padEnd(40)}  ${title}`);
+  const source = resolveSource(args, baseUrl);
+  try {
+    const r = await source.listPosts({ page, perPage, status });
+    console.log(`# ${r.total} posts (page ${page}/${r.totalPages})`);
+    for (const p of r.posts) {
+      const date = p.date.slice(0, 10);
+      const title = decodeEntities(p.title.rendered);
+      console.log(`${String(p.id).padStart(5)}  ${date}  ${p.slug.padEnd(40)}  ${title}`);
+    }
+  } finally {
+    source.close();
   }
   /* c8 ignore stop */
 }
@@ -60,31 +70,40 @@ async function post(args: string[]): Promise<void> {
 
   /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-import tests */
   const p = paths();
-  const post = await fetchPost(baseUrl, idOrSlug);
+  const source = resolveSource(args, baseUrl);
+  try {
+    const post = await source.fetchPost(idOrSlug);
 
-  // Skip-if-exists by default. Use --force to overwrite.
-  const date = post.date.slice(0, 10);
-  const filename = `${date}-${post.slug || `post-${post.id}`}.md`;
-  const dest = path.join(p.root, 'content', 'posts', filename);
-  if (!force && fs.existsSync(dest)) {
-    console.log(`skip: ${filename} already exists (use --force to overwrite)`);
-    return;
+    // Skip-if-exists by default. Use --force to overwrite.
+    const date = post.date.slice(0, 10);
+    const filename = `${date}-${post.slug || `post-${post.id}`}.md`;
+    const dest = path.join(p.root, 'content', 'posts', filename);
+    if (!force && fs.existsSync(dest)) {
+      console.log(`skip: ${filename} already exists (use --force to overwrite)`);
+      return;
+    }
+
+    console.log(`fetching post ${post.id} (${post.slug}): ${decodeEntities(post.title.rendered)}`);
+    const result = await importPost(post, {
+      siteRoot: p.root,
+      fetchImage: (url) => source.fetchImage(url),
+      fetchTagNames: (ids, link) => source.fetchTagNames(ids, link)
+    });
+
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    writeFileAtomicSync(dest, result.markdown);
+
+    const ok = result.imagesIngested.length;
+    const fail = result.imageErrors.length;
+    console.log(`wrote ${dest}`);
+    console.log(`ingested ${ok} image(s)${fail > 0 ? ` (${fail} failed)` : ''}`);
+    for (const e of result.imageErrors) {
+      console.warn(`  ! ${e.url}: ${e.error}`);
+    }
+    console.log(`status: draft — review with the editor before publishing`);
+  } finally {
+    source.close();
   }
-
-  console.log(`fetching post ${post.id}: ${decodeEntities(post.title.rendered)}`);
-  const result = await importPost(post, { siteRoot: p.root });
-
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  writeFileAtomicSync(dest, result.markdown);
-
-  const ok = result.imagesIngested.length;
-  const fail = result.imageErrors.length;
-  console.log(`wrote ${dest}`);
-  console.log(`ingested ${ok} image(s)${fail > 0 ? ` (${fail} failed)` : ''}`);
-  for (const e of result.imageErrors) {
-    console.warn(`  ! ${e.url}: ${e.error}`);
-  }
-  console.log(`status: draft — review with the editor before publishing`);
   /* c8 ignore stop */
 }
 
@@ -111,13 +130,18 @@ async function push(args: string[]): Promise<void> {
   const status: 'draft' | 'published' = statusFlag === 'draft' ? 'draft' : 'published';
 
   console.log(`pushing ${wpBaseUrl} ${slug} → ${toUrl}`);
-  const result = await pushPost({ wpBaseUrl, slug, toUrl, token, status });
+  const source = resolveSource(args, wpBaseUrl);
+  try {
+    const result = await pushPost({ wpBaseUrl, slug, toUrl, token, status, source });
 
-  console.log(
-    `${result.inserted ? 'created' : 'overwrote'} /${result.slug}: ${result.imagesUploaded} image(s)${
-      result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
-    }, status=${result.status}`
-  );
+    console.log(
+      `${result.inserted ? 'created' : 'overwrote'} /${result.slug}: ${result.imagesUploaded} image(s)${
+        result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
+      }, status=${result.status}`
+    );
+  } finally {
+    source.close();
+  }
   /* c8 ignore stop */
 }
 
@@ -135,18 +159,24 @@ async function about(args: string[]): Promise<void> {
 
   /* c8 ignore start -- success path makes real HTTP calls */
   console.log(`==> fetching About page from ${wpBaseUrl}`);
-  const result = await pushPage({
-    wpBaseUrl,
-    slug: 'about',
-    toUrl,
-    token,
-    status: 'published'
-  });
-  console.log(
-    `${result.inserted ? 'created' : 'overwrote'} /_about: ${result.imagesUploaded} image(s)${
-      result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
-    }`
-  );
+  const source = resolveSource(args, wpBaseUrl);
+  try {
+    const result = await pushPage({
+      wpBaseUrl,
+      slug: 'about',
+      toUrl,
+      token,
+      status: 'published',
+      source
+    });
+    console.log(
+      `${result.inserted ? 'created' : 'overwrote'} /_about: ${result.imagesUploaded} image(s)${
+        result.imagesFailed > 0 ? `, ${result.imagesFailed} failed` : ''
+      }`
+    );
+  } finally {
+    source.close();
+  }
   /* c8 ignore stop */
 }
 
@@ -164,53 +194,59 @@ async function siteBanner(args: string[]): Promise<void> {
 
   /* c8 ignore start -- success path makes real HTTP calls */
   const target = toUrl.replace(/\/$/, '');
+  const source = resolveSource(args, wpBaseUrl);
+  try {
+    // Fetch WP site title and tagline, then push to target.
+    console.log(`==> fetching site info from ${wpBaseUrl}`);
+    const siteInfo = await source.fetchSiteInfo();
+    if (siteInfo.name) {
+      const siteRes = await fetch(`${target}/admin/settings/site`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: siteInfo.name, tagline: siteInfo.description })
+      });
+      if (!siteRes.ok)
+        throw new Error(`set site info failed: ${siteRes.status} ${await siteRes.text()}`);
+      console.log(`    title: ${siteInfo.name}`);
+      if (siteInfo.description) console.log(`    tagline: ${siteInfo.description}`);
+    }
 
-  // Fetch WP site title and tagline, then push to target.
-  console.log(`==> fetching site info from ${wpBaseUrl}`);
-  const siteInfo = await fetchWpSiteInfo(wpBaseUrl);
-  if (siteInfo.name) {
-    const siteRes = await fetch(`${target}/admin/settings/site`, {
+    // Fetch and upload site banner image.
+    console.log(`==> fetching site banner URL from ${wpBaseUrl}`);
+    const bannerUrl = await source.fetchSiteBannerUrl();
+    if (!bannerUrl) throw new Error(`no header image found on ${wpBaseUrl}`);
+    console.log(`    banner URL: ${bannerUrl}`);
+
+    // Download the banner image bytes.
+    const stream = await source.fetchImage(bannerUrl);
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(Buffer.from(c));
+    const bytes = Buffer.concat(chunks);
+
+    // Upload to the target site.
+    const filename = bannerUrl.replace(/#.*$/, '').split('/').pop() ?? 'banner.jpg';
+    const fd = new FormData();
+    fd.append('file', new Blob([new Uint8Array(bytes)]), filename);
+    const upRes = await fetch(`${target}/admin/upload`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: fd
+    });
+    if (!upRes.ok) throw new Error(`upload failed: ${upRes.status} ${await upRes.text()}`);
+    const { id } = (await upRes.json()) as { id: string };
+    console.log(`    uploaded: ${id.slice(0, 12)}…`);
+
+    // Register as site banner.
+    const setRes = await fetch(`${target}/admin/settings/banner`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ title: siteInfo.name, tagline: siteInfo.description })
+      body: JSON.stringify({ imageId: id })
     });
-    if (!siteRes.ok)
-      throw new Error(`set site info failed: ${siteRes.status} ${await siteRes.text()}`);
-    console.log(`    title: ${siteInfo.name}`);
-    if (siteInfo.description) console.log(`    tagline: ${siteInfo.description}`);
+    if (!setRes.ok) throw new Error(`set banner failed: ${setRes.status} ${await setRes.text()}`);
+    console.log(`==> site banner set (${id.slice(0, 12)}…)`);
+  } finally {
+    source.close();
   }
-
-  // Fetch and upload site banner image.
-  console.log(`==> fetching site banner URL from ${wpBaseUrl}`);
-  const bannerUrl = await fetchWpSiteBannerUrl(wpBaseUrl);
-  if (!bannerUrl) throw new Error(`no header image found on ${wpBaseUrl}`);
-  console.log(`    banner URL: ${bannerUrl}`);
-
-  // Download the banner image bytes.
-  const res = await fetch(bannerUrl);
-  if (!res.ok || !res.body) throw new Error(`banner fetch failed: ${res.status} ${bannerUrl}`);
-
-  // Upload to the target site.
-  const filename = bannerUrl.split('/').pop() ?? 'banner.jpg';
-  const fd = new FormData();
-  fd.append('file', new Blob([await res.arrayBuffer()]), filename);
-  const upRes = await fetch(`${target}/admin/upload`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: fd
-  });
-  if (!upRes.ok) throw new Error(`upload failed: ${upRes.status} ${await upRes.text()}`);
-  const { id } = (await upRes.json()) as { id: string };
-  console.log(`    uploaded: ${id.slice(0, 12)}…`);
-
-  // Register as site banner.
-  const setRes = await fetch(`${target}/admin/settings/banner`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ imageId: id })
-  });
-  if (!setRes.ok) throw new Error(`set banner failed: ${setRes.status} ${await setRes.text()}`);
-  console.log(`==> site banner set (${id.slice(0, 12)}…)`);
   /* c8 ignore stop */
 }
 
@@ -230,6 +266,17 @@ function stringFlag(args: string[], flag: string): string | undefined {
   if (i < 0) return undefined;
   if (i + 1 >= args.length) throw new Error(`${flag} requires a value`);
   return args[i + 1];
+}
+
+/** Pick the content source: a converted backup when `--from-dump` is
+ * present, otherwise the live REST API at `baseUrl`. Callers must
+ * `close()` the result. */
+export function resolveSource(args: string[], baseUrl: string): WpSource {
+  const dbPath = stringFlag(args, '--from-dump');
+  if (!dbPath) return restSource(baseUrl);
+  const uploadsRoot = stringFlag(args, '--uploads');
+  if (!uploadsRoot) throw new Error('--uploads <dir> is required with --from-dump');
+  return sqliteSource({ dbPath, uploadsRoot });
 }
 
 /* c8 ignore start -- only reached from c8-ignored list/post success paths */

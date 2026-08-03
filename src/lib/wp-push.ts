@@ -23,6 +23,7 @@ import { imageInfo } from './originals.ts';
 import { importPost } from './wp-import.ts';
 import type { WpPost } from './wp-import-types.ts';
 import { fetchWpPage } from './wp-rest.ts';
+import type { WpSource } from './wp-source.ts';
 
 export interface PushOpts {
   wpBaseUrl: string;
@@ -40,6 +41,9 @@ export interface PushOpts {
    * SSRF-guarded fetch from wp-import; tests inject a plain fetch so
    * they can serve images from a loopback fixture port. */
   fetchImage?: (url: string) => Promise<Readable>;
+  /** Content source. Default: the REST API at `wpBaseUrl`. Pass a
+   * sqliteSource to push from a backup. */
+  source?: WpSource;
 }
 
 export interface PushResult {
@@ -53,8 +57,9 @@ export interface PushResult {
 }
 
 export async function pushPost(opts: PushOpts): Promise<PushResult> {
-  const fetcher = opts.fetcher ?? fetch;
-  const post = await fetchWpPost(fetcher, opts.wpBaseUrl, opts.slug);
+  const post = opts.source
+    ? await opts.source.fetchPost(opts.slug)
+    : await fetchWpPost(opts.fetcher ?? fetch, opts.wpBaseUrl, opts.slug);
   return pushWpObject(post, opts);
 }
 
@@ -62,7 +67,9 @@ export async function pushPost(opts: PushOpts): Promise<PushResult> {
  * post: fetch the page, force its slug to `_about`, then run the same
  * import/upload/POST pipeline as pushPost. */
 export async function pushPage(opts: PushOpts): Promise<PushResult> {
-  const page = await fetchWpPage(opts.wpBaseUrl, String(opts.slug), opts.fetcher);
+  const page = opts.source
+    ? await opts.source.fetchPage(String(opts.slug))
+    : await fetchWpPage(opts.wpBaseUrl, String(opts.slug), opts.fetcher);
   page.slug = '_about';
   return pushWpObject(page, opts);
 }
@@ -77,7 +84,9 @@ async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
   //    fetched by the caller — pushPost via fetchWpPost, pushPage via
   //    fetchWpPage). Produces local markdown + originals + sidecars.
   const bannerUrl = post.featured_media
-    ? ((await fetchFeaturedMediaUrlDirect(fetcher, opts.wpBaseUrl, post.featured_media)) ??
+    ? ((opts.source
+        ? await opts.source.fetchFeaturedMediaUrl(post.featured_media)
+        : await fetchFeaturedMediaUrlDirect(fetcher, opts.wpBaseUrl, post.featured_media)) ??
       undefined)
     : undefined;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-wp-push-'));
@@ -85,9 +94,11 @@ async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
     for (const sub of ['sidecars', 'originals', 'cache/img', 'data', 'content/posts']) {
       fs.mkdirSync(path.join(tmp, sub), { recursive: true });
     }
+    const imageFetcher = opts.fetchImage ?? (opts.source ? opts.source.fetchImage : undefined);
     const result = await importPost(post, {
       siteRoot: tmp,
-      ...(opts.fetchImage ? { fetchImage: opts.fetchImage } : {}),
+      ...(imageFetcher ? { fetchImage: imageFetcher } : {}),
+      ...(opts.source ? { fetchTagNames: opts.source.fetchTagNames } : {}),
       ...(bannerUrl ? { bannerUrl } : {})
     });
 

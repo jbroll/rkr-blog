@@ -8,6 +8,7 @@ import { getPostIdBySlug, listPublishedThread } from '../../src/lib/comments.ts'
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import type { WpFetcher } from '../../src/lib/wp-import-types.ts';
+import { restSource } from '../../src/lib/wp-source.ts';
 
 function setup(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-impc-'));
@@ -73,7 +74,7 @@ function wpFetcher(): WpFetcher {
 
 test('imports approved comments, maps parent, skips unknown post, is idempotent', async (t) => {
   const { root } = setup(t);
-  const r1 = await importWpComments('https://roll-along.example', root, wpFetcher());
+  const r1 = await importWpComments(restSource('https://roll-along.example', wpFetcher()), root);
   assert.equal(r1.inserted, 3);
   assert.equal(r1.skipped, 1);
 
@@ -109,7 +110,7 @@ test('imports approved comments, maps parent, skips unknown post, is idempotent'
 
   db.close();
 
-  const r2 = await importWpComments('https://roll-along.example', root, wpFetcher());
+  const r2 = await importWpComments(restSource('https://roll-along.example', wpFetcher()), root);
   assert.equal(r2.inserted, 0);
   const db2 = open(path.join(root, 'data', 'site.db'));
   assert.equal(db2.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM comments').get()?.n, 3);
@@ -139,7 +140,7 @@ test('empty WP author_name falls back to Anonymous', async (t) => {
       { status: 200, headers: { 'X-WP-Total': '1', 'X-WP-TotalPages': '1' } }
     );
   };
-  await importWpComments('https://roll-along.example', root, fetcher);
+  await importWpComments(restSource('https://roll-along.example', fetcher), root);
   const db = open(path.join(root, 'data', 'site.db'));
   const row = db
     .prepare<{ author_name: string }>('SELECT author_name FROM comments WHERE wp_comment_id=20')
@@ -171,7 +172,7 @@ test('htmlToText handles &amp; &#39; <br> entities', async (t) => {
       { status: 200, headers: { 'X-WP-Total': '1', 'X-WP-TotalPages': '1' } }
     );
   };
-  await importWpComments('https://roll-along.example', root, fetcher);
+  await importWpComments(restSource('https://roll-along.example', fetcher), root);
   const db = open(path.join(root, 'data', 'site.db'));
   const row = db
     .prepare<{ body: string }>('SELECT body FROM comments WHERE wp_comment_id=30')
@@ -231,7 +232,7 @@ test('multi-page paging: fetches all pages of posts and comments', async (t) => 
       { status: 200, headers: { 'X-WP-Total': '2', 'X-WP-TotalPages': '2' } }
     );
   };
-  const r = await importWpComments('https://roll-along.example', root, fetcher);
+  const r = await importWpComments(restSource('https://roll-along.example', fetcher), root);
   assert.equal(r.inserted, 2);
   assert.equal(postPage, 2);
   assert.equal(commentPage, 2);

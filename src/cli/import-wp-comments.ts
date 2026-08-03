@@ -8,8 +8,7 @@ import path from 'node:path';
 
 import { getPostIdBySlug, insertImportedComment } from '../lib/comments.ts';
 import { open } from '../lib/db.ts';
-import type { WpFetcher } from '../lib/wp-import-types.ts';
-import { listComments, listPosts } from '../lib/wp-rest.ts';
+import type { WpSource } from '../lib/wp-source.ts';
 
 export interface ImportCommentsResult {
   inserted: number;
@@ -33,15 +32,11 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-async function buildWpIdToSlug(baseUrl: string, fetcher?: WpFetcher): Promise<Map<number, string>> {
+async function buildWpIdToSlug(source: WpSource): Promise<Map<number, string>> {
   const map = new Map<number, string>();
   let page = 1;
   for (;;) {
-    const r = await listPosts(
-      baseUrl,
-      { page, perPage: 100, status: 'publish' },
-      ...(fetcher ? [fetcher] : [])
-    );
+    const r = await source.listPosts({ page, perPage: 100, status: 'publish' });
     for (const p of r.posts) map.set(p.id, p.slug);
     if (page >= r.totalPages || r.posts.length === 0) break;
     page++;
@@ -50,23 +45,22 @@ async function buildWpIdToSlug(baseUrl: string, fetcher?: WpFetcher): Promise<Ma
 }
 
 export async function importWpComments(
-  baseUrl: string,
-  siteRoot: string,
-  fetcher?: WpFetcher
+  source: WpSource,
+  siteRoot: string
 ): Promise<ImportCommentsResult> {
   const dbPath = path.join(siteRoot, 'data', 'site.db');
   const db = open(dbPath);
   let inserted = 0;
   let skipped = 0;
   try {
-    const idToSlug = await buildWpIdToSlug(baseUrl, fetcher);
+    const idToSlug = await buildWpIdToSlug(source);
     const wpToLocal = new Map<number, number>();
     const wpTopLevel = new Set<number>(); // WP ids inserted as top-level local comments
 
     let page = 1;
     let totalPages = 1;
     do {
-      const r = await listComments(baseUrl, { page, perPage: 100 }, ...(fetcher ? [fetcher] : []));
+      const r = await source.listComments({ page, perPage: 100 });
       totalPages = r.totalPages || 1;
       // Page-local sort: ensures a top-level parent is processed before its reply within
       // the same page. A reply whose top-level parent lands on a later page is flattened
@@ -117,11 +111,19 @@ export async function importWpComments(
 export default async function importWpCommentsCmd(argv: string[]): Promise<void> {
   const baseUrl = argv[0];
   if (!baseUrl) {
-    throw new Error('usage: site-admin import-wp-comments <wp-base-url>');
+    throw new Error(
+      'usage: site-admin import-wp-comments <wp-base-url> [--from-dump <db> --uploads <dir>]'
+    );
   }
-  /* c8 ignore start -- success path makes real HTTP calls; covered by importWpComments tests */
+  /* c8 ignore start -- success path touches the real site DB; covered by importWpComments tests */
   const { paths } = await import('../lib/config.ts');
-  const r = await importWpComments(baseUrl, paths().root);
-  console.log(`imported ${r.inserted} comment(s), skipped ${r.skipped}`);
+  const { resolveSource } = await import('./import-wp.ts');
+  const source = resolveSource(argv.slice(1), baseUrl);
+  try {
+    const r = await importWpComments(source, paths().root);
+    console.log(`imported ${r.inserted} comment(s), skipped ${r.skipped}`);
+  } finally {
+    source.close();
+  }
   /* c8 ignore stop */
 }
