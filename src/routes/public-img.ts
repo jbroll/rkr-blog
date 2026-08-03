@@ -10,6 +10,7 @@ import type { Sidecar } from '@rkr/image-edit';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
+import { imageDimensions } from '../lib/image-map-fs.ts';
 import { enqueue, noteLiveRender } from '../lib/jobs.ts';
 import {
   type DerivativeArgs,
@@ -21,7 +22,6 @@ import {
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { Semaphore } from '../lib/semaphore.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
-import { imageDimensions } from '../lib/widget-helpers.ts';
 
 // Smallest source dimension the derivative pipeline will accept.
 // Sharp + the encoders (mozjpeg, libwebp, libavif) refuse or produce

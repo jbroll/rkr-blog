@@ -12,9 +12,9 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import type { SidecarOp } from '@rkr/image-edit';
 import sharp from 'sharp';
+import { imageDimensions } from '../../src/lib/image-map-fs.ts';
 import { bakePath, ingestStream } from '../../src/lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../../src/lib/sidecar.ts';
-import { imageDimensions } from '../../src/lib/widget-helpers.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-dims-'));
@@ -257,4 +257,37 @@ test('imageDimensions: throws when a perspective op has malformed corners', asyn
   sidecar.ops = [{ type: 'perspective', corners: 'not-an-array' }];
   await sidecarWrite(root, r.id, sidecar);
   await assert.rejects(() => imageDimensions(root, r.id, sidecar), /malformed perspective/);
+});
+
+test('imageDimensions: ops present but original file missing → throws', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload' }
+  });
+  const sidecar = await sidecarRead(root, r.id);
+  assert.ok(sidecar);
+  sidecar.ops = [{ type: 'rotate', degrees: 90 }];
+  await sidecarWrite(root, r.id, sidecar);
+  const origDir = path.join(root, 'originals', r.id.slice(0, 2), r.id.slice(2, 4));
+  for (const f of fs.readdirSync(origDir)) fs.unlinkSync(path.join(origDir, f));
+  await assert.rejects(() => imageDimensions(root, r.id, sidecar), /original missing/);
+});
+
+test('imageDimensions: bake write failure surfaces and cleans up the tmp file', async (t) => {
+  const root = freshSiteRoot(t);
+  const r = await ingestStream({
+    stream: Readable.from([await makeJpeg(800, 600)]),
+    siteRoot: root,
+    source: { kind: 'upload' }
+  });
+  const sidecar = await sidecarRead(root, r.id);
+  assert.ok(sidecar);
+  sidecar.ops = [{ type: 'rotate', degrees: 90 }];
+  await sidecarWrite(root, r.id, sidecar);
+  t.mock.method(fs.promises, 'rename', async () => {
+    throw new Error('boom');
+  });
+  await assert.rejects(() => imageDimensions(root, r.id, sidecar), /boom/);
 });

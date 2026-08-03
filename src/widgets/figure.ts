@@ -14,15 +14,15 @@
 
 import type { Sidecar } from '@rkr/image-edit';
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { resolveIds } from '../lib/id-resolve.ts';
+import { imageDimensions } from '../lib/image-map-fs.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import {
   extractDirectiveCaption,
   extractImageIdsAndAlts,
   getKnownIds,
-  imageDimensions,
   indent,
-  renderPicture,
-  resolveIds
+  renderPicture
 } from '../lib/widget-helpers.ts';
 import type {
   DirectiveNode,

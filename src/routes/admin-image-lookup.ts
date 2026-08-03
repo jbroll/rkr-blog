@@ -15,11 +15,11 @@ import fs from 'node:fs';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import { cacheKey } from '../lib/hash.ts';
+import { imageDimensions } from '../lib/image-map-fs.ts';
 import { imageInfo } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
 import type { OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
-import { imageDimensions } from '../lib/widget-helpers.ts';
 import { fallback as imageFallback } from '../widgets/figure.ts';
 import { sidecarUpdatedAt } from './sidecar-base.ts';
 
