@@ -21,6 +21,13 @@ function setStatus(msg: string, isError = false): void {
 }
 
 async function loadFile(file: File): Promise<void> {
+  // The picker is unfiltered (see index.html), so a non-image is a normal
+  // mistake, not a decoder edge case. Only reject a stated non-image type —
+  // an empty type is common for cloud-provider files and still decodes.
+  if (file.type && !file.type.startsWith('image/')) {
+    setStatus(`${file.name} is not an image (${file.type})`, true);
+    return;
+  }
   setStatus('loading…');
   let bitmap: ImageBitmap;
   try {

@@ -33,6 +33,7 @@ function runHook(opts: {
   siteEnvContents: string;
   secretsFileContents?: string; // undefined = secrets file does not exist on disk
   preSeedSecretsEnv?: boolean; // mimic node_app/build.sh having already copied it
+  env?: Record<string, string>; // extra deploy vars, e.g. DEPLOY_IMAGE_EDITOR
 }): { tmp: string; projectDir: string; run: () => string } {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fastify-hook-'));
   fs.mkdirSync(path.join(tmp, 'app'), { recursive: true });
@@ -58,7 +59,8 @@ function runHook(opts: {
     APP_NAME: opts.appName ?? 'rkr-blog',
     FASTIFY_APP_DATA_PATH: opts.dataPath ?? '/var/www',
     SITE_ENV_FILE: siteEnvRel,
-    FASTIFY_APP_SECRETS_FILE: secretsRel
+    FASTIFY_APP_SECRETS_FILE: secretsRel,
+    ...opts.env
   };
 
   return {
@@ -108,21 +110,12 @@ test('hook rejects a merged secrets.env with no SITE_ROOT line at all', () => {
   );
 });
 
-test('hook accepts a merged secrets.env whose effective SITE_ROOT matches APP_NAME (fails later, at the PWA build, not at the guard)', () => {
-  // A real project tree isn't set up here, so the hook still fails overall
-  // (no apps/image-pwa workspace) — the point of this test is that it gets
-  // PAST our SITE_ROOT guard first, proving a correct config isn't rejected.
+test('hook accepts a merged secrets.env whose effective SITE_ROOT matches APP_NAME', () => {
   const { run } = runHook({
     siteEnvContents: 'SITE_ROOT=/var/www/rkr-blog\n',
     secretsFileContents: 'ADMIN_TOKEN=x\n'
   });
-  assert.throws(
-    () => run(),
-    (err: unknown) => {
-      const stderr = stderrOf(err);
-      return !/SITE_ROOT/.test(stderr) && !/missing secrets file/.test(stderr);
-    }
-  );
+  assert.match(run(), /image-editor PWA skipped/);
 });
 
 test('hook rejects a secrets file that sets PUBLIC_BASE_URL, even matching the site env', () => {
@@ -148,12 +141,26 @@ test('hook rejects an ADMIN_BASE_URL present only in the secrets file', () => {
 });
 
 test('hook leaves OLLAMA_BASE_URL in the secrets file alone', () => {
-  const { run } = runHook({
+  const { tmp, run } = runHook({
     siteEnvContents: 'SITE_ROOT=/var/www/rkr-blog\n',
     secretsFileContents: 'ADMIN_TOKEN=x\nOLLAMA_BASE_URL=https://ollama.test\n'
   });
+  run();
+  const merged = fs.readFileSync(path.join(tmp, 'app/secrets.env'), 'utf8');
+  assert.match(merged, /^OLLAMA_BASE_URL=https:\/\/ollama\.test$/m);
+});
+
+test('the image-editor PWA is staged only when the site opts in', () => {
+  const { tmp, run } = runHook({
+    siteEnvContents: 'SITE_ROOT=/var/www/rkr-blog\n',
+    secretsFileContents: 'ADMIN_TOKEN=x\n',
+    env: { DEPLOY_IMAGE_EDITOR: 'yes' }
+  });
+  // The throwaway project dir has no apps/image-pwa workspace, so opting in
+  // reaches the build step and fails there — which is the proof it ran.
   assert.throws(
     () => run(),
-    (err: unknown) => !/BASE_URL/.test(stderrOf(err))
+    (err: unknown) => !/image-editor PWA skipped/.test(stderrOf(err))
   );
+  assert.equal(fs.existsSync(path.join(tmp, 'app/image-editor')), false);
 });

@@ -97,6 +97,11 @@ test('stockademade site config uses the apex domain with a www alias', () => {
   assert.equal(c.APACHE_SERVER_ALIASES, 'www.stockademade.com');
 });
 
+test('the image-editor PWA is opted into by rkr-blog alone', () => {
+  assert.equal(loadConfig('deploy/sites/rkr-blog.conf').DEPLOY_IMAGE_EDITOR, 'yes');
+  assert.equal(loadConfig('deploy/sites/stockademade.conf').DEPLOY_IMAGE_EDITOR, undefined);
+});
+
 const SITES = ['rkr-blog', 'stockademade'];
 
 test('every site config uses a distinct port, app name, env file, secrets file, and domain', () => {

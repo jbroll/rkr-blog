@@ -13,7 +13,11 @@
       <h1>Image Editor</h1>
       <label class="pick">
         Open image…
-        <input id="file" type="file" accept="image/*" />
+        <!-- No accept="image/*": that routes Chrome on Android to the system
+             Photo Picker, which only reaches local media and Google Photos.
+             Without it we get the document picker, where OneDrive and Drive
+             appear as storage providers. Non-images fail in loadFile. -->
+        <input id="file" type="file" />
       </label>
       <span id="status"></span>
     </header>

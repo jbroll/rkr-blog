@@ -93,14 +93,20 @@ if [[ -f "$app_pkg" ]]; then
 fi
 
 # --- Standalone image-editor PWA -------------------------------------------
-# Build apps/image-pwa and stage its static output under the app tree so it
-# ships to /opt/<app>/image-editor; Apache serves it at /image-editor (see
-# apache.build.post.sh). node_app/build.sh ran `npm run build` already, so
-# packages/image-edit/dist (which the PWA imports) exists.
-( cd "$PROJECT_DIR" && npm run --silent build -w @rkr/image-pwa )
-pwa_src="$PROJECT_DIR/apps/image-pwa"
-pwa_dst="$TMP_DIR/app/image-editor"
-mkdir -p "$pwa_dst/dist"
-cp "$pwa_src/index.html" "$pwa_src/manifest.webmanifest" "$pwa_dst/"
-cp -r "$pwa_src/dist/." "$pwa_dst/dist/"
-echo "  fastify_app.build.post: staged image-editor PWA ($(ls "$pwa_dst/dist" | wc -l) dist files)"
+# Opt-in per site (DEPLOY_IMAGE_EDITOR=yes): the editor belongs to rkr-blog,
+# not to every site this repo serves. Build apps/image-pwa and stage its static
+# output under the app tree so it ships to /opt/<app>/image-editor; Apache
+# serves it at /image-editor (see apache.build.post.sh). node_app/build.sh ran
+# `npm run build` already, so packages/image-edit/dist (which the PWA imports)
+# exists.
+if [[ "${DEPLOY_IMAGE_EDITOR:-no}" == "yes" ]]; then
+  ( cd "$PROJECT_DIR" && npm run --silent build -w @rkr/image-pwa )
+  pwa_src="$PROJECT_DIR/apps/image-pwa"
+  pwa_dst="$TMP_DIR/app/image-editor"
+  mkdir -p "$pwa_dst/dist"
+  cp "$pwa_src/index.html" "$pwa_src/manifest.webmanifest" "$pwa_dst/"
+  cp -r "$pwa_src/dist/." "$pwa_dst/dist/"
+  echo "  fastify_app.build.post: staged image-editor PWA ($(ls "$pwa_dst/dist" | wc -l) dist files)"
+else
+  echo "  fastify_app.build.post: image-editor PWA skipped (DEPLOY_IMAGE_EDITOR != yes)"
+fi

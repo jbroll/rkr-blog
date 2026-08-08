@@ -18,6 +18,16 @@ pointing at the VPS but no vhost or service there yet.
 server-side paths, and predates the domain move. Renaming it would move
 `/var/www/rkr-blog` and orphan the site's data.
 
+### Per-site image editor
+
+The standalone image editor (`apps/image-pwa`) ships only where a site
+config sets `DEPLOY_IMAGE_EDITOR="yes"` — roll-along, at
+`https://roll-along.rkroll.com/image-editor/`. The flag gates both halves:
+`fastify_app.build.post.sh` builds and stages the static files under
+`/opt/<app>/image-editor`, and `apache.build.post.sh` emits the `Alias` +
+`ProxyPass !` pair that serves them. Unset (the default) means neither
+runs, so nothing is built, shipped, or routed.
+
 ### Split public / admin hostnames
 
 roll-along serves both its hostnames directly — no canonical redirect —
