@@ -43,7 +43,8 @@ export function registerAdminVideoRoutes(
       // limit was hit mid-stream. ingestVideoStream already wrote the
       // partial bytes + possibly a sidecar. Only delete files we just
       // created; if the upload deduplicated against an existing id, leave
-      // the existing original and sidecar untouched.
+      // the existing original and sidecar untouched. Check before
+      // transcoding so a truncated upload never pays for a render.
       if (part.file.truncated) {
         if (!result.deduplicated) {
           await fs.promises.unlink(result.path).catch(() => {});

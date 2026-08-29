@@ -194,7 +194,7 @@ function buildPopover(
     // Persist trim/poster to the sidecar so public URLs stay valid.
     const ids = attrs.ids ?? '';
     if (/^[0-9a-f]{64}$/.test(ids)) {
-      const body = trimToTrimBody(trim, poster);
+      const body = await trimToTrimBody(ids, trim, poster);
       if (body) {
         try {
           await fetch(`/admin/video/${ids}/trim`, {
@@ -217,22 +217,34 @@ function buildPopover(
   return popover;
 }
 
-function trimToTrimBody(
+async function trimToTrimBody(
+  ids: string,
   trim: string,
   poster: string
-): { startMs: number; endMs: number; posterTimeMs: number } | null {
-  const m = /^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/.exec(trim.trim());
-  if (!m) return null;
-  const start = Number(m[1]);
-  const end = Number(m[2]);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
-  const posterTime = poster.trim() === '' ? start : Number(poster);
+): Promise<{ startMs: number; endMs: number; posterTimeMs: number } | null> {
+  const posterTime = poster.trim() === '' ? 0 : Number(poster);
   if (!Number.isFinite(posterTime) || posterTime < 0) return null;
-  return {
-    startMs: Math.round(start * 1000),
-    endMs: Math.round(end * 1000),
-    posterTimeMs: Math.round(posterTime * 1000)
-  };
+  const posterTimeMs = Math.round(posterTime * 1000);
+
+  const m = /^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/.exec(trim.trim());
+  if (m) {
+    const start = Number(m[1]);
+    const end = Number(m[2]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
+    return {
+      startMs: Math.round(start * 1000),
+      endMs: Math.round(end * 1000),
+      posterTimeMs
+    };
+  }
+
+  // No trim: persist the full range so the sidecar ops clear and poster
+  // still lands. Duration comes from the OPFS video map.
+  const map = await buildVideoMapFromOpfs();
+  const src = map.get(ids);
+  if (!src) return null;
+  const durationMs = src.durationMs;
+  return { startMs: 0, endMs: durationMs, posterTimeMs };
 }
 
 function splitTrim(trim: string): [string, string] {
