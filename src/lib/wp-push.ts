@@ -28,7 +28,7 @@ import type { WpSource } from './wp-source.ts';
 export interface PushOpts {
   wpBaseUrl: string;
   slug: string | number;
-  /** Target rkr-blog base URL, e.g. https://rkr-blog.fly.dev */
+  /** Target rkr-blog base URL, e.g. https://roll-along.rkroll.com */
   toUrl: string;
   /** Matches ADMIN_TOKEN env on the target. */
   token: string;

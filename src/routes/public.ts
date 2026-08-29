@@ -111,10 +111,11 @@ export default async function publicRoutes(
   fastify: FastifyInstance,
   opts: PublicRoutesOpts
 ): Promise<void> {
-  // 8s default keeps the /img response well under Fly's ~20s edge
-  // timeout — past that the platform returns 502 instead of waiting
-  // for the route's 202 fallback. Cold-cache renders that exceed 8s
-  // (rare, mostly AVIF on big sources) take the 202 path; img-retry.js
+  // 8s default keeps the /img response well under the reverse-proxy
+  // (Apache) timeout — past that the proxy returns 502 instead of
+  // waiting for the route's 202 fallback. Cold-cache renders that
+  // exceed 8s (rare, mostly AVIF on big sources) take the 202 path;
+  // img-retry.js
   // polls back with backoff until the cache lands.
   const { siteRoot, db, renderBudgetMs = 8_000 } = opts;
   const getSite = (): SiteConfig => opts.site ?? siteConfig();

@@ -145,24 +145,19 @@ Two guards worth knowing when a login is rejected:
 The end-to-end "wipe a site, repopulate from a WordPress source, verify
 every post and image renders" cycle. Use this:
 
-- After landing a release on the demo and wanting a clean baseline.
 - After an import-pipeline change, to confirm a known WP fixture
   round-trips end-to-end on real infrastructure.
-- After a Fly redeploy, to confirm the volume + machine survived the
-  swap and the public surface is healthy.
+- After a deploy, to confirm the public surface is healthy.
 
-The same three commands apply to both targets — only the base URL and
-the auth source change.
+The commands run against your local dev server. The old second target —
+the Fly demo at `rkr-blog.fly.dev` — was retired in August 2026; how it
+was configured is archived in [`archive/fly-demo.md`](archive/fly-demo.md).
 
-### Targets
+### Target
 
-| Target            | Base URL                                | `ADMIN_TOKEN` source                       |
-|-------------------|-----------------------------------------|--------------------------------------------|
-| Local dev         | `http://127.0.0.1:3000` (or your `PORT`)| your `.env` / shell — whatever you started the server with |
-| Remote (Fly demo) | `https://rkr-blog.fly.dev`              | repo's `secret.env` (gitignored) — `set -a; . secret.env; set +a` exposes `ADMIN_TOKEN`. Fly itself reads the same value from `fly secrets list --app rkr-blog`. |
-
-`fly.toml` pins the public URL to `rkr-blog.fly.dev`; `rkr-blog.fly.io`
-redirects but isn't the canonical host.
+| Target    | Base URL                              | `ADMIN_TOKEN` source                        |
+|-----------|---------------------------------------|---------------------------------------------|
+| Local dev | `http://127.0.0.1:3000` (or your `PORT`) | your `.env` / shell — whatever you started the server with |
 
 ### 1. Reset
 
@@ -173,10 +168,6 @@ Idempotent — the only side effect is "everything is gone, again."
 # Local dev
 SITE_ROOT=$HOME/site bin/site-admin reset \
   --to http://127.0.0.1:3000 --token "$ADMIN_TOKEN" --force
-
-# Fly demo
-bin/site-admin reset \
-  --to https://rkr-blog.fly.dev --token "$ADMIN_TOKEN" --force
 ```
 
 `--force` is required; without it the CLI prints a warning and exits
@@ -188,9 +179,8 @@ A successful reset prints:
 reset ok: posts=N, originals=N, sidecars=N, cache=N (db rows cleared: N)
 ```
 
-The Fly volume keeps directory shells around — empty
-`originals/<aa>/<bb>/` shard dirs are expected after a reset; the actual
-blob files are gone. `bin/site-admin gc` will tidy them later.
+Empty `originals/<aa>/<bb>/` shard dirs are expected after a reset; the
+actual blob files are gone. `bin/site-admin gc` will tidy them later.
 
 ### 2. Seed (import 3 posts from a WordPress source)
 
@@ -271,15 +261,12 @@ No auth needed — everything walked here is public.
 ```bash
 # Local dev
 scripts/walk-site.sh http://127.0.0.1:3000
-
-# Fly demo
-scripts/walk-site.sh https://rkr-blog.fly.dev
 ```
 
 Output:
 
 ```
-==> https://rkr-blog.fly.dev — 3 posts across 1 page(s)
+==> http://127.0.0.1:3000 — 3 posts across 1 page(s)
 post-slug-a                              200 Title A · imgs=4 failed=0
 post-slug-b                              200 Title B · imgs=2 failed=0
 post-slug-c                              200 Title C · imgs=7 failed=0
@@ -421,54 +408,22 @@ so existing sessions survive a re-run (provided you preserved that
 file). The other writable subtrees — `content/posts`, `originals`,
 `sidecars`, `cache/img`, `data` — are recreated empty.
 
-Never use this on the Fly demo. The Fly volume isn't a local
-filesystem you can rm + reinit; the HTTP `bin/site-admin reset
---to https://rkr-blog.fly.dev …` path is the only safe wipe there.
-
-## Fly machine sizing
-
-The Fly demo's VM size lives in `fly.toml` (`[[vm]]` block), not in
-the Fly dashboard. Fly's UI exposes start/stop/restart but resizing
-goes through the deployed config:
-
-```toml
-[[vm]]
-  size = "shared-cpu-2x"
-  memory = "2gb"
-```
-
-Edit, commit, push. The GitHub-app integration auto-deploys this
-branch on push; the new machine spec rolls out with the next
-deploy. The previous machine is replaced (not scaled alongside) —
-brief downtime during the roll is expected.
-
-When to bump: image-render bursts (`/img/<id>.<hash>.<fmt>`) trip
-OOM during the post-reseed pre-warm. Each variant render decodes
-the source JPEG into uncompressed pixel buffers before resizing,
-and a 24-image post at 12-MP source resolution × multiple variants
-× multiple output formats burns through 512 MB quickly. 2 GB is a
-comfortable floor for the current photo-heavy demo seed; if a
-single image's source resolution is in the high tens of megapixels,
-bump further.
-
-`fly status --app rkr-blog` confirms the current size; `fly logs
---app rkr-blog` shows the kernel OOM message when the cap is hit
-(`Killed (out of memory)`).
+This is local-dev only: on the deployed VPS the site root is owned by
+the service user and managed via deploy, not by an interactive wipe.
 
 ## Troubleshooting
 
 - **`reset failed: 401 invalid token`** — The bearer token doesn't
-  match `ADMIN_TOKEN` on the target. For Fly, `fly secrets list --app
-  rkr-blog` shows the digest but not the value; if it's drifted from
-  your local copy, set a fresh one with `fly secrets set
-  ADMIN_TOKEN=<new>` and remember to update the runner.
+  match `ADMIN_TOKEN` on the target. For the deployed VPS, check
+  `/etc/rkr-blog.env` on the host.
 - **`POST /admin/upload: 413`** — The target rejected an image as too
   large. Source has an oversize asset; either clean it up upstream or
   raise the multipart limit in `src/server.ts`.
 - **`render failed` (HTTP 500 from `/img/<id>.<hash>.<fmt>`)** — sharp
   threw on the derivative. Almost always a corrupt or pathologically
   small original. The walk script reports it as a per-image failure;
-  check `fly logs --app rkr-blog` for the underlying sharp error.
+  check `journalctl -u rkr-blog` on the VPS for the underlying sharp
+  error.
 - **Walk reports `posts=0`** — Either the import didn't run (check
   `import-wp push` exit codes) or the posts landed as `draft`. Without
   `--status`, the target status follows the WordPress post: `publish`

@@ -274,12 +274,12 @@ SITE_ROOT=$HOME/site bin/site-admin verify
 SITE_ROOT=$HOME/site bin/site-admin reset --to <url> --token <ADMIN_TOKEN> --force
 SITE_ROOT=$HOME/site bin/site-admin user invite <email> [--role owner|editor]
 SITE_ROOT=$HOME/site bin/site-admin jobs failed
-SITE_ROOT=$HOME/site bin/site-admin import-wp push <wp-base> <slug> --to <fly-url>
+SITE_ROOT=$HOME/site bin/site-admin import-wp push <wp-base> <slug> --to <target-url>
 SITE_ROOT=$HOME/site bin/site-admin server [--port N]
 ```
 
-For the operator-facing reset → seed → walk procedure (against the Fly
-demo or a local dev server), see [`RUNBOOK.md`](RUNBOOK.md).
+For the operator-facing reset → seed → walk procedure, see
+[`RUNBOOK.md`](RUNBOOK.md).
 
 ## 9. On-device browser test page
 

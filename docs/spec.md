@@ -574,7 +574,7 @@ import-wp-comments <base-url>               import approved comments from a Word
 wp-dump <dump.sql> <out.db>                 convert a mysqldump file to SQLite
 import-wp … --from-dump <db> --uploads <d>  read a backup instead of a live WordPress site
 fix-wp-dates                                repair WP-imported post dates using the filename prefix as truth
-reset --to <fly-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
+reset --to <target-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
 server [--port N]       run the application server

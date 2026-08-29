@@ -15,9 +15,9 @@
 //
 // Examples:
 //   scripts/check-orientation.mjs \
-//     https://roll-along.rkroll.com https://rkr-blog.fly.dev
+//     https://roll-along.rkroll.com http://127.0.0.1:3000
 //   scripts/check-orientation.mjs \
-//     https://roll-along.rkroll.com https://rkr-blog.fly.dev first-2-days-on-the-boats
+//     https://roll-along.rkroll.com http://127.0.0.1:3000 first-2-days-on-the-boats
 //
 // Strategy per post:
 //   1. Fetch the target's rendered HTML; collect each <img src> in

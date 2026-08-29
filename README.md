@@ -43,7 +43,7 @@ Images are automatically served in multiple sizes and modern formats so every br
 | Language | TypeScript |
 | Database | SQLite |
 | Auth | Google OAuth |
-| Deployment | Apache, Docker / Fly.io |
+| Deployment | Apache (VPS) |
 
 ---
 

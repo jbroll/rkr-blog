@@ -118,7 +118,7 @@ async function ensureBake(
     await fs.promises.unlink(tmp).catch(() => {});
     throw err;
   }
-  // biome-ignore lint/suspicious/noConsole: surface to fly logs when self-healing pre-migration sidecars
+  // biome-ignore lint/suspicious/noConsole: surface to server logs when self-healing pre-migration sidecars
   console.warn(`widget-helpers: recreated missing bake for ${id.slice(0, 8)}…`);
   const meta = await sharp(bp).metadata();
   return { width: meta.width ?? 1, height: meta.height ?? 1 };

@@ -93,7 +93,7 @@ rkr-blog trails on: large-library management, EXIF/metadata browsing, public alb
 
 - **No multi-author workflow.** User management is CLI-only; no UI for inviting or managing co-authors beyond the allowlist.
 - **No plugin or theme marketplace.** 8 CSS-only themes ship out of the box; extending requires writing code.
-- **No managed hosting.** Requires a VPS or container host (Fly.io supported); no one-click cloud deploy or managed SaaS option.
+- **No managed hosting.** Requires a VPS (Apache + systemd); no one-click cloud deploy or managed SaaS option.
 - **No mobile app.** Admin is a web app; no native iOS or Android client.
 - **No CDN integration.** Apache serves derivatives from disk; no built-in Cloudflare, Fastly, or S3 offload path.
 - **Corpus scan performance.** `listPosts` and `listSidecars` do full scans; performance degrades with very large image libraries.

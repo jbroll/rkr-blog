@@ -16,7 +16,7 @@
 #   scripts/reseed-from-roll-along.sh <target-url> [post-count]
 #
 # Examples:
-#   ADMIN_TOKEN=xxx scripts/reseed-from-roll-along.sh https://rkr-blog.fly.dev
+#   ADMIN_TOKEN=xxx scripts/reseed-from-roll-along.sh http://127.0.0.1:3000
 #   ADMIN_TOKEN=xxx scripts/reseed-from-roll-along.sh http://127.0.0.1:3000 5
 #
 # Env:

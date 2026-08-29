@@ -15,8 +15,8 @@ export interface ResetCounts {
 /**
  * Recursively walk a directory: unlink every regular file, then rmdir
  * every now-empty INNER subdirectory (leaves up to root). The top-level
- * `dir` itself is preserved so a Fly volume mount point — which can't
- * be unlinked — stays in place. Returns the count of files removed.
+ * `dir` itself is preserved so a mount point — which can't be
+ * unlinked — stays in place. Returns the count of files removed.
  *
  * Two passes by design:
  *   1. forward (stack) walk to unlink files and enumerate subdirs
