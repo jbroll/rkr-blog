@@ -8,6 +8,7 @@ import { WidgetRegistry } from '../lib/widgets.ts';
 import type { AssetCtx } from '../templates/layout.ts';
 import { renderPostPage } from '../templates/post.ts';
 import figureWidget from '../widgets/figure.ts';
+import videoWidget from '../widgets/video.ts';
 import { loadDraft, readMeta } from './draft.ts';
 import { buildImageMapFromOpfs } from './image-map-opfs.ts';
 import { listDir } from './opfs.ts';
@@ -48,11 +49,14 @@ export async function renderPreviewDocument(input: PreviewInput): Promise<string
   const snapshot = resolveSnapshot(input.snapshot);
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
+  widgets.register(videoWidget);
   const parsed = parsePost(
     `---\ntitle: ${JSON.stringify(input.title)}\nslug: ${JSON.stringify(input.slug)}\n---\n\n${input.markdown}`
   );
   const images = await buildImageMapFromOpfs(parsed.ast);
-  const bodyHtml = await renderPostHtml(parsed.ast, { images, widgets });
+  // Video drafts preview with an empty map until the OPFS video map lands
+  // (video spec Task 8); ::video renders its missing-video comment.
+  const bodyHtml = await renderPostHtml(parsed.ast, { images, videos: new Map(), widgets });
 
   return renderPostPage({
     site: {

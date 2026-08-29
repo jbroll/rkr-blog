@@ -201,6 +201,19 @@ rules a theme should not touch.
 - Justify classes: `.rkr-justify-center`, `.rkr-justify-left`,
   `.rkr-justify-right`, `.rkr-justify-full`, `.rkr-justify-bleed`.
 
+### Video widget
+The `::video` widget is the self-hosted video element. It shares the
+figure widget's `.rkr-justify-*` placement classes. Themes typically
+only restyle the frame + caption; the layout machinery lives in shared
+rules a theme should not touch.
+
+- `.rkr-video` — outer wrapper.
+- `.rkr-video-wrapper` — aspect-reserving frame around the player
+  (`aspect-ratio: var(--rkr-video-aspect, 16/9)`; the widget sets
+  `--rkr-video-aspect` inline from the source dimensions).
+- `.rkr-video-wrapper video` — the player element.
+- `.rkr-video-caption` — caption text.
+
 ### Admin posts list (`/admin/posts`)
 - `.rkr-admin-posts-heading` — page h1.
 - `.rkr-admin-posts` — the `<table>`.

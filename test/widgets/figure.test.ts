@@ -65,7 +65,7 @@ async function dispatch(root: string, attrs: Record<string, string>): Promise<st
   widgets.register(figureWidget);
   const node = makeNode(attrs);
   const images = await buildImageMap(root, node);
-  return widgets.dispatch('figure', node, { images, widgets });
+  return widgets.dispatch('figure', node, { images, videos: new Map(), widgets });
 }
 
 test('::figure 1x1 default — single image, defaults applied', async (t) => {

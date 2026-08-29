@@ -6,6 +6,24 @@ import type { Parent, PhrasingContent } from 'mdast';
 
 import type { ImageMap } from './image-map.ts';
 
+/** Widget-facing view of one video. The real VideoSource lives in
+ * lib/video-map-fs.ts (node-dependent); importing it here would drag the
+ * ffmpeg pipeline into browser-compiled programs (tsconfig.browser.json
+ * type-checks src/admin through WidgetCtx). The real map is structurally
+ * assignable to this view — it is all the renderer needs. */
+interface VideoSourceView {
+  width: number;
+  height: number;
+  durationMs: number;
+  sidecar: { poster: { timeMs: number } };
+  urlFor(
+    ops: ReadonlyArray<{ kind: 'trim'; startMs: number; endMs: number }>,
+    posterTimeMs: number
+  ): { videoUrl: string; posterUrl: string };
+}
+
+export type VideoMapView = ReadonlyMap<string, VideoSourceView>;
+
 export interface DirectiveNode extends Parent {
   type: 'leafDirective' | 'textDirective' | 'containerDirective';
   name: string;
@@ -15,6 +33,7 @@ export interface DirectiveNode extends Parent {
 
 export interface WidgetCtx {
   images: ImageMap;
+  videos: VideoMapView;
   widgets: WidgetRegistry;
 }
 

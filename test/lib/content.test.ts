@@ -79,7 +79,7 @@ test('renderPostHtml emits expected HTML for prose, dispatches directives to wid
     }
   });
 
-  const html = await renderPostHtml(parsed.ast, { images: new Map(), widgets });
+  const html = await renderPostHtml(parsed.ast, { images: new Map(), videos: new Map(), widgets });
 
   // Prose elements.
   assert.match(html, /<p>This is the opening paragraph. It has <strong>bold<\/strong>/);
@@ -94,19 +94,23 @@ test('renderPostHtml emits expected HTML for prose, dispatches directives to wid
 test('renderPostHtml emits a comment for unknown widgets rather than crashing', async () => {
   const parsed = parsePost(`---\ntitle: x\nslug: x\n---\n\n::nope{}\n`);
   const widgets = new WidgetRegistry();
-  const html = await renderPostHtml(parsed.ast, { images: new Map(), widgets });
+  const html = await renderPostHtml(parsed.ast, { images: new Map(), videos: new Map(), widgets });
   assert.match(html, /<!-- unknown widget: nope -->/);
 });
 
 test('renderPostHtml escapes plain text content to prevent HTML injection', async () => {
   const parsed = parsePost(`---\ntitle: x\nslug: x\n---\n\n<script>alert(1)</script> end\n`);
   const widgets = new WidgetRegistry();
-  const html = await renderPostHtml(parsed.ast, { images: new Map(), widgets });
+  const html = await renderPostHtml(parsed.ast, { images: new Map(), videos: new Map(), widgets });
   // The literal `<script>...` line is treated as raw HTML by remark — that's
   // a single-author trust decision per content.ts. Inline angle-text in a
   // paragraph would be escaped; assert that a paragraph with `&` works.
   const safeParsed = parsePost(`---\ntitle: x\nslug: x\n---\n\nA & B then *italic*\n`);
-  const safeHtml = await renderPostHtml(safeParsed.ast, { images: new Map(), widgets });
+  const safeHtml = await renderPostHtml(safeParsed.ast, {
+    images: new Map(),
+    videos: new Map(),
+    widgets
+  });
   assert.match(safeHtml, /A &amp; B then <em>italic<\/em>/);
   // Trust check on raw HTML: <script>...</script> passes through verbatim.
   assert.match(html, /<script>alert\(1\)<\/script>/);

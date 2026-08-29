@@ -31,6 +31,7 @@ import { buildFtsMatch } from '../lib/search-query.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { truncateParagraph } from '../lib/teaser-truncate.ts';
+import { buildVideoMap } from '../lib/video-map-fs.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
 import { type IndexTeaser, renderIndexPage } from '../templates/index.ts';
@@ -38,6 +39,7 @@ import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
 import { renderSearchPage, type SearchHit } from '../templates/search.ts';
 import figureWidget from '../widgets/figure.ts';
+import videoWidget from '../widgets/video.ts';
 import { registerPublicCommentRoutes } from './public-comments.ts';
 import { registerPublicImgRoutes } from './public-img.ts';
 import { registerPublicVideoRoutes } from './public-video.ts';
@@ -118,12 +120,13 @@ export default async function publicRoutes(
   const getSite = (): SiteConfig => opts.site ?? siteConfig();
 
   const widgets = new WidgetRegistry();
-  // ::figure is the only image widget (spec.md §9 unification).
-  // The figure widget is the only image directive recognised by the
-  // public renderer. Any older ::image / ::gallery / ::carousel /
-  // ::diptych / ::triptych on disk renders as a `<!-- unknown widget -->`
-  // placeholder; the WP importer emits ::figure directly.
+  // ::figure is the only image widget (spec.md §9 unification); ::video
+  // is the self-hosted video widget (video spec §5). Any older ::image /
+  // ::gallery / ::carousel / ::diptych / ::triptych on disk renders as a
+  // `<!-- unknown widget -->` placeholder; the WP importer emits ::figure
+  // directly.
   widgets.register(figureWidget);
+  widgets.register(videoWidget);
   registerPublicCommentRoutes(fastify, { db });
   registerPublicImgRoutes(fastify, { siteRoot, db, renderBudgetMs });
   registerPublicVideoRoutes(fastify, { siteRoot, db, renderBudgetMs });
@@ -178,6 +181,7 @@ export default async function publicRoutes(
             const dir = figureNode as DirectiveNode;
             indexBannerHtml = await widgets.dispatch('figure', dir, {
               images: await buildImageMap(siteRoot, dir),
+              videos: await buildVideoMap(siteRoot),
               widgets
             });
           }
@@ -195,6 +199,7 @@ export default async function publicRoutes(
         };
         indexBannerHtml = await widgets.dispatch('figure', bannerNode, {
           images: await buildImageMap(siteRoot, bannerNode),
+          videos: await buildVideoMap(siteRoot),
           widgets
         });
       }
@@ -212,7 +217,11 @@ export default async function publicRoutes(
         try {
           const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
           const { ast } = parsePost(rawTop);
-          const ctx = { images: await buildImageMap(siteRoot, teaserNodes(ast)), widgets };
+          const ctx = {
+            images: await buildImageMap(siteRoot, teaserNodes(ast)),
+            videos: await buildVideoMap(siteRoot),
+            widgets
+          };
           const bannerHtml = await extractPostBanner(ast, ctx);
           const excerptHtml = bannerHtml
             ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
@@ -285,7 +294,11 @@ export default async function publicRoutes(
     } catch {
       return send404();
     }
-    const ctx = { images: await buildImageMap(siteRoot, parsed.ast), widgets };
+    const ctx = {
+      images: await buildImageMap(siteRoot, parsed.ast),
+      videos: await buildVideoMap(siteRoot),
+      widgets
+    };
     const bannerHtml = await extractPostBanner(parsed.ast, ctx);
     const bodyHtml = await renderPostHtml(parsed.ast, ctx);
     setPublicSecurityHeaders(reply);
@@ -412,7 +425,11 @@ export default async function publicRoutes(
       const fullPath = path.join(siteRoot, row.path);
       const raw = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parsePost(raw);
-      const ctx = { images: await buildImageMap(siteRoot, parsed.ast), widgets };
+      const ctx = {
+        images: await buildImageMap(siteRoot, parsed.ast),
+        videos: await buildVideoMap(siteRoot),
+        widgets
+      };
       const bannerHtml = await extractPostBanner(parsed.ast, ctx);
       const bodyHtml = await renderPostHtml(parsed.ast, ctx);
 

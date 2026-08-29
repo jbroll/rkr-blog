@@ -71,6 +71,7 @@ More prose.
   const { ast } = parsePost(body);
   const serverHtml = await renderPostHtml(ast, {
     images: await buildImageMap(root, ast),
+    videos: new Map(),
     widgets: registry()
   });
   const clientHtml = await renderPostHtml(ast, {
@@ -78,6 +79,7 @@ More prose.
       decode: async () => ({ width: 900, height: 300 }),
       toUrl: () => 'blob:x'
     }),
+    videos: new Map(),
     widgets: registry()
   });
 

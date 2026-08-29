@@ -32,7 +32,7 @@ import { parse as yamlParse } from 'yaml';
 
 import type { ImageMap } from './image-map.ts';
 import { safeLinkUrl } from './safe-url.ts';
-import type { DirectiveNode, WidgetRegistry } from './widgets.ts';
+import type { DirectiveNode, VideoMapView, WidgetRegistry } from './widgets.ts';
 
 export interface PostFrontmatter {
   title: string;
@@ -53,6 +53,7 @@ export interface ParsedPost {
 
 export interface RenderCtx {
   images: ImageMap;
+  videos: VideoMapView;
   widgets: WidgetRegistry;
 }
 

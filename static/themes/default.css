@@ -766,6 +766,35 @@ body > .rkr-figure:first-child {
 .rkr-fit-cover .rkr-figure-cell img { object-fit: cover; }
 .rkr-fit-contain .rkr-figure-cell img { object-fit: contain; }
 
+/* ---- ::video widget (video spec §5) ------------------------------- */
+/* One self-hosted mp4 per ::video. The wrapper reserves the source
+   aspect ratio (set inline as --rkr-video-aspect) so layout doesn't
+   shift when the player metadata arrives. Placement reuses the shared
+   .rkr-justify-* block rules below — this section must stay before
+   them so the justify margins win (same ordering trick as .rkr-figure). */
+
+.rkr-video {
+  margin: var(--rkr-figure-margin) auto;
+}
+.rkr-video-wrapper {
+  aspect-ratio: var(--rkr-video-aspect, 16/9);
+  overflow: hidden;
+  border-radius: var(--rkr-radius);
+  background: var(--rkr-rule);
+}
+.rkr-video-wrapper video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.rkr-video-caption {
+  font-family: var(--rkr-display-font);
+  font-size: 0.875rem;
+  color: var(--rkr-muted);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
 /* Block placement (mirrors rkr-pos-* but renamed per spec). */
 .rkr-justify-center {
   width: 100%;

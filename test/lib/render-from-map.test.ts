@@ -36,7 +36,7 @@ function mapWith(key: string): ImageMap {
 function ctx(images: ImageMap) {
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
-  return { images, widgets };
+  return { images, videos: new Map(), widgets };
 }
 
 const POST = (ids: string) => `---
