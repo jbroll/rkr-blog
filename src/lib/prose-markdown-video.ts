@@ -55,6 +55,8 @@ export function emitVideo(attrs: Record<string, unknown>): string {
 
   if (attrs.controls === false) parts.push('controls=false');
   if (attrs.autoplay === true) parts.push('autoplay');
+  if (attrs.muted === true) parts.push('muted');
+  if (attrs.loop === true) parts.push('loop');
 
   return `::video{${parts.join(' ')}}`;
 }
@@ -79,7 +81,9 @@ export function parseVideoToEditorNode(
       width: attrs.width ?? '',
       justify: attrs.justify ?? 'center',
       controls: attrs.controls !== 'false',
-      autoplay: attrs.autoplay === '' || attrs.autoplay === 'true' || attrs.autoplay === '1'
+      autoplay: attrs.autoplay === '' || attrs.autoplay === 'true' || attrs.autoplay === '1',
+      muted: attrs.muted === '' || attrs.muted === 'true' || attrs.muted === '1',
+      loop: attrs.loop === '' || attrs.loop === 'true' || attrs.loop === '1'
     }
   };
 }

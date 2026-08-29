@@ -19,6 +19,8 @@ export interface VideoNodeAttrs {
   justify: string | null;
   controls: boolean;
   autoplay: boolean;
+  muted: boolean;
+  loop: boolean;
 }
 
 interface TrimOp {
@@ -42,7 +44,9 @@ export const VideoNode = Node.create({
       width: { default: null },
       justify: { default: null },
       controls: { default: true },
-      autoplay: { default: false }
+      autoplay: { default: false },
+      muted: { default: false },
+      loop: { default: false }
     };
   },
   parseHTML() {

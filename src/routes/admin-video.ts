@@ -6,6 +6,7 @@ import fs from 'node:fs';
 
 import type { FastifyInstance } from 'fastify';
 
+import { resolveVideoCaps } from '../lib/config.ts';
 import { ingestVideoStream, VideoCapError, VideoProbeError } from '../lib/video.ts';
 import { renderVideoDerivative, videoCachePaths } from '../lib/video-render.ts';
 import { readVideoSidecar, videoSidecarPath, writeVideoSidecar } from '../lib/video-sidecar.ts';
@@ -34,16 +35,20 @@ export function registerAdminVideoRoutes(
       const result = await ingestVideoStream({
         stream: part.file,
         siteRoot,
-        source: { kind: 'upload', originalName: part.filename ?? '' }
+        source: { kind: 'upload', originalName: part.filename ?? '' },
+        caps: resolveVideoCaps(siteRoot)
       });
 
       // @fastify/multipart sets file.truncated when the server-level size
       // limit was hit mid-stream. ingestVideoStream already wrote the
-      // partial bytes + a sidecar; unlink both (same rationale as the
-      // image path — the truncated bytes hash to an orphaned id).
+      // partial bytes + possibly a sidecar. Only delete files we just
+      // created; if the upload deduplicated against an existing id, leave
+      // the existing original and sidecar untouched.
       if (part.file.truncated) {
-        await fs.promises.unlink(result.path).catch(() => {});
-        await fs.promises.unlink(videoSidecarPath(siteRoot, result.id)).catch(() => {});
+        if (!result.deduplicated) {
+          await fs.promises.unlink(result.path).catch(() => {});
+          await fs.promises.unlink(videoSidecarPath(siteRoot, result.id)).catch(() => {});
+        }
         return reply.code(413).send({ error: 'file too large' });
       }
 

@@ -122,7 +122,11 @@ export async function ingestVideoStream({
   source,
   caps
 }: IngestVideoArgs): Promise<IngestVideoResult> {
-  const limits = { ...DEFAULT_VIDEO_CAPS, ...(caps ?? {}) };
+  const limits: Required<VideoCaps> = {
+    maxBytes: caps?.maxBytes ?? DEFAULT_VIDEO_CAPS.maxBytes,
+    maxDurationMs: caps?.maxDurationMs ?? DEFAULT_VIDEO_CAPS.maxDurationMs,
+    maxWidth: caps?.maxWidth ?? DEFAULT_VIDEO_CAPS.maxWidth
+  };
   const tmpDir = path.join(siteRoot, 'originals', 'videos', '.tmp');
   await fs.promises.mkdir(tmpDir, { recursive: true });
 
