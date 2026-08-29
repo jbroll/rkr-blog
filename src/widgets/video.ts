@@ -32,7 +32,7 @@ export const variants: VariantSpec[] = [{ w: 1920, formats: ['mp4'] }];
 export const poster = { w: 640, format: 'jpg' };
 export const fallback: FallbackSpec = { w: 640, format: 'jpg', quality: 85 };
 
-function render(node: DirectiveNode, ctx: WidgetCtx): string {
+async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
   const v = validateVideoAttrs(node.attributes ?? {});
   if (!v.ok) return `<!-- invalid video widget: ${v.error} -->`;
   const a = v.attrs;
@@ -51,7 +51,7 @@ function render(node: DirectiveNode, ctx: WidgetCtx): string {
   }
 
   const posterTimeMs = a.poster ?? src.sidecar.poster.timeMs;
-  const { videoUrl, posterUrl } = src.urlFor(ops, posterTimeMs);
+  const { videoUrl, posterUrl } = await src.urlFor(ops, posterTimeMs);
 
   // Inline is a figure concept (text-flow <span>); a video can't sit in
   // text flow, so it degrades to the centered block placement.

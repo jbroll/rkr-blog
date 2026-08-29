@@ -19,7 +19,7 @@ interface VideoSourceView {
   urlFor(
     ops: ReadonlyArray<{ kind: 'trim'; startMs: number; endMs: number }>,
     posterTimeMs: number
-  ): { videoUrl: string; posterUrl: string };
+  ): Promise<{ videoUrl: string; posterUrl: string }>;
 }
 
 export type VideoMapView = ReadonlyMap<string, VideoSourceView>;

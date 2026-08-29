@@ -60,7 +60,7 @@ test('buildVideoMap reads sidecars/videos and exposes dimensions + urlFor', asyn
   assert.equal(src.sidecar.original, HEX64);
   assert.deepEqual(videoDimensions(src.sidecar), { width: 640, height: 480 });
 
-  const urls = src.urlFor([], 1000);
+  const urls = await src.urlFor([], 1000);
   assert.match(urls.videoUrl, new RegExp(`^/video/${HEX64}\\.[0-9a-f]{12}\\.mp4$`));
   assert.match(urls.posterUrl, new RegExp(`^/video/poster/${HEX64}\\.[0-9a-f]{12}\\.jpg$`));
 });
@@ -89,8 +89,8 @@ test('buildVideoMap urlFor reflects ops in the ophash', async (t) => {
   const src = (await buildVideoMap(root)).get(HEX64);
   assert.ok(src);
 
-  const plain = src.urlFor([], 1000);
-  const trimmed = src.urlFor([{ kind: 'trim', startMs: 0, endMs: 5000 }], 1000);
+  const plain = await src.urlFor([], 1000);
+  const trimmed = await src.urlFor([{ kind: 'trim', startMs: 0, endMs: 5000 }], 1000);
   assert.notEqual(trimmed.videoUrl, plain.videoUrl);
   assert.notEqual(trimmed.posterUrl, plain.posterUrl);
 });
@@ -102,7 +102,7 @@ test('buildVideoMap urlFor hashes match the render cache filenames', async (t) =
   assert.ok(src);
 
   const ops: VideoOp[] = [{ kind: 'trim', startMs: 0, endMs: 5000 }];
-  const urls = src.urlFor(ops, 1234);
+  const urls = await src.urlFor(ops, 1234);
   const cachePaths = videoCachePaths(root, HEX64, ops, 1234);
   assert.equal(urls.videoUrl, `/video/${path.basename(cachePaths.videoPath)}`);
   assert.equal(urls.posterUrl, `/video/poster/${path.basename(cachePaths.posterPath)}`);

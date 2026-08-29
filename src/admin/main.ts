@@ -20,6 +20,7 @@ import { mountMatrixControl } from './matrix-control';
 import { initPageTitle } from './page-title.ts';
 import { startOfflineInfrastructure } from './startup';
 import { mountToolbar } from './toolbar';
+import { VideoNode } from './video-node';
 
 function mount(): void {
   // Mount inside <article> so site.css prose typography applies; the
@@ -85,7 +86,7 @@ function mount(): void {
   // through makeDropHandlers' `() => editor` closure.
   const editor: Editor = new Editor({
     element: root,
-    extensions: [StarterKit, FigureNode],
+    extensions: [StarterKit, FigureNode, VideoNode],
     content: '<p></p>',
     autofocus: 'end',
     editorProps: makeDropHandlers(() => editor)

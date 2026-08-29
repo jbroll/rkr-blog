@@ -19,7 +19,7 @@ export interface VideoSource {
   height: number;
   durationMs: number;
   /** Public URLs for the current ops+poster time. */
-  urlFor(ops: VideoOp[], posterTimeMs: number): { videoUrl: string; posterUrl: string };
+  urlFor(ops: VideoOp[], posterTimeMs: number): Promise<{ videoUrl: string; posterUrl: string }>;
 }
 
 /** Keyed by the full 64-hex id (the ::video widget rejects prefixes). */
@@ -54,7 +54,7 @@ function makeVideoSource(id: string, sidecar: VideoSidecar): VideoSource {
     width,
     height,
     durationMs: sidecar.source.durationMs,
-    urlFor: (ops, posterTimeMs) => {
+    urlFor: async (ops, posterTimeMs) => {
       const trimOp = (ops as VideoOp[]).find((op) => op.kind === 'trim');
       const posterHashTime =
         trimOp !== undefined

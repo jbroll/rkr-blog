@@ -14,6 +14,7 @@ import { buildImageMapFromOpfs } from './image-map-opfs.ts';
 import { listDir } from './opfs.ts';
 import { isDraftMetaFile, OPFS_DIRS, readRoot } from './opfs-schema.ts';
 import { captureSiteSnapshot, readSiteSnapshot, type SiteSnapshot } from './site-snapshot.ts';
+import { buildVideoMapFromOpfs } from './video-map-opfs.ts';
 
 const ASSET_BASE = '/admin/static';
 
@@ -54,9 +55,8 @@ export async function renderPreviewDocument(input: PreviewInput): Promise<string
     `---\ntitle: ${JSON.stringify(input.title)}\nslug: ${JSON.stringify(input.slug)}\n---\n\n${input.markdown}`
   );
   const images = await buildImageMapFromOpfs(parsed.ast);
-  // Video drafts preview with an empty map until the OPFS video map lands
-  // (video spec Task 8); ::video renders its missing-video comment.
-  const bodyHtml = await renderPostHtml(parsed.ast, { images, videos: new Map(), widgets });
+  const videos = await buildVideoMapFromOpfs();
+  const bodyHtml = await renderPostHtml(parsed.ast, { images, videos, widgets });
 
   return renderPostPage({
     site: {

@@ -45,6 +45,7 @@ import { registerAdminSettingsRoutes } from './admin-settings.ts';
 import { registerShellRoutes } from './admin-shell.ts';
 import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 import { registerAdminTagsRoute } from './admin-tags.ts';
+import { registerAdminVideoRoutes } from './admin-video.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -410,6 +411,10 @@ export default async function adminRoutes(
     urlFetcher,
     invalidateSidecarListCache
   });
+
+  // Video ingest + trim live in their own module (admin.ts is at its
+  // size cap); same guard/auth wiring as the image routes above.
+  registerAdminVideoRoutes(fastify, { siteRoot, guard });
 
   // POST /admin/reset — bearer-only nuclear reset for the demo.
   //
