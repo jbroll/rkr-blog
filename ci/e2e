@@ -21,6 +21,11 @@ trap free_e2e_port EXIT
 npm install
 npx playwright install chromium
 
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+  echo "ffmpeg and ffprobe are required for video e2e specs" >&2
+  exit 1
+fi
+
 npm run --silent build:packages
 npm run --silent build:admin
 npm run --silent build:site
