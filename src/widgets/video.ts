@@ -50,7 +50,7 @@ async function render(node: DirectiveNode, ctx: WidgetCtx): Promise<string> {
     ops = [{ kind: 'trim', startMs: a.trim.startMs, endMs: a.trim.endMs }];
   }
 
-  const posterTimeMs = a.poster ?? src.sidecar.poster.timeMs;
+  const posterTimeMs = a.poster !== null ? a.poster : src.sidecar.poster.timeMs;
   const { videoUrl, posterUrl } = await src.urlFor(ops, posterTimeMs);
 
   // Inline is a figure concept (text-flow <span>); a video can't sit in

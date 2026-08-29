@@ -183,6 +183,17 @@ test('renders a valid trim and poster override into different derivative URLs', 
   assert.match(trimmed, /data-duration="60000"/);
 });
 
+test('poster="0" is honored (0 is valid, not a fallback trigger)', async (t) => {
+  const videos = await mapWith(t, validSidecar());
+  const plain = await render({ ids: HEX64 }, videos);
+  const zero = await render({ ids: HEX64, poster: '0' }, videos);
+
+  // The sidecar default poster.timeMs is 1000; an explicit poster="0"
+  // must produce a different (immutable) poster URL.
+  assert.notEqual(zero, plain);
+  assert.match(zero, /poster="\/video\/poster\/[0-9a-f]{64}\.[0-9a-f]{12}\.jpg"/);
+});
+
 test('trim beyond duration -> invalid video widget comment', async (t) => {
   const videos = await mapWith(t, validSidecar());
   const html = await render({ ids: HEX64, trim: '2-100' }, videos);
