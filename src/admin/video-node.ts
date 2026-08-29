@@ -188,18 +188,51 @@ function buildPopover(
   captionRow.appendChild(caption);
   popover.appendChild(captionRow);
 
-  const commit = (): void => {
-    const next: Record<string, unknown> = {
-      trim: joinTrim(inputs.trimStart?.value ?? '', inputs.trimEnd?.value ?? ''),
-      poster: inputs.poster?.value ?? '',
-      caption: caption.value
-    };
-    updateAttributes(next);
+  const commit = async (): Promise<void> => {
+    const trim = joinTrim(inputs.trimStart?.value ?? '', inputs.trimEnd?.value ?? '');
+    const poster = inputs.poster?.value ?? '';
+    // Persist trim/poster to the sidecar so public URLs stay valid.
+    const ids = attrs.ids ?? '';
+    if (/^[0-9a-f]{64}$/.test(ids)) {
+      const body = trimToTrimBody(trim, poster);
+      if (body) {
+        try {
+          await fetch(`/admin/video/${ids}/trim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        } catch {
+          // Network failure: still update the node attrs; the public
+          // widget will show a missing-video comment until the sidecar
+          // catches up.
+        }
+      }
+    }
+    updateAttributes({ trim, poster, caption: caption.value });
   };
-  for (const input of Object.values(inputs)) input.addEventListener('change', commit);
-  caption.addEventListener('change', commit);
+  for (const input of Object.values(inputs)) input.addEventListener('change', () => void commit());
+  caption.addEventListener('change', () => void commit());
 
   return popover;
+}
+
+function trimToTrimBody(
+  trim: string,
+  poster: string
+): { startMs: number; endMs: number; posterTimeMs: number } | null {
+  const m = /^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/.exec(trim.trim());
+  if (!m) return null;
+  const start = Number(m[1]);
+  const end = Number(m[2]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
+  const posterTime = poster.trim() === '' ? start : Number(poster);
+  if (!Number.isFinite(posterTime) || posterTime < 0) return null;
+  return {
+    startMs: Math.round(start * 1000),
+    endMs: Math.round(end * 1000),
+    posterTimeMs: Math.round(posterTime * 1000)
+  };
 }
 
 function splitTrim(trim: string): [string, string] {

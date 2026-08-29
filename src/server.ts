@@ -47,7 +47,7 @@ import integrationsOnedriveRoutes, {
 import publicRoutes from './routes/public.ts';
 import { renderNotFoundPage } from './templates/not-found.ts';
 
-const UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MiB cap on a single file
+const UPLOAD_LIMIT_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB hard ceiling; per-route caps enforce the real limit
 
 export interface BuildAppOpts {
   logger?: FastifyServerOptions['logger'];
