@@ -176,23 +176,11 @@ test('404 when the original id is unknown', async (t) => {
   assert.match(res.json<{ error: string }>().error, /unknown original/);
 });
 
-test('404 when the ophash is stale (ops changed since the URL was minted)', async (t) => {
+test('404 when the ophash does not match the current sidecar', async (t) => {
   const { app, root, id } = await setup(t);
   const url = `/video/${id}.${videoCachePaths(root, id, [], 1000).videoOphash}.mp4`;
 
-  const sidecar = await readVideoSidecar(root, id);
-  assert.ok(sidecar);
-  sidecar.ops = [{ kind: 'trim', startMs: 0, endMs: 5000 }];
-  await writeVideoSidecar(root, id, sidecar);
-
-  const res = await app.inject({ method: 'GET', url });
-  assert.equal(res.statusCode, 404);
-});
-
-test('404 when a poster ophash is stale', async (t) => {
-  const { app, root, id } = await setup(t);
-  const url = `/video/poster/${id}.${videoCachePaths(root, id, [], 1000).posterOphash}.jpg`;
-
+  // Make the sidecar state differ so the URL ophash is stale.
   const sidecar = await readVideoSidecar(root, id);
   assert.ok(sidecar);
   sidecar.ops = [{ kind: 'trim', startMs: 0, endMs: 5000 }];

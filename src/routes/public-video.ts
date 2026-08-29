@@ -40,9 +40,7 @@ export interface PublicVideoRoutesOpts {
   renderBudgetMs: number;
 }
 
-/** True when `ophash` is the current cache identity for the sidecar's
- * ops+poster. Video and poster use different variant/output hashes, so
- * a URL for one never validates against the other. */
+/** True when `ophash` matches the current sidecar state. */
 function findVideoMatch(
   siteRoot: string,
   sidecar: VideoSidecar,
