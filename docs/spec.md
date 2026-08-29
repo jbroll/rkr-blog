@@ -54,6 +54,9 @@ The deployed application owns a tree of state outside the codebase:
 | bakes | one client-baked post-ops image per id | optional; reproducible from original + sidecar |
 | derivatives cache | per-format, per-variant rendered images | reproducible; safe to delete |
 | posts | one markdown file per post | canonical content source |
+| originals/videos | one master file per video, content-addressed by sha256 | write-once; re-importing identical bytes is a no-op |
+| sidecars/videos | one JSON per video; trim/poster editing state | mutable; primary truth for trim op + poster time |
+| video derivatives cache | per-derivative normalized mp4 + jpeg poster | reproducible; safe to delete |
 | index DB | post index, jobs, sessions, OAuth | reproducible from posts (index) + filesystem (jobs); sessions and OAuth tokens are not reproducible |
 
 Backup set: originals, sidecars, posts, index DB. Skip caches and
@@ -422,6 +425,38 @@ atomic-rename into place → write sidecar with `source.kind` set.
 Provenance is recorded but the original is treated identically
 regardless of source.
 
+## 10a. Video (isolated v1)
+
+A single-file `::video` widget mirrors the image pipeline but stays
+isolated from `figure.ts`/`lightbox`. One normalized mp4 per logical
+video (no HLS/DASH, no adaptive renditions); a jpeg poster; non-
+destructive trim.
+
+- **Ingest** (`POST /admin/upload/video`): stream → sha256 → ffprobe →
+  cap checks (bytes/duration/width from `config/site.json#videoCaps`,
+  defaults 500 MiB / 300 s / 1920w) → dedupe into
+  `originals/videos/<aa>/<bb>/<id>.<ext>` → `sidecars/videos/<id>.json`
+  → eager transcode + poster.
+- **Sidecar** (`sidecars/videos/<id>.json`): version 1, source probe
+  metadata, `ops: [{kind:"trim", startMs, endMs}]`, `poster.timeMs`.
+  Trimming rewrites the sidecar, never the original.
+- **Transcode** (`renderVideoDerivative`): ffmpeg h264/aac yuv420p
+  `+faststart`, max 1920w, preset fast CRF 23 → `cache/video/<id>.<ophash>.mp4`;
+  poster jpeg from the transcoded file at `posterTimeMs` (relative to
+  trim start) → `cache/video/<id>.<ophash>.jpg`. Poster ophash includes
+  the poster time so a `poster=` change invalidates the immutable URL.
+- **Serving** (`GET /video/:filename`, `GET /video/poster/:filename`):
+  Range/206 + 416, `Cache-Control: immutable`, render within budget with
+  202 + client retry on timeout (mirrors `/img`). Apache rewrites
+  `/video/*` hits straight to `/cache/video`.
+- **Widget**: `::video{ids="<64-hex>" trim="2-45.5" poster="1.5" controls
+  autoplay muted loop width=... caption="..."}`. `autoplay` forces
+  `muted`+`playsinline`. Unknown id renders a comment. Missing/invalid
+  trim/poster render a comment.
+- **Editor**: TipTap `video` node with a trim/poster/caption popover that
+  persists trim/poster to the sidecar via `POST /admin/video/:id/trim`.
+  Round-trips through `::video` markdown.
+
 OAuth tokens are stored encrypted at rest with a server-held key.
 
 ## 11. HTTP routes
@@ -438,6 +473,8 @@ GET    /about                         about page
 GET    /search                        full-text search page
 GET    /:slug                         rendered single post
 GET    /img/:filename                 derivative image (cache-miss handler)
+GET    /video/:filename               derivative mp4, Range/206-capable (cache-miss handler)
+GET    /video/poster/:filename        derivative jpeg poster (cache-miss handler)
 POST   /:slug/comments                anonymous reader comment submission
 
 # Liveness — server.ts
@@ -457,6 +494,8 @@ GET    /admin/view/:slug              same shell; boots the published-form previ
                                        the editor's current buffer, so online and offline would disagree
 POST   /admin/posts                   save markdown (insert or overwrite by slug)
 POST   /admin/upload                  multipart, streams to originals
+POST   /admin/upload/video            multipart video ingest → probe + transcode + poster
+POST   /admin/video/:id/trim          non-destructive trim + poster time (rewrites sidecar only)
 POST   /admin/reset                   wipe posts/images/cache (bearer)
 
 # Admin posts index — admin-posts.ts

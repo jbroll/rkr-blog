@@ -73,14 +73,21 @@ is not.
 $SITE_ROOT/
   originals/
     ab/cd/abcd1234ef….jpg              # 2/2 prefix sharding by id
+    videos/
+      ab/cd/abcd1234ef….mp4            # video masters (same sharding)
   sidecars/
     abcd1234ef….json
+    videos/
+      abcd1234ef….json                 # video sidecar (trim/poster state)
   bakes/
     ab/cd/abcd1234ef….webp             # always WebP at q=0.95
   cache/
     img/                               # served directly by Apache
       abcd1234ef….<ophash>.webp
       abcd1234ef….<ophash>.avif
+    video/                             # served directly by Apache
+      abcd1234ef….<ophash>.mp4
+      abcd1234ef….<ophash>.jpg         # poster
   content/
     posts/
       2026-05-06-slug.md
@@ -236,6 +243,51 @@ path: one slower request at most, always correct content.
 25 MB (`BAKE_MAX_BYTES`); WebP at q=0.95 for a 50 MP source is ~5–10 MB so
 real bakes are well under.
 
+## 5a. Video pipeline internals
+
+Video is an isolated parallel to the image pipeline — `::video` never
+mixes into `figure.ts`/`ImageMap`/`lightbox`.
+
+- **Ingest** (`src/lib/video.ts:ingestVideoStream`): hash-while-stream
+  to a tmp file, `ffprobe` for dimensions/duration/codecs, cap checks
+  against `resolveVideoCaps(siteRoot)` (`config/site.json#videoCaps`),
+  dedupe by sha256 into `originals/videos/<aa>/<bb>/<id>.<ext>`, write
+  `sidecars/videos/<id>.json` via `src/lib/video-sidecar.ts`.
+- **Sidecar** (`video-sidecar.ts`): version 1, source probe metadata,
+  `ops` (trim), `poster.timeMs`. Atomic write, mirrors `src/lib/sidecar.ts`.
+- **ffmpeg wrapper** (`src/lib/video-ffmpeg.ts`): `buildFfmpegArgs`
+  (h264/aac, yuv420p, `+faststart`, `-vf scale='min(1920,iw)':-2`),
+  `buildPosterArgs` (`-vframes 1 -q:v 2`), `probeVideo` (10 s timeout),
+  `runFfmpeg` (stderr capture, kill-on-timeout, ENOENT error).
+- **Render** (`src/lib/video-render.ts:renderVideoDerivative`): cache key
+  via `cacheKey({originalId, ops, variant, output})` — video
+  `{w:1920,mp4}`, poster `{w:640,jpg,posterTimeMs}` (poster time is in
+  the hash so a `poster=` edit invalidates the immutable URL). Atomic
+  tmp+rename; inflight dedup + `Semaphore(1)`.
+- **Serve** (`src/routes/public-video.ts`): regex-validates
+  `<id>.<ophash>.mp4|jpg`, 404 on stale ophash, 422 under 16 px, render
+  within `renderBudgetMs` → 202 + enqueue on timeout, Range/206 + 416
+  via `fs.createReadStream(start,end)`, `Cache-Control: immutable`,
+  600/min/IP.
+- **Client retry** (`src/site/video-retry.ts`): clone of `img-retry.ts`
+  for `<video>` — backoff `[500,1500,3000,6000,10000]`, `rkr_retry` param,
+  abort on tab hidden, swap `src` on success.
+- **Widget** (`src/widgets/video.ts` + `video-attrs.ts`): parses
+  `ids/trim/poster/controls/autoplay/muted/loop/width/justify/caption`,
+  looks the id up in `VideoMap` (`src/lib/video-map-fs.ts`, built from
+  `sidecars/videos/*.json`), mints URLs via `urlFor`, emits
+  `<figure class="rkr-video">` with `--rkr-video-aspect` reservation.
+- **Admin** (`src/routes/admin-video.ts`): `POST /admin/upload/video`
+  (ingest → eager transcode → URLs; 413 on cap, 422 on probe failure),
+  `POST /admin/video/:id/trim` (validates, rewrites sidecar ops/poster,
+  clears redoStack). TipTap `video` node (`src/admin/video-node.ts`)
+  renders a preview + trim/poster/caption popover that persists to the
+  sidecar via the trim endpoint. `::video` round-trip lives in
+  `src/lib/prose-markdown-video.ts`.
+- **OPFS preview map** (`src/admin/video-map-opfs.ts`): client-side copy
+  of `video-map-fs.ts` computing the same ophashes from the OPFS
+  `sidecars/videos` tree.
+
 ## 6. Job worker lifecycle
 
 One worker codepath (`workQueue` in `src/lib/jobs.ts`) runs in two
@@ -275,7 +327,7 @@ constructing the app (currently only used by tests).
 
 The vhost template lives at `deploy/apache.conf`. Key behaviours:
 
-- `mod_rewrite` checks whether the requested `/img/*` path exists on disk; if so it rewrites directly to the `cache/img/` file, bypassing Node entirely.
+- `mod_rewrite` checks whether the requested `/img/*` path exists on disk; if so it rewrites directly to the `cache/img/` file, bypassing Node entirely. `/video/*.mp4` and `/video/poster/*.jpg` do the same against `cache/video/`.
 - `/admin/static/*` is aliased to the same directory as `/static/*`. The
   admin service worker's scope is `/admin/`, so the shell's assets have
   to be reachable inside it; both prefixes serve identical bytes.
