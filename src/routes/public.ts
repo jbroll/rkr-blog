@@ -181,7 +181,7 @@ export default async function publicRoutes(
             const dir = figureNode as DirectiveNode;
             indexBannerHtml = await widgets.dispatch('figure', dir, {
               images: await buildImageMap(siteRoot, dir),
-              videos: await buildVideoMap(siteRoot),
+              videos: new Map(),
               widgets
             });
           }
@@ -199,7 +199,7 @@ export default async function publicRoutes(
         };
         indexBannerHtml = await widgets.dispatch('figure', bannerNode, {
           images: await buildImageMap(siteRoot, bannerNode),
-          videos: await buildVideoMap(siteRoot),
+          videos: new Map(),
           widgets
         });
       }
