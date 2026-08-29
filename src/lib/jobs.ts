@@ -16,6 +16,8 @@ import { envMailer } from './mailer.ts';
 import { makeNotifyHandler } from './notify-handler.ts';
 import type { DerivativeArgs } from './render.ts';
 import { renderDerivative } from './render.ts';
+import type { VideoDerivativeArgs } from './video-render.ts';
+import { renderVideoDerivative } from './video-render.ts';
 
 // Process-local wakeup signal. workQueue() listens for 'enqueued'.
 // One emitter per process is sufficient: SQLite is the source of truth;
@@ -45,7 +47,7 @@ export function liveRendersInFlight(): boolean {
   return liveInflight > 0;
 }
 
-type JobKind = 'render' | 'classify' | 'notify';
+type JobKind = 'render' | 'renderVideo' | 'classify' | 'notify';
 
 export interface RenderPayload extends DerivativeArgs {}
 
@@ -182,8 +184,15 @@ export const renderHandler: JobHandler<RenderPayload> = async (payload, ctx) => 
   await renderDerivative({ originalId, ops, variant, output, siteRoot: ctx.siteRoot });
 };
 
+/** Default handler for `kind: 'renderVideo'` jobs. Calls renderVideoDerivative. */
+export const videoRenderHandler: JobHandler<VideoDerivativeArgs> = async (payload, ctx) => {
+  const { originalId, ops, posterTimeMs } = payload;
+  await renderVideoDerivative({ originalId, ops, posterTimeMs, siteRoot: ctx.siteRoot });
+};
+
 const DEFAULT_HANDLERS: JobHandlerMap = {
   render: renderHandler as JobHandler<unknown>,
+  renderVideo: videoRenderHandler as JobHandler<unknown>,
   classify: makeClassifyHandler(envClassifier(), enqueue) as JobHandler<unknown>,
   notify: makeNotifyHandler(envMailer()) as JobHandler<unknown>
 };

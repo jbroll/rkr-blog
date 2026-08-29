@@ -100,6 +100,10 @@ test('GET /:slug includes the lightbox script tag', async (t) => {
     res.body,
     /<script type="module" src="\/static\/site\/img-retry\.js(\?v=[0-9a-f]+)?" defer>/
   );
+  assert.match(
+    res.body,
+    /<script type="module" src="\/static\/site\/video-retry\.js(\?v=[0-9a-f]+)?" defer>/
+  );
 });
 
 test('GET / does NOT include the lightbox script (no figures on index)', async (t) => {

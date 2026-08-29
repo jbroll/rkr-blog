@@ -87,6 +87,7 @@ export function renderPostPage(post: PostPageData): string {
       ? ''
       : `<script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
 <script type="module" src="${a.base}/site/img-retry.js${v}" defer></script>
+<script type="module" src="${a.base}/site/video-retry.js${v}" defer></script>
 <script type="module" src="${a.base}/site/lightbox.js${v}" defer></script>
 <script type="module" src="${a.base}/site/carousel.js${v}" defer></script>
 <script type="module" src="${a.base}/site/copy-link.js${v}" defer></script>

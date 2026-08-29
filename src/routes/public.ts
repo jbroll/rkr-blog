@@ -40,6 +40,7 @@ import { renderSearchPage, type SearchHit } from '../templates/search.ts';
 import figureWidget from '../widgets/figure.ts';
 import { registerPublicCommentRoutes } from './public-comments.ts';
 import { registerPublicImgRoutes } from './public-img.ts';
+import { registerPublicVideoRoutes } from './public-video.ts';
 
 export interface PublicRoutesOpts {
   siteRoot: string;
@@ -125,6 +126,7 @@ export default async function publicRoutes(
   widgets.register(figureWidget);
   registerPublicCommentRoutes(fastify, { db });
   registerPublicImgRoutes(fastify, { siteRoot, db, renderBudgetMs });
+  registerPublicVideoRoutes(fastify, { siteRoot, db, renderBudgetMs });
 
   // ---- index: GET / -----------------------------------------------------
 
