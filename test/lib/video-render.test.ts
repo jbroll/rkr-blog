@@ -156,11 +156,11 @@ async function waitFor(pred: () => boolean, timeoutMs = 2000): Promise<void> {
 
 // ---- hash stability -----------------------------------------------------
 
-test('videoCachePaths: ophashes are stable; trim changes them; poster time is not part of the key', () => {
+test('videoCachePaths: ophashes are stable; trim changes them; poster time changes poster ophash only', () => {
   const p1 = videoCachePaths('/site', HEX64, [], 1000);
   const p2 = videoCachePaths('/site', HEX64, [], 5000);
   assert.equal(p1.videoOphash, p2.videoOphash);
-  assert.equal(p1.posterOphash, p2.posterOphash);
+  assert.notEqual(p1.posterOphash, p2.posterOphash);
   assert.match(p1.videoOphash, /^[0-9a-f]{12}$/);
   assert.match(p1.posterOphash, /^[0-9a-f]{12}$/);
   assert.match(p1.videoPath, new RegExp(`^/site/cache/video/${HEX64}\\.[0-9a-f]{12}\\.mp4$`));
@@ -175,7 +175,7 @@ test('videoCachePaths: ophashes are stable; trim changes them; poster time is no
 test('videoFilename names cache files <id>.<oph>.<ext>', () => {
   const p = videoCachePaths('/site', HEX64, [], 1000);
   assert.equal(videoFilename(HEX64, [], false), `${HEX64}.${p.videoOphash}.mp4`);
-  assert.equal(videoFilename(HEX64, [], true), `${HEX64}.${p.posterOphash}.jpg`);
+  assert.equal(videoFilename(HEX64, [], true, 1000), `${HEX64}.${p.posterOphash}.jpg`);
 });
 
 // ---- render flow --------------------------------------------------------
@@ -243,7 +243,7 @@ test('renderVideoDerivative clamps posterTimeMs into [startMs, endMs)', async (t
 
   const trim: VideoOp[] = [{ kind: 'trim', startMs: 2000, endMs: 4550 }];
 
-  // Above end -> 4549ms (endMs exclusive); below start -> 2000ms.
+  // Above end -> 4549ms absolute -> 2.549s relative to trim start; below start -> 0s relative.
   await renderVideoDerivative({
     originalId: HEX64,
     ops: trim,
@@ -252,7 +252,7 @@ test('renderVideoDerivative clamps posterTimeMs into [startMs, endMs)', async (t
   });
   let invocations = readInvocations(argsFile);
   let posterArgs = invocations[1] ?? [];
-  assert.equal(posterArgs[posterArgs.indexOf('-ss') + 1], '4.549');
+  assert.equal(posterArgs[posterArgs.indexOf('-ss') + 1], '2.549');
 
   await renderVideoDerivative({
     originalId: HEX64,
@@ -263,9 +263,9 @@ test('renderVideoDerivative clamps posterTimeMs into [startMs, endMs)', async (t
   });
   invocations = readInvocations(argsFile);
   posterArgs = invocations[3] ?? [];
-  assert.equal(posterArgs[posterArgs.indexOf('-ss') + 1], '2');
+  assert.equal(posterArgs[posterArgs.indexOf('-ss') + 1], '0');
 
-  // NaN falls back to the window start.
+  // NaN falls back to the window start -> 0s relative.
   await renderVideoDerivative({
     originalId: HEX64,
     ops: trim,
@@ -275,7 +275,7 @@ test('renderVideoDerivative clamps posterTimeMs into [startMs, endMs)', async (t
   });
   invocations = readInvocations(argsFile);
   posterArgs = invocations[5] ?? [];
-  assert.equal(posterArgs[posterArgs.indexOf('-ss') + 1], '2');
+  assert.equal(posterArgs[posterArgs.indexOf('-ss') + 1], '0');
 });
 
 test('renderVideoDerivative clamps to the sidecar duration when untrimmed and unknown sidecars to 0', async (t) => {

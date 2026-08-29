@@ -18,11 +18,7 @@ export interface VideoSource {
   width: number;
   height: number;
   durationMs: number;
-  /**
-   * Public URLs for the current ops. The poster FRAME time is accepted for
-   * interface symmetry but is not part of the ophash — the hashes match
-   * the cache filenames renderVideoDerivative writes.
-   */
+  /** Public URLs for the current ops+poster time. */
   urlFor(ops: VideoOp[], posterTimeMs: number): { videoUrl: string; posterUrl: string };
 }
 
@@ -59,6 +55,13 @@ function makeVideoSource(id: string, sidecar: VideoSidecar): VideoSource {
     height,
     durationMs: sidecar.source.durationMs,
     urlFor: (ops, posterTimeMs) => {
+      const trimOp = (ops as VideoOp[]).find((op) => op.kind === 'trim');
+      const posterHashTime =
+        trimOp !== undefined
+          ? clampPosterForHash(posterTimeMs, trimOp.startMs, trimOp.endMs)
+          : Number.isFinite(posterTimeMs)
+            ? posterTimeMs
+            : 0;
       const videoOphash = cacheKey({
         originalId: id,
         ops: ops as never,
@@ -69,7 +72,7 @@ function makeVideoSource(id: string, sidecar: VideoSidecar): VideoSource {
         originalId: id,
         ops: ops as never,
         variant: { w: POSTER_MAX_WIDTH },
-        output: { format: 'jpg' }
+        output: { format: 'jpg', posterTimeMs: posterHashTime }
       });
       return {
         videoUrl: `/video/${id}.${videoOphash}.mp4`,
@@ -77,6 +80,13 @@ function makeVideoSource(id: string, sidecar: VideoSidecar): VideoSource {
       };
     }
   };
+}
+
+function clampPosterForHash(timeMs: number, startMs: number, endMs: number): number {
+  const lo = Math.max(0, startMs);
+  const hi = Math.max(lo, endMs - 1);
+  if (!Number.isFinite(timeMs)) return lo;
+  return Math.min(Math.max(timeMs, lo), hi);
 }
 
 /** Source pixel dimensions, straight from the ingest-time probe. */

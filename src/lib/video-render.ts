@@ -4,10 +4,9 @@
 // for one derivative shares a single ffmpeg run.
 //
 // Cache identity: video ophash = cacheKey({originalId, ops,
-// variant:{w:1920}, output:{format:"mp4"}}); the poster ophash uses
-// variant:{w:640} + jpg. The poster FRAME time is a render parameter
-// (clamped into the playable window) but not part of either ophash — the
-// serving route recomputes hashes from the sidecar alone.
+// variant:{w:1920}, output:{format:"mp4"}}); the poster ophash adds the
+// clamped posterTimeMs so a poster="..." change invalidates the cache
+// under the immutable header.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -51,25 +50,35 @@ export interface VideoCachePaths {
 }
 
 /** Cache filename for one derivative: <id>.<oph>.<mp4|jpg>. */
-export function videoFilename(id: string, ops: VideoOp[], poster: boolean): string {
+export function videoFilename(
+  id: string,
+  ops: VideoOp[],
+  poster: boolean,
+  posterTimeMs?: number
+): string {
   const oph = cacheKey({
     originalId: id,
     ops: ops as never,
     variant: { w: poster ? POSTER_MAX_WIDTH : VIDEO_MAX_WIDTH },
-    output: { format: poster ? 'jpg' : 'mp4' }
+    output: poster ? { format: 'jpg', posterTimeMs } : { format: 'mp4' }
   });
   return `${id}.${oph}.${poster ? 'jpg' : 'mp4'}`;
 }
 
-/** On-disk paths and ophashes for a derivative pair under cache/video.
- * `posterTimeMs` is accepted for interface symmetry but is not part of the
- * cache identity (see the file header). */
+/** On-disk paths and ophashes for a derivative pair under cache/video. */
 export function videoCachePaths(
   siteRoot: string,
   id: string,
   ops: VideoOp[],
   posterTimeMs: number
 ): VideoCachePaths {
+  const trimOp = ops.find((op) => op.kind === 'trim');
+  const posterHashTime =
+    trimOp !== undefined
+      ? clampPosterTime(posterTimeMs, trimOp.startMs, trimOp.endMs)
+      : Number.isFinite(posterTimeMs)
+        ? posterTimeMs
+        : 0;
   const videoOphash = cacheKey({
     originalId: id,
     ops: ops as never,
@@ -80,7 +89,7 @@ export function videoCachePaths(
     originalId: id,
     ops: ops as never,
     variant: { w: POSTER_MAX_WIDTH },
-    output: { format: 'jpg' }
+    output: { format: 'jpg', posterTimeMs: posterHashTime }
   });
   return {
     videoPath: path.join(siteRoot, 'cache', 'video', `${id}.${videoOphash}.mp4`),
@@ -184,9 +193,10 @@ async function doRender(
       }),
       { timeoutMs: TRANSCODE_TIMEOUT_MS }
     );
-    // Poster comes from the transcoded mp4 so the frame matches the
-    // trimmed/clamped timeline exactly.
-    await runFfmpeg(buildPosterArgs({ input: videoTmp, timeMs: posterTimeMs, output: posterTmp }), {
+    // Poster comes from the transcoded mp4; its timeline starts at 0
+    // after the trim, so seek relative to the trim start.
+    const posterSeekMs = posterTimeMs - (trimOp?.startMs ?? 0);
+    await runFfmpeg(buildPosterArgs({ input: videoTmp, timeMs: posterSeekMs, output: posterTmp }), {
       timeoutMs: POSTER_TIMEOUT_MS
     });
     await fs.promises.rename(videoTmp, cachePaths.videoPath);
