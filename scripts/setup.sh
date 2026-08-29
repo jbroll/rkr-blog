@@ -21,6 +21,8 @@
 #   * Install OS packages. Sharp's prebuilds cover Debian / Ubuntu /
 #     macOS out of the box; on Void or musl distros, install vips
 #     manually before running this script (see Troubleshooting §9).
+#     ffmpeg + ffprobe are also OS packages — the video pipeline and
+#     the e2e suite need them (see developer-quickstart.md §1).
 
 set -euo pipefail
 

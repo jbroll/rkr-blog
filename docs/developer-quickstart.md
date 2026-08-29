@@ -17,6 +17,11 @@ For how the codebase delivers it, see [implementation.md](./implementation.md).
 - **A C toolchain** for native `sharp` builds when prebuilds are
   unavailable (musl distros, ARM variants). Debian / Ubuntu / macOS
   prebuilds resolve cleanly out of the box.
+- **ffmpeg + ffprobe** (any recent build). The video pipeline spawns
+  them for ingest probing and transcode/poster rendering, and the e2e
+  suite generates its video fixtures with them. Debian/Ubuntu:
+  `apt-get install ffmpeg`; Void: `xbps-install ffmpeg`; macOS:
+  `brew install ffmpeg`.
 
 ## 2. Initial setup
 

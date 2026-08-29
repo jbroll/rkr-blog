@@ -33,6 +33,12 @@ npm run test:e2e -- --headed   # see what's happening in chromium
 npm run test:e2e -- editor-flow.spec.ts -g "rotate"   # one test
 ```
 
+The video specs (`video-upload.spec.ts`, `public-videos.spec.ts`) generate
+their mp4 fixtures with ffmpeg at test time — **ffmpeg + ffprobe must be
+installed** or those specs fail at fixture generation (see
+developer-quickstart.md §1). Everything else in the suite runs without
+them.
+
 ---
 
 ## 1. Upstream fundamentals (per Playwright docs)

@@ -42,9 +42,10 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 
 # ca-certificates so node fetch can reach Google's JWKS (OAuth verifier),
-# the WP REST API at roll-along.rkroll.com, etc.
+# the WP REST API at roll-along.rkroll.com, etc. ffmpeg + ffprobe drive
+# the video pipeline (transcode + poster extraction + ingest probing).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates \
+      ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -85,6 +85,7 @@
           "src/cli/wp-dump.ts",
           "src/cli/reset.ts",
           "src/cli/jobs.ts",
+          "src/cli/video.ts",
           "src/cli/fix-wp-dates.ts",
           "src/cli/fix-wp-titles.ts",
           "src/cli/export.ts",

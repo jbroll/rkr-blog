@@ -9,6 +9,7 @@
 //   site-admin verify
 //   site-admin server [--port 3000]
 //   site-admin jobs failed
+//   site-admin video probe <path>
 //
 // Future subcommands (see spec.md §12 operator commands): reindex, password.
 
@@ -23,6 +24,7 @@ const COMMANDS = {
   user:              () => import('../src/cli/user.ts'),
   server:            () => import('../src/cli/server.ts'),
   jobs:              () => import('../src/cli/jobs.ts'),
+  video:             () => import('../src/cli/video.ts'),
   'import-wp':          () => import('../src/cli/import-wp.ts'),
   'fix-wp-dates':       () => import('../src/cli/fix-wp-dates.ts'),
   'fix-wp-titles':      () => import('../src/cli/fix-wp-titles.ts'),

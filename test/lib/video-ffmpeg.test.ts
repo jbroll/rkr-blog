@@ -98,6 +98,10 @@ test('buildFfmpegArgs builds the full trim+scale mp4 arg list', () => {
     '128k',
     '-movflags',
     '+faststart',
+    // Explicit muxer: the render writes to a .tmp path, so ffmpeg can't
+    // infer the format from the output extension (e2e regression).
+    '-f',
+    'mp4',
     '/tmp/out.mp4'
   ]);
 });
@@ -124,6 +128,8 @@ test('buildPosterArgs extracts a single frame at the given time', () => {
     '1',
     '-q:v',
     '2',
+    '-f',
+    'mjpeg',
     'poster.jpg'
   ]);
 });

@@ -30,7 +30,11 @@ export function buildFfmpegArgs({
   args.push('-vf', `scale='min(${maxWidth},iw)':-2:flags=lanczos`);
   args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-pix_fmt', 'yuv420p');
   args.push('-c:a', 'aac', '-b:a', '128k');
-  args.push('-movflags', '+faststart', output);
+  args.push('-movflags', '+faststart');
+  // Explicit muxer: renderVideoDerivative writes to a <name>.<rand>.tmp
+  // path, and the mp4 muxer refuses an output it can't infer from the
+  // extension. Same for the poster's mjpeg muxer below.
+  args.push('-f', 'mp4', output);
   return args;
 }
 
@@ -44,7 +48,19 @@ export function buildPosterArgs({
   timeMs: number;
   output: string;
 }): string[] {
-  return ['-ss', String(timeMs / 1000), '-i', input, '-vframes', '1', '-q:v', '2', output];
+  return [
+    '-ss',
+    String(timeMs / 1000),
+    '-i',
+    input,
+    '-vframes',
+    '1',
+    '-q:v',
+    '2',
+    '-f',
+    'mjpeg',
+    output
+  ];
 }
 
 export interface VideoProbe {
