@@ -17,6 +17,12 @@ export interface Paths {
   sidecars: string;
   cache: string;
   cacheImg: string;
+  /** Hash-addressed video originals, per-video sidecars, and the
+   * derivative cache (mp4 + jpeg poster). Isolated from the image
+   * pipeline's dirs so the two never share filenames. */
+  originalsVideo: string;
+  sidecarsVideo: string;
+  cacheVideo: string;
   content: string;
   contentPosts: string;
   data: string;
@@ -44,6 +50,10 @@ export interface SiteConfig {
    * defaults from image-constants.ts. Individual fields can be
    * missing; the resize helper merges them with DEFAULT_INGEST_RESIZE. */
   ingestResize?: PersistedIngestResize;
+  /** Persisted video-ingest caps. Undefined → DEFAULT_VIDEO_CAPS.
+   * Individual fields can be missing; resolveVideoCaps() merges them
+   * with the defaults. */
+  videoCaps?: VideoCaps;
   /** When true, the anonymous homepage features the top post as a
    * teaser (hero figure + first paragraph). Default off. */
   postTeaser?: boolean;
@@ -70,6 +80,33 @@ export interface PersistedIngestResize {
   webpQuality?: number;
 }
 
+/** Video-ingest caps. Persisted under `videoCaps` in config/site.json;
+ * a missing field falls through to DEFAULT_VIDEO_CAPS. Mirrors
+ * PersistedIngestResize's clamp-at-read pattern. */
+export interface VideoCaps {
+  /** Max accepted upload size in bytes. */
+  maxBytes?: number;
+  /** Max accepted source duration in ms. */
+  maxDurationMs?: number;
+  /** Max accepted source width in px (long edge). */
+  maxWidth?: number;
+}
+
+/** Caller-side validation bounds for video caps. Out-of-range values
+ * from persisted config snap to these at read time. */
+export const VIDEO_CAPS_BOUNDS = {
+  maxBytes: { min: 1, max: 2 * 1024 * 1024 * 1024 },
+  maxDurationMs: { min: 1000, max: 600000 },
+  maxWidth: { min: 320, max: 7680 }
+} as const;
+
+/** Defaults applied when config/site.json omits videoCaps. */
+export const DEFAULT_VIDEO_CAPS = {
+  maxBytes: 500 * 1024 * 1024,
+  maxDurationMs: 300_000,
+  maxWidth: 1920
+} as const;
+
 /** Schema of `<siteRoot>/config/site.json`. All fields optional — a
  * missing field falls through to the env var, then to a hard-coded
  * default. The admin settings UI rewrites this file. */
@@ -78,6 +115,8 @@ export interface PersistedSiteConfig {
   tagline?: string;
   theme?: string;
   ingestResize?: PersistedIngestResize;
+  /** Video-ingest caps. Admin-editable like ingestResize. */
+  videoCaps?: VideoCaps;
   /** Sidecar ID of the site-wide banner image. */
   bannerImageId?: string;
   /** Feature the top post on the anonymous homepage as a teaser. */
@@ -140,6 +179,8 @@ function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   }
   const ingest = pickPersistedIngestResize(r.ingestResize);
   if (ingest) out.ingestResize = ingest;
+  const caps = pickPersistedVideoCaps(r.videoCaps);
+  if (caps) out.videoCaps = caps;
   return out;
 }
 
@@ -157,6 +198,22 @@ function pickPersistedIngestResize(raw: unknown): PersistedIngestResize | undefi
   if (sp !== undefined) out.scalePct = sp;
   const wq = clampInt(r.webpQuality, INGEST_RESIZE_BOUNDS.webpQuality);
   if (wq !== undefined) out.webpQuality = wq;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Validate + clamp videoCaps knobs at read time. Anything outside
+ * VIDEO_CAPS_BOUNDS snaps to the nearest bound, and non-numeric
+ * values are dropped so they fall back to DEFAULT_VIDEO_CAPS. */
+function pickPersistedVideoCaps(raw: unknown): VideoCaps | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: VideoCaps = {};
+  const mb = clampInt(r.maxBytes, VIDEO_CAPS_BOUNDS.maxBytes);
+  if (mb !== undefined) out.maxBytes = mb;
+  const md = clampInt(r.maxDurationMs, VIDEO_CAPS_BOUNDS.maxDurationMs);
+  if (md !== undefined) out.maxDurationMs = md;
+  const mw = clampInt(r.maxWidth, VIDEO_CAPS_BOUNDS.maxWidth);
+  if (mw !== undefined) out.maxWidth = mw;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -184,6 +241,9 @@ export function writePersistedSiteConfig(
   if (sanitized.ingestResize || current.ingestResize) {
     next.ingestResize = { ...current.ingestResize, ...sanitized.ingestResize };
   }
+  if (sanitized.videoCaps || current.videoCaps) {
+    next.videoCaps = { ...current.videoCaps, ...sanitized.videoCaps };
+  }
   const p = paths(env).siteConfigFile;
   fs.mkdirSync(path.dirname(p), { recursive: true });
   writeFileAtomicSync(p, `${JSON.stringify(next, null, 2)}\n`);
@@ -199,6 +259,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   const out: SiteConfig = { title };
   if (tagline) out.tagline = tagline;
   if (persisted.ingestResize) out.ingestResize = persisted.ingestResize;
+  if (persisted.videoCaps) out.videoCaps = persisted.videoCaps;
   if (persisted.bannerImageId) out.bannerImageId = persisted.bannerImageId;
   if (persisted.postTeaser) out.postTeaser = true;
   if (persisted.bannerAboveHeader) out.bannerAboveHeader = true;
@@ -223,6 +284,9 @@ export function paths(env: Env = process.env): Paths {
     sidecars: path.join(root, 'sidecars'),
     cache: path.join(root, 'cache'),
     cacheImg: path.join(root, 'cache', 'img'),
+    originalsVideo: path.join(root, 'originals', 'videos'),
+    sidecarsVideo: path.join(root, 'sidecars', 'videos'),
+    cacheVideo: path.join(root, 'cache', 'video'),
     content: path.join(root, 'content'),
     contentPosts: path.join(root, 'content', 'posts'),
     data: path.join(root, 'data'),
@@ -230,6 +294,18 @@ export function paths(env: Env = process.env): Paths {
     static: path.join(root, 'static'),
     config: path.join(root, 'config'),
     siteConfigFile: path.join(root, 'config', 'site.json')
+  };
+}
+
+/** Fully-resolved video caps for a site: persisted overrides merged
+ * over DEFAULT_VIDEO_CAPS. Persisted values were already clamped at
+ * read time by pickPersistedVideoCaps, so no re-clamp is needed. */
+export function resolveVideoCaps(siteRoot: string): Required<VideoCaps> {
+  const persisted = readPersistedSiteConfig({ SITE_ROOT: siteRoot }).videoCaps;
+  return {
+    maxBytes: persisted?.maxBytes ?? DEFAULT_VIDEO_CAPS.maxBytes,
+    maxDurationMs: persisted?.maxDurationMs ?? DEFAULT_VIDEO_CAPS.maxDurationMs,
+    maxWidth: persisted?.maxWidth ?? DEFAULT_VIDEO_CAPS.maxWidth
   };
 }
 
