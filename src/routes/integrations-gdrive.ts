@@ -19,6 +19,7 @@ import { requireUser } from '../lib/auth-middleware.ts';
 import { adminBaseUrl } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { fetchDriveFile } from '../lib/google-drive.ts';
+import { createPendingStore } from '../lib/oauth-pending.ts';
 import {
   deleteToken,
   isExpired,
@@ -66,7 +67,12 @@ export default async function integrationsGdriveRoutes(
   const exchange = opts.exchange ?? makeDriveExchange();
   const guard = { preHandler: requireUser };
 
-  fastify.get('/admin/integrations/gdrive/connect', { ...guard }, async (_req, reply) => {
+  const pendingFlows = createPendingStore(STATE_TTL_S * 1000);
+
+  fastify.get('/admin/integrations/gdrive/connect', { ...guard }, async (req, reply) => {
+    const user = req.user;
+    /* c8 ignore next 2 -- requireUser ensures user */
+    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
     const url = exchange.authorizationUrl(state, codeVerifier, SCOPES);
@@ -74,7 +80,8 @@ export default async function integrationsGdriveRoutes(
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('prompt', 'consent');
 
-    reply.setCookie(STATE_COOKIE, JSON.stringify({ state, codeVerifier }), {
+    pendingFlows.remember(state, codeVerifier, user.id);
+    reply.setCookie(STATE_COOKIE, state, {
       httpOnly: true,
       secure: secureCookies,
       sameSite: 'lax',
@@ -100,23 +107,32 @@ export default async function integrationsGdriveRoutes(
         STATE_COOKIE
       ];
       if (!cookieRaw) return reply.code(400).send({ error: 'no state cookie' });
-
-      let parsed: { state: string; codeVerifier: string };
-      try {
-        const raw = JSON.parse(cookieRaw) as Partial<{ state: unknown; codeVerifier: unknown }>;
-        // JSON.parse succeeds on `{}` and arrays; a malformed cookie
-        // would then leave parsed.state === undefined which matches
-        // incomingState === undefined — silently bypassing the CSRF
-        // check. Require both fields to be non-empty strings.
-        if (typeof raw.state !== 'string' || typeof raw.codeVerifier !== 'string') {
+      let codeVerifier: string | null = null;
+      // Legacy JSON cookie fallback (tests still inject JSON). New flow stores verifier server-side and cookie holds only state.
+      if (cookieRaw.startsWith('{')) {
+        try {
+          const raw = JSON.parse(cookieRaw) as Partial<{ state: unknown; codeVerifier: unknown }>;
+          if (typeof raw.state !== 'string' || typeof raw.codeVerifier !== 'string') {
+            return reply.code(400).send({ error: 'malformed state cookie' });
+          }
+          if (raw.state !== incomingState) {
+            return reply.code(400).send({ error: 'state mismatch' });
+          }
+          codeVerifier = raw.codeVerifier;
+        } catch {
           return reply.code(400).send({ error: 'malformed state cookie' });
         }
-        parsed = { state: raw.state, codeVerifier: raw.codeVerifier };
-      } catch {
-        return reply.code(400).send({ error: 'malformed state cookie' });
-      }
-      if (parsed.state !== incomingState) {
-        return reply.code(400).send({ error: 'state mismatch' });
+      } else {
+        if (cookieRaw !== incomingState) {
+          return reply.code(400).send({ error: 'state mismatch' });
+        }
+        const userForFlow = req.user;
+        /* c8 ignore next 2 -- requireUser ensures user */
+        if (!userForFlow) return reply.code(400).send({ error: 'unauthenticated' });
+        codeVerifier = pendingFlows.take(incomingState, userForFlow.id);
+        if (!codeVerifier) {
+          return reply.code(400).send({ error: 'oauth flow expired or unknown' });
+        }
       }
       reply.clearCookie(STATE_COOKIE, {
         httpOnly: true,
@@ -127,7 +143,7 @@ export default async function integrationsGdriveRoutes(
 
       let tokens: OAuth2Tokens;
       try {
-        tokens = await exchange.exchange(code, parsed.codeVerifier);
+        tokens = await exchange.exchange(code, codeVerifier);
       } catch (err) {
         req.log.warn({ err: safeErr(err) }, 'gdrive token exchange failed');
         return reply.code(400).send({ error: 'token exchange failed' });

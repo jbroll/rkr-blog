@@ -199,7 +199,7 @@ test('callback: malformed state cookie → 400', async (t) => {
   const res = await app.inject({
     method: 'GET',
     url: '/admin/integrations/onedrive/callback?code=abc&state=st',
-    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=not-json` }
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state={bad-json` }
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<ErrorBody>().error, /malformed state cookie/);

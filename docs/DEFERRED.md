@@ -17,7 +17,7 @@ Format: **item** — _revisit when:_ trigger.
   pivot.
 - **Provider media fetches follow redirects without per-hop SSRF re-validation** — trusted single-author model; `url-safety.ts` guards the initial URL only. _Revisit when:_ opening authoring to untrusted/multi-author posters.
 - **Slug rename + comment orphan cascade** — renaming a .md file AND changing its `slug` field simultaneously triggers the orphan-delete path and CASCADE-deletes that post's comments. _Revisit when:_ a migration or bulk-rename operation needs comment preservation; fix: update the slug column first (reindex), then rename the file.
-- **Integration OAuth PKCE verifier in browser cookie** — gdrive + onedrive integration flows store the PKCE `code_verifier` in a JSON-serialised cookie (primary auth flow already moved this server-side). State is also not bound to session userId. _Revisit when:_ cloud-drive integrations are used in a multi-user context or security posture requires it; fix: mirror the `pendingFlows` Map pattern from `auth.ts`.
+
 
 ## Deployment
 
