@@ -20,6 +20,7 @@ import { mountMatrixControl } from './matrix-control';
 import { initPageTitle } from './page-title.ts';
 import { startOfflineInfrastructure } from './startup';
 import { mountToolbar } from './toolbar';
+import { createVideoInserter } from './video-insert';
 import { VideoNode } from './video-node';
 
 function mount(): void {
@@ -28,6 +29,7 @@ function mount(): void {
   const root = $('rkroll-admin-article');
   const toolbar = $('rkroll-admin-toolbar');
   const fileInput = $<HTMLInputElement>('rkr-image-input');
+  const videoInput = $<HTMLInputElement>('rkr-video-input');
 
   // Two scoped dialogs: figureDialog (figure-level) and cellDialog
   // (per-image, opened when the author clicks one image).
@@ -108,12 +110,16 @@ function mount(): void {
 
   // Source-picker + insertion plumbing in image-insert.ts.
   const inserter = createImageInserter({ editor, fileInput, sourceDialog });
+  // No source picker for video: local file only, straight to the server.
+  const videoInserter = createVideoInserter({ editor, fileInput: videoInput });
 
+  const figureOnly = document.body.dataset.mode === 'figure';
   const syncToolbarActiveStates = mountToolbar({
     editor,
     toolbar,
     insertImage: () => inserter.insertNew(),
-    figureOnly: document.body.dataset.mode === 'figure'
+    insertVideo: figureOnly ? undefined : () => videoInserter.insertNew(),
+    figureOnly
   });
 
   // `populating` guards attribute writes against the feedback loop
@@ -437,6 +443,7 @@ function mount(): void {
   });
 
   fileInput.addEventListener('change', () => void inserter.handleFileChange());
+  videoInput.addEventListener('change', () => void videoInserter.handleFileChange());
 }
 
 // Warn on reload / close while any image has unsaved local edits.

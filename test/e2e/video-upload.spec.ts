@@ -190,3 +190,35 @@ test('video: upload, trim persists, editor save publishes the trimmed derivative
   expect(html).toMatch(/data-duration="\d+"/);
   expect(html).toContain('e2e clip');
 });
+
+test('video: toolbar +Video uploads the picked file and inserts a video node', async ({ page }) => {
+  test.setTimeout(120_000);
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.getByRole('button', { name: '+Video' }).click();
+  await page.locator('#rkr-video-input').setInputFiles({
+    name: 'toolbar.mp4',
+    mimeType: 'video/mp4',
+    buffer: makeFixtureMp4()
+  });
+
+  await expect(page.locator('.rkr-video-placeholder[data-video]')).toHaveCount(1, {
+    timeout: 60_000
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText('uploaded toolbar.mp4');
+
+  // The node view renders a bare placeholder, so read the id off the doc.
+  const ids = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed; ?e2e=1 missing');
+    let found: string | null = null;
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'video') found = (node.attrs as { ids?: string }).ids ?? null;
+      return found === null;
+    });
+    return found;
+  });
+  expect(ids).toMatch(/^[0-9a-f]{64}$/);
+});

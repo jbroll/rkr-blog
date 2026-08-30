@@ -455,7 +455,9 @@ destructive trim.
   trim/poster render a comment.
 - **Editor**: TipTap `video` node with a trim/poster/caption popover that
   persists trim/poster to the sidecar via `POST /admin/video/:id/trim`.
-  Round-trips through `::video` markdown.
+  Round-trips through `::video` markdown. Authors insert one via the
+  toolbar `+Video` button (local file only, no source picker) or by
+  dropping/pasting a video file into the editor.
 
 OAuth tokens are stored encrypted at rest with a server-held key.
 

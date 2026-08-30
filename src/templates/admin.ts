@@ -232,6 +232,7 @@ ${siteHead(data.site, { isAdmin: true })}
 </div>
 <div id="rkroll-admin-status"></div>
 <input id="rkr-image-input" type="file" accept="image/*" hidden/>
+<input id="rkr-video-input" type="file" accept="video/*" hidden/>
 </div>
 <script type="module" src="${data.bundleUrl}"></script>
 </body>

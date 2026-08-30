@@ -79,10 +79,6 @@ Format: **item** — _revisit when:_ trigger.
 - **Tilt slider uses delta-from-last semantics** — the slider applies `appendRotate(newVal - prevVal)`, so its absolute value can diverge from the net rotation after 90° buttons (deltas still accumulate correctly). _Revisit when:_ a UX report calls it confusing; track a dedicated tilt op.
 - **Package canvas layer not c8-gated** — `packages/image-edit/src/canvas/**` (DOM/UI) is excluded from unit coverage like `src/admin`; only `src/core` is c8-gated, the canvas layer is e2e/manual-verified. _Revisit when:_ the union e2e ratchet baseline is seeded.
 
-## Video
-
-- **No admin toolbar button to insert a video** — authors reach `::video` via the editor hook/API or raw markdown today. _Revisit when:_ video editing is surfaced in the UI; add a toolbar insert + drop handler.
-
 ## Test coverage
 
 - **Playwright: perspective-rectify + Google OAuth callback** —

@@ -1,17 +1,18 @@
-// Drag-and-drop / paste image plumbing for the editor.
+// Drag-and-drop / paste media plumbing for the editor.
 //
 // Three pieces:
-//   • imageFilesFrom — pulls image File entries out of a DataTransfer or
-//     ClipboardData payload (.files for drops, .items fallback for paste
-//     in browsers where clipboardData.files is empty).
-//   • uploadAndInsertAt — sequential upload + figure-node insertion at a
-//     ProseMirror position, so a partial-batch failure doesn't dribble
-//     half the ids into the doc before throwing.
+//   • mediaFilesFrom — pulls image and video File entries out of a
+//     DataTransfer or ClipboardData payload (.files for drops, .items
+//     fallback for paste in browsers where clipboardData.files is empty).
+//   • uploadAndInsertAt — sequential upload + figure/video-node insertion
+//     at a ProseMirror position, so a partial-batch failure doesn't
+//     dribble half the ids into the doc before throwing.
 //   • makeDropHandlers / wireDragOverlay — TipTap editorProps for
 //     handleDrop+handlePaste and the visual cue on the editor frame.
 //
-// Toolbar Image / Gallery buttons go through pick.ts instead — they
-// prompt via <input type="file"> rather than extracting from a drop.
+// Toolbar +Image / +Video go through image-insert.ts / video-insert.ts
+// instead — they prompt via <input type="file"> rather than extracting
+// from a drop.
 
 import type { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
@@ -19,22 +20,27 @@ import type { EditorView } from '@tiptap/pm/view';
 import { setStatus } from './dom';
 import { hydrateLocalThumbs } from './local-thumb';
 import { uploadImage } from './upload';
+import { uploadVideo } from './video-upload';
 
-/** Pull image File entries out of a DataTransfer / Clipboard event.
+function isMedia(type: string): boolean {
+  return type.startsWith('image/') || type.startsWith('video/');
+}
+
+/** Pull image/video File entries out of a DataTransfer / Clipboard event.
  * Filters by type so a drop containing both an image and a text snippet
  * doesn't double-handle. */
-function imageFilesFrom(source: { files?: FileList | null; items?: DataTransferItemList }): File[] {
+function mediaFilesFrom(source: { files?: FileList | null; items?: DataTransferItemList }): File[] {
   const out: File[] = [];
   // .files works for drag-drop. clipboardData.files is empty in some
   // browsers for image paste; .items is the fallback.
   if (source.files) {
     for (const f of Array.from(source.files)) {
-      if (f.type.startsWith('image/')) out.push(f);
+      if (isMedia(f.type)) out.push(f);
     }
   }
   if (out.length === 0 && source.items) {
     for (const item of Array.from(source.items)) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
+      if (item.kind === 'file' && isMedia(item.type)) {
         const f = item.getAsFile();
         if (f) out.push(f);
       }
@@ -43,31 +49,31 @@ function imageFilesFrom(source: { files?: FileList | null; items?: DataTransferI
   return out;
 }
 
-/** Upload + insert N image files. Sequential so a partial-batch failure
+/** Upload + insert N media files. Sequential so a partial-batch failure
  * doesn't dribble half the ids into the editor before throwing.
  * `pos === null` means "at current cursor". */
 async function uploadAndInsertAt(ed: Editor, files: File[], pos: number | null): Promise<void> {
   let cursor = pos;
   for (let i = 0; i < files.length; i++) {
     const f = files[i] as File;
-    setStatus(`uploading ${f.name || 'image'} (${i + 1}/${files.length})…`);
+    const video = f.type.startsWith('video/');
+    const kind = video ? 'video' : 'image';
+    setStatus(`uploading ${f.name || kind} (${i + 1}/${files.length})…`);
     try {
-      const r = await uploadImage(f);
+      const r = video ? await uploadVideo(f) : await uploadImage(f);
       const attrs = { ids: r.id };
       const chain = ed.chain().focus();
       if (cursor !== null) {
-        chain.insertContentAt(cursor, { type: 'figure', attrs });
-        // Advance cursor for subsequent inserts so multiple images land
+        chain.insertContentAt(cursor, { type: video ? 'video' : 'figure', attrs });
+        // Advance cursor for subsequent inserts so multiple files land
         // in source order, not stacked at the same point.
         cursor += 1;
       } else {
-        chain.insertContent({ type: 'figure', attrs });
+        chain.insertContent({ type: video ? 'video' : 'figure', attrs });
       }
       chain.run();
-      void hydrateLocalThumbs(ed, [r.id]);
-      setStatus(
-        `inserted ${f.name || 'image'} (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`
-      );
+      if (!video) void hydrateLocalThumbs(ed, [r.id]);
+      setStatus(`inserted ${f.name || kind} (${r.bytes} bytes${r.deduplicated ? ', dedup' : ''})`);
     } catch (err) {
       setStatus(`upload error: ${(err as Error).message}`, true);
       return;
@@ -88,7 +94,7 @@ export function makeDropHandlers(getEditor: () => Editor): {
   return {
     handleDrop: (view, ev): boolean => {
       const dt = (ev as DragEvent).dataTransfer;
-      const files = dt ? imageFilesFrom(dt) : [];
+      const files = dt ? mediaFilesFrom(dt) : [];
       if (files.length === 0) return false;
       ev.preventDefault();
       const e = ev as DragEvent;
@@ -99,7 +105,7 @@ export function makeDropHandlers(getEditor: () => Editor): {
     },
     handlePaste: (_view, ev): boolean => {
       const cd = (ev as ClipboardEvent).clipboardData;
-      const files = cd ? imageFilesFrom(cd) : [];
+      const files = cd ? mediaFilesFrom(cd) : [];
       if (files.length === 0) return false;
       ev.preventDefault();
       void uploadAndInsertAt(getEditor(), files, null);

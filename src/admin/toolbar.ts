@@ -50,6 +50,9 @@ export interface ToolbarDeps {
    * lives in main.ts so the source picker + append-mode plumbing stays
    * in one place; the toolbar only knows the entry point. */
   insertImage: () => Promise<void>;
+  /** Upload and insert a video node. Optional so figure-mode and any
+   * caller without a video file input simply omits the button. */
+  insertVideo?: () => Promise<void>;
   /** When true, only the +Image and Save buttons are rendered; text
    * formatting buttons (B/I/H2/H3/Link) are omitted. */
   figureOnly?: boolean;
@@ -60,7 +63,7 @@ export interface ToolbarDeps {
  * `is-active` class tracks the live selection (bold inside a bold span,
  * heading inside an H2, etc.). */
 export function mountToolbar(deps: ToolbarDeps): () => void {
-  const { editor, toolbar, insertImage, figureOnly } = deps;
+  const { editor, toolbar, insertImage, insertVideo, figureOnly } = deps;
   const buttons: HTMLButtonElement[] = [];
   if (!figureOnly) {
     buttons.push(
@@ -88,6 +91,14 @@ export function mountToolbar(deps: ToolbarDeps): () => void {
       cmd: 'image',
       iconSvg: icon('imagePlus', 16)
     }),
+    ...(insertVideo
+      ? [
+          makeButton('+Video', () => void insertVideo(), {
+            cmd: 'video',
+            iconSvg: icon('video', 16)
+          })
+        ]
+      : []),
     makeButton('Save', () => void handleSave(editor), {
       cmd: 'save',
       className: 'rkr-toolbar-primary',
