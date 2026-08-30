@@ -90,7 +90,6 @@
           "src/cli/fix-wp-titles.ts",
           "src/cli/export.ts",
           "src/cli/import.ts",
-          "src/admin/opfs-worker.ts",
           "src/admin/posts-list.ts",
           "src/admin/settings-page.ts",
           "src/site/carousel.ts",
@@ -103,35 +102,23 @@
           "src/site/sw-admin-register.ts",
           "scripts/check-bundle-size.ts",
           "scripts/check-orientation.mjs",
-          "scripts/gen-precache.ts",
           "website/build-legal.js",
           "test/**/*.test.ts",
           "test/e2e/**/*.spec.ts",
-          "test/playwright.config.ts",
           "bin/site-admin",
           "src/lib/comments.ts"
         ],
         "ignore": [
           "src/admin/css.d.ts",
-          "src/site/css.d.ts",
-          ".claude/**",
-          ".claire/**"
+          "src/site/css.d.ts"
         ]
       },
       "packages/image-edit": {
-        "entry": [
-          "src/core/index.ts",
-          "src/canvas/index.ts"
-        ],
         "project": [
           "src/**/*.ts"
         ]
       },
       "apps/image-pwa": {
-        "entry": [
-          "src/main.ts",
-          "src/sw.ts"
-        ],
         "project": [
           "src/**/*.ts"
         ]
