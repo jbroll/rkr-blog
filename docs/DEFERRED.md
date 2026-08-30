@@ -16,8 +16,6 @@ Format: **item** — _revisit when:_ trigger.
   auth-write logging. _Revisit when:_ any shared/team/multi-tenant
   pivot.
 
-- **Slug rename + comment orphan cascade** — renaming a .md file AND changing its `slug` field simultaneously triggers the orphan-delete path and CASCADE-deletes that post's comments. _Revisit when:_ a migration or bulk-rename operation needs comment preservation; fix: update the slug column first (reindex), then rename the file.
-
 
 ## Deployment
 

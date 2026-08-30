@@ -18,7 +18,7 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 
 ## 2. Data integrity & image pipeline
 
-- [ ] **Slug rename + comment orphan cascade** — renaming `.md` file and changing `slug` frontmatter simultaneously triggers orphan-delete and `CASCADE` deletes comments. Fix: update slug column first (reindex) then rename file. (`DEFERRED.md: Security`)
+- [x] **Slug rename + comment orphan cascade** — renaming `.md` file and changing `slug` frontmatter simultaneously triggers orphan-delete and `CASCADE` deletes comments. Fix: update slug column first (reindex) then rename file. (`DEFERRED.md: Security`)
 - [ ] **GC never reclaims orphaned originals** — `src/cli/gc.ts` prunes cache only; `originals/<aa>/<bb>/<id>.<ext>` accumulates forever. Add cross-referencing pass over sidecars. (`DEFERRED.md: Performance`)
 - [ ] **Prepass-equivalence test doesn't cover variant fidelity** — `test/lib/image-map-equivalence.test.ts` strips `<source>` before compare; WebP/AVIF divergence invisible. (`DEFERRED.md: Image pipeline`)
 - [ ] **`buildImageMapFromOpfs` blob: URLs never revoked** — bounded to one map per load today; re-rendering preview would leak. (`DEFERRED.md: Image pipeline`)

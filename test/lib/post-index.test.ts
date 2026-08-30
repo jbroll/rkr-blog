@@ -493,3 +493,82 @@ test('runReindex removes the posts_fts row when the source file is gone', (t) =>
     db.close();
   }
 });
+
+test('runReindex preserves comments when file is renamed and slug changes simultaneously', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(root, 'a.md', { slug: 'old-slug', title: 'Old', status: 'published' }, 'body old');
+  runReindex(root);
+
+  const db1 = open(path.join(root, 'data', 'site.db'));
+  const post = db1.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get('old-slug');
+  assert.ok(post);
+  db1
+    .prepare(
+      `INSERT INTO comments (post_id, parent_id, wp_comment_id, author_name, author_email, body, status, source, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    )
+    .run(
+      post.id,
+      null,
+      null,
+      'Alice',
+      'alice@example.com',
+      'hello',
+      'published',
+      'web',
+      new Date().toISOString()
+    );
+  db1.close();
+
+  fs.unlinkSync(path.join(root, 'content', 'posts', 'a.md'));
+  writePost(root, 'b.md', { slug: 'new-slug', title: 'New', status: 'published' }, 'body new');
+  const r = runReindex(root);
+  assert.equal(r.inserted, 0);
+  assert.equal(r.updated, 1);
+  assert.equal(r.removed, 0);
+
+  const db2 = open(path.join(root, 'data', 'site.db'));
+  try {
+    assert.equal(
+      db2.prepare<{ c: number }>('SELECT COUNT(*) c FROM posts WHERE slug = ?').get('new-slug')?.c,
+      1
+    );
+    assert.equal(
+      db2.prepare<{ c: number }>('SELECT COUNT(*) c FROM posts WHERE slug = ?').get('old-slug')?.c,
+      0
+    );
+    const newPost = db2
+      .prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?')
+      .get('new-slug');
+    assert.ok(newPost);
+    const cc = db2
+      .prepare<{ c: number }>('SELECT COUNT(*) c FROM comments WHERE post_id = ?')
+      .get(newPost.id);
+    assert.equal(cc?.c, 1, 'comment migrated to new slug');
+  } finally {
+    db2.close();
+  }
+});
+
+test('runReindex updates slug when file keeps name but frontmatter slug changes', (t) => {
+  const root = freshSiteRoot(t);
+  writePost(root, 'a.md', { slug: 'old', title: 'T', status: 'published' }, 'body');
+  runReindex(root);
+  writePost(root, 'a.md', { slug: 'new', title: 'T', status: 'published' }, 'body');
+  const r = runReindex(root);
+  assert.equal(r.inserted, 0);
+  assert.equal(r.updated, 1);
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    assert.equal(
+      db.prepare<{ c: number }>('SELECT COUNT(*) c FROM posts WHERE slug = ?').get('new')?.c,
+      1
+    );
+    assert.equal(
+      db.prepare<{ c: number }>('SELECT COUNT(*) c FROM posts WHERE slug = ?').get('old')?.c,
+      0
+    );
+  } finally {
+    db.close();
+  }
+});

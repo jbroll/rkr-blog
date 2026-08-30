@@ -62,6 +62,15 @@ function doReindex(
   let inserted = 0;
   let updated = 0;
 
+  // Snapshot of existing posts before upsert — used to match renames.
+  const beforeRows = db
+    .prepare<{ id: number; slug: string; path: string }>('SELECT id, slug, path FROM posts')
+    .all();
+  const beforeSlugToRow = new Map(beforeRows.map((r) => [r.slug, r]));
+  const beforePathToRow = new Map(beforeRows.map((r) => [r.path, r]));
+
+  const insertedSlugs = new Set<string>();
+
   const upsert = db.transaction(() => {
     for (const filename of onDiskFiles) {
       const fullPath = path.join(postsDir, filename);
@@ -105,19 +114,31 @@ function doReindex(
           : null;
       const relPath = path.posix.join('content', 'posts', filename);
 
-      const existing = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
+      // Prefer match by path (handles slug-change without rename), then by slug (handles rename without slug change).
+      const existingByPath = db
+        .prepare<{ id: number; slug: string }>('SELECT id, slug FROM posts WHERE path = ?')
+        .get(relPath);
+      const existingBySlug = !existingByPath
+        ? db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug)
+        : null;
+      const existing = existingByPath ?? existingBySlug;
+
+      // Keep FTS in sync when slug changes via path match: remove old slug's FTS row.
+      const oldSlug = existingByPath && existingByPath.slug !== slug ? existingByPath.slug : null;
 
       if (existing) {
         db.prepare(
-          `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, path = ?
+          `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?, path = ?
            WHERE id = ?`
-        ).run(frontmatter.title, status, updatedAt, publishedAt, relPath, existing.id);
+        ).run(slug, frontmatter.title, status, updatedAt, publishedAt, relPath, existing.id);
+        if (oldSlug) db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(oldSlug);
         updated++;
       } else {
         db.prepare(
           `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path)
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         ).run(slug, frontmatter.title, status, created, updatedAt, publishedAt, relPath);
+        insertedSlugs.add(slug);
         inserted++;
       }
 
@@ -146,6 +167,73 @@ function doReindex(
     }
   });
   upsert();
+
+  // Handle simultaneous file-rename + slug-change: the upsert above inserted
+  // a new row for the new file while the old row is now an orphan. Instead
+  // of deleting the orphan (and CASCADE-deleting its comments), migrate the
+  // orphan's id to the new slug/path and remove the duplicate insert.
+  // This is best-effort: only when one orphan and one insert are unpaired
+  // by both path and slug, we treat them as the same logical post.
+  if (insertedSlugs.size > 0) {
+    const allAfterUpsert = db
+      .prepare<{ id: number; slug: string; path: string }>('SELECT id, slug, path FROM posts')
+      .all();
+    const orphansBeforeDelete = allAfterUpsert.filter((row) => {
+      if (row.slug.startsWith('_')) return false;
+      const filename = path.basename(row.path);
+      return !onDiskFiles.has(filename);
+    });
+    // Build map of newly inserted rows (those whose slug was not in before snapshot).
+    const newlyInserted = allAfterUpsert.filter((r) => insertedSlugs.has(r.slug));
+    for (const orphan of orphansBeforeDelete) {
+      // Skip if orphan already matched via path/slug above (should not be orphan).
+      // Find a newly inserted candidate whose slug/path are both absent from before snapshot.
+      const candidate = newlyInserted.find(
+        (n) => !beforeSlugToRow.has(n.slug) && !beforePathToRow.has(n.path) && n.id !== orphan.id
+      );
+      if (!candidate) continue;
+      // Only migrate if orphan has comments to preserve — otherwise orphan
+      // deletion is harmless and the insert can stay.
+      const commentCount = db
+        .prepare<{ c: number }>('SELECT COUNT(*) as c FROM comments WHERE post_id = ?')
+        .get(orphan.id)?.c;
+      if (!commentCount) continue;
+      // Migrate: move candidate's content onto orphan's id, then remove candidate.
+      const candidateRow = db
+        .prepare<{
+          slug: string;
+          title: string;
+          status: string;
+          published_at: string | null;
+          path: string;
+        }>('SELECT slug, title, status, published_at, path FROM posts WHERE id = ?')
+        .get(candidate.id);
+      if (!candidateRow) continue;
+      // Free the new slug before moving orphan onto it (unique constraint).
+      db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(orphan.slug);
+      db.prepare('UPDATE post_tags SET post_id = ? WHERE post_id = ?').run(orphan.id, candidate.id);
+      db.prepare('DELETE FROM posts WHERE id = ?').run(candidate.id);
+      db.prepare(
+        `UPDATE posts SET slug = ?, title = ?, status = ?, published_at = ?, path = ?, updated_at = ?
+         WHERE id = ?`
+      ).run(
+        candidateRow.slug,
+        candidateRow.title,
+        candidateRow.status,
+        candidateRow.published_at,
+        candidateRow.path,
+        new Date().toISOString(),
+        orphan.id
+      );
+      // Remove candidate from tracking so it isn't considered again.
+      insertedSlugs.delete(candidateRow.slug);
+      // Adjust counts: the insert was actually an update via migration.
+      inserted--;
+      updated++;
+      // Only handle one orphan per run to keep it simple; multiple simultaneous renames are rare.
+      break;
+    }
+  }
 
   // Remove rows whose source file is gone.
   // ON DELETE CASCADE in post_tags keeps that table clean automatically.
