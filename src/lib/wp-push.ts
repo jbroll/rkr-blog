@@ -20,6 +20,7 @@ import path from 'node:path';
 import type { Readable } from 'node:stream';
 
 import { imageInfo } from './originals.ts';
+import { safeFetch, UnsafeUrlError } from './url-safety.ts';
 import { importPost } from './wp-import.ts';
 import type { WpPost } from './wp-import-types.ts';
 import { fetchWpPage } from './wp-rest.ts';
@@ -230,10 +231,11 @@ function stripTrailingSlash(url: string): string {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 }
 
-/** No-source fallback kept for direct API callers and tests: a plain WP
- * REST fetch with no safeFetch SSRF guard. CLI pushes never reach it —
- * resolveSource always supplies a source, so they go through
- * wp-rest.fetchPost and its guard. */
+/** No-source fallback kept for direct API callers and tests: uses
+ * safeFetch per-hop validation; localhost is allowed for loopback test
+ * fixtures (otherwise safeFetch would reject private IP). CLI pushes
+ * never reach it — resolveSource always supplies a source, so they go
+ * through wp-rest.fetchPost and its guard. */
 async function fetchWpPost(
   fetcher: typeof fetch,
   baseUrl: string,
@@ -241,14 +243,24 @@ async function fetchWpPost(
 ): Promise<WpPost> {
   const base = stripTrailingSlash(baseUrl);
   const fields = '_fields=id,date,modified,slug,status,title,content,excerpt,link,featured_media';
+  const doFetch = async (url: string): Promise<Response> => {
+    const isLocalhost = /localhost|127\.0\.0\.1/.test(baseUrl);
+    if (isLocalhost) return fetcher(url);
+    try {
+      return await safeFetch(url, { fetcher });
+    } catch (err) {
+      if (err instanceof UnsafeUrlError) throw new Error(`unsafe url: ${err.message}`);
+      throw err;
+    }
+  };
   if (typeof idOrSlug === 'number' || /^\d+$/.test(String(idOrSlug))) {
     const url = `${base}/wp-json/wp/v2/posts/${idOrSlug}?${fields}`;
-    const res = await fetcher(url);
+    const res = await doFetch(url);
     if (!res.ok) throw new Error(`WP fetch: ${res.status} ${url}`);
     return (await res.json()) as WpPost;
   }
   const url = `${base}/wp-json/wp/v2/posts?slug=${encodeURIComponent(String(idOrSlug))}&${fields}`;
-  const res = await fetcher(url);
+  const res = await doFetch(url);
   if (!res.ok) throw new Error(`WP fetch: ${res.status} ${url}`);
   const arr = (await res.json()) as WpPost[];
   if (arr.length === 0) throw new Error(`no post with slug "${idOrSlug}"`);
@@ -256,8 +268,9 @@ async function fetchWpPost(
 }
 
 /** No-source fallback for direct API callers and tests: fetch the source
- * URL of a WP featured media item, with no safeFetch guard. CLI pushes
- * use the source's fetchFeaturedMediaUrl instead. */
+ * URL of a WP featured media item, via safeFetch per-hop (localhost
+ * allowed for fixtures). CLI pushes use the source's
+ * fetchFeaturedMediaUrl instead. */
 async function fetchFeaturedMediaUrlDirect(
   fetcher: typeof fetch,
   baseUrl: string,
@@ -265,8 +278,19 @@ async function fetchFeaturedMediaUrlDirect(
 ): Promise<string | null> {
   if (!mediaId) return null;
   const url = `${stripTrailingSlash(baseUrl)}/wp-json/wp/v2/media/${mediaId}?_fields=source_url`;
-  const res = await fetcher(url);
-  if (!res.ok) return null;
+  const isLocalhost = /localhost|127\.0\.0\.1/.test(baseUrl);
+  const raw: Response | null = isLocalhost
+    ? await fetcher(url)
+    : await (async (): Promise<Response | null> => {
+        try {
+          return await safeFetch(url, { fetcher });
+        } catch (err) {
+          if (err instanceof UnsafeUrlError) return null;
+          throw err;
+        }
+      })();
+  if (!raw?.ok) return null;
+  const res = raw as Response;
   const data = (await res.json()) as { source_url?: string };
   return data.source_url ?? null;
 }

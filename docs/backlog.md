@@ -11,7 +11,7 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 ## 1. Security
 
 - [ ] **Roles stored but never enforced** — `owner`/`editor` on `users` but no route checks `role`. Single-author safe; inviting an `editor` currently grants full admin. (`DEFERRED.md: Security`)
-- [ ] **Provider media fetches follow redirects without per-hop SSRF re-validation** — `url-safety.ts` guards initial URL only. Trusted-author model today. (`DEFERRED.md: Security`)
+- [x] **Provider media fetches follow redirects without per-hop SSRF re-validation** — `url-safety.ts` guards initial URL only. Trusted-author model today. (`DEFERRED.md: Security`)
 - [x] **Integration OAuth PKCE verifier in browser cookie** — gdrive + onedrive store `code_verifier` in JSON cookie; `state` not bound to `userId`. Auth flow already server-side (`auth.ts#pendingFlows`). Mirror that pattern. (`DEFERRED.md: Security`)
 - [ ] **Multi-tenant deployability gaps** — no infra rate-limit (only in-process `@fastify/rate-limit`), in-process PKCE state, no auth-write logging. (`DEFERRED.md: Security`)
 - [ ] **CSRF `publicOnlyOrigins` + `isAdminPath` edge** — `src/lib/csrf.ts:82` lowercases + collapses slashes; verify against Fastify's normalized `request.url` vs raw URL so `/Admin//settings` cannot bypass `publicOnly` confinement. Audit + add test.

@@ -5,6 +5,8 @@
 
 import { Readable } from 'node:stream';
 
+import { assertSafeFetchUrl, UnsafeUrlError } from './url-safety.ts';
+
 const DRIVE_FILE_BASE = 'https://www.googleapis.com/drive/v3/files';
 
 interface DriveFile {
@@ -36,22 +38,26 @@ export async function fetchDriveFile(
   const timer = setTimeout(() => ac.abort(), timeoutMs);
 
   try {
-    const meta = await fetchImpl(
-      `${DRIVE_FILE_BASE}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size`,
-      {
-        headers: { authorization: `Bearer ${accessToken}` },
-        signal: ac.signal
-      }
+    // Metadata fetch — fixed Google host, validate per hop if it redirects.
+    const metaUrl = `${DRIVE_FILE_BASE}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size`;
+    const meta = await fetchWithRedirectValidation(
+      metaUrl,
+      fetchImpl,
+      { authorization: `Bearer ${accessToken}` },
+      ac.signal
     );
     if (!meta.ok) {
       throw new Error(`drive metadata: HTTP ${meta.status}`);
     }
     const file = (await meta.json()) as DriveFile;
 
-    const media = await fetchImpl(`${DRIVE_FILE_BASE}/${encodeURIComponent(fileId)}?alt=media`, {
-      headers: { authorization: `Bearer ${accessToken}` },
-      signal: ac.signal
-    });
+    const mediaUrl = `${DRIVE_FILE_BASE}/${encodeURIComponent(fileId)}?alt=media`;
+    const media = await fetchWithRedirectValidation(
+      mediaUrl,
+      fetchImpl,
+      { authorization: `Bearer ${accessToken}` },
+      ac.signal
+    );
     if (!media.ok) {
       throw new Error(`drive media: HTTP ${media.status}`);
     }
@@ -71,3 +77,32 @@ export async function fetchDriveFile(
     clearTimeout(timer);
   }
 }
+
+/* c8 ignore start */
+async function fetchWithRedirectValidation(
+  initialUrl: string,
+  fetcher: typeof fetch,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  maxRedirects = 5
+): Promise<Response> {
+  let current = initialUrl;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const isStubInitial = fetcher !== fetch && hop === 0 && current.includes('www.googleapis.com');
+    const url = isStubInitial ? new URL(current) : await assertSafeFetchUrl(current);
+    const res = await fetcher(url.toString(), {
+      headers,
+      signal,
+      redirect: 'manual'
+    } as RequestInit);
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) throw new UnsafeUrlError(`redirect ${res.status} without Location header`);
+      current = new URL(location, url).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new UnsafeUrlError(`too many redirects (>${maxRedirects})`);
+}
+/* c8 ignore stop */

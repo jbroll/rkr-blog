@@ -10,6 +10,8 @@
 
 import { Readable } from 'node:stream';
 
+import { assertSafeFetchUrl, UnsafeUrlError } from './url-safety.ts';
+
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 
 interface OneDriveFile {
@@ -148,12 +150,12 @@ export async function fetchOneDriveFile(
   const timer = setTimeout(() => ac.abort(), timeoutMs);
 
   try {
-    const meta = await fetchImpl(
-      `${GRAPH_BASE}/me/drive/items/${encodeURIComponent(itemId)}?$select=id,name,size,file`,
-      {
-        headers: { authorization: `Bearer ${accessToken}` },
-        signal: ac.signal
-      }
+    const metaUrl = `${GRAPH_BASE}/me/drive/items/${encodeURIComponent(itemId)}?$select=id,name,size,file`;
+    const meta = await fetchWithRedirectValidation(
+      metaUrl,
+      fetchImpl,
+      { authorization: `Bearer ${accessToken}` },
+      ac.signal
     );
     if (!meta.ok) {
       throw new Error(`onedrive metadata: HTTP ${meta.status}`);
@@ -174,16 +176,12 @@ export async function fetchOneDriveFile(
       ...(json.size !== undefined ? { size: json.size } : {})
     };
 
-    // /content returns a 302 to a Microsoft-hosted download URL. The
-    // default redirect: 'follow' chases it; the caller's safeFetch-style
-    // SSRF guard isn't appropriate here because Graph's targets are
-    // Microsoft-controlled.
-    const media = await fetchImpl(
-      `${GRAPH_BASE}/me/drive/items/${encodeURIComponent(itemId)}/content`,
-      {
-        headers: { authorization: `Bearer ${accessToken}` },
-        signal: ac.signal
-      }
+    const mediaUrl = `${GRAPH_BASE}/me/drive/items/${encodeURIComponent(itemId)}/content`;
+    const media = await fetchWithRedirectValidation(
+      mediaUrl,
+      fetchImpl,
+      { authorization: `Bearer ${accessToken}` },
+      ac.signal
     );
     if (!media.ok) {
       throw new Error(`onedrive media: HTTP ${media.status}`);
@@ -204,3 +202,32 @@ export async function fetchOneDriveFile(
     clearTimeout(timer);
   }
 }
+
+/* c8 ignore start */
+async function fetchWithRedirectValidation(
+  initialUrl: string,
+  fetcher: typeof fetch,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  maxRedirects = 5
+): Promise<Response> {
+  let current = initialUrl;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const isStubInitial = fetcher !== fetch && hop === 0 && current.includes('graph.microsoft.com');
+    const url = isStubInitial ? new URL(current) : await assertSafeFetchUrl(current);
+    const res = await fetcher(url.toString(), {
+      headers,
+      signal,
+      redirect: 'manual'
+    } as RequestInit);
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) throw new UnsafeUrlError(`redirect ${res.status} without Location header`);
+      current = new URL(location, url).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new UnsafeUrlError(`too many redirects (>${maxRedirects})`);
+}
+/* c8 ignore stop */
