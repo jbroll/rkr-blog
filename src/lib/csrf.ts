@@ -70,18 +70,32 @@ export function registerCsrfGuard(app: FastifyInstance, opts: CsrfOptions): void
       return reply;
     }
     if (allowed.has(claimed)) return;
-    if (publicOnly.has(claimed) && !isAdminPath(request.url)) return;
+    if (publicOnly.has(claimed) && !isAdminPath(request)) return;
     reply.code(403).send({ error: `cross-origin request blocked: ${claimed}` });
     return reply;
   });
 }
 
-/** Whether a raw request URL targets the admin surface. Collapses repeated
- * slashes and lowercases before matching: Fastify's router would 404 those
- * variants anyway, and erring toward "admin" only ever tightens the check. */
-function isAdminPath(rawUrl: string): boolean {
-  const path = (rawUrl.split(/[?#]/)[0] ?? '').replace(/\/{2,}/g, '/').toLowerCase();
-  return path === '/admin' || path.startsWith('/admin/');
+/** Whether the request targets the admin surface. Prefers Fastify's
+ * normalized route (request.routeOptions.url) over raw URL so encoded
+ * or case-variant paths like /Admin//settings or /admin%2Fsettings
+ * cannot bypass publicOnly confinement. Falls back to raw URL with
+ * decode + slash-collapse + lowercasing. */
+function isAdminPath(request: FastifyRequest): boolean {
+  const routeUrl = (request.routeOptions as { url?: string } | undefined)?.url;
+  if (typeof routeUrl === 'string' && routeUrl.length > 0) {
+    const p = routeUrl.toLowerCase();
+    return p === '/admin' || p.startsWith('/admin/');
+  }
+  const raw = request.url;
+  const path = (raw.split(/[?#]/)[0] ?? '').replace(/\/{2,}/g, '/').toLowerCase();
+  try {
+    const decoded = decodeURIComponent(path);
+    const normalized = decoded.replace(/\/{2,}/g, '/').toLowerCase();
+    return normalized === '/admin' || normalized.startsWith('/admin/');
+  } catch {
+    return path === '/admin' || path.startsWith('/admin/');
+  }
 }
 
 function pickClaimedOrigin(request: FastifyRequest): string | null {

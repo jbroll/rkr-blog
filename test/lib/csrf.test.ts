@@ -150,3 +150,22 @@ test('csrf: a path merely starting with the letters "admin" is not the admin sur
   app.post('/administrivia/comments', async () => ({ ok: true }));
   assert.equal(await post(app, '/administrivia/comments', 'https://read.test'), 200);
 });
+
+test('csrf: publicOnly origin can POST /search but 403 on /admin/posts (encoded and case variants)', async () => {
+  const app = Fastify();
+  registerCsrfGuard(app, {
+    allowedOrigins: ['https://admin.test'],
+    publicOnlyOrigins: ['https://read.test']
+  });
+  app.post('/search', async () => ({ ok: true }));
+  app.post('/admin/posts', async () => ({ ok: true }));
+  app.post('/admin/settings', async () => ({ ok: true }));
+  // publicOnly allowed on /search
+  assert.equal(await post(app, '/search', 'https://read.test'), 200);
+  // blocked on /admin
+  assert.equal(await post(app, '/admin/posts', 'https://read.test'), 403);
+  // case, double-slash and percent-encoded variants must also be blocked
+  assert.equal(await post(app, '/Admin//settings', 'https://read.test'), 403);
+  assert.equal(await post(app, '/admin%2Fsettings', 'https://read.test'), 403);
+  assert.equal(await post(app, '/ADMIN/settings', 'https://read.test'), 403);
+});
