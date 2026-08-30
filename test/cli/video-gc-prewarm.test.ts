@@ -142,3 +142,34 @@ test('prewarmVariants enqueues a renderVideo job for referenced videos', async (
   const payload = JSON.parse(row.payload) as { originalId: string };
   assert.equal(payload.originalId, id);
 });
+
+test('runGc deletes orphaned image originals not referenced by any sidecar', async (t) => {
+  const root = freshSiteRoot(t);
+  // Create a valid sidecar + original via manual files.
+  const validId = 'd'.repeat(64);
+  const validDir = path.join(root, 'originals', validId.slice(0, 2), validId.slice(2, 4));
+  fs.mkdirSync(validDir, { recursive: true });
+  fs.writeFileSync(path.join(validDir, `${validId}.webp`), Buffer.alloc(8));
+  fs.mkdirSync(path.join(root, 'sidecars'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${validId}.json`),
+    JSON.stringify({
+      version: 1,
+      original: validId,
+      source: {},
+      ops: [],
+      outputs: [],
+      variants: []
+    })
+  );
+  // Orphan original with no sidecar.
+  const orphanId = 'e'.repeat(64);
+  const orphanDir = path.join(root, 'originals', orphanId.slice(0, 2), orphanId.slice(2, 4));
+  fs.mkdirSync(orphanDir, { recursive: true });
+  fs.writeFileSync(path.join(orphanDir, `${orphanId}.webp`), Buffer.alloc(8));
+
+  const result = await runGc(root, { tmpMinAgeMs: 0 });
+  assert.ok(result.deleted >= 1, 'orphan original deleted');
+  assert.equal(fs.existsSync(path.join(validDir, `${validId}.webp`)), true, 'valid original kept');
+  assert.equal(fs.existsSync(path.join(orphanDir, `${orphanId}.webp`)), false, 'orphan deleted');
+});

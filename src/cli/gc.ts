@@ -10,7 +10,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { paths } from '../lib/config.ts';
-import { listPosts, listSidecars, listVideoSidecarIds, scanPostForVideoIds } from '../lib/posts.ts';
+import {
+  listPosts,
+  listSidecarIds,
+  listSidecars,
+  listVideoSidecarIds,
+  scanPostForVideoIds
+} from '../lib/posts.ts';
 import {
   type DerivativeArgs,
   derivativeFilename,
@@ -187,6 +193,52 @@ export async function runGc(
           if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
           const parent = path.dirname(dir);
           if (fs.existsSync(parent) && fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  // Orphaned image originals: delete originals/<aa>/<bb>/<id>.<ext> when no sidecar references the id.
+  {
+    const knownIds = new Set(listSidecarIds(siteRoot));
+    const originalsRoot = path.join(siteRoot, 'originals');
+    if (fs.existsSync(originalsRoot)) {
+      const stack: string[] = [originalsRoot];
+      while (stack.length > 0) {
+        const dir = stack.pop() as string;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            // Skip tmp and videos subdirs — handled elsewhere.
+            if (entry.name === '.tmp' || entry.name === 'videos') continue;
+            stack.push(full);
+          } else if (entry.isFile()) {
+            const id = entry.name.split('.')[0] as string;
+            if (!/^[0-9a-f]{64}$/.test(id)) continue;
+            if (!knownIds.has(id)) {
+              fs.unlinkSync(full);
+              deleted++;
+            }
+          }
+        }
+      }
+      // Best-effort empty shard cleanup.
+      for (const aa of fs.readdirSync(originalsRoot)) {
+        if (aa === '.tmp' || aa === 'videos') continue;
+        const aaPath = path.join(originalsRoot, aa);
+        if (!fs.statSync(aaPath, { throwIfNoEntry: false })?.isDirectory()) continue;
+        for (const bb of fs.readdirSync(aaPath)) {
+          const bbPath = path.join(aaPath, bb);
+          try {
+            if (fs.readdirSync(bbPath).length === 0) fs.rmdirSync(bbPath);
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          if (fs.readdirSync(aaPath).length === 0) fs.rmdirSync(aaPath);
         } catch {
           /* ignore */
         }
