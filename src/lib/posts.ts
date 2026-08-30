@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Sidecar } from '@rkr/image-edit';
+import { resolveIds } from './id-resolve.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
 /** Iterate every sidecar id present in $SITE_ROOT/sidecars/. */
@@ -40,60 +41,32 @@ export async function listSidecars(siteRoot: string): Promise<Sidecar[]> {
   return out;
 }
 
-const ID_RE = /\b[0-9a-f]{64}\b/g;
-const SHORT_ID_RE = /\b[0-9a-f]{6,64}\b/g;
+const HEX_ID_RE = /\b[0-9a-f]{6,64}\b/g;
 
 /**
- * Lightweight scanner for image references in a post's markdown body.
+ * Lightweight scanner for sidecar references in a post's markdown body.
  * Handles the directive forms:
  *   ::image{id=<hex>}
  *   ::gallery{ids=[<hex>,<hex>,...]}
  * Full mdast directive parsing replaces this in Step 5.
  *
- * Accepts ids of 6-64 hex chars to allow short prefixes; short ids are
- * resolved against the supplied set of full ids.
+ * Accepts ids of 6-64 hex chars; unknown ids and ambiguous prefixes are
+ * silently dropped — Step 5's directive parser surfaces them as
+ * authoring errors.
  */
+function scanPostForIds(body: string, knownIds: Set<string>): Set<string> {
+  const candidates = [...body.matchAll(HEX_ID_RE)].map((m) => m[0]);
+  if (candidates.length === 0) return new Set();
+  const resolved = resolveIds(candidates, [...knownIds]);
+  return new Set(resolved.filter((id): id is string => id !== null));
+}
+
 export function scanPostForImageIds(body: string, knownIds: Set<string>): Set<string> {
-  const refs = new Set<string>();
-
-  // First pass: full 64-hex ids.
-  for (const m of body.matchAll(ID_RE)) {
-    if (knownIds.has(m[0])) refs.add(m[0]);
-  }
-
-  // Second pass: short ids → resolve to full id by prefix match.
-  const fulls = [...knownIds];
-  for (const m of body.matchAll(SHORT_ID_RE)) {
-    const candidate = m[0];
-    if (candidate.length === 64) continue; // already handled above
-    const matches = fulls.filter((id) => id.startsWith(candidate));
-    if (matches.length === 1) {
-      const sole = matches[0];
-      if (sole !== undefined) refs.add(sole);
-    }
-    // Ambiguous prefixes are silently ignored — Step 5's directive parser
-    // surfaces them as authoring errors.
-  }
-
-  return refs;
+  return scanPostForIds(body, knownIds);
 }
 
 export function scanPostForVideoIds(body: string, knownVideoIds: Set<string>): Set<string> {
-  const refs = new Set<string>();
-  for (const m of body.matchAll(ID_RE)) {
-    if (knownVideoIds.has(m[0])) refs.add(m[0]);
-  }
-  const fulls = [...knownVideoIds];
-  for (const m of body.matchAll(SHORT_ID_RE)) {
-    const candidate = m[0];
-    if (candidate.length === 64) continue;
-    const matches = fulls.filter((id) => id.startsWith(candidate));
-    if (matches.length === 1) {
-      const sole = matches[0];
-      if (sole !== undefined) refs.add(sole);
-    }
-  }
-  return refs;
+  return scanPostForIds(body, knownVideoIds);
 }
 
 export interface PostFile {

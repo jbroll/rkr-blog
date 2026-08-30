@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import { cacheKey } from '../lib/hash.ts';
+import { resolveIds } from '../lib/id-resolve.ts';
 import { imageDimensions } from '../lib/image-map-fs.ts';
 import { imageInfo } from '../lib/originals.ts';
 import { listSidecarIds } from '../lib/posts.ts';
@@ -72,13 +73,14 @@ export function registerImageLookupRoutes(
         return reply.code(400).send({ error: 'invalid id' });
       }
       let fullId = id;
+      // Full ids skip the known-set check: the TTL cache can lag a
+      // just-created sidecar, and sidecarRead below already 404s.
       if (id.length !== 64) {
-        const known = getKnownIdsCached();
-        const matches = known.filter((k) => k.startsWith(id));
-        if (matches.length !== 1) {
+        const [resolved] = resolveIds([id], getKnownIdsCached());
+        if (!resolved) {
           return reply.code(404).send({ error: 'unknown or ambiguous id' });
         }
-        fullId = matches[0] as string;
+        fullId = resolved;
       }
       const sidecar = await sidecarRead(siteRoot, fullId);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });

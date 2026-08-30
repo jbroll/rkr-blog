@@ -56,7 +56,6 @@ Format: **item** — _revisit when:_ trigger.
 
 - **Prepass-equivalence test doesn't cover variant fidelity** — `test/lib/image-map-equivalence.test.ts` strips every `<source>` line before comparing, so a format/width divergence between the server and client prepasses wouldn't be caught by it. _Revisit when:_ either prepass's variant generation changes.
 - **`buildImageMapFromOpfs` blob: URLs are never revoked** — bounded to one map per page load today; a re-rendering preview would leak. _Revisit when:_ the preview starts re-rendering without a full page reload.
-- **`scanPostForImageIds` duplicates prefix resolution** — `src/lib/posts.ts` carries a third independent copy of the id-prefix-resolution rule that `src/lib/id-resolve.ts` was created to unify. _Revisit when:_ next touching either.
 
 ## UI / UX
 

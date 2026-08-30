@@ -8,7 +8,8 @@ import {
   imageIdsForPost,
   listPosts,
   listSidecarIds,
-  scanPostForImageIds
+  scanPostForImageIds,
+  scanPostForVideoIds
 } from '../../src/lib/posts.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -123,4 +124,18 @@ test('imageIdsForPost returns the referenced ids for a known post', (t) => {
   );
   const ids = imageIdsForPost(root, 'p');
   assert.ok(ids?.has(FULL_A));
+});
+
+test('scanPostForVideoIds resolves full ids and unique short prefixes', () => {
+  const known = new Set([FULL_A, FULL_B]);
+  const refs = scanPostForVideoIds(
+    `::video{id=${FULL_A}} and ::video{id=b${'a'.repeat(5)}}\n`,
+    known
+  );
+  assert.deepEqual([...refs].sort(), [FULL_A, FULL_B].sort());
+});
+
+test('scanPostForVideoIds ignores unknown ids and ambiguous prefixes', () => {
+  const known = new Set([FULL_A, `${'a'.repeat(6)}${'c'.repeat(58)}`]);
+  assert.equal(scanPostForVideoIds(`see aaaaaa and ${FULL_C}\n`, known).size, 0);
 });
