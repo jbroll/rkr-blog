@@ -6,7 +6,7 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 
 - [x] **knip: remove 9 redundant entry patterns** — `.claude/**`, `.claire/**`, `src/admin/opfs-worker.ts`, `scripts/gen-precache.ts`, `test/playwright.config.ts`, `packages/image-edit` and `apps/image-pwa` entries in `package.json#knip`. Gate passes but hints confuse contributors.
 - [x] **`check-bundle-size.ts --write` not implemented** — error message tells caller to re-run with `--write` but `argv` is never parsed. Implement the flag or drop the hint. (`DEFERRED.md: Performance`)
-- [ ] **500-line cap pressure** — `src/lib/archive.ts` 500, `src/routes/public.ts` 485, `src/routes/admin.ts` 473, `src/routes/auth.ts` 461. Next feature will trip the hook. Split `public.ts` (index/search/post) and `admin.ts` (upload vs posts) pre-emptively.
+- [x] **500-line cap pressure** — `src/lib/archive.ts` 500, `src/routes/public.ts` 485, `src/routes/admin.ts` 473, `src/routes/auth.ts` 461. Next feature will trip the hook. Split `public.ts` (index/search/post) and `admin.ts` (upload vs posts) pre-emptively.
 
 ## 1. Security
 

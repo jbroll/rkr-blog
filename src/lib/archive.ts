@@ -12,31 +12,12 @@
 // Excluded (fully derivable): bakes/, cache/, posts/tags/fts tables,
 // sessions, oauth_tokens, oauth_accounts, jobs, applied_outbox.
 
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { ARCHIVE_VERSION, ARCHIVE_SCHEMA as SCHEMA, writeBlob } from './archive-helpers.ts';
 import { open } from './db.ts';
 import { runReindex } from './post-index.ts';
-
-const ARCHIVE_VERSION = '1';
-
-const SCHEMA = `
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE files (path TEXT PRIMARY KEY, data BLOB NOT NULL);
-CREATE TABLE comments (
-  export_id INTEGER NOT NULL, post_slug TEXT NOT NULL, parent_export_id INTEGER NULL,
-  wp_comment_id INTEGER NULL, author_name TEXT NOT NULL, author_email TEXT NOT NULL,
-  body TEXT NOT NULL, status TEXT NOT NULL, source TEXT NOT NULL,
-  spam_score REAL NULL, spam_reason TEXT NULL, ip TEXT NULL,
-  created_at TEXT NOT NULL, classified_at TEXT NULL
-);
-CREATE TABLE users (
-  email TEXT PRIMARY KEY, display_name TEXT, role TEXT NOT NULL,
-  created_at TEXT NOT NULL, last_seen_at TEXT
-);
-CREATE TABLE allowed_emails (email TEXT PRIMARY KEY, role TEXT NOT NULL, invited_at TEXT NOT NULL);
-`.trim();
 
 export interface ExportStats {
   files: number;
@@ -484,17 +465,4 @@ export function importArchive(
     invites: inviteCount,
     orphanedParents
   };
-}
-
-// ---- helpers --------------------------------------------------------------
-
-function writeBlob(target: string, data: Uint8Array): void {
-  const tmp = `${target}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  try {
-    fs.writeFileSync(tmp, data);
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    fs.rmSync(tmp, { force: true });
-    throw err;
-  }
 }

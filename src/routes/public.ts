@@ -6,16 +6,6 @@
 // Apache rewrites /img/* directly to the cache file when present
 // (implementation.md §7); only on miss does it fall through here.
 
-// snippet() wraps matches in sentinel chars (from the SQL char(1) /
-// char(2) args = U+0001 / U+0002). Escape the whole string FIRST,
-// THEN swap the (escaping-untouched) sentinels for <mark> — a literal
-// "<mark>" in body text cannot be injected.
-const SNIP_OPEN = String.fromCharCode(1);
-const SNIP_CLOSE = String.fromCharCode(2);
-function highlightSnippet(snip: string): string {
-  return escapeText(snip).split(SNIP_OPEN).join('<mark>').split(SNIP_CLOSE).join('</mark>');
-}
-
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -23,11 +13,10 @@ import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
-import { escapeText, parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
+import { parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
-import { buildFtsMatch } from '../lib/search-query.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { truncateParagraph } from '../lib/teaser-truncate.ts';
@@ -37,11 +26,11 @@ import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
 import { type IndexTeaser, renderIndexPage } from '../templates/index.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
-import { renderSearchPage, type SearchHit } from '../templates/search.ts';
 import figureWidget from '../widgets/figure.ts';
 import videoWidget from '../widgets/video.ts';
 import { registerPublicCommentRoutes } from './public-comments.ts';
 import { registerPublicImgRoutes } from './public-img.ts';
+import { registerPublicSearchRoute } from './public-search.ts';
 import { registerPublicVideoRoutes } from './public-video.ts';
 
 export interface PublicRoutesOpts {
@@ -321,74 +310,7 @@ export default async function publicRoutes(
 
   // ---- search: GET /search ---------------------------------------------
 
-  // Probe once at registration time: is the FTS table present?
-  // If migration 006 has not run, posts_fts doesn't exist and the probe
-  // throws — we set ftsAvailable=false and skip the query entirely (graceful
-  // empty results, no error). If the table exists but a later query fails
-  // (corrupt index, etc.) that error propagates to the global error handler.
-  //
-  // Self-healing: when cached false, re-probe inside the request handler so a
-  // runtime runReindex (admin reindex) that creates posts_fts on the same db
-  // is picked up without a process restart. Once true, never probe again.
-  let ftsAvailable = false;
-  try {
-    db.prepare('SELECT 1 FROM posts_fts LIMIT 0').all();
-    ftsAvailable = true;
-  } catch {
-    // posts_fts not yet migrated — degrade to no-results silently.
-  }
-
-  fastify.get<{ Querystring: { q?: string } }>('/search', async (req, reply) => {
-    const site = getSite();
-    const isAdmin = !!req.user;
-    const q = typeof req.query.q === 'string' ? req.query.q : '';
-    const match = buildFtsMatch(q);
-
-    // Lazy re-probe: if cached false, check once per request whether FTS has
-    // since been created (e.g. by a runtime runReindex). On success flip the
-    // cache to true so subsequent requests skip the probe entirely.
-    if (!ftsAvailable) {
-      try {
-        db.prepare('SELECT 1 FROM posts_fts LIMIT 0').all();
-        ftsAvailable = true;
-      } catch {
-        // Still not migrated — stay false and return graceful empty below.
-      }
-    }
-
-    let results: SearchHit[] = [];
-    if (ftsAvailable && match) {
-      const rows = db
-        .prepare<{
-          slug: string;
-          title: string;
-          published_at: string | null;
-          snip: string;
-        }>(
-          `SELECT p.slug AS slug, p.title AS title, p.published_at AS published_at,
-                    snippet(posts_fts, 3, char(1), char(2), '…', 12) AS snip
-               FROM posts_fts
-               JOIN posts p ON p.slug = posts_fts.slug
-              WHERE posts_fts MATCH ?
-                AND (p.status = 'published' OR ? = 1)
-              ORDER BY bm25(posts_fts, 0.0, 10.0, 5.0, 1.0)
-              LIMIT 50`
-        )
-        .all(match, isAdmin ? 1 : 0);
-      results = rows.map((r) => ({
-        slug: r.slug,
-        title: r.title,
-        ...(r.published_at ? { date: r.published_at.slice(0, 10) } : {}),
-        snippetHtml: highlightSnippet(r.snip)
-      }));
-    }
-
-    setPublicSecurityHeaders(reply);
-    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-    return reply
-      .type('text/html; charset=utf-8')
-      .send(renderSearchPage({ site, assets: serverAssets(), q, results, isAdmin }));
-  });
+  registerPublicSearchRoute(fastify, { db, getSite });
 
   // ---- post: GET /:slug -------------------------------------------------
 
