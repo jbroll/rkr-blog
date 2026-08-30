@@ -81,18 +81,30 @@ for (const dir of DIRS) {
 
 console.log(report.join('\n'));
 
+const shouldWrite = process.argv.includes('--write');
+
 if (failed > 0) {
+  if (shouldWrite) {
+    const next: BundleSizeBaseline = { version: 1, totals: current };
+    fs.writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
+    try {
+      execSync(`git add ${BASELINE_PATH}`, { stdio: 'ignore' });
+    } catch {
+      // not a git repo or staging failed — fine, the file is still updated
+    }
+    console.log(`\nbundle-size baseline updated via --write (${failed} dir(s) over budget).`);
+    process.exit(0);
+  }
   console.error(
     `\nbundle-size check failed: ${failed} dir(s) grew more than ${(GROWTH_BUDGET * 100).toFixed(0)}%.\n` +
-      `If the growth is intentional, bump the baseline manually:\n` +
-      `  npm run -s build:admin && npm run -s build:site && \\\n` +
+      `If the growth is intentional, bump the baseline:\n` +
       `  node --no-warnings=ExperimentalWarning --experimental-strip-types \\\n` +
       `    scripts/check-bundle-size.ts --write\n`
   );
   process.exit(1);
 }
 
-// On pass (or with --write override), rewrite the baseline.
+// On pass, rewrite the baseline.
 const next: BundleSizeBaseline = { version: 1, totals: current };
 fs.writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
 try {
