@@ -19,6 +19,16 @@ export function listSidecarIds(siteRoot: string): string[] {
     .filter((id) => /^[0-9a-f]{64}$/.test(id));
 }
 
+export function listVideoSidecarIds(siteRoot: string): string[] {
+  const dir = path.join(siteRoot, 'sidecars', 'videos');
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => f.slice(0, -5))
+    .filter((id) => /^[0-9a-f]{64}$/.test(id));
+}
+
 /** Read every sidecar present in $SITE_ROOT/sidecars/, in id order. */
 export async function listSidecars(siteRoot: string): Promise<Sidecar[]> {
   const ids = listSidecarIds(siteRoot).sort();
@@ -65,6 +75,24 @@ export function scanPostForImageIds(body: string, knownIds: Set<string>): Set<st
     // surfaces them as authoring errors.
   }
 
+  return refs;
+}
+
+export function scanPostForVideoIds(body: string, knownVideoIds: Set<string>): Set<string> {
+  const refs = new Set<string>();
+  for (const m of body.matchAll(ID_RE)) {
+    if (knownVideoIds.has(m[0])) refs.add(m[0]);
+  }
+  const fulls = [...knownVideoIds];
+  for (const m of body.matchAll(SHORT_ID_RE)) {
+    const candidate = m[0];
+    if (candidate.length === 64) continue;
+    const matches = fulls.filter((id) => id.startsWith(candidate));
+    if (matches.length === 1) {
+      const sole = matches[0];
+      if (sole !== undefined) refs.add(sole);
+    }
+  }
   return refs;
 }
 

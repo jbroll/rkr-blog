@@ -10,8 +10,14 @@ import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import { parsePost } from '../lib/content.ts';
 import { imageInfo } from '../lib/originals.ts';
-import { listSidecarIds, scanPostForImageIds } from '../lib/posts.ts';
+import {
+  listSidecarIds,
+  listVideoSidecarIds,
+  scanPostForImageIds,
+  scanPostForVideoIds
+} from '../lib/posts.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
+import { readVideoSidecar } from '../lib/video-sidecar.ts';
 import { isValidSlug } from './admin-post-consts.ts';
 
 export interface PostBundleRouteOpts {
@@ -55,6 +61,8 @@ export function registerPostBundleRoutes(
 
       const knownIds = new Set(listSidecarIds(siteRoot));
       const refIds = scanPostForImageIds(markdown, knownIds);
+      const knownVideoIds = new Set(listVideoSidecarIds(siteRoot));
+      const refVideoIds = scanPostForVideoIds(markdown, knownVideoIds);
 
       const originals: { id: string; ext: string; bytes: number }[] = [];
       const sidecars: { id: string; json: unknown }[] = [];
@@ -75,6 +83,13 @@ export function registerPostBundleRoutes(
         }
       }
 
+      const videoSidecars: { id: string; json: unknown }[] = [];
+      for (const id of [...refVideoIds].sort()) {
+        const sc = await readVideoSidecar(siteRoot, id);
+        if (!sc) continue;
+        videoSidecars.push({ id, json: sc });
+      }
+
       return {
         slug,
         title: fm.title,
@@ -85,6 +100,7 @@ export function registerPostBundleRoutes(
         markdown,
         originals,
         sidecars,
+        videoSidecars,
         tags: Array.isArray(fm.tags)
           ? (fm.tags as string[]).filter((t) => typeof t === 'string')
           : []

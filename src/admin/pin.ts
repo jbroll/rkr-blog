@@ -19,6 +19,7 @@ export interface PinManifest {
   markdown: string;
   originals: { id: string; ext: string; bytes: number }[];
   sidecars: { id: string; json: Sidecar }[];
+  videoSidecars?: { id: string; json: unknown }[];
   /** Tag names attached to the post; empty array when untagged. */
   tags?: string[];
 }
@@ -49,6 +50,9 @@ export async function pinPost(
 
   for (const sc of manifest.sidecars) {
     await writeJson(`sidecars/${sc.id}.json`, sc.json);
+  }
+  for (const sc of manifest.videoSidecars ?? []) {
+    await writeJson(`sidecars/videos/${sc.id}.json`, sc.json);
   }
 
   const total = manifest.originals.length;

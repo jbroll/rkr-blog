@@ -27,7 +27,7 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 
 ## 3. Video (isolated v1 follow-ups)
 
-- [ ] **Video sidecars not synced to OPFS** — `admin-post-bundle.ts` ships only image sidecars; `video-map-opfs.ts` empty, `/admin/view/:slug` shows `<!-- missing video -->`. Wire video sidecars into bundle + `pin.ts`. (`DEFERRED.md: Video`) — highest user-visible deferred.
+- [x] **Video sidecars not synced to OPFS** — `admin-post-bundle.ts` ships only image sidecars; `video-map-opfs.ts` empty, `/admin/view/:slug` shows `<!-- missing video -->`. Wire video sidecars into bundle + `pin.ts`. (`DEFERRED.md: Video`) — highest user-visible deferred.
 - [ ] **No admin toolbar button to insert video** — authors use hook/API or raw `::video` markdown today. Add toolbar + drop handler. (`DEFERRED.md: Video`)
 - [ ] **`video gc` not implemented** — `bin/site-admin video probe` ships; orphaned video GC does not. Mirror image GC over `originals/videos` + `sidecars/videos`. (`DEFERRED.md: Video`)
 - [ ] **Video derivatives not prewarmed on post save** — `admin-prewarm.ts` walks image refs only; trimmed video hits 202+retry on first read. (`DEFERRED.md: Video`)
