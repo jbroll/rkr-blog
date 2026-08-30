@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { paths } from '../lib/config.ts';
-import { listSidecars } from '../lib/posts.ts';
+import { listPosts, listSidecars, listVideoSidecarIds, scanPostForVideoIds } from '../lib/posts.ts';
 import {
   type DerivativeArgs,
   derivativeFilename,
@@ -19,6 +19,9 @@ import {
   type OutputFormat,
   type Variant
 } from '../lib/render.ts';
+import { findExistingVideoOriginal } from '../lib/video.ts';
+import { videoFilename } from '../lib/video-render.ts';
+import { readVideoSidecar } from '../lib/video-sidecar.ts';
 
 export default async function gcCmd(_argv: string[]): Promise<void> {
   const result = await runGc(paths().root);
@@ -66,6 +69,15 @@ export async function runGc(
     }
   }
 
+  // Video cache validity: one mp4 + one jpg per video sidecar.
+  const validVideo = new Set<string>();
+  for (const vid of listVideoSidecarIds(siteRoot)) {
+    const sc = await readVideoSidecar(siteRoot, vid);
+    if (!sc) continue;
+    validVideo.add(videoFilename(vid, sc.ops, false));
+    validVideo.add(videoFilename(vid, sc.ops, true, sc.poster.timeMs));
+  }
+
   let deleted = 0;
   let kept = 0;
 
@@ -111,6 +123,74 @@ export async function runGc(
       if (!stat || !tmpAgedOut(stat.mtimeMs, tmpMinAgeMs)) continue;
       fs.unlinkSync(p);
       deleted++;
+    }
+  }
+
+  // cache/video/: video derivatives + stale tmp files.
+  const cacheVideoDir = path.join(siteRoot, 'cache', 'video');
+  if (fs.existsSync(cacheVideoDir)) {
+    for (const filename of fs.readdirSync(cacheVideoDir)) {
+      if (filename.endsWith('.tmp')) {
+        const p = path.join(cacheVideoDir, filename);
+        const stat = fs.statSync(p, { throwIfNoEntry: false });
+        if (!stat || !tmpAgedOut(stat.mtimeMs, tmpMinAgeMs)) continue;
+        fs.unlinkSync(p);
+        deleted++;
+        continue;
+      }
+      if (validVideo.has(filename)) {
+        kept++;
+      } else {
+        fs.unlinkSync(path.join(cacheVideoDir, filename));
+        deleted++;
+      }
+    }
+  }
+
+  // sidecars/videos/*.tmp + originals/videos/.tmp sweeps.
+  deleted += sweepTmp(path.join(siteRoot, 'sidecars', 'videos'), tmpMinAgeMs);
+  const originalsVideoTmp = path.join(siteRoot, 'originals', 'videos', '.tmp');
+  if (fs.existsSync(originalsVideoTmp)) {
+    for (const name of fs.readdirSync(originalsVideoTmp)) {
+      const p = path.join(originalsVideoTmp, name);
+      const stat = fs.statSync(p, { throwIfNoEntry: false });
+      if (!stat || !tmpAgedOut(stat.mtimeMs, tmpMinAgeMs)) continue;
+      fs.unlinkSync(p);
+      deleted++;
+    }
+  }
+
+  // Orphaned video originals + sidecars: delete when no post references the id.
+  {
+    const posts = listPosts(siteRoot);
+    const knownVideoIds = new Set(listVideoSidecarIds(siteRoot));
+    const referenced = new Set<string>();
+    for (const post of posts) {
+      for (const id of scanPostForVideoIds(post.body, knownVideoIds)) referenced.add(id);
+    }
+    for (const vid of knownVideoIds) {
+      if (referenced.has(vid)) continue;
+      // Delete sidecar.
+      const sidecarPath = path.join(siteRoot, 'sidecars', 'videos', `${vid}.json`);
+      if (fs.existsSync(sidecarPath)) {
+        fs.unlinkSync(sidecarPath);
+        deleted++;
+      }
+      // Delete original file(s) across candidate exts.
+      const orig = await findExistingVideoOriginal(siteRoot, vid);
+      if (orig) {
+        fs.unlinkSync(orig.path);
+        deleted++;
+        // Remove empty shard dirs (best-effort).
+        try {
+          const dir = path.dirname(orig.path);
+          if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+          const parent = path.dirname(dir);
+          if (fs.existsSync(parent) && fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 

@@ -84,10 +84,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Video
 
-
 - **No admin toolbar button to insert a video** — authors reach `::video` via the editor hook/API or raw markdown today. _Revisit when:_ video editing is surfaced in the UI; add a toolbar insert + drop handler.
-- **`video gc` not implemented** — `bin/site-admin video probe` ships; GC of orphaned videos (masters/sidecars whose posts are gone) does not. _Revisit when:_ disk usage from deleted posts' videos matters; mirror the image GC pass over `originals/videos` + `sidecars/videos`.
-- **Video derivatives not prewarmed on post save** — `admin-prewarm.ts` walks image refs only, so a trimmed video hits the 202+retry path on first public request. _Revisit when:_ first-read latency for videos matters.
 
 ## Test coverage
 

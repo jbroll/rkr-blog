@@ -8,9 +8,16 @@
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { enqueue } from '../lib/jobs.ts';
-import { listSidecarIds, scanPostForImageIds } from '../lib/posts.ts';
+import {
+  listSidecarIds,
+  listVideoSidecarIds,
+  scanPostForImageIds,
+  scanPostForVideoIds
+} from '../lib/posts.ts';
 import type { DerivativeArgs, Op, OutputFormat } from '../lib/render.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
+import { videoCachePaths } from '../lib/video-render.ts';
+import { readVideoSidecar } from '../lib/video-sidecar.ts';
 
 export async function prewarmVariants(db: Db, siteRoot: string, markdown: string): Promise<void> {
   const knownIds = new Set(listSidecarIds(siteRoot));
@@ -41,5 +48,18 @@ export async function prewarmVariants(db: Db, siteRoot: string, markdown: string
         enqueue(db, { kind: 'render', payload: args, cacheKey: ck });
       }
     }
+  }
+
+  const knownVideoIds = new Set(listVideoSidecarIds(siteRoot));
+  const videoRefIds = scanPostForVideoIds(markdown, knownVideoIds);
+  for (const id of videoRefIds) {
+    const sc = await readVideoSidecar(siteRoot, id);
+    if (!sc) continue;
+    const paths = videoCachePaths(siteRoot, id, sc.ops, sc.poster.timeMs);
+    enqueue(db, {
+      kind: 'renderVideo',
+      payload: { originalId: id, ops: sc.ops, posterTimeMs: sc.poster.timeMs, siteRoot },
+      cacheKey: paths.videoOphash
+    });
   }
 }
