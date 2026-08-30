@@ -101,5 +101,12 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
   }
 }
 
-// requireOwner will land alongside the first owner-only route (likely the
-// user-management UI). Removed for now to keep coverage honest.
+export async function requireOwner(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!req.user) {
+    reply.code(401).send({ error: 'authentication required' });
+    return;
+  }
+  if (req.user.role !== 'owner') {
+    reply.code(403).send({ error: 'owner role required' });
+  }
+}

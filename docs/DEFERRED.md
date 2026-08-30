@@ -10,7 +10,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Security
 
-- **Roles stored but never enforced** — `owner` / `editor` are assigned from the invite and carried on the user, but no route consults `role`; every admin route requires only a user. _Revisit when:_ a second person is invited, or an `editor` invite is meant to withhold anything.
+- **Roles stored but never enforced** — `owner` / `editor` are assigned from the invite and carried on the user, but no route consults `role`; every admin route requires only a user. Stub `requireOwner` at `src/lib/auth-middleware.ts` (tested in `test/lib/require-owner.test.ts`) enforces `role === 'owner'`. _Revisit when:_ second editor invited — wire `requireOwner` to owner-only routes.
 - **Multi-tenant deployability gaps** — no infra rate-limit (only
   in-process `@fastify/rate-limit`), in-process PKCE state, no
   auth-write logging. _Revisit when:_ any shared/team/multi-tenant
