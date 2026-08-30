@@ -842,6 +842,23 @@ test('importPost: fetchTagNames failure is non-fatal, post imports without tags'
   assert.doesNotMatch(result.markdown, /^tags:/m);
 });
 
+test('importPost: resolved tag names are reported on the result', async (t) => {
+  const root = freshSiteRoot(t);
+  const post: WpPost = { ...makePost('<p>Tagged post.</p>'), tags: [10, 20] };
+  const result = await importPost(post, {
+    siteRoot: root,
+    fetchImage: stubFetcher(),
+    fetchTagNames: async () => ['travel', 'food']
+  });
+  assert.deepEqual(result.tagNames, ['travel', 'food']);
+
+  const untagged = await importPost(makePost('<p>No tags.</p>'), {
+    siteRoot: root,
+    fetchImage: stubFetcher()
+  });
+  assert.deepEqual(untagged.tagNames, []);
+});
+
 // ---- Fix 1: surrogate codepoints in numeric entities must not throw ------
 
 test('importPost: lone surrogate entities (&#xD800;, &#55296;) do not throw and are preserved literally', async (t) => {

@@ -150,7 +150,8 @@ async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
         status,
         date: frontmatter.date ?? post.date,
         markdown: body,
-        ...(result.bannerImageId ? { banner: result.bannerImageId } : {})
+        ...(result.bannerImageId ? { banner: result.bannerImageId } : {}),
+        ...(result.tagNames.length > 0 ? { tags: result.tagNames } : {})
       })
     });
     if (!postRes.ok) {

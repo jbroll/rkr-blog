@@ -34,6 +34,9 @@ export interface ImportResult {
   filename: string;
   /** Ingested id of the banner / featured image, if `opts.bannerUrl` was set. */
   bannerImageId?: string;
+  /** Tag names resolved from the post's WP tag ids, as emitted into the
+   * frontmatter. Empty when the post has no tags or resolution failed. */
+  tagNames: string[];
 }
 
 export interface ImportOpts {
@@ -157,7 +160,8 @@ export async function importPost(post: WpPost, opts: ImportOpts): Promise<Import
     imagesIngested,
     imageErrors,
     filename: filenameFor(post),
-    bannerImageId
+    bannerImageId,
+    tagNames
   };
 }
 

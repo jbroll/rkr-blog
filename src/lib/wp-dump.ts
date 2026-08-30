@@ -5,6 +5,7 @@
 // and ignores everything else.
 
 import fs from 'node:fs';
+import path from 'node:path';
 
 import { open } from './db.ts';
 
@@ -241,42 +242,65 @@ function unparseableInsert(stmt: string): string {
   return `unparseable INSERT INTO \`${table}\`: ${excerpt}`;
 }
 
+function tmpDbPath(dbPath: string): string {
+  return path.join(
+    path.dirname(dbPath),
+    `.${path.basename(dbPath)}.${process.pid}.${Date.now()}.${Math.random()
+      .toString(36)
+      .slice(2)}.tmp`
+  );
+}
+
+/** A clean `db.close()` checkpoints and unlinks the sidecars, but a close
+ * that itself failed leaves them behind. */
+function removeTmpDb(tmpPath: string): void {
+  for (const suffix of ['', '-wal', '-shm']) fs.rmSync(`${tmpPath}${suffix}`, { force: true });
+}
+
 /** Convert a dump file into a fresh SQLite database at `dbPath`.
- * Existing tables of the same name are dropped, so repeat runs are
- * idempotent. */
+ * Built in a sibling temp file and renamed into place only once the whole
+ * dump has converted, so a failure leaves any existing `dbPath` intact
+ * rather than a truncated or half-loaded database. */
 export function convertDump(sqlPath: string, dbPath: string): DumpStats {
   const text = fs.readFileSync(sqlPath, 'utf8');
-  const db = open(dbPath);
+  const tmpPath = tmpDbPath(dbPath);
   let tables = 0;
   let rows = 0;
   try {
-    db.exec('PRAGMA foreign_keys = OFF');
-    for (const stmt of statements(text)) {
-      const s = stmt.trim();
-      if (!s) continue;
-      if (/^CREATE TABLE/i.test(s)) {
-        const created = convertCreate(s);
-        if (!created) continue;
-        db.exec(`DROP TABLE IF EXISTS \`${created.table}\``);
-        db.exec(created.ddl);
-        tables++;
-      } else if (ROW_STATEMENT.test(s)) {
-        const m = ROW_INSERT.exec(s);
-        const parsed = m ? parseValues(m[3] as string) : [];
-        if (!m || parsed.length === 0) throw new Error(unparseableInsert(s));
-        const placeholders = (parsed[0] as Cell[]).map(() => '?').join(',');
-        const insert = db.prepare(
-          `INSERT INTO \`${m[1]}\`${columnList(m[2])} VALUES (${placeholders})`
-        );
-        db.transaction(() => {
-          for (const row of parsed) insert.run(...row);
-        })();
-        rows += parsed.length;
+    const db = open(tmpPath);
+    try {
+      db.exec('PRAGMA foreign_keys = OFF');
+      for (const stmt of statements(text)) {
+        const s = stmt.trim();
+        if (!s) continue;
+        if (/^CREATE TABLE/i.test(s)) {
+          const created = convertCreate(s);
+          if (!created) continue;
+          db.exec(`DROP TABLE IF EXISTS \`${created.table}\``);
+          db.exec(created.ddl);
+          tables++;
+        } else if (ROW_STATEMENT.test(s)) {
+          const m = ROW_INSERT.exec(s);
+          const parsed = m ? parseValues(m[3] as string) : [];
+          if (!m || parsed.length === 0) throw new Error(unparseableInsert(s));
+          const placeholders = (parsed[0] as Cell[]).map(() => '?').join(',');
+          const insert = db.prepare(
+            `INSERT INTO \`${m[1]}\`${columnList(m[2])} VALUES (${placeholders})`
+          );
+          db.transaction(() => {
+            for (const row of parsed) insert.run(...row);
+          })();
+          rows += parsed.length;
+        }
       }
+    } finally {
+      db.close();
     }
-  } finally {
-    db.close();
+    if (tables === 0) throw new Error(`no CREATE TABLE statements in ${sqlPath}`);
+    fs.renameSync(tmpPath, dbPath);
+  } catch (err) {
+    removeTmpDb(tmpPath);
+    throw err;
   }
-  if (tables === 0) throw new Error(`no CREATE TABLE statements in ${sqlPath}`);
   return { tables, rows };
 }

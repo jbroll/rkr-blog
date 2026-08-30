@@ -275,3 +275,39 @@ test('convertDump: throws when the dump has no CREATE TABLE', (t) => {
   fs.writeFileSync(sqlPath, '-- nothing here\n');
   assert.throws(() => convertDump(sqlPath, path.join(dir, 'out.db')), /no CREATE TABLE/);
 });
+
+const GOOD_DUMP = `${POSTS_DDL}\nINSERT INTO \`wp_posts\` VALUES (1,'A','B',0,NULL);\n`;
+const BAD_INSERT_DUMP = `${POSTS_DDL}\nINSERT INTO \`wp_posts\` VALUES 1,2,3;\n`;
+
+for (const [label, dump, message] of [
+  ['an unparseable INSERT', BAD_INSERT_DUMP, /unparseable INSERT/],
+  ['no CREATE TABLE', '-- nothing here\n', /no CREATE TABLE/]
+] as Array<[string, string, RegExp]>) {
+  test(`convertDump: ${label} leaves no database and no temp files`, (t) => {
+    const dir = tmpdir(t);
+    const sqlPath = path.join(dir, 'dump.sql');
+    const dbPath = path.join(dir, 'out.db');
+    fs.writeFileSync(sqlPath, dump);
+    assert.throws(() => convertDump(sqlPath, dbPath), message);
+    assert.equal(fs.existsSync(dbPath), false);
+    assert.deepEqual(fs.readdirSync(dir), ['dump.sql']);
+  });
+
+  test(`convertDump: ${label} leaves an existing database untouched`, (t) => {
+    const dir = tmpdir(t);
+    const sqlPath = path.join(dir, 'dump.sql');
+    const dbPath = path.join(dir, 'out.db');
+    fs.writeFileSync(sqlPath, GOOD_DUMP);
+    convertDump(sqlPath, dbPath);
+    const before = fs.readFileSync(dbPath);
+
+    fs.writeFileSync(sqlPath, dump);
+    assert.throws(() => convertDump(sqlPath, dbPath), message);
+    assert.deepEqual(fs.readFileSync(dbPath), before);
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['dump.sql', 'out.db']);
+
+    const db = open(dbPath);
+    t.after(() => db.close());
+    assert.equal(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM wp_posts').get()?.n, 1);
+  });
+}

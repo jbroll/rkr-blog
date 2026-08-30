@@ -736,6 +736,7 @@ test("pushPost via source: the source's fetchImage, media URL and tag names are 
     'utf8'
   );
   assert.match(md, /^banner: [0-9a-f]{64}$/m);
+  assert.match(md, /^tags:\n- Alpha\n- Beta$/m);
 });
 
 test('pushPage via source: a draft About page lands as a draft _about', async (t) => {

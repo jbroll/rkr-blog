@@ -28,9 +28,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## WordPress import
 
-- **Push drops resolved tags** — `import-wp push` doesn't forward the post's tag names to `/admin/posts`, so pushed posts arrive untagged even when the source resolved tags. _Revisit when:_ a source with tags is pushed (the roll-along backup has no `post_tag` rows).
 - **`_binary` / `0x` hex literals stored as text** — the dump converter writes blob literals verbatim into TEXT columns rather than decoding them. _Revisit when:_ a dump whose post content or options carry real binary data is imported.
-- **Failed conversion leaves a partial `.db`** — `convertDump` writes in place, so an error mid-run leaves a truncated database at the target path. _Revisit when:_ conversion runs unattended or feeds an automated pipeline; fix is convert-to-temp then rename.
 
 ## Editor & figures
 
