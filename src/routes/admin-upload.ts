@@ -7,7 +7,8 @@ import path from 'node:path';
 
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
-import { BUILD_HEADER, STALE_CLIENT_STATUS, staleClientRejection } from '../lib/client-build.ts';
+import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
+import { staleClientRejection } from '../lib/client-build.ts';
 import { ingestStream } from '../lib/originals.ts';
 
 export interface AdminUploadRouteOpts {

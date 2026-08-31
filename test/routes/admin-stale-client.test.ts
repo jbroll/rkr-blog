@@ -13,13 +13,15 @@ import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
-
+import { BUILD_META_NAME } from '../../src/lib/build-contract.ts';
 import { _resetGitHashCache } from '../../src/lib/build-info.ts';
 import { staleClientRejection } from '../../src/lib/client-build.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
+import { serverAssets } from '../../src/lib/site-assets.ts';
 import { buildApp } from '../../src/server.ts';
+import { renderAdminPage } from '../../src/templates/admin.ts';
 import { buildMultipart, buildMultipartParts } from '../helpers/multipart.ts';
 
 const BUILD = 'deadbeefcafe';
@@ -216,4 +218,26 @@ test('POST /admin/sidecar/:id/commit: the current build writes', async (t) => {
     payload: mp.payload
   });
   assert.equal(res.statusCode, 200);
+});
+
+// ---- the shell stamp --------------------------------------------
+
+test('the admin shell stamps the build the guard checks against', () => {
+  const hash = 'abcdef012345';
+  const html = renderAdminPage({
+    site: { title: 'Test Site' },
+    assets: { theme: 'default', hash, base: '/admin/static' },
+    bundleUrl: `/admin/static/admin/main.js?v=${hash}`,
+    cspNonce: 'n'
+  });
+  // The client reads exactly this name to build the header; a rename
+  // or a dropped tag disables the guard with every route test still
+  // passing.
+  assert.match(html, new RegExp(`<meta name="${BUILD_META_NAME}" content="${hash}"/>`));
+});
+
+test('the stamped build is the one serverAssets hands the templates', (t) => {
+  pinBuild(t);
+  assert.equal(serverAssets('/admin/static').hash, BUILD);
+  assert.equal(staleClientRejection(serverAssets().hash), null);
 });

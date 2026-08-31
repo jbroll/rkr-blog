@@ -14,12 +14,6 @@
 
 import { shortGitHash } from './build-info.ts';
 
-export const BUILD_HEADER = 'x-rkr-build';
-
-/** 426 Upgrade Required, not 409: `/admin/posts` already spends 409
- * on post-superseded and the client branches on it. */
-export const STALE_CLIENT_STATUS = 426;
-
 export interface StaleClient {
   error: 'stale-client';
   serverBuild: string;

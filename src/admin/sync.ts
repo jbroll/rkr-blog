@@ -5,6 +5,7 @@
 // cycle. Enforced by the circular-import gauntlet check.
 
 import { buildIdHeader } from './build-id.ts';
+import { setStatus } from './dom.ts';
 import { runEviction } from './eviction.ts';
 import { getState as getOnlineState } from './online-state.ts';
 import {
@@ -38,8 +39,8 @@ export class SavePostConflictError extends Error {
  * its writes (426). No retry can fix it — the author has to reload.
  * @public */
 export class StaleClientError extends Error {
-  constructor(op: string, seq: number) {
-    super(`${op} drain ${seq}: this editor is out of date — reload to sync`);
+  constructor(context: string) {
+    super(`${context}: this editor is out of date — reload to sync`);
     this.name = 'StaleClientError';
   }
 }
@@ -232,6 +233,13 @@ export async function forceConflictedSave(): Promise<void> {
       serverUpdatedAt: info?.serverUpdatedAt ?? baseline,
       clientLastSyncedAt: baseline
     });
+    return;
+  }
+  if (res.status === 426) {
+    // Leave the conflict standing: 'halted' would replace it, and
+    // both discard and force early-return unless the status is still
+    // 'conflict' — stranding the resolution UI until a reload.
+    setStatus('this editor is out of date — reload, then resolve the conflict', true);
     return;
   }
   if (!res.ok) {

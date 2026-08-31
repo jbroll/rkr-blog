@@ -4,13 +4,19 @@
 import type { SidecarOp } from '@rkr/image-edit';
 import { isDirty, type LocalEditState, validateOps } from '@rkr/image-edit';
 import { webpOrJpeg } from '@rkr/image-edit/canvas';
+import { buildIdHeader } from './build-id.ts';
 import { getPipelineCache, loadOriginal } from './canvas-loaders';
 import { setStatus } from './dom.ts';
 import { getState } from './online-state.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
 import { OPFS_DIRS } from './opfs-schema.ts';
 import { append as outboxAppend } from './outbox.ts';
-import { onImageStateInvalidated, publishImageStateInvalidation, tryDrain } from './sync.ts';
+import {
+  onImageStateInvalidated,
+  publishImageStateInvalidation,
+  StaleClientError,
+  tryDrain
+} from './sync.ts';
 
 const IMAGE_STATE_DIR = OPFS_DIRS.IMAGE_STATE;
 
@@ -140,7 +146,17 @@ async function postCommit(
   const fd = new FormData();
   fd.append('ops', JSON.stringify({ ops, redoStack }));
   if (bake) fd.append('bake', bake, `${id}.${bake.type === 'image/jpeg' ? 'jpg' : 'webp'}`);
-  const res = await fetch(`/admin/sidecar/${id}/commit`, { method: 'POST', body: fd });
+  const res = await fetch(`/admin/sidecar/${id}/commit`, {
+    method: 'POST',
+    body: fd,
+    // Stamped like the save path: without it this write lands under
+    // the old contract while the savePost that follows it 426s,
+    // splitting one edit across two contracts.
+    headers: buildIdHeader()
+  });
+  // Queued by the caller's catch, then the drain re-hits 426 and halts
+  // with the reload prompt. Nothing is lost.
+  if (res.status === 426) throw new StaleClientError(`commit ${id.slice(0, 8)}`);
   if (!res.ok) throw new Error(`commit: ${res.status} ${await res.text()}`);
   return (await res.json()) as {
     ops: SidecarOp[];

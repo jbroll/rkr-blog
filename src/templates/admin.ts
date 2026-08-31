@@ -5,7 +5,8 @@
 // network dependency at runtime, which keeps the editor's CSP tight
 // (script-src 'self' only, no esm.sh / CDN allowance).
 
-import { escapeText } from '../lib/content.ts';
+import { BUILD_META_NAME } from '../lib/build-contract.ts';
+import { escapeAttr, escapeText } from '../lib/content.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { icon } from './icons.ts';
@@ -33,7 +34,7 @@ export function renderAdminPage(data: AdminPageData): string {
 <!-- The build this shell was rendered from. An offline launch boots the
      CACHED shell, so this carries the stale bundle's build — which is
      exactly what the drain routes check against. -->
-<meta name="rkr-build" content="${escapeText(a.hash)}"/>
+<meta name="${BUILD_META_NAME}" content="${escapeAttr(a.hash)}"/>
 <title>Editor — ${escapeText(data.site.title)}</title>
 <!-- Public theme: gives the editor preview the same look the published post
      will have (figures, prose width, headings, gallery/carousel placeholders).

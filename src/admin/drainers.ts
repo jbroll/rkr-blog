@@ -12,7 +12,7 @@ import { type Drainer, SavePostConflictError, StaleClientError } from './sync.ts
  * a distinct error keeps the retry loop from burning its budget on a
  * failure no retry can fix. */
 function throwIfStale(op: string, seq: number, res: Response): void {
-  if (res.status === 426) throw new StaleClientError(op, seq);
+  if (res.status === 426) throw new StaleClientError(`${op} drain ${seq}`);
 }
 
 /** Shared POST + outbox-seq header + non-2xx → throw with a
