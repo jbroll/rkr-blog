@@ -1,6 +1,8 @@
 # Backlog — review findings 2026-08-30
 
-Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped; delete the line. For one-line deferred format with revisit triggers see `DEFERRED.md`.
+Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped. For one-line deferred format with revisit triggers see `DEFERRED.md`.
+
+Build hygiene, security, and video follow-ups are done. What remains is editor/sync/PWA (group 4), the WordPress permalink redirect and website vhost (group 5), and the long-tail items in groups 6-8.
 
 ## 0. Build hygiene — quick wins (no spec needed)
 
@@ -22,13 +24,13 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 - [x] **GC never reclaims orphaned originals** — `src/cli/gc.ts` prunes cache only; `originals/<aa>/<bb>/<id>.<ext>` accumulates forever. Add cross-referencing pass over sidecars. (`DEFERRED.md: Performance`)
 - [ ] **Prepass-equivalence test doesn't cover variant fidelity** — `test/lib/image-map-equivalence.test.ts` strips `<source>` before compare; WebP/AVIF divergence invisible. (`DEFERRED.md: Image pipeline`)
 - [ ] **`buildImageMapFromOpfs` blob: URLs never revoked** — bounded to one map per load today; re-rendering preview would leak. (`DEFERRED.md: Image pipeline`)
-- [ ] **`scanPostForImageIds` duplicates prefix resolution** — third copy of `id-resolve.ts` rule in `src/lib/posts.ts`. Unify on next touch. (`DEFERRED.md: Image pipeline`)
+- [x] **`scanPostForImageIds` duplicates prefix resolution** — third copy of `id-resolve.ts` rule in `src/lib/posts.ts`. Unify on next touch. (`DEFERRED.md: Image pipeline`)
 - [ ] **`console.warn` vs structured log** — `src/lib/image-map-fs.ts` uses `console.warn` for bake recreation; should be `app.log.warn`.
 
 ## 3. Video (isolated v1 follow-ups)
 
 - [x] **Video sidecars not synced to OPFS** — `admin-post-bundle.ts` ships only image sidecars; `video-map-opfs.ts` empty, `/admin/view/:slug` shows `<!-- missing video -->`. Wire video sidecars into bundle + `pin.ts`. (`DEFERRED.md: Video`) — highest user-visible deferred.
-- [ ] **No admin toolbar button to insert video** — authors use hook/API or raw `::video` markdown today. Add toolbar + drop handler. (`DEFERRED.md: Video`)
+- [x] **No admin toolbar button to insert video** — authors use hook/API or raw `::video` markdown today. Add toolbar + drop handler. (`DEFERRED.md: Video`)
 - [x] **`video gc` not implemented** — `bin/site-admin video probe` ships; orphaned video GC does not. Mirror image GC over `originals/videos` + `sidecars/videos`. (`DEFERRED.md: Video`)
 - [x] **Video derivatives not prewarmed on post save** — `admin-prewarm.ts` walks image refs only; trimmed video hits 202+retry on first read. (`DEFERRED.md: Video`)
 
@@ -47,9 +49,9 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 ## 5. WordPress import & deployment
 
 - [ ] **Legacy WordPress permalinks 404** — `/%year%/%monthnum%/%day%/%postname%/` → `/:slug` without redirect; ~47 in-content links broken. Add `GET /:y/:m/:d/:slug` 301. (`DEFERRED.md: Deployment`)
-- [ ] **Push drops resolved tags** — `import-wp push` doesn't forward tag names to `/admin/posts`. (`DEFERRED.md: WordPress import`)
+- [x] **Push drops resolved tags** — `import-wp push` doesn't forward tag names to `/admin/posts`. (`DEFERRED.md: WordPress import`)
 - [ ] **`_binary`/`0x` hex literals stored as text** — dump converter writes blob literals verbatim into TEXT. (`DEFERRED.md: WordPress import`)
-- [ ] **Failed conversion leaves partial `.db`** — `convertDump` writes in place. Fix: temp + rename. (`DEFERRED.md: WordPress import`)
+- [x] **Failed conversion leaves partial `.db`** — `convertDump` writes in place. Fix: temp + rename. (`DEFERRED.md: WordPress import`)
 - [ ] **Website: no app CTA, unknown paths 200 not 404** — `website/` fallbacks to `index.html` for missing paths. (`DEFERRED.md: Website` — 2 items)
 
 ## 6. Performance / reliability
@@ -60,9 +62,9 @@ Source: full codebase review at `main` 33b77b5. Every item below was either flag
 
 ## 7. Tests
 
-- [ ] **Flaky: `offline ops bake drains on reconnect`** — save-btn disabled races `ensureLocalState`. (`DEFERRED.md: Test coverage`)
-- [ ] **Flaky: `rotate single image then save edits`** — 404 on `loadOriginal` races OPFS drain under CI load. (`DEFERRED.md: Test coverage`)
-- [ ] **Flaky: `online-save 409 surfaces conflict`** — mtime-bump + 409 timing-sensitive under CI. (`DEFERRED.md: Test coverage`)
+- [x] **Flaky: `offline ops bake drains on reconnect`** — save-btn disabled races `ensureLocalState`. (`DEFERRED.md: Test coverage`)
+- [x] **Flaky: `rotate single image then save edits`** — 404 on `loadOriginal` races OPFS drain under CI load. (`DEFERRED.md: Test coverage`)
+- [x] **Flaky: `online-save 409 surfaces conflict`** — mtime-bump + 409 timing-sensitive under CI. (`DEFERRED.md: Test coverage`)
 - [ ] **PWA e2e smoke not in CI** — `apps/image-pwa` verified via workflow tests + manual smoke, no Playwright spec. (`DEFERRED.md: image-pwa`)
 - [ ] **Uncovered: perspective-rectify, Google OAuth callback, perspective-modal WebGL UI** — math unit-tested, shell uncovered. (`DEFERRED.md: Test coverage` — 2 items)
 

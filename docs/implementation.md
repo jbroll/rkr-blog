@@ -588,6 +588,11 @@ info, featured media, images, tag names. Two implementations:
   converted to SQLite by `src/lib/wp-dump.ts`, plus the site's
   `wp-content/uploads` tree on disk. No network access.
 
+`convertDump` builds into a sibling temp file and renames into place
+only once the whole dump has converted, so a malformed statement
+partway through leaves any existing database untouched rather than a
+half-loaded one.
+
 `importPost` and `pushPost` already accepted injectable `fetchImage` and
 `fetchTagNames`, so neither the HTML→markdown emitter nor the push path
 knows which source it is running against. The CLI picks one from
@@ -662,7 +667,8 @@ Gather first, then render:
   `blob:` URLs, dimensions falling back to the sidecar's recorded
   values, since there's no sharp in the browser.
 - `src/lib/id-resolve.ts` holds the one copy of the id-prefix
-  resolution rule both prepasses call.
+  resolution rule. Both prepasses call it, as do `posts.ts`'s
+  image/video scanners and `/admin/preview/:id`.
 
 Callers pass whatever subtree they are about to render: a whole `Root`
 for `/about` and `/:slug`, the hero figure plus lede for the index
