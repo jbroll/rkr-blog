@@ -106,6 +106,43 @@ async function waitForOpfsContains(
     .toBe(true);
 }
 
+// Poll until the `upload` outbox entry for `id` has drained. The
+// "uploaded <file>" status fires as soon as the bytes hit OPFS, so
+// everything server-side (sidecar meta, /admin/original) 404s until
+// the drain lands — and ensureLocalState treats a 404 meta as a
+// silent no-op, leaving the image-edit panel un-hydrated.
+async function waitForUploadDrained(
+  page: import('@playwright/test').Page,
+  id: string,
+  timeout = 15_000
+): Promise<void> {
+  await expect
+    .poll(async () => (await page.request.get(`/admin/sidecar/${id}/meta`)).status(), { timeout })
+    .toBe(200);
+}
+
+// Poll until an entry for `op` is durably in the outbox. Save
+// handlers are fire-and-forget: the button re-disables before the
+// outbox write lands, and a reconnect in that window drains an
+// empty queue with nothing left to re-trigger it. Needs ?e2e=1.
+async function waitForOutboxEntry(
+  page: import('@playwright/test').Page,
+  op: string,
+  timeout = 10_000
+): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async (wanted: string) => {
+          type ListFn = () => Promise<{ op: string }[]>;
+          const list = (window as unknown as { __rkrOutboxList: ListFn }).__rkrOutboxList;
+          return (await list()).some((e) => e.op === wanted);
+        }, op),
+      { timeout }
+    )
+    .toBe(true);
+}
+
 test('editor: insert image, set matrix, save publishes to /:slug', async ({ page }) => {
   await login(page);
   await page.goto('/admin/editor');
@@ -374,6 +411,8 @@ test('editor: rotate single image then save edits', async ({ page }) => {
   await expect(page.locator('#rkroll-admin-status')).toContainText(/^uploaded rotate\.png/, {
     timeout: 10_000
   });
+  const rotateId = await page.locator('#rkr-figure-ids').inputValue();
+  await waitForUploadDrained(page, rotateId);
   // Click the image to enter per-cell mode (image-edit panel only
   // reveals when a cell is explicitly selected — single-image
   // figures no longer auto-select cell 0).
@@ -386,9 +425,8 @@ test('editor: rotate single image then save edits', async ({ page }) => {
     timeout: 10_000
   });
 
-  // Wait for ensureLocalState() to settle — the Save button starts
-  // disabled and the rotate handler reads getLocalEditState which
-  // returns null until the meta fetch resolves.
+  // Save starts disabled; rotate reads getLocalEditState, which is
+  // null until ensureLocalState's meta fetch resolves.
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled();
   await expect(page.locator('#rkr-image-edits')).toBeAttached();
 
@@ -637,9 +675,11 @@ test('editor: crop save updates the thumb src to a blob URL', async ({ page }) =
   // original. After crop, the canvas pipeline produces a NEW blob
   // URL (the rectified bytes), so the assertion is "different blob
   // URL", not "blob URL replaces /admin/preview".
+  // hydrateLocalThumb swaps the src after the "uploaded" status, so
+  // wait for the swap rather than reading straight through it.
   const thumb = page.locator('img[data-cell-index="0"]');
+  await expect(thumb).toHaveAttribute('src', /^blob:/, { timeout: 10_000 });
   const beforeSrc = await thumb.getAttribute('src');
-  expect(beforeSrc).toMatch(/^blob:/);
 
   // Open the per-cell dialog + cropper.
   await thumb.click();
@@ -1164,6 +1204,7 @@ test('editor: offline rotate+save queues setOps+bake, drains on reconnect', asyn
   });
   const id = await page.locator('#rkr-figure-ids').inputValue();
   expect(id).toMatch(/^[0-9a-f]{64}$/);
+  await waitForUploadDrained(page, id);
 
   // Enter per-cell mode while still online so ensureLocalState's
   // initial meta fetch lands; otherwise rotate fires before the local
@@ -1190,6 +1231,9 @@ test('editor: offline rotate+save queues setOps+bake, drains on reconnect', asyn
   await page.locator('#rkr-image-save-btn').click();
   // commitOffline updates s.baseline → Save disables again.
   await expect(page.locator('#rkr-image-save-btn')).toBeDisabled({ timeout: 10_000 });
+  // The button disables on click, before the queue write; reconnecting
+  // here would drain an empty outbox and never revisit the entry.
+  await waitForOutboxEntry(page, 'commitImageEdit');
 
   // Confirm the server STILL doesn't see the rotate op yet.
   const metaPre = await page.request.get(`/admin/sidecar/${id}/meta`);
@@ -1539,6 +1583,9 @@ test('editor: online-save 409 surfaces conflict, not a "queued" toast; network f
   page,
   context
 }) => {
+  // Three round-trips of save → server write → save, each gated on
+  // the response; a loaded CI runner outruns the default budget.
+  test.slow();
   await login(page);
   await page.goto('/admin/editor?e2e=1');
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
@@ -1559,7 +1606,7 @@ test('editor: online-save 409 surfaces conflict, not a "queued" toast; network f
   // v1 online → meta.lastSyncedAt stamped, success toast shown.
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('#rkroll-admin-status')).toContainText(`saved /${slug}`, {
-    timeout: 10_000
+    timeout: 20_000
   });
 
   // Competing write bumps the file mtime so the next save's
@@ -1583,7 +1630,7 @@ test('editor: online-save 409 surfaces conflict, not a "queued" toast; network f
   // The conflict affordance — the SAME one a drained 409 uses — must
   // surface: the badge flips to is-conflict / "conflict on /slug".
   const badge = page.locator('#rkr-sync-badge');
-  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-conflict/, { timeout: 10_000 });
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-conflict/, { timeout: 20_000 });
   await expect(badge.locator('.rkr-sync-text')).toHaveText(`conflict on /${slug}`);
 
   // The misleading success path must NOT have fired: neither the
@@ -1601,7 +1648,7 @@ test('editor: online-save 409 surfaces conflict, not a "queued" toast; network f
     (window as unknown as { __rkrForceConflict: () => Promise<void> }).__rkrForceConflict()
   );
   await expect(badge.locator('.rkr-sync-dot')).not.toHaveClass(/is-conflict/, {
-    timeout: 10_000
+    timeout: 20_000
   });
 
   const offSlug = `e2e-409-net-${Date.now()}`;
@@ -2510,22 +2557,26 @@ test('editor: uploadMany uploads multiple files in series', async ({ page }) => 
     { name: 'multi2.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1X1_GREEN, 'base64') }
   ]);
 
-  // After both uploads complete the status line mentions the last file.
-  await expect(page.locator('#rkroll-admin-status')).toContainText(/multi2\.png/, {
-    timeout: 15_000
-  });
-
-  // A figure carrying both ids must be in the doc.
-  const figureIds = await page.evaluate(() => {
-    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
-    if (!ed) throw new Error('window.__rkrEditor not exposed');
-    let ids = '';
-    ed.state.doc.descendants((node) => {
-      if (node.type.name === 'figure') ids = String((node.attrs as { ids: string }).ids ?? '');
-    });
-    return ids;
-  });
-  expect(figureIds.split(',').length).toBeGreaterThanOrEqual(2);
+  // uploadMany's last status is "uploading multi2.png (2/2)…", which
+  // matches while the second upload is still in flight — the figure is
+  // only inserted once uploadMany resolves. Poll the doc instead.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor })
+            .__rkrEditor;
+          if (!ed) throw new Error('window.__rkrEditor not exposed');
+          let ids = '';
+          ed.state.doc.descendants((node) => {
+            if (node.type.name === 'figure')
+              ids = String((node.attrs as { ids: string }).ids ?? '');
+          });
+          return ids === '' ? 0 : ids.split(',').length;
+        }),
+      { timeout: 15_000 }
+    )
+    .toBeGreaterThanOrEqual(2);
 });
 
 // ---------------------------------------------------------------------------

@@ -48,6 +48,7 @@ Format: **item** — _revisit when:_ trigger.
 
 - **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — a concurrent other-device edit between the conflict and the force can be overwritten (explicit user action; server idempotency covers replays, not this). _Revisit when:_ multi-device editing becomes common.
 - **Offline-launched client can drain a stale bundle to a newer server** — network-first navigation narrows the window to a single launch but does not close it; the fix is a build-hash check at drain time in the drain routes (`/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`), which changes the sync contract. _Revisit when:_ a sync-breaking schema change ships.
+- **A queued outbox entry can sit unsynced until the next online transition** — `tryDrain` in `src/admin/sync.ts` takes the leader lock with `ifAvailable`, and a drain that finds an empty queue publishes `idle`. An entry appended while a previous drain is still finishing gets a no-op `tryDrain` and nothing re-triggers it; there is no periodic sweep. Found while de-flaking `editor: offline rotate+save queues setOps+bake, drains on reconnect`. _Revisit when:_ an author reports edits that never reached the server; fix is a re-check after the lock releases, or a periodic sweep.
 - **`admin/main.js` + `main.css` double-cached, bare and `?v=`-stamped** — ~475 KB of the ~1.2 MB precache is duplicate: relative imports reach them bare, the shell stamps them by name (`scripts/gen-precache.ts`). _Revisit when:_ precache quota pressure causes eviction.
 
 ## Image pipeline
@@ -83,9 +84,6 @@ Format: **item** — _revisit when:_ trigger.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
-- **Flaky: `editor: offline ops bake drains on reconnect`** — save-btn disabled check races `ensureLocalState`. _Revisit when:_ seen failing again; add explicit wait for network idle before the disabled assertion.
-- **Flaky: `editor: rotate single image then save edits`** — 404 on `loadOriginal` / preview during rotate races OPFS-to-server drain under CI load. _Revisit when:_ seen failing outside CI load conditions; add explicit drain-wait.
-- **Flaky: `editor: online-save 409 surfaces conflict`** — mtime-bump + 409 path is timing-sensitive; fails under CI server load. _Revisit when:_ seen failing locally; increase server-response timeouts.
 
 ## Website (marketing site)
 
