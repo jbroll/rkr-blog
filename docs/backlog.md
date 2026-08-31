@@ -44,7 +44,7 @@ Build hygiene, security, video, and the WordPress permalink redirect are done. W
 - [ ] **Container directive for galleries, cross-figure image move** — leaf `::figure` can't carry per-image captions; drag between figures needs two-node PM transaction. (`DEFERRED.md: Editor` — 2 items)
 - [ ] **Tilt slider delta-from-last semantics** — `appendRotate(newVal - prevVal)` diverges from absolute after 90° buttons. Track dedicated tilt op. (`DEFERRED.md: image-pwa`)
 - [ ] **Package canvas layer not c8-gated** — `packages/image-edit/src/canvas/**` excluded like `src/admin`; only `src/core` gated. (`DEFERRED.md: image-pwa`)
-- [ ] **PWA installability (SW scope + icons)** — `sw.js` scope is `dist/`, manifest has no icons due to `eof-ws` hook rejecting PNGs. (`DEFERRED.md: image-pwa`)
+- [x] **PWA installability (SW scope + icons)** — `sw.js` scope is `dist/`, manifest has no icons due to `eof-ws` hook rejecting PNGs. (`DEFERRED.md: image-pwa`)
 
 ## 5. WordPress import & deployment
 

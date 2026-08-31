@@ -103,9 +103,12 @@ if [[ "${DEPLOY_IMAGE_EDITOR:-no}" == "yes" ]]; then
   ( cd "$PROJECT_DIR" && npm run --silent build -w @rkr/image-pwa )
   pwa_src="$PROJECT_DIR/apps/image-pwa"
   pwa_dst="$TMP_DIR/app/image-editor"
-  mkdir -p "$pwa_dst/dist"
-  cp "$pwa_src/index.html" "$pwa_src/manifest.webmanifest" "$pwa_dst/"
+  mkdir -p "$pwa_dst/dist" "$pwa_dst/icons"
+  # sw.js sits at the app root so its scope covers start_url; the
+  # manifest icons are what make the install prompt appear.
+  cp "$pwa_src/index.html" "$pwa_src/manifest.webmanifest" "$pwa_src/sw.js" "$pwa_dst/"
   cp -r "$pwa_src/dist/." "$pwa_dst/dist/"
+  cp -r "$pwa_src/icons/." "$pwa_dst/icons/"
   echo "  fastify_app.build.post: staged image-editor PWA ($(ls "$pwa_dst/dist" | wc -l) dist files)"
 else
   echo "  fastify_app.build.post: image-editor PWA skipped (DEPLOY_IMAGE_EDITOR != yes)"

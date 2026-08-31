@@ -75,6 +75,9 @@ document.addEventListener('drop', (e) => {
   if (file) void loadFile(file);
 });
 
+// Served from the app root, not dist/: a worker's scope defaults to
+// its own directory, and a dist/-scoped worker doesn't cover the
+// manifest's start_url, so the browser withholds the install prompt.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./dist/sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
 }

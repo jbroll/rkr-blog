@@ -7,6 +7,9 @@ static/site/
 # Workspace package/app build artifacts
 packages/*/dist/
 apps/*/dist/
+# Built at the app root so its service-worker scope covers start_url.
+apps/image-pwa/sw.js
+apps/image-pwa/sw.js.map
 
 # c8 coverage output (test:coverage / test:coverage:report)
 coverage/

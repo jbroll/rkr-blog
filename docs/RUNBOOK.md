@@ -28,6 +28,12 @@ config sets `DEPLOY_IMAGE_EDITOR="yes"` — roll-along, at
 `ProxyPass !` pair that serves them. Unset (the default) means neither
 runs, so nothing is built, shipped, or routed.
 
+The app is installable: `sw.js` builds to the app root rather than
+`dist/` so its scope covers the manifest's `start_url`, and the
+manifest ships 192/512 icons plus a maskable variant from `icons/`.
+Both must reach `/opt/<app>/image-editor` or the browser withholds the
+install prompt without saying why.
+
 ### Split public / admin hostnames
 
 roll-along serves both its hostnames directly — no canonical redirect —
