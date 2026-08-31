@@ -474,6 +474,7 @@ GET    /                              rendered post index (paginated)
 GET    /about                         about page
 GET    /search                        full-text search page
 GET    /:slug                         rendered single post
+GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug (published only)
 GET    /img/:filename                 derivative image (cache-miss handler)
 GET    /video/:filename               derivative mp4, Range/206-capable (cache-miss handler)
 GET    /video/poster/:filename        derivative jpeg poster (cache-miss handler)

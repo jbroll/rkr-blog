@@ -17,15 +17,6 @@ Format: **item** — _revisit when:_ trigger.
   pivot.
 
 
-## Deployment
-
-- **Legacy WordPress permalinks 404** — both migrated sites used
-  `/%year%/%monthnum%/%day%/%postname%/`; rkr-blog serves `/:slug`.
-  Import preserves slugs, so breakage is limited to ~47 in-content links
-  (29 roll-along, 18 stockademade) plus external inbound links. _Revisit
-  when:_ those links matter; fix is a `GET /:y/:m/:d/:slug` route that
-  301s to `/:slug` when the slug is a published post.
-
 ## WordPress import
 
 - **`_binary` / `0x` hex literals stored as text** — the dump converter writes blob literals verbatim into TEXT columns rather than decoding them. _Revisit when:_ a dump whose post content or options carry real binary data is imported.
@@ -88,4 +79,3 @@ Format: **item** — _revisit when:_ trigger.
 ## Website (marketing site)
 
 - **No app CTA on the landing page** — `website/` ships no "Try it" / sign-up button because the app has no public entry flow. _Revisit when:_ the app gains a public entry/sign-up flow; wire CTAs in `index.html` nav/hero/footer to the app domain.
-- **Unknown paths fall back to `index.html` (200, not 404)** — the static Apache vhost serves `index.html` for any missing path, so e.g. `/deploy.conf` returns the homepage instead of 404. Harmless (no real file is exposed) but not ideal for a non-SPA. _Revisit when:_ it matters for SEO/correctness; drop the fallback for this static vhost.

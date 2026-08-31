@@ -8,7 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
@@ -108,6 +108,16 @@ export default async function publicRoutes(
   // polls back with backoff until the cache lands.
   const { siteRoot, db, renderBudgetMs = 8_000 } = opts;
   const getSite = (): SiteConfig => opts.site ?? siteConfig();
+
+  const send404 = (req: FastifyRequest, reply: FastifyReply) => {
+    const isAdmin = !!req.user;
+    setPublicSecurityHeaders(reply);
+    if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+    return reply
+      .code(404)
+      .type('text/html; charset=utf-8')
+      .send(renderNotFoundPage({ site: getSite(), isAdmin, assets: serverAssets() }));
+  };
 
   const widgets = new WidgetRegistry();
   // ::figure is the only image widget (spec.md §9 unification); ::video
@@ -270,19 +280,11 @@ export default async function publicRoutes(
     const site = getSite();
     const isAdmin = !!req.user;
     const filePath = path.join(siteRoot, 'content', 'posts', '_about.md');
-    const send404 = () => {
-      setPublicSecurityHeaders(reply);
-      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-      return reply
-        .code(404)
-        .type('text/html; charset=utf-8')
-        .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
-    };
     let parsed: ReturnType<typeof parsePost>;
     try {
       parsed = parsePost(await fs.promises.readFile(filePath, 'utf8'));
     } catch {
-      return send404();
+      return send404(req, reply);
     }
     const ctx = {
       images: await buildImageMap(siteRoot, parsed.ast),
@@ -322,28 +324,12 @@ export default async function publicRoutes(
       // _-prefixed slugs are system posts (e.g. _site-banner); they are
       // never indexed and must never be directly accessible via the public
       // route — return 404 unconditionally, even for authenticated users.
-      if (slug.startsWith('_')) {
-        setPublicSecurityHeaders(reply);
-        const isAdmin = !!req.user;
-        if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-        return reply
-          .code(404)
-          .type('text/html; charset=utf-8')
-          .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
-      }
+      if (slug.startsWith('_')) return send404(req, reply);
       const row = readIndexedPostBySlug(db, slug);
       // Authed visitors see drafts (matches the index page, which links
       // drafts straight to /:slug from the admin table). Anonymous
       // visitors keep the published-only filter.
-      if (!row || (row.status !== 'published' && !req.user)) {
-        setPublicSecurityHeaders(reply);
-        const isAdmin = !!req.user;
-        if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-        return reply
-          .code(404)
-          .type('text/html; charset=utf-8')
-          .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets() }));
-      }
+      if (!row || (row.status !== 'published' && !req.user)) return send404(req, reply);
 
       const fullPath = path.join(siteRoot, row.path);
       const raw = await fs.promises.readFile(fullPath, 'utf8');
@@ -381,6 +367,29 @@ export default async function publicRoutes(
       return reply.type('text/html; charset=utf-8').send(html);
     }
   );
+
+  // ---- legacy WordPress permalinks: GET /:y/:m/:d/:slug ------------------
+
+  // Both migrated sites used /%year%/%monthnum%/%day%/%postname%/ and the
+  // import preserved slugs, so a 301 keeps in-content and inbound links
+  // alive. Drafts and system posts do not redirect: a 301 is cached
+  // permanently by browsers, so it must only ever point at a URL that is
+  // public for everyone.
+  const legacyPermalink = async (
+    req: FastifyRequest<{ Params: { y: string; m: string; d: string; slug: string } }>,
+    reply: FastifyReply
+  ) => {
+    const { y, m, d, slug } = req.params;
+    if (!/^\d{4}$/.test(y) || !/^\d{2}$/.test(m) || !/^\d{2}$/.test(d)) {
+      return send404(req, reply);
+    }
+    const row = readIndexedPostBySlug(db, slug);
+    if (!row || row.status !== 'published' || slug.startsWith('_')) return send404(req, reply);
+    setPublicSecurityHeaders(reply);
+    return reply.redirect(`/${encodeURIComponent(slug)}`, 301);
+  };
+  fastify.get('/:y/:m/:d/:slug', legacyPermalink);
+  fastify.get('/:y/:m/:d/:slug/', legacyPermalink);
 }
 
 /** Count posts matching the given status + optional multi-tag AND filter. */

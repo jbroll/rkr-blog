@@ -2,7 +2,7 @@
 
 Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped. For one-line deferred format with revisit triggers see `DEFERRED.md`.
 
-Build hygiene, security, and video follow-ups are done. What remains is editor/sync/PWA (group 4), the WordPress permalink redirect and website vhost (group 5), and the long-tail items in groups 6-8.
+Build hygiene, security, video, and the WordPress permalink redirect are done. What remains is editor/sync/PWA (group 4), the dump converter's binary literals (group 5), and the long-tail items in groups 6-8.
 
 ## 0. Build hygiene — quick wins (no spec needed)
 
@@ -48,11 +48,11 @@ Build hygiene, security, and video follow-ups are done. What remains is editor/s
 
 ## 5. WordPress import & deployment
 
-- [ ] **Legacy WordPress permalinks 404** — `/%year%/%monthnum%/%day%/%postname%/` → `/:slug` without redirect; ~47 in-content links broken. Add `GET /:y/:m/:d/:slug` 301. (`DEFERRED.md: Deployment`)
+- [x] **Legacy WordPress permalinks 404** — `/%year%/%monthnum%/%day%/%postname%/` → `/:slug` without redirect; ~47 in-content links broken. Add `GET /:y/:m/:d/:slug` 301. (`DEFERRED.md: Deployment`)
 - [x] **Push drops resolved tags** — `import-wp push` doesn't forward tag names to `/admin/posts`. (`DEFERRED.md: WordPress import`)
 - [ ] **`_binary`/`0x` hex literals stored as text** — dump converter writes blob literals verbatim into TEXT. (`DEFERRED.md: WordPress import`)
 - [x] **Failed conversion leaves partial `.db`** — `convertDump` writes in place. Fix: temp + rename. (`DEFERRED.md: WordPress import`)
-- [ ] **Website: no app CTA, unknown paths 200 not 404** — `website/` fallbacks to `index.html` for missing paths. (`DEFERRED.md: Website` — 2 items)
+- [ ] **Website: no app CTA** — no "Try it" / sign-up button; the app has no public entry flow yet. (`DEFERRED.md: Website`)
 
 ## 6. Performance / reliability
 

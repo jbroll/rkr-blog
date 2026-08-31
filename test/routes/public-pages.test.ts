@@ -795,3 +795,32 @@ test('GET /: postTeaser on but admin view → never a teaser', async (t) => {
   assert.match(anon.body, /class="rkr-teaser"/);
   assert.doesNotMatch(anon.body, /class="rkr-admin-posts"/);
 });
+
+test('legacy WordPress permalink 301s to /:slug', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(
+    root,
+    'hello.md',
+    { slug: 'hello', title: 'Hello', status: 'published', date: '2013-05-12T14:00:00Z' },
+    'body'
+  );
+  runReindex(root);
+
+  for (const url of ['/2013/05/12/hello', '/2013/05/12/hello/']) {
+    const res = await app.inject({ method: 'GET', url });
+    assert.equal(res.statusCode, 301, url);
+    assert.equal(res.headers.location, '/hello', url);
+  }
+});
+
+test('legacy permalink 404s for a draft, an unknown slug, and a non-date path', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(root, 'd.md', { slug: 'd', title: 'Drafty', status: 'draft' }, 'body');
+  runReindex(root);
+
+  for (const url of ['/2013/05/12/d', '/2013/05/12/nope', '/one/two/three/four']) {
+    const res = await app.inject({ method: 'GET', url });
+    assert.equal(res.statusCode, 404, url);
+    assert.equal(res.headers.location, undefined, url);
+  }
+});
