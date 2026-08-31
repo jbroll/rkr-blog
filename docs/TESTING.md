@@ -20,10 +20,10 @@ Practical guidelines for the e2e suite. Two layers:
 | `test-e2e/*.spec.ts` | The specs. One per logical flow. |
 | `test-e2e/coverage-fixtures.ts` | Custom `test` fixture that wraps Playwright's `baseTest` to capture V8 coverage per spec. **Always import `test` + `expect` from here, not `@playwright/test`** — otherwise no coverage data is collected for the spec. |
 | `test-e2e/server-runner.ts` | Boots a fresh `buildApp()` against a tmp `SITE_ROOT` for the duration of a run. Single shared instance across all specs. |
+| `test-e2e/coverage-config.ts` | The monocart options both of the above construct a `CoverageReport` from: entry/source filters, source-map resolver, and the bundle-URL → repo-path mapping. mcr applies the filters at both `add()` and `generate()` time, so the two call sites must not disagree. |
 | `test-e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes. |
 | `playwright.config.ts` | Wires the webServer + global teardown. `workers: 1` (the suite shares one server). |
-| `coverage-baseline.json` | Per-file lcov baseline for the pre-commit ratchet (see §10). |
-| `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-core.test.ts` for the service worker). These run under c8, not Playwright; see §10 for the ratchet's `EXEMPT` carve-out. |
+| `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-core.test.ts` for the service worker). These run under c8, not Playwright; see §10 for the ratchet's carve-out list. |
 
 Run:
 
@@ -222,7 +222,9 @@ Two design notes:
 
 `global-teardown.ts` calls `mcr.generate()` once at the end of the run; the report lands at `coverage/e2e/index.html` (HTML) and `coverage/e2e/lcov.info` (lcov for the ratchet).
 
-Source-map resolution maps the bundled URLs (`/static/admin/main.js`) back to source paths (`src/admin/main.ts`). `entryFilter` + `sourceFilter` in the fixture limit the report to OUR code — without them, every TipTap / ProseMirror / PhotoSwipe file appears.
+Source-map resolution maps the bundled URLs (`/static/admin/main.js`) back to source paths (`src/admin/main.ts`). `entryFilter` + `sourceFilter` in `coverage-config.ts` limit the report to OUR code — without them, every TipTap / ProseMirror / PhotoSwipe file appears. The filter also keeps `packages/image-edit/src/canvas/**`, which is bundled into the admin SPA and cannot be reached by the c8 unit gate because it needs a DOM.
+
+`sourcePath` there anchors the dist dir on the last `static/` segment of the bundle's path. The admin shell loads `main.js` both as `/static/admin/main.js` and as `/admin/static/admin/main.js`; slicing the host off the front instead maps the two URLs to different paths, and every file lands in the report twice with different counts. (The ratchet's own `normalisePath` collapses both forms, so this is a report-legibility fix, not a gating one.)
 
 ---
 
@@ -240,45 +242,42 @@ For coverage debugging: `coverage/e2e/index.html` shows per-file uncovered lines
 
 ---
 
-## 10. The pre-commit ratchet (you already have it)
+## 10. The union coverage ratchet
 
-`.githooks/pre-commit` runs the e2e suite + coverage gate **only when `src/admin/**` or `src/site/**` is staged**. Three rules per file:
+Coverage gating lives in org-hooks (`profiles/sci-tiered.yml`), not in
+this repo. The tier-2 push runs the unit and e2e jobs in parallel on
+the CI host, merges `coverage/lcov.info` with `coverage/e2e/lcov.info`
+per line, and ratchets the union against `coverage-union-baseline.json`
+minus `coverage-union-ratchet-exclude`. Neither file is committed yet,
+and `ratchet-staged.sh` exits 0 without a baseline, so the gate is
+inert until one is seeded.
 
-- **New file**: must be exercised at ≥ 75% lines.
-- **Existing file at ≥ 75%**: must stay there.
-- **Existing file below 75%**: uncovered-line count must not increase.
+Its `--glob` (`^(src|packages)/.*\.(ts|tsx|js|jsx|mjs|cjs)$`) selects
+which *staged* files a commit is gated on. lcov paths are a separate
+matter: `normalisePath` in org-hooks strips host and `admin/` prefixes
+and anchors `packages/` before `src/`, so both spellings of a bundle
+URL land on the same key.
 
-Output on failure:
-
-```
-e2e coverage ratchet failed:
-  src/admin/main.ts: more uncovered lines than baseline: 26 → 31 (76.15% → 71.56%)
-
-Add e2e coverage for the affected lines, or revisit the change.
-```
-
-Two paths to passing:
+Two paths to passing once it is live:
 
 1. Add an e2e spec that exercises the new lines. (The right answer for new behavior.)
 2. Make the change without adding net-uncovered lines (refactor only, change deletes lines, etc.).
 
-`coverage-baseline.json` updates automatically on every passing commit, so improvements ratchet forward without manual bookkeeping.
-
 ### Carve-outs: code Playwright structurally can't see
 
-`scripts/check-e2e-coverage.ts` keeps a small `EXEMPT` set of files
-that bypass the new-file rule because the e2e harness cannot
-instrument them. Today that's the service worker (`src/site/sw.ts`,
-`src/site/sw-core.ts`) — Playwright's `page.coverage` only sees the
-page's JS context, not the SW thread. These files are unit-tested in
-Node via `test/site/sw-core.test.ts` with a Map-backed mock
-`CacheStorage`, and that suite is enforced by the c8 per-file gate
-in `npm run test:coverage` (≥ 90% lines / ≥ 75% branches).
+The union ratchet's carve-out list is `coverage-union-ratchet-exclude`
+at the repo root. It is for files the e2e harness cannot instrument at
+all: the service worker (`src/site/sw.ts`, `src/site/sw-core.ts`),
+because Playwright's `page.coverage` only sees the page's JS context,
+not the SW thread. Those are unit-tested in Node via
+`test/site/sw-core.test.ts` with a Map-backed mock `CacheStorage`, and
+enforced by the c8 per-file gate in `npm run test:coverage` (≥ 90%
+lines / ≥ 75% branches).
 
 When you add code that's structurally invisible to e2e (web workers,
-SharedWorker, AudioWorklet, etc.), add the source file to `EXEMPT`
-and pair it with a unit test under `test/site/`. Don't game the gate
-for code that *is* reachable from a page — add an e2e spec instead.
+SharedWorker, AudioWorklet, etc.), add it to the exclude file and pair
+it with a unit test. Don't exclude code that *is* reachable from a
+page — add an e2e spec instead.
 
 ---
 
@@ -290,7 +289,7 @@ for code that *is* reachable from a page — add an e2e spec instead.
 | Test fails with "post already exists" on save | Slug literal reused | `${Date.now()}` suffix |
 | Image-edit panel snapshots show unexpected ops | Shared sidecar from a prior test using the same PNG bytes | Generate a unique PNG color |
 | `window.__rkrEditor` is undefined | Loaded `/admin/editor` without `?e2e=1` | Add the query string |
-| Coverage report shows lots of node_modules | `entryFilter` / `sourceFilter` too loose | Tighten in `coverage-fixtures.ts` |
+| Coverage report shows lots of node_modules | `entryFilter` / `sourceFilter` too loose | Tighten in `coverage-config.ts` |
 | Bake POST returns 409 | Stale ops-hash | Re-fetch ops, recompute `sha256(canonicalJson(ops))`, retry |
 | Selector for a button or input doesn't exist | Bundle wasn't rebuilt after a template/SPA change | `npm run build:admin && npm run build:site` |
 | Spec adds 200 lines and the ratchet still passes | Coverage came in via existing flows | Good — but also confirm the new behavior is actually exercised, not just walked over |
