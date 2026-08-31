@@ -18,6 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
+import { BUILD_HEADER, STALE_CLIENT_STATUS, staleClientRejection } from '../lib/client-build.ts';
 import { paths } from '../lib/config.ts';
 import { parsePost } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -166,6 +167,11 @@ export default async function adminRoutes(
         return reply.code(prior.status).type('application/json').send(prior.body);
       }
     }
+
+    // After the replay short-circuit: a lost-ACK replay from a stale
+    // bundle already landed, so returning its stored 2xx is right.
+    const stale = staleClientRejection(request.headers[BUILD_HEADER]);
+    if (stale) return reply.code(STALE_CLIENT_STATUS).send(stale);
 
     const {
       slug: slugRaw,

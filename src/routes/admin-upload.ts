@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
+import { BUILD_HEADER, STALE_CLIENT_STATUS, staleClientRejection } from '../lib/client-build.ts';
 import { ingestStream } from '../lib/originals.ts';
 
 export interface AdminUploadRouteOpts {
@@ -22,6 +23,11 @@ export function registerAdminUploadRoute(
   const { siteRoot, guard, invalidateSidecarListCache } = opts;
 
   fastify.post('/admin/upload', { ...guard }, async (request, reply) => {
+    // Before request.file(), so an oversized body from a stale client
+    // isn't read off the wire only to be rejected.
+    const stale = staleClientRejection(request.headers[BUILD_HEADER]);
+    if (stale) return reply.code(STALE_CLIENT_STATUS).send(stale);
+
     const part = await request.file();
     /* c8 ignore next 3 — no-file-part branch rarely exercised */
     if (!part) return reply.code(400).send({ error: 'no file part' });

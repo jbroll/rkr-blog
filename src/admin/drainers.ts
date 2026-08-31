@@ -2,9 +2,18 @@
 
 import { extForMime } from '../lib/content-id.ts';
 import type { OutboxEntry } from '../lib/outbox-types.ts';
+import { buildIdHeader } from './build-id.ts';
 import { readBlob } from './opfs.ts';
 import { clearPendingUpload } from './pending-uploads.ts';
-import { type Drainer, SavePostConflictError } from './sync.ts';
+import { type Drainer, SavePostConflictError, StaleClientError } from './sync.ts';
+
+/** 426 from any drain route: this bundle predates the running server,
+ * so its writes go through a contract it no longer matches. Throwing
+ * a distinct error keeps the retry loop from burning its budget on a
+ * failure no retry can fix. */
+function throwIfStale(op: string, seq: number, res: Response): void {
+  if (res.status === 426) throw new StaleClientError(op, seq);
+}
 
 /** Shared POST + outbox-seq header + non-2xx → throw with a
  * standard "<op> drain <seq>: <status>" message. Used by the
@@ -24,8 +33,13 @@ async function postFormDrain(
     // x-rkr-device-id + x-rkr-outbox-seq are the server-side
     // idempotency key (Task 8): a lost-ACK replay short-circuits to
     // the original 2xx instead of re-running a non-idempotent op.
-    headers: { 'x-rkr-outbox-seq': String(seq), 'x-rkr-device-id': deviceId }
+    headers: {
+      'x-rkr-outbox-seq': String(seq),
+      'x-rkr-device-id': deviceId,
+      ...buildIdHeader()
+    }
   });
+  throwIfStale(op, seq, res);
   /* v8 ignore next 3 -- non-2xx server response; prod-only path */
   if (!res.ok) {
     throw new Error(`${op} drain ${seq}: ${res.status}`);
@@ -70,7 +84,8 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
   // field existed → server preserves legacy no-409 behavior.
   const headers: Record<string, string> = {
     'x-rkr-outbox-seq': String(entry.seq),
-    'x-rkr-device-id': entry.deviceId
+    'x-rkr-device-id': entry.deviceId,
+    ...buildIdHeader()
   };
   if (entry.payload.sidecarBase) {
     headers['x-rkr-sidecar-base'] = entry.payload.sidecarBase;
@@ -80,6 +95,7 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
     body: fd,
     headers
   });
+  throwIfStale('commitImageEdit', entry.seq, res);
   if (res.status === 409) {
     // sidecar-superseded: a newer edit to this image landed while
     // this entry was queued offline. Applying the stale ops would
@@ -107,7 +123,8 @@ export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
     'content-type': 'application/json',
     // Server-side idempotency key (Task 8) — see postFormDrain.
     'x-rkr-outbox-seq': String(entry.seq),
-    'x-rkr-device-id': entry.deviceId
+    'x-rkr-device-id': entry.deviceId,
+    ...buildIdHeader()
   };
   if (entry.payload.lastSyncedAt) {
     headers['x-rkr-last-synced-at'] = entry.payload.lastSyncedAt;
@@ -117,6 +134,7 @@ export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
     headers,
     body: JSON.stringify(entry.payload)
   });
+  throwIfStale('savePost', entry.seq, res);
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as {
       slug?: string;

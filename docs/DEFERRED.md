@@ -38,7 +38,6 @@ Format: **item** — _revisit when:_ trigger.
 ## Local-first / sync
 
 - **A future-dated post mtime wedges the slug with no in-app escape** — the server clamps a client's `X-Rkr-Last-Synced-At` to now, so `mtime > now` 409s every save, and force-overwrite now carries the header too. Recovery is `touch` on the file. _Revisit when:_ clock skew or a restored backup actually strands a post; fix is a compare-and-swap force header the server matches exactly instead of clamping.
-- **Offline-launched client can drain a stale bundle to a newer server** — network-first navigation narrows the window to a single launch but does not close it; the fix is a build-hash check at drain time in the drain routes (`/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`), which changes the sync contract. _Revisit when:_ a sync-breaking schema change ships.
 - **A queued outbox entry can sit unsynced until the next online transition** — `tryDrain` in `src/admin/sync.ts` takes the leader lock with `ifAvailable`, and a drain that finds an empty queue publishes `idle`. An entry appended while a previous drain is still finishing gets a no-op `tryDrain` and nothing re-triggers it; there is no periodic sweep. Found while de-flaking `editor: offline rotate+save queues setOps+bake, drains on reconnect`. _Revisit when:_ an author reports edits that never reached the server; fix is a re-check after the lock releases, or a periodic sweep.
 
 ## Image pipeline

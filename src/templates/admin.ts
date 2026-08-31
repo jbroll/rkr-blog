@@ -30,6 +30,10 @@ export function renderAdminPage(data: AdminPageData): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
+<!-- The build this shell was rendered from. An offline launch boots the
+     CACHED shell, so this carries the stale bundle's build — which is
+     exactly what the drain routes check against. -->
+<meta name="rkr-build" content="${escapeText(a.hash)}"/>
 <title>Editor — ${escapeText(data.site.title)}</title>
 <!-- Public theme: gives the editor preview the same look the published post
      will have (figures, prose width, headings, gallery/carousel placeholders).

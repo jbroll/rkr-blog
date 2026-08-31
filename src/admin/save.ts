@@ -9,6 +9,7 @@ import type { Editor } from '@tiptap/core';
 import type { SavePostPayload } from '../lib/outbox-types.ts';
 import { type ProseDoc, proseToMarkdown } from '../lib/prose-markdown.ts';
 import { flushPendingAttrCommits } from './attr-commit';
+import { buildIdHeader } from './build-id.ts';
 import { $, setStatus, setStatusWithLink } from './dom';
 import { getOrCreateDraftId, readMeta, updateMeta } from './draft.ts';
 import { dirtyImageStates, flushDirtyImageEdits } from './image-edit';
@@ -42,7 +43,10 @@ class SaveHttpError extends Error {
 }
 
 async function postSavePost(payload: SavePostPayload): Promise<SaveResponse> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...buildIdHeader()
+  };
   if (payload.lastSyncedAt) {
     headers['x-rkr-last-synced-at'] = payload.lastSyncedAt;
   }
@@ -175,6 +179,15 @@ export async function handleSave(
       // behaviour is the toast: a conflict, not a cheerful "queued".
       if (err instanceof SaveHttpError && err.status === 409) {
         await queueConflictedSave(payload, draftId);
+        return;
+      }
+      // 426: this bundle predates the server (offline launch, then a
+      // deploy). Queue so nothing is lost, but say what actually has
+      // to happen — "queued for sync" would imply it drains on its
+      // own, and it can't until the author reloads.
+      if (err instanceof SaveHttpError && err.status === 426) {
+        await queueSavePost(payload, uploadsStillPending ? referencedIds.length : 0, draftId);
+        setStatus('this editor is out of date — reload to sync your changes', true);
         return;
       }
       // Transport failure (fetch rejected / offline) or a transient

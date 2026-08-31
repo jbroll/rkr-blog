@@ -4,6 +4,7 @@
 // `SavePostConflictError` (value) from here. One-way arrow — no
 // cycle. Enforced by the circular-import gauntlet check.
 
+import { buildIdHeader } from './build-id.ts';
 import { runEviction } from './eviction.ts';
 import { getState as getOnlineState } from './online-state.ts';
 import {
@@ -30,6 +31,16 @@ export class SavePostConflictError extends Error {
   ) {
     super(`savePost conflict on /${info.slug}: server updated ${info.serverUpdatedAt}`);
     this.name = 'SavePostConflictError';
+  }
+}
+
+/** The running bundle predates the server, so the drain routes refuse
+ * its writes (426). No retry can fix it — the author has to reload.
+ * @public */
+export class StaleClientError extends Error {
+  constructor(op: string, seq: number) {
+    super(`${op} drain ${seq}: this editor is out of date — reload to sync`);
+    this.name = 'StaleClientError';
   }
 }
 
@@ -201,7 +212,8 @@ export async function forceConflictedSave(): Promise<void> {
       // drain means a lost-ACK replay of THIS request still
       // short-circuits to the stored 2xx.
       'x-rkr-outbox-seq': String(seq),
-      'x-rkr-device-id': entry.deviceId
+      'x-rkr-device-id': entry.deviceId,
+      ...buildIdHeader()
     },
     body: JSON.stringify(entry.payload)
   });
@@ -372,6 +384,11 @@ async function drainEntryWithRetry(
     } catch (err) {
       if (err instanceof SavePostConflictError) {
         return { kind: 'conflict', info: err.info };
+      }
+      // Not transient: retrying the same stale bundle gets the same
+      // 426 five more times and leaves the queue looking merely slow.
+      if (err instanceof StaleClientError) {
+        return { kind: 'failed', reason: err.message };
       }
       lastErr = err as Error;
       // Offline-aware halt: no point spinning through 5×backoff

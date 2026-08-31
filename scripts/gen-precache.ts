@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { resolveGitHash } from '../src/lib/build-info.ts';
+import { shortGitHash } from '../src/lib/build-info.ts';
 
 export interface Precache {
   hash: string;
@@ -107,6 +107,6 @@ export function writePrecache(repoRoot: string, hash: string): string {
 
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
   const repoRoot = path.resolve(import.meta.dirname, '..');
-  const out = writePrecache(repoRoot, resolveGitHash().slice(0, 12));
+  const out = writePrecache(repoRoot, shortGitHash());
   process.stdout.write(`${out}\n`);
 }

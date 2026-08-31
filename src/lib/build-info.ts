@@ -24,6 +24,14 @@ export function resolveGitHash(): string {
   return cached;
 }
 
+/** The build identity everything user-facing agrees on: the asset
+ * `?v=` stamp, the precache manifest, the admin shell's build meta,
+ * and the drain routes' staleness check. They must all truncate the
+ * same way or a client looks stale against its own server. */
+export function shortGitHash(): string {
+  return resolveGitHash().slice(0, 12);
+}
+
 /** Test-only: clear the cache so the next call re-resolves. */
 export function _resetGitHashCache(): void {
   cached = undefined;

@@ -310,6 +310,7 @@ connection that drops mid-stream gets the user nothing usable.
 | `X-Rkr-Outbox-Seq` | upload, setOps, bake, savePost | integer | client-side seq number; server logs for replay debugging |
 | `X-Rkr-Last-Synced-At` | savePost | ISO-8601 | the `meta.lastSyncedAt` the client believed the server had at the time the OFFLINE EDITS BEGAN. Not the time of drain — the time of the last successful pull |
 | `X-Rkr-Bake-Ops-Hash` | bake | sha256 hex | (already required per spec.md §7) |
+| `X-Rkr-Build` | upload, commit, savePost | 12-hex git hash | the build the page was rendered from, stamped into the admin shell as `<meta name="rkr-build">` and read at drain time. A mismatch against the running server is refused with 426; a missing header is permissive (legacy queued entries, the WordPress importer, scripted clients) |
 
 ### `savePost` conflict response
 
@@ -593,6 +594,7 @@ Single tabular summary of every reconciliation point.
 | `setOps` against an id whose ops changed server-side | Two devices ran ops on the same image | Last writer wins by server `updated_at`. Visual change is immediately apparent to the user; no 409. |
 | `bake` with stale ops-hash | Bake-ops-hash mismatch | 409 (per spec.md §7). Client re-bakes against current ops + re-POSTs. |
 | `savePost` with stale `X-Rkr-Last-Synced-At` | Two devices edited the same post | 409. Author chooses discard vs. force-overwrite (§6). Force re-POSTs with the version the author was shown, so a write landing in between 409s again and re-prompts rather than being lost. |
+| A drain from a bundle older than the running server | Client launched offline, server redeployed before it reconnected | 426 `stale-client` on all three drain routes. The queue halts (no retry can fix it) and the badge asks the author to reload; the outbox is kept, so nothing is lost. A lost-ACK replay still short-circuits to its stored 2xx first. |
 | Pulled bundle for a post that's been edited offline | Author runs "Sync now" while a draft is dirty | Refuse the pull; surface "you have local changes; save or discard first". |
 | OPFS write fails mid-drain | QuotaExceededError | Halt drain, surface "free space" warning, keep outbox intact. |
 | Two browsers, same author, both offline | Different OPFS caches | Each is independent; each syncs on its own schedule; the `savePost` policy reconciles at the markdown level. |

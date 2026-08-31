@@ -17,6 +17,7 @@ import { SHARP_PIXEL_LIMIT, validateOps } from '@rkr/image-edit';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import sharp from 'sharp';
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
+import { BUILD_HEADER, STALE_CLIENT_STATUS, staleClientRejection } from '../lib/client-build.ts';
 import type { Db } from '../lib/db.ts';
 import { bakePath, imageInfo } from '../lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../lib/sidecar.ts';
@@ -64,6 +65,12 @@ export function registerSidecarEditRoutes(
           return reply.code(prior.status).type('application/json').send(prior.body);
         }
       }
+      // After the replay short-circuit, before the multipart drain: a
+      // stale client's bake shouldn't be read off the wire to be
+      // rejected, and a replay that already landed still returns its 2xx.
+      const stale = staleClientRejection(req.headers[BUILD_HEADER]);
+      if (stale) return reply.code(STALE_CLIENT_STATUS).send(stale);
+
       const sidecar = await sidecarRead(siteRoot, id);
       if (!sidecar) return reply.code(404).send({ error: 'no sidecar' });
 
