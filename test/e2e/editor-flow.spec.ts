@@ -1536,7 +1536,7 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   // ---- 2. competing-device write — bump mtime via the test-only
   //         endpoint so the next save's lastSyncedAt header looks stale.
   const bump = await page.request.post(`/admin/test/bump-mtime/${slug}`, {
-    data: { offsetMs: 5_000 }
+    data: { offsetMs: 0 }
   });
   expect(bump.status()).toBe(200);
 
@@ -1557,12 +1557,33 @@ test('editor: savePost conflict surfaces + force-overwrite resolves it', async (
   await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-conflict/, { timeout: 10_000 });
   await expect(badge.locator('.rkr-sync-text')).toHaveText(`conflict on /${slug}`);
 
-  // ---- 4. force-overwrite resolves it -----------------------------
+  // ---- 4. a write landing between the conflict and the force must
+  //         re-prompt, not be clobbered ----------------------------
+  const bump2 = await page.request.post(`/admin/test/bump-mtime/${slug}`, {
+    data: { offsetMs: 0 }
+  });
+  expect(bump2.status()).toBe(200);
+  const rejected = page.waitForResponse(
+    (res) => res.url().endsWith('/admin/posts') && res.request().method() === 'POST'
+  );
   await page.evaluate(async () =>
     (window as unknown as { __rkrForceConflict: () => Promise<void> }).__rkrForceConflict()
   );
-  // Force POSTs without the header → server accepts → drainer removes
-  // the entry → status returns to a non-conflict state.
+  // The force carries the version the author was shown, so the write
+  // that landed after it is not clobbered — the server 409s again.
+  const rejectedRes = await rejected;
+  expect((await rejectedRes.request().allHeaders())['x-rkr-last-synced-at']).toBeTruthy();
+  expect(rejectedRes.status()).toBe(409);
+  await expect(badge.locator('.rkr-sync-dot')).toHaveClass(/is-conflict/, { timeout: 10_000 });
+
+  // ---- 5. forcing against the version now shown resolves it -------
+  const accepted = page.waitForResponse(
+    (res) => res.url().endsWith('/admin/posts') && res.request().method() === 'POST'
+  );
+  await page.evaluate(async () =>
+    (window as unknown as { __rkrForceConflict: () => Promise<void> }).__rkrForceConflict()
+  );
+  expect((await accepted).status()).toBe(200);
   await expect(badge.locator('.rkr-sync-dot')).not.toHaveClass(/is-conflict/, { timeout: 10_000 });
 
   // The public site renders v2 once we publish — the editor saves
@@ -1611,9 +1632,12 @@ test('editor: online-save 409 surfaces conflict, not a "queued" toast; network f
 
   // Competing write bumps the file mtime so the next save's
   // X-Rkr-Last-Synced-At header looks stale → the DIRECT online POST
-  // returns 409 (not a drained one).
+  // returns 409 (not a drained one). offsetMs 0 keeps the mtime in
+  // the past, as a real competing write would leave it — the server
+  // clamps a client's claim to now, so a future-dated mtime would
+  // 409 the force-overwrite too.
   const bump = await page.request.post(`/admin/test/bump-mtime/${slug}`, {
-    data: { offsetMs: 5_000 }
+    data: { offsetMs: 0 }
   });
   expect(bump.status()).toBe(200);
 

@@ -268,7 +268,9 @@ test('concurrent requests for the same derivative share one render', async (t) =
 });
 
 test('render failure returns 500', async (t) => {
-  const { app, root, id } = await setup(t);
+  // A budget wide enough that spawning the failing ffmpeg stub can't
+  // outrun it on a loaded runner and hand back 202 instead.
+  const { app, root, id } = await setup(t, { renderBudgetMs: 5000 });
   const binDir = freshBinDir(t);
   fs.writeFileSync(path.join(binDir, 'ffmpeg'), '#!/bin/sh\necho "boom" >&2\nexit 1\n', {
     mode: 0o755

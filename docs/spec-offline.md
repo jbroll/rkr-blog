@@ -592,7 +592,7 @@ Single tabular summary of every reconciliation point.
 | `upload` for an id that already exists server-side | Same bytes uploaded by another device since this device went offline | Server returns `{id, deduplicated:true}`. Client deletes the outbox entry. No-op. |
 | `setOps` against an id whose ops changed server-side | Two devices ran ops on the same image | Last writer wins by server `updated_at`. Visual change is immediately apparent to the user; no 409. |
 | `bake` with stale ops-hash | Bake-ops-hash mismatch | 409 (per spec.md §7). Client re-bakes against current ops + re-POSTs. |
-| `savePost` with stale `X-Rkr-Last-Synced-At` | Two devices edited the same post | 409. Author chooses discard vs. force-overwrite (§6). |
+| `savePost` with stale `X-Rkr-Last-Synced-At` | Two devices edited the same post | 409. Author chooses discard vs. force-overwrite (§6). Force re-POSTs with the version the author was shown, so a write landing in between 409s again and re-prompts rather than being lost. |
 | Pulled bundle for a post that's been edited offline | Author runs "Sync now" while a draft is dirty | Refuse the pull; surface "you have local changes; save or discard first". |
 | OPFS write fails mid-drain | QuotaExceededError | Halt drain, surface "free space" warning, keep outbox intact. |
 | Two browsers, same author, both offline | Different OPFS caches | Each is independent; each syncs on its own schedule; the `savePost` policy reconciles at the markdown level. |

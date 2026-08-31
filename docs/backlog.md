@@ -37,7 +37,7 @@ Build hygiene, security, video, and the WordPress permalink redirect are done. W
 ## 4. Editor, offline sync & PWA
 
 - [x] **`admin/main.js` + `main.css` double-cached (bare and `?v=`)** — ~475 KB duplicate in precache from `scripts/gen-precache.ts` relative imports vs shell stamping. (`DEFERRED.md: Local-first`)
-- [ ] **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — concurrent other-device edit between conflict and force can be overwritten. (`DEFERRED.md: Local-first`)
+- [x] **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — concurrent other-device edit between conflict and force can be overwritten. (`DEFERRED.md: Local-first`)
 - [ ] **Offline-launched client can drain stale bundle to newer server** — network-first narrows window; fix is build-hash check at drain time in `/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`. (`DEFERRED.md: Local-first`)
 - [ ] **parseHTML doesn't recover attrs** — rendered-HTML/clipboard round-trip drops figure attrs. (`DEFERRED.md: Editor`)
 - [ ] **Per-instance crops in multi-image directives** — crops per-sidecar globally; same image cannot be cropped differently in two posts. (`DEFERRED.md: Editor`)

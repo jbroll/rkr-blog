@@ -169,13 +169,18 @@ export async function discardConflictedSave(): Promise<void> {
   await tryDrain();
 }
 
-/** Re-POST without X-Rkr-Last-Synced-At so the server accepts the
- * conflicted save unconditionally (spec-offline §6).
+/** Re-POST with X-Rkr-Last-Synced-At set to the server version the
+ * author was shown, so the force overwrites exactly that version
+ * (spec-offline §6). A write that lands between the conflict and the
+ * force advances the mtime past it and 409s again rather than being
+ * silently clobbered.
  * @public */
 export async function forceConflictedSave(): Promise<void> {
   /* v8 ignore start -- conflict-resolution UI lives in storage panel */
   if (currentStatus.kind !== 'conflict') return;
   const seq = currentStatus.seq;
+  const baseline = currentStatus.serverUpdatedAt;
+  const conflictSlug = currentStatus.slug;
   const entries = await outboxList();
   const entry = entries.find((e) => e.seq === seq);
   if (!entry || entry.op !== 'savePost') {
@@ -188,9 +193,11 @@ export async function forceConflictedSave(): Promise<void> {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      // Idempotency key (Task 8). NOTE: the force path deliberately
-      // omits x-rkr-last-synced-at so the server accepts the
-      // overwrite unconditionally; keying it the same as the normal
+      // The version the author was shown and chose to overwrite, not
+      // the stale one the drain sent. Anything written to the slug
+      // since then 409s below instead of being lost.
+      'x-rkr-last-synced-at': baseline,
+      // Idempotency key (Task 8). Keying it the same as the normal
       // drain means a lost-ACK replay of THIS request still
       // short-circuits to the stored 2xx.
       'x-rkr-outbox-seq': String(seq),
@@ -198,6 +205,23 @@ export async function forceConflictedSave(): Promise<void> {
     },
     body: JSON.stringify(entry.payload)
   });
+  if (res.status === 409) {
+    // A third write landed in the gap. Re-prompt against the version
+    // that actually exists now; the outbox entry stays put so the
+    // author can force again.
+    const info = (await res.json().catch(() => null)) as {
+      slug?: string;
+      serverUpdatedAt?: string;
+    } | null;
+    publish({
+      kind: 'conflict',
+      slug: info?.slug ?? conflictSlug,
+      seq,
+      serverUpdatedAt: info?.serverUpdatedAt ?? baseline,
+      clientLastSyncedAt: baseline
+    });
+    return;
+  }
   if (!res.ok) {
     publish({
       kind: 'halted',
