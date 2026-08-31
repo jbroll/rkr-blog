@@ -7,7 +7,8 @@ import {
   appendRotate,
   type LocalEditState,
   localRedo,
-  localUndo
+  localUndo,
+  type SidecarOp
 } from '@rkr/image-edit';
 
 export interface MemoryState {
@@ -33,6 +34,35 @@ export function applyRotate(m: MemoryState, degrees: number): void {
   m.state.ops = appendRotate(m.state.ops, degrees);
   m.state.redoStack = [];
   m.onChange();
+}
+
+export interface TiltSession {
+  /** Apply the slider's current angle, absolute within this drag. */
+  move: (degrees: number) => void;
+  /** Release, or anything else touching the rotation, ends the drag. */
+  end: () => void;
+}
+
+/** One tilt drag re-applies onto the ops as they stood when it began,
+ * rather than onto whatever the previous event left behind. A slider
+ * that sends deltas drifts out of step with the image as soon as
+ * anything else touches the rotation: an undo pops the whole merged
+ * rotate op while the thumb stays where it was, and every later
+ * reading is off by that much. Re-reading the base each drag also
+ * collapses the drag to a single undo step. */
+export function createTiltSession(m: MemoryState): TiltSession {
+  let base: SidecarOp[] | null = null;
+  return {
+    move(degrees: number): void {
+      base ??= m.state.ops;
+      m.state.ops = appendRotate(base, degrees);
+      m.state.redoStack = [];
+      m.onChange();
+    },
+    end(): void {
+      base = null;
+    }
+  };
 }
 
 export function applyFlip(m: MemoryState, axis: 'horizontal' | 'vertical'): void {

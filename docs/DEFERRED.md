@@ -62,7 +62,6 @@ Format: **item** — _revisit when:_ trigger.
 ## image-pwa (apps/image-pwa)
 
 - **PWA e2e smoke not in CI** — the standalone editor (upload → rotate → crop → download) is verified by headless workflow tests + a manual browser smoke, but has no Playwright spec in the suite (the webServer serves the blog, not the app). _Revisit when:_ the app gains non-trivial UI or a regression ships; wire a static-serve route for `apps/image-pwa/dist`.
-- **Tilt slider uses delta-from-last semantics** — the slider applies `appendRotate(newVal - prevVal)`, so its absolute value can diverge from the net rotation after 90° buttons (deltas still accumulate correctly). _Revisit when:_ a UX report calls it confusing; track a dedicated tilt op.
 - **Package canvas layer not c8-gated** — `packages/image-edit/src/canvas/**` (DOM/UI) is excluded from unit coverage like `src/admin`; only `src/core` is c8-gated, the canvas layer is e2e/manual-verified. Blocked upstream of the ratchet: monocart never offers those sources to `sourceFilter` or `sourcePath` in `test/e2e/coverage-fixtures.ts`, so widening the filter changes nothing, even though `static/admin/main.js.map` carries all six canvas sources with content. Diagnose that first. _Revisit when:_ the union e2e ratchet baseline is seeded.
 
 ## Test coverage

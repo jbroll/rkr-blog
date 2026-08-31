@@ -14,6 +14,7 @@ import {
   applyRotate,
   canRedo,
   canUndo,
+  createTiltSession,
   type MemoryState,
   redo,
   undo
@@ -67,18 +68,24 @@ export function mountToolbar(root: HTMLElement, ctx: ToolbarCtx): void {
     ctx.renderPreview();
   };
 
-  // Tilt slider applies its delta since the last value (appendRotate merges
-  // adjacent rotations, so successive deltas accumulate into one rotate op).
-  let prevTilt = 0;
-  sel<HTMLInputElement>('tilt').addEventListener('input', (e) => {
-    const val = Number((e.target as HTMLInputElement).value);
-    applyRotate(ctx.mem, val - prevTilt);
-    prevTilt = val;
+  const tilt = sel<HTMLInputElement>('tilt');
+  const tiltSession = createTiltSession(ctx.mem);
+  const endTilt = (): void => {
+    tiltSession.end();
+    // Re-centre the thumb: the tilt is part of the rotation now, so the
+    // next drag starts from zero again.
+    tilt.value = '0';
+  };
+  tilt.addEventListener('input', () => {
+    tiltSession.move(Number(tilt.value));
+    refresh();
   });
+  tilt.addEventListener('change', endTilt);
 
   root.addEventListener('click', (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
     if (!act) return;
+    endTilt();
     switch (act) {
       case 'rotL':
         applyRotate(ctx.mem, -90);
