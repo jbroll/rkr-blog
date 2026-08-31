@@ -55,6 +55,7 @@ Images are automatically served in multiple sizes and modern formats so every br
 - **WordPress importer** — migrate posts and images from an existing WordPress site
 - **Author access** — invite authors by email address; owner and editor roles
 - **Operator CLI** — tools for rendering, garbage collection, reindexing, and user management
+- **Standalone image editor** (`apps/image-pwa`) — the editor's crop / rotate / perspective pipeline as an installable offline PWA, over the shared `packages/image-edit`. Off by default; see [docs/RUNBOOK.md](./docs/RUNBOOK.md)
 
 ---
 

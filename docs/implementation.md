@@ -58,6 +58,8 @@ to add any of them.
 | `src/templates/` | Server-side HTML templates (TypeScript template literals) |
 | `src/routes/` | Fastify route modules (one per concern) |
 | `src/cli/` | One file per `site-admin` subcommand |
+| `packages/image-edit/` | Workspace package, built and tested on its own: `src/core/` is the pure op model (validation, canvas math, rotation) shared by server and browser; `src/canvas/` is the browser-only DOM/WebGL layer (crop + perspective modals, encode). Two exports, `.` and `./canvas` |
+| `apps/image-pwa/` | Workspace package: the standalone image editor, a fully client-side PWA over `@rkr/image-edit`. Ships only where a site sets `DEPLOY_IMAGE_EDITOR=yes` (see `RUNBOOK.md`) |
 | `test/` | Unit + integration tests mirroring `src/` layout; e2e specs under `test/e2e/` |
 | `migrations/` | Numbered SQL migration files applied by `site-admin migrate` |
 | `deploy/` | Apache vhost template and systemd unit |
@@ -338,9 +340,13 @@ Required modules: `rewrite`, `proxy`, `proxy_http`, `headers`, `expires`.
 
 ## 8. Editor browser bundle
 
-`tsconfig.browser.json` covers `src/admin/**`, `src/site/**`, and the
-two shared lib files the admin bundle pulls in (`prose-markdown.ts` +
-`safe-url.ts`). The admin bundle is built with esbuild (TipTap +
+`tsconfig.browser.json` names `src/admin/**`, `src/site/**`, and two
+`src/lib` roots (`prose-markdown.ts`, `safe-url.ts`); the other lib
+files the bundle uses are reached transitively. Anything `src/admin`
+imports has to be free of node builtins — that is why the build
+identity the shell and the drain routes share lives in
+`src/lib/build-contract.ts`, apart from `client-build.ts`, which
+resolves the server's own hash. The admin bundle is built with esbuild (TipTap +
 ProseMirror + Cropper.js), ESM format with code-splitting:
 
 - `static/admin/main.js` — editor SPA (TipTap, image ops, offline sync)
@@ -352,6 +358,12 @@ ProseMirror + Cropper.js), ESM format with code-splitting:
 - `static/site/sw-unregister.js` — loaded on all public pages; actively unregisters any prior SW at scope `/`
 - `static/site/sw-admin.js` (thin event wiring; the cache logic lives in `src/site/sw-admin-core.ts`, unit-tested directly in Node) + `sw-admin-register.js` — admin PWA service worker and registration script
 - `static/admin/precache.json` — the list of URLs `sw-admin.js` precaches, keyed by build hash; written by `scripts/gen-precache.ts` at the end of the top-level `build` script, not inside `build:admin` — it walks `static/site/` and `static/themes/` output, so `build:site` must already have run. Running `build:admin` alone leaves no `precache.json`. Each file is listed under the URL it is requested at: `static/admin/**` bare, because esbuild's chunks reach each other (and `preview-page`, `prose-markdown`) through relative imports, and relative resolution drops the `?v=` query; everything else with the `?v=<hash>` the templates stamp. `admin/main.js` and `admin/main.css` are stamped-only: the import direction is main → chunks, so nothing reaches them relatively and a bare entry would be a cache key nothing requests. The OPFS write worker is constructed from `/admin/static/admin/opfs-worker.js` for the same reason a stylesheet is: outside the worker's `/admin/` scope it is never intercepted, so it would not load offline.
+
+The shell stamps the build it was rendered from into `<meta
+name="rkr-build">`, and the bundle sends it back on every write that
+carries queued offline work. An offline launch boots the cached shell,
+so that meta is the stale bundle's build — which is what lets the
+drain routes refuse it (`spec-offline.md §6`).
 
 The editor converts ProseMirror → markdown locally before POSTing to
 `/admin/posts`. The server only receives markdown (validated via
