@@ -36,9 +36,9 @@ function fixtureRepo(t: TestContext): string {
 
 test('buildPrecache: lists every emitted file under static/admin, sourcemaps excluded', (t) => {
   const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
-  assert.ok(assets.includes('/admin/static/admin/main.js'));
+  assert.ok(assets.includes('/admin/static/admin/main.js?v=abcdef012345'));
   assert.ok(assets.includes('/admin/static/admin/chunk-ABC123.js'));
-  assert.ok(assets.includes('/admin/static/admin/main.css'));
+  assert.ok(assets.includes('/admin/static/admin/main.css?v=abcdef012345'));
   assert.ok(!assets.some((a) => a.includes('.map')), 'sourcemaps excluded');
 });
 
@@ -56,11 +56,14 @@ test('buildPrecache: split chunks are cached bare — a relative import drops th
   assert.ok(assets.includes('/admin/static/admin/opfs-worker.js'));
 });
 
-test('buildPrecache: the two files the shell stamps by name are cached both ways', (t) => {
+test('buildPrecache: the files the shell stamps by name are cached stamped only', (t) => {
   const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
   for (const rel of ['admin/main.js', 'admin/main.css']) {
-    assert.ok(assets.includes(`/admin/static/${rel}`), `${rel} bare missing`);
     assert.ok(assets.includes(`/admin/static/${rel}?v=abcdef012345`), `${rel} versioned missing`);
+    assert.ok(
+      !assets.includes(`/admin/static/${rel}`),
+      `${rel} bare is a cache key nothing requests — nothing relatively imports it`
+    );
   }
 });
 

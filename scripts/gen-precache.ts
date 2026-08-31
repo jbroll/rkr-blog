@@ -11,8 +11,10 @@
 //     no query at all. Those names are content-hashed already.
 //   everything else  ?v=<hash>, the form the templates stamp.
 //
-// admin/main.js and admin/main.css are listed both ways: the shell
-// requests them by name with the stamp, chunks reach them without.
+// A file the shell stamps is listed ONLY stamped: nothing relatively
+// imports admin/main.js or admin/main.css (the import direction is
+// main -> chunks), so a bare entry for them is 475 KB of cache key
+// nothing ever requests.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,14 +55,16 @@ function walk(dir: string, rel: string, out: string[]): void {
   }
 }
 
-/** Build output the shell references by name, so it is requested with
- * the stamp as well as bare. */
+/** Build output the shell references by name, so it is only ever
+ * requested with the stamp. Excluded from the bare walk below. */
 const STAMPED = ['admin/main.js', 'admin/main.css'];
 
 export function buildPrecache(repoRoot: string, hash: string): Precache {
   const staticDir = path.join(repoRoot, 'static');
-  const bare: string[] = [];
-  walk(path.join(staticDir, 'admin'), 'admin', bare);
+  const walked: string[] = [];
+  walk(path.join(staticDir, 'admin'), 'admin', walked);
+  const stamped = new Set(STAMPED);
+  const bare = walked.filter((r) => !stamped.has(r));
 
   // A missing file here means the build ran out of order (e.g.
   // build:admin's precache step ran before build:site emitted the file
