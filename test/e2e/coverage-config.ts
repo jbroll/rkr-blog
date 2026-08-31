@@ -24,6 +24,26 @@ const sourceMapResolver = async (url: string, defaultResolver: any): Promise<unk
   return defaultResolver(url);
 };
 
+// esbuild emits runtime-helper chunks whose sourcemap carries no
+// sources at all. Nothing unpacks out of them, so they survive
+// sourceFilter and reach the report as raw dist files, which then seed
+// the union ratchet baseline with keys that match no source file.
+const mapSources = new Map<string, number>();
+const hasOwnSources = (url: string): boolean => {
+  const rel = url.split('?')[0]?.match(/\/(static\/(?:admin|site)\/.+\.js)$/)?.[1];
+  if (!rel) return true;
+  let count = mapSources.get(rel);
+  if (count === undefined) {
+    const mapPath = path.join(process.cwd(), `${rel}.map`);
+    count = fs.existsSync(mapPath)
+      ? ((JSON.parse(fs.readFileSync(mapPath, 'utf8')) as { sources?: unknown[] }).sources
+          ?.length ?? 0)
+      : 1;
+    mapSources.set(rel, count);
+  }
+  return count > 0;
+};
+
 // Source filtering: keep only OUR code. Without this the report
 // includes node_modules (TipTap, ProseMirror, PhotoSwipe).
 // entryFilter narrows the V8 entries (bundle URLs); sourceFilter
@@ -40,7 +60,8 @@ export const coverageOptions = {
   outputDir: './coverage/e2e',
   reports: ['v8', 'lcovonly', 'console-details'],
   entryFilter: (entry: { url: string }) =>
-    entry.url.includes('/static/admin/') || entry.url.includes('/static/site/'),
+    (entry.url.includes('/static/admin/') || entry.url.includes('/static/site/')) &&
+    hasOwnSources(entry.url),
   sourceFilter: (sourcePath: string) =>
     !sourcePath.includes('node_modules/') && SOURCE_PREFIXES.some((p) => sourcePath.includes(p)),
   sourceMapResolver,

@@ -248,9 +248,30 @@ Coverage gating lives in org-hooks (`profiles/sci-tiered.yml`), not in
 this repo. The tier-2 push runs the unit and e2e jobs in parallel on
 the CI host, merges `coverage/lcov.info` with `coverage/e2e/lcov.info`
 per line, and ratchets the union against `coverage-union-baseline.json`
-minus `coverage-union-ratchet-exclude`. Neither file is committed yet,
-and `ratchet-staged.sh` exits 0 without a baseline, so the gate is
-inert until one is seeded.
+(203 files, committed at the root) minus an optional
+`coverage-union-ratchet-exclude`, which this repo does not carry — the
+service worker is already held at ≥ 90% by the c8 per-file gate, so
+nothing needs a carve-out yet.
+
+A staged file below its baseline percentage fails the commit. Files
+with no baseline entry must clear a 0.75 floor. There is 0.5 pp of
+tolerance, 5 lines of line-tolerance, and a file at ≥ 90% may regress
+up to 5 pp without tripping either.
+
+To rebuild the baseline after a legitimate change in what's measured:
+
+```bash
+npm run test:coverage && npm run build:admin && npm run build:site && npm run test:e2e
+node "$ORG_HOOKS/scripts/coverage-union-merge.mjs" \
+  --unit coverage/lcov.info --e2e coverage/e2e/lcov.info \
+  --out coverage/union/lcov.info --src-root src
+node "$ORG_HOOKS/scripts/coverage-ratchet.mjs" --reseed \
+  --lcov coverage/union/lcov.info --baseline coverage-union-baseline.json
+```
+
+`--reseed` merges over the existing baseline per-file max, so it can
+never lower a mark. `--seed` is the hard reset and forgets old marks;
+use it only when code was genuinely removed.
 
 Its `--glob` (`^(src|packages)/.*\.(ts|tsx|js|jsx|mjs|cjs)$`) selects
 which *staged* files a commit is gated on. lcov paths are a separate
@@ -265,14 +286,14 @@ Two paths to passing once it is live:
 
 ### Carve-outs: code Playwright structurally can't see
 
-The union ratchet's carve-out list is `coverage-union-ratchet-exclude`
-at the repo root. It is for files the e2e harness cannot instrument at
-all: the service worker (`src/site/sw.ts`, `src/site/sw-core.ts`),
-because Playwright's `page.coverage` only sees the page's JS context,
-not the SW thread. Those are unit-tested in Node via
-`test/site/sw-core.test.ts` with a Map-backed mock `CacheStorage`, and
-enforced by the c8 per-file gate in `npm run test:coverage` (≥ 90%
-lines / ≥ 75% branches).
+The union ratchet reads a carve-out list from
+`coverage-union-ratchet-exclude` at the repo root, for files no test
+layer can reach. The service worker (`src/site/sw.ts`,
+`src/site/sw-core.ts`) is invisible to Playwright — `page.coverage`
+only sees the page's JS context, not the SW thread — but it is
+unit-tested in Node via `test/site/sw-core.test.ts` with a Map-backed
+mock `CacheStorage`, so the union covers it and it needs no entry.
+That is why the file doesn't exist here.
 
 When you add code that's structurally invisible to e2e (web workers,
 SharedWorker, AudioWorklet, etc.), add it to the exclude file and pair

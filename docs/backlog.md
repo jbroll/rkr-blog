@@ -2,7 +2,7 @@
 
 Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped. For one-line deferred format with revisit triggers see `DEFERRED.md`.
 
-Build hygiene, security, video, and the WordPress permalink redirect are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4, the canvas coverage gate (measured now, not enforced), the dump converter's binary literals (group 5), and the long-tail items in groups 6-8.
+Build hygiene, security, video, and the WordPress permalink redirect are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4, the dump converter's binary literals (group 5), and the long-tail items in groups 6-8.
 
 ## 0. Build hygiene — quick wins (no spec needed)
 
@@ -43,7 +43,7 @@ Build hygiene, security, video, and the WordPress permalink redirect are done, a
 - [ ] **Per-instance crops in multi-image directives** — crops per-sidecar globally; same image cannot be cropped differently in two posts. (`DEFERRED.md: Editor`)
 - [ ] **Container directive for galleries, cross-figure image move** — leaf `::figure` can't carry per-image captions; drag between figures needs two-node PM transaction. (`DEFERRED.md: Editor` — 2 items)
 - [x] **Tilt slider delta-from-last semantics** — `appendRotate(newVal - prevVal)` diverges from absolute after 90° buttons. Track dedicated tilt op. (`DEFERRED.md: image-pwa`)
-- [ ] **Package canvas layer not c8-gated** — `packages/image-edit/src/canvas/**` excluded like `src/admin`; only `src/core` gated. The e2e report now measures the canvas layer; a floor still has to be enforced. (`DEFERRED.md: image-pwa`)
+- [x] **Package canvas layer not c8-gated** — `packages/image-edit/src/canvas/**` excluded like `src/admin`; only `src/core` gated. Now measured by the e2e report and held by the seeded union ratchet baseline. (`DEFERRED.md: image-pwa`)
 - [x] **PWA installability (SW scope + icons)** — `sw.js` scope is `dist/`, manifest has no icons due to `eof-ws` hook rejecting PNGs. (`DEFERRED.md: image-pwa`)
 
 ## 5. WordPress import & deployment

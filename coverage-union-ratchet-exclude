@@ -1,0 +1,18 @@
+# Files the union coverage ratchet must not gate. One path per line;
+# blank lines and # comments ignored. Only for code no test layer can
+# reach — not for code that is merely untested. See docs/TESTING.md §10.
+#
+# Type-only modules and the canvas barrel: no runtime statements, so they
+# are erased at compile and can never appear in an lcov (the ratchet
+# already special-cases .d.ts, but not .ts files that emit nothing).
+packages/image-edit/src/core/sidecar-types.ts
+packages/image-edit/src/canvas/index.ts
+src/admin/opfs-worker-msg.ts
+src/lib/wp-import-types.ts
+src/lib/image-map.ts
+
+# Off-main-thread entry points: page.coverage only instruments the page's
+# JS context, so neither the service worker nor the OPFS worker is visible
+# to e2e. Their logic lives in sw-admin-core.ts and opfs.ts, which are.
+src/site/sw-admin.ts
+src/admin/opfs-worker.ts
