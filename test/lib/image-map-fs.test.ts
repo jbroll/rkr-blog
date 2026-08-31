@@ -8,7 +8,8 @@ import sharp from 'sharp';
 
 import { parsePost } from '../../src/lib/content.ts';
 import { buildImageMap } from '../../src/lib/image-map-fs.ts';
-import { ingestStream } from '../../src/lib/originals.ts';
+import { bakePath, ingestStream } from '../../src/lib/originals.ts';
+import { read as sidecarRead, write as sidecarWrite } from '../../src/lib/sidecar.ts';
 
 function body(markdown: string) {
   return parsePost(`---\ntitle: t\nslug: s\n---\n\n${markdown}`).ast;
@@ -81,4 +82,25 @@ test('buildImageMap: unknown and ambiguous ids are absent from the map', async (
   await seed(root);
   const map = await buildImageMap(root, body('::figure{ids="deadbeef"}\n'));
   assert.equal(map.get('deadbeef'), undefined);
+});
+
+test('buildImageMap: a recreated bake is reported to the passed logger', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = await seed(root);
+  const sidecar = await sidecarRead(root, id);
+  assert.ok(sidecar);
+  await sidecarWrite(root, id, {
+    ...sidecar,
+    ops: [{ type: 'crop', x: 0, y: 0, w: 400, h: 300 }]
+  });
+  assert.equal(fs.existsSync(bakePath(root, id)), false, 'no bake yet');
+
+  const warns: Array<[Record<string, unknown>, string]> = [];
+  const map = await buildImageMap(root, body(`::figure{ids="${id}"}\n`), {
+    log: { warn: (obj, msg) => warns.push([obj, msg]) }
+  });
+
+  assert.deepEqual(warns, [[{ imageId: id }, 'recreated missing bake']]);
+  assert.ok(fs.existsSync(bakePath(root, id)), 'bake self-healed');
+  assert.equal(map.get(id)?.width, 400);
 });

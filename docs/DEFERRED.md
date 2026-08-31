@@ -44,8 +44,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Image pipeline
 
-- **Prepass-equivalence test doesn't cover variant fidelity** — `test/lib/image-map-equivalence.test.ts` strips every `<source>` line before comparing, so a format/width divergence between the server and client prepasses wouldn't be caught by it. _Revisit when:_ either prepass's variant generation changes.
-- **`buildImageMapFromOpfs` blob: URLs are never revoked** — bounded to one map per page load today; a re-rendering preview would leak. _Revisit when:_ the preview starts re-rendering without a full page reload.
+- **`buildImageMapFromOpfs` blob: URLs are never revoked** — every URL it makes reaches the rendered document and must outlive it, and the preview renders once per page load, so there is nothing to revoke yet. _Revisit when:_ the preview starts re-rendering without a full page reload.
 
 ## UI / UX
 

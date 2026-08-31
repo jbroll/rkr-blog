@@ -15,10 +15,26 @@ import { listSidecarIds } from './posts.ts';
 import { applyOp, type Op } from './render.ts';
 import { read as sidecarRead } from './sidecar.ts';
 
+/** Pino's shape, structurally. Declared here rather than imported so
+ * this module stays independent of Fastify; routes pass `req.log`. */
+interface BakeLogger {
+  warn(obj: Record<string, unknown>, msg: string): void;
+}
+
+export interface ImageMapOpts {
+  /** Where self-healing bake recreations are reported. Falls back to
+   * the console for callers with no request logger (CLI, tests). */
+  log?: BakeLogger;
+}
+
 /** Every image the given nodes render, resolved and measured before
  * rendering starts. Reads run concurrently; the renderer then does no
  * I/O at all. */
-export async function buildImageMap(siteRoot: string, source: FigureIdSource): Promise<ImageMap> {
+export async function buildImageMap(
+  siteRoot: string,
+  source: FigureIdSource,
+  opts: ImageMapOpts = {}
+): Promise<ImageMap> {
   const raws = collectFigureIds(source);
   if (raws.length === 0) return new Map();
   const known = listSidecarIds(siteRoot);
@@ -30,7 +46,7 @@ export async function buildImageMap(siteRoot: string, source: FigureIdSource): P
       if (!id) return null;
       const sidecar = await sidecarRead(siteRoot, id);
       if (!sidecar) return null;
-      const { width, height } = await imageDimensions(siteRoot, id, sidecar);
+      const { width, height } = await imageDimensions(siteRoot, id, sidecar, opts);
       return [raw, makeSource(id, sidecar, width, height)];
     })
   );
@@ -66,7 +82,8 @@ function makeSource(id: string, sidecar: Sidecar, width: number, height: number)
 export async function imageDimensions(
   siteRoot: string,
   id: string,
-  sidecar: Sidecar
+  sidecar: Sidecar,
+  opts: ImageMapOpts = {}
 ): Promise<{ width: number; height: number }> {
   const ops = sidecar.ops ?? [];
   if (ops.length === 0) {
@@ -78,7 +95,17 @@ export async function imageDimensions(
   // from the original + ops via sharp. ensureBake throws for the
   // perspective branch sharp can't handle, surfaced upstream so the
   // operator notices instead of getting silent wrong dims.
-  return ensureBake(siteRoot, id, sidecar);
+  return ensureBake(siteRoot, id, sidecar, opts);
+}
+
+function warnBakeRecreated(log: BakeLogger | undefined, id: string): void {
+  const msg = 'recreated missing bake';
+  if (log) {
+    log.warn({ imageId: id }, msg);
+    return;
+  }
+  // biome-ignore lint/suspicious/noConsole: no request logger (CLI/test caller); still worth surfacing
+  console.warn(`image-map-fs: ${msg} for ${id.slice(0, 8)}…`);
 }
 
 /** Return the bake's on-disk dimensions, recreating the file from
@@ -94,7 +121,8 @@ export async function imageDimensions(
 async function ensureBake(
   siteRoot: string,
   id: string,
-  sidecar: Sidecar
+  sidecar: Sidecar,
+  opts: ImageMapOpts
 ): Promise<{ width: number; height: number }> {
   const bp = bakePath(siteRoot, id);
   try {
@@ -118,8 +146,7 @@ async function ensureBake(
     await fs.promises.unlink(tmp).catch(() => {});
     throw err;
   }
-  // biome-ignore lint/suspicious/noConsole: surface to server logs when self-healing pre-migration sidecars
-  console.warn(`widget-helpers: recreated missing bake for ${id.slice(0, 8)}…`);
+  warnBakeRecreated(opts.log, id);
   const meta = await sharp(bp).metadata();
   return { width: meta.width ?? 1, height: meta.height ?? 1 };
 }

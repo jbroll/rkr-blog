@@ -22,6 +22,34 @@ function normalize(html: string): string {
     .replace(/(src|href)="[^"]*"/g, '$1="URL"');
 }
 
+/** The format → widths matrix the rendered `<source>` elements carry,
+ * plus every variant URL, keyed in emission order. normalize() drops
+ * the sources before comparing the two halves, so a format or width
+ * the server stopped emitting would be invisible there. */
+function sourceMatrix(html: string): { matrix: Record<string, string[]>; urls: string[] } {
+  const matrix: Record<string, string[]> = {};
+  const urls: string[] = [];
+  for (const m of html.matchAll(/<source type="image\/([^"]+)" srcset="([^"]*)"\/>/g)) {
+    const format = m[1] as string;
+    const entries = (m[2] as string).split(', ');
+    matrix[format] = entries.map((e) => e.split(' ')[1] as string);
+    urls.push(...entries.map((e) => e.split(' ')[0] as string));
+  }
+  return { matrix, urls };
+}
+
+/** The same matrix, derived from the figure widget's declared variants
+ * rather than from the HTML. */
+function declaredMatrix(): Record<string, string[]> {
+  const matrix: Record<string, string[]> = {};
+  for (const v of figureWidget.variants ?? []) {
+    for (const format of v.formats) {
+      matrix[format] = [...(matrix[format] ?? []), `${v.w}w`];
+    }
+  }
+  return matrix;
+}
+
 function registry(): WidgetRegistry {
   const w = new WidgetRegistry();
   w.register(figureWidget);
@@ -84,4 +112,20 @@ More prose.
   });
 
   assert.equal(normalize(clientHtml), normalize(serverHtml));
+
+  // What normalize() stripped: every declared format and width is
+  // actually emitted, and each (width, format) pair gets its own
+  // cache-keyed URL.
+  const { matrix, urls } = sourceMatrix(serverHtml);
+  const declared = declaredMatrix();
+  assert.deepEqual(Object.keys(declared).sort(), ['avif', 'webp'], 'declared matrix is non-empty');
+  assert.deepEqual(matrix, declared);
+  assert.equal(new Set(urls).size, urls.length, 'variant URLs are distinct');
+  for (const url of urls) {
+    assert.match(url, new RegExp(`^/img/${id}\\.[0-9a-f]+\\.(${Object.keys(matrix).join('|')})$`));
+  }
+
+  // The client half legitimately has no <source> at all: one blob URL
+  // serves every candidate, so renderPicture collapses to the <img>.
+  assert.deepEqual(sourceMatrix(clientHtml).matrix, {});
 });

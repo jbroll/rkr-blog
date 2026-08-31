@@ -180,7 +180,7 @@ export default async function publicRoutes(
             siteBannerFigureFound = true;
             const dir = figureNode as DirectiveNode;
             indexBannerHtml = await widgets.dispatch('figure', dir, {
-              images: await buildImageMap(siteRoot, dir),
+              images: await buildImageMap(siteRoot, dir, { log: req.log }),
               videos: new Map(),
               widgets
             });
@@ -198,7 +198,7 @@ export default async function publicRoutes(
           children: []
         };
         indexBannerHtml = await widgets.dispatch('figure', bannerNode, {
-          images: await buildImageMap(siteRoot, bannerNode),
+          images: await buildImageMap(siteRoot, bannerNode, { log: req.log }),
           videos: new Map(),
           widgets
         });
@@ -218,7 +218,7 @@ export default async function publicRoutes(
           const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
           const { ast } = parsePost(rawTop);
           const ctx = {
-            images: await buildImageMap(siteRoot, teaserNodes(ast)),
+            images: await buildImageMap(siteRoot, teaserNodes(ast), { log: req.log }),
             videos: await buildVideoMap(siteRoot),
             widgets
           };
@@ -287,7 +287,7 @@ export default async function publicRoutes(
       return send404(req, reply);
     }
     const ctx = {
-      images: await buildImageMap(siteRoot, parsed.ast),
+      images: await buildImageMap(siteRoot, parsed.ast, { log: req.log }),
       videos: await buildVideoMap(siteRoot),
       widgets
     };
@@ -335,7 +335,7 @@ export default async function publicRoutes(
       const raw = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parsePost(raw);
       const ctx = {
-        images: await buildImageMap(siteRoot, parsed.ast),
+        images: await buildImageMap(siteRoot, parsed.ast, { log: req.log }),
         videos: await buildVideoMap(siteRoot),
         widgets
       };

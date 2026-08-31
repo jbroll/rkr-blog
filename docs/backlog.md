@@ -22,10 +22,10 @@ Build hygiene, security, video, and the WordPress permalink redirect are done. W
 
 - [x] **Slug rename + comment orphan cascade** — renaming `.md` file and changing `slug` frontmatter simultaneously triggers orphan-delete and `CASCADE` deletes comments. Fix: update slug column first (reindex) then rename file. (`DEFERRED.md: Security`)
 - [x] **GC never reclaims orphaned originals** — `src/cli/gc.ts` prunes cache only; `originals/<aa>/<bb>/<id>.<ext>` accumulates forever. Add cross-referencing pass over sidecars. (`DEFERRED.md: Performance`)
-- [ ] **Prepass-equivalence test doesn't cover variant fidelity** — `test/lib/image-map-equivalence.test.ts` strips `<source>` before compare; WebP/AVIF divergence invisible. (`DEFERRED.md: Image pipeline`)
-- [ ] **`buildImageMapFromOpfs` blob: URLs never revoked** — bounded to one map per load today; re-rendering preview would leak. (`DEFERRED.md: Image pipeline`)
+- [x] **Prepass-equivalence test doesn't cover variant fidelity** — `test/lib/image-map-equivalence.test.ts` strips `<source>` before compare; WebP/AVIF divergence invisible. (`DEFERRED.md: Image pipeline`)
+- [ ] **`buildImageMapFromOpfs` blob: URLs never revoked** — nothing to revoke while the preview renders once per page load; the URLs must outlive the document. (`DEFERRED.md: Image pipeline`)
 - [x] **`scanPostForImageIds` duplicates prefix resolution** — third copy of `id-resolve.ts` rule in `src/lib/posts.ts`. Unify on next touch. (`DEFERRED.md: Image pipeline`)
-- [ ] **`console.warn` vs structured log** — `src/lib/image-map-fs.ts` uses `console.warn` for bake recreation; should be `app.log.warn`.
+- [x] **`console.warn` vs structured log** — `src/lib/image-map-fs.ts` uses `console.warn` for bake recreation; should be `app.log.warn`.
 
 ## 3. Video (isolated v1 follow-ups)
 
