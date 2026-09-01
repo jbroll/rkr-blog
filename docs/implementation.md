@@ -52,8 +52,8 @@ to add any of them.
 |---|---|
 | `bin/` | CLI entry point (`site-admin`) and server entry point |
 | `src/lib/` | Framework-agnostic library code: DB wrapper, image pipeline, posts, auth, sessions, config |
-| `src/widgets/` | Public renderer widget — `::figure` only |
-| `src/admin/` | Editor browser bundle (esbuild → `static/admin/`): ~40 files covering editing, image ops, offline sync, and settings |
+| `src/widgets/` | Public renderer widgets — `::figure` and `::video` |
+| `src/admin/` | Editor browser bundle (esbuild → `static/admin/`): 48 files covering editing, image ops, offline sync, and settings |
 | `src/site/` | Public-page browser scripts (esbuild → `static/site/`): lightbox, carousel, comment form, service worker |
 | `src/templates/` | Server-side HTML templates (TypeScript template literals) |
 | `src/routes/` | Fastify route modules (one per concern) |
@@ -61,8 +61,8 @@ to add any of them.
 | `packages/image-edit/` | Workspace package, built and tested on its own: `src/core/` is the pure op model (validation, canvas math, rotation) shared by server and browser; `src/canvas/` is the browser-only DOM/WebGL layer (crop + perspective modals, encode). Two exports, `.` and `./canvas` |
 | `apps/image-pwa/` | Workspace package: the standalone image editor, a fully client-side PWA over `@rkr/image-edit`. Ships only where a site sets `DEPLOY_IMAGE_EDITOR=yes` (see `RUNBOOK.md`) |
 | `test/` | Unit + integration tests mirroring `src/` layout; e2e specs under `test/e2e/` |
-| `migrations/` | Numbered SQL migration files applied by `site-admin migrate` |
-| `deploy/` | Apache vhost template and systemd unit |
+| `src/migrations/` | Numbered SQL migration files applied by `site-admin migrate` |
+| `deploy/` | Per-site deploy config (`common.conf`, `sites/*.conf`) and the `deploy.sh` hooks that generate the Apache vhost and patch the systemd unit |
 
 The runtime data tree (`originals/`, `sidecars/`, `bakes/`, `cache/`,
 `content/`, `data/`) lives **outside** the repo, configured via
@@ -126,7 +126,23 @@ See `src/migrations/` for the full schema. `site-admin migrate` applies any unap
 
 ### Roles
 
-`requireUser` (any authenticated user) and `requireOwner` (`role === 'owner'` only) are the two `/admin/*` route guards, built once in `src/routes/admin.ts` as `guard` and `ownerGuard` and threaded into each route registrar the same way. Owner gates credentials (OAuth access tokens, connect/callback/disconnect — the callback too, because it stores tokens against the caller and must not be reachable by someone who cannot start the flow), site config (`/admin/settings*`), and whole-site export/import — actions with either account-level or destructive-to-everything blast radius. Everything else — post CRUD, uploads, comments, the editor shell — stays on `requireUser`, since an editor who cannot write content isn't an editor. When adding a route, default to `requireUser`; reach for `requireOwner` only when the route touches a stored credential, global config, or the whole site's data rather than a single post.
+`requireUser` (any authenticated user) and `requireOwner` (`role === 'owner'` only) are the two `/admin/*` route guards. `src/routes/admin.ts` builds them as `guard` and `ownerGuard` and threads them into each route registrar, but only when `opts.requireAuth` is set — with it false both are `{}` and the routes are open, which is how tests reach them.
+
+The two integration modules are the exception. `src/routes/integrations-gdrive.ts` and `integrations-onedrive.ts` are registered from `src/server.ts`, not from `admin.ts`, and build their own `guard`/`ownerGuard` unconditionally. Their 9 owner routes stay owner-gated whatever `requireAuth` says.
+
+Owner covers stored credentials, site config, and everything-at-once operations:
+
+| Route | Why owner |
+|---|---|
+| `/admin/integrations/{gdrive,onedrive}/connect`, `/callback`, `/disconnect` | OAuth flow. The callback too — it stores tokens against the caller, so it must not be reachable by someone who cannot start the flow |
+| `/admin/integrations/gdrive/access-token`, `/admin/integrations/onedrive/{access-token,picker-token}` | Hands out a live provider token |
+| `GET`/`POST /admin/settings`, `/admin/settings/site`, `/admin/settings/banner`, `/admin/settings/{gdrive,onedrive}/disconnect` | Site-wide config and the same stored credentials |
+| `GET /admin/export`, `POST /admin/import` | The whole site's content in one request |
+| `POST /admin/reset` | Wipes posts, originals, sidecars, and cache |
+
+Everything else — post CRUD, uploads, comments, the editor shell — stays on `requireUser`, since an editor who cannot write content isn't an editor. `POST /admin/reindex` (`admin-settings.ts`) and `POST /admin/posts/:slug/delete` (`admin-posts.ts`) are deliberate `requireUser` routes despite living next to owner ones: both rebuild or remove content an editor is already allowed to write, and neither touches a credential or the site as a whole.
+
+When adding a route, default to `requireUser`. Reach for `requireOwner` only when it touches a stored credential, global config, or the whole site's data rather than a single post.
 
 ## 5. Image pipeline internals
 
@@ -151,18 +167,20 @@ Behavior:
      canvas pipeline). Sharp's job is variant downscale + format
      encode only.
    - `originals/<id>.<ext>` otherwise → fall back to applying the
-     full ops chain in sharp. Sharp can't apply `perspective`; if
-     the ops list contains it AND the bake is missing,
-     `renderDerivative` throws `unknown op type`. The bake is
-     authoritative for perspective.
+     full ops chain in sharp. Sharp has no homography operator, so a
+     `perspective` op materialises the pipeline so far as a raw RGBA
+     buffer (`ensureAlpha()` first — `resamplePerspective` hardcodes a
+     4-channel stride), runs the pure-JS `resamplePerspective`, and
+     restarts sharp from the result. Only a malformed quad or singular
+     homography throws.
 5. Write to a temp file; atomic rename into place.
 6. Concurrency: `sharp.concurrency(1)` per call so libvips threads
    don't multiply with job concurrency.
 
-### Client: `src/admin/canvas.ts` and `canvas-math.ts`
+### Client: `packages/image-edit/src/{core,canvas}/`
 
-`canvas-math.ts` is DOM-free so the server-side test runner can import
-it. Holds:
+`core/canvas-math.ts` is DOM-free so the server-side test runner can
+import it. Holds:
 
 - `computeResampleSize` — sharp-compatible inside-fit math.
 - `simplifyOps` — collapses adjacent rotates and same-axis flip pairs
@@ -175,7 +193,7 @@ it. Holds:
 - `opsEqual` — sorted-key JSON canonicalization for cache-prefix
   comparison.
 
-`canvas.ts` is the DOM-touching half:
+`canvas/canvas.ts` is the DOM-touching half:
 
 - `applyOps(source, ops): HTMLCanvasElement` — runs the simplified
   chain via Canvas2D ops (crop / rotate / flip / resample) and
@@ -241,6 +259,18 @@ HTTP requests where ops and bake could disagree; the `/commit` endpoint
 reduces that window to adjacent filesystem operations in a single request.
 A render landing in that window falls through to the original + applyOp
 path: one slower request at most, always correct content.
+
+### Save baselines
+
+Both write paths take an optimistic-concurrency baseline so a queued
+offline save can't silently revert newer work. `src/routes/post-base.ts`
+(`X-Rkr-Last-Synced-At`, used by `POST /admin/posts`) and
+`src/routes/sidecar-base.ts` (`X-Rkr-Sidecar-Base`, used by
+`/admin/sidecar/:id/commit` and `GET /admin/sidecar/:id/meta`) each
+compare the client's echoed timestamp against the file's mtime and
+reject a mismatch with 409. Both are Fastify-free so the read route and
+the write handler share one implementation. `docs/spec-offline.md` has
+the mechanism and the replay rules.
 
 ### Magic-byte validation
 
@@ -318,20 +348,21 @@ Both compete for jobs via an atomic SQLite `UPDATE … WHERE state = 'queued' RE
    filename.
 3. Looks up the matching sidecar + variant + output by ophash.
 4. Calls `renderDerivative` synchronously with a wall-clock budget
-   (`renderBudgetMs`, default 30 s).
+   (`renderBudgetMs`, default 8 s).
 5. On success within budget: `200` with the bytes (and Apache picks up
    subsequent requests from disk).
 6. On budget exceeded: enqueues the job, returns `202` + a low-res
    placeholder, client retries.
 
-The 30 s default sizes for a low-end VPS rendering large variants;
-the spec just calls for "configurable wall-clock budget" without
+The 8 s default keeps a miss inside a reader's patience on a low-end
+VPS; the spec just calls for "configurable wall-clock budget" without
 fixing the number. Override via `BuildAppOpts.renderBudgetMs` when
 constructing the app (currently only used by tests).
 
 ## 7. Front proxy (Apache vhost)
 
-The vhost template lives at `deploy/apache.conf`. Key behaviours:
+`deploy/hooks/apache.build.post.sh` writes the vhost from the values in
+`deploy/common.conf` and `deploy/sites/<site>.conf`. Key behaviours:
 
 - `mod_rewrite` checks whether the requested `/img/*` path exists on disk; if so it rewrites directly to the `cache/img/` file, bypassing Node entirely. `/video/*.mp4` and `/video/poster/*.jpg` do the same against `cache/video/`.
 - `/admin/static/*` is aliased to the same directory as `/static/*`. The
@@ -358,7 +389,7 @@ ProseMirror + Cropper.js), ESM format with code-splitting:
 - `static/admin/settings-page.js` — settings page
 - `static/site/lightbox.js` — public-page lightbox
 - `static/site/carousel.js` — public-page carousel runtime
-- `static/site/comment-form.js`, `copy-link.js`, `img-retry.js` — lightweight public-page helpers
+- `static/site/comment-form.js`, `copy-link.js`, `img-retry.js`, `video-retry.js` — lightweight public-page helpers
 - `static/site/sw-unregister.js` — loaded on all public pages; actively unregisters any prior SW at scope `/`
 - `static/site/sw-admin.js` (thin event wiring; the cache logic lives in `src/site/sw-admin-core.ts`, unit-tested directly in Node) + `sw-admin-register.js` — admin PWA service worker and registration script
 - `static/admin/precache.json` — the list of URLs `sw-admin.js` precaches, keyed by build hash; written by `scripts/gen-precache.ts` at the end of the top-level `build` script, not inside `build:admin` — it walks `static/site/` and `static/themes/` output, so `build:site` must already have run. Running `build:admin` alone leaves no `precache.json`. Each file is listed under the URL it is requested at: `static/admin/**` bare, because esbuild's chunks reach each other (and `preview-page`, `prose-markdown`) through relative imports, and relative resolution drops the `?v=` query; everything else with the `?v=<hash>` the templates stamp. `admin/main.js` and `admin/main.css` are stamped-only: the import direction is main → chunks, so nothing reaches them relatively and a bare entry would be a cache key nothing requests. The OPFS write worker is constructed from `/admin/static/admin/opfs-worker.js` for the same reason a stylesheet is: outside the worker's `/admin/` scope it is never intercepted, so it would not load offline.
@@ -391,7 +422,7 @@ field.
 
 ## 10. Deployment
 
-See `deploy/apache.conf` for the vhost template and `deploy/systemd.service` for the systemd unit. Full step-by-step setup is in [developer-quickstart.md](./developer-quickstart.md).
+`deploy.sh` drives it, with the site's settings in `deploy/sites/<site>.conf` over `deploy/common.conf`. `deploy/hooks/apache.build.post.sh` writes the vhost; `deploy/hooks/fastify_app.configure.post.sh` patches the systemd unit the `fastify_app` deploy type generates. Full step-by-step setup is in [RUNBOOK.md](./RUNBOOK.md).
 
 Sharp on Debian/Ubuntu uses prebuilt binaries. On musl-based distros (Void, Alpine) build from source: install `vips-devel` then `npm install --build-from-source sharp`. Production is glibc; do not ship `node_modules` between dev and prod — install on target.
 
@@ -409,7 +440,7 @@ step N's signal is green.
 - [x] `bin/site-admin init` creates `$SITE_ROOT` directory tree if absent, runs migrations.
 - [x] `bin/server.js` starts a Fastify server, `GET /health` returns `200 {"ok":true}`.
 - [x] `node --test` runs and at least one trivial test passes.
-- [x] `deploy/apache.conf` and `deploy/systemd.service` written; not deployed yet.
+- [x] Apache vhost and systemd unit written; not deployed yet. (Both were static files then; they now come from `deploy/hooks/`, and the originals survive under `fly-deploy/` from the retired Fly demo.)
 
 ### Step 2 — Originals + sidecars
 
@@ -497,25 +528,35 @@ step N's signal is green.
 
 ### Step 13 — PWA shell + service worker
 
-- [x] `static/manifest.webmanifest` + 192/512 icons.
+- [x] `static/admin-manifest.webmanifest` + 192/512 icons.
 - [x] `<link rel="manifest">` in public templates (`layout.ts`,
       `post.ts`, `index.ts`).
-- [x] `src/site/sw-admin.ts` event-listener glue + `src/site/sw-core.ts`
-      pure cache/route logic. Three caches:
-      `rkr-shell-v<hash>`, `rkr-pages-v<hash>`, `rkr-images-v<hash>`.
-- [x] Cache-first for `/img/*`, SWR for `/static/*` + page navs;
-      `Cache-Control: no-store` opt-out for session-private bodies.
+- [x] `src/site/sw-admin.ts` event-listener glue +
+      `src/site/sw-admin-core.ts` pure cache/route logic. One cache,
+      `rkr-admin-<hash>`, from the precache manifest — new HTML can
+      never pair with old chunks, and `evictOldCaches` drops every
+      other `rkr-admin-` cache on activate.
+- [x] `handleFetch` handles two kinds of GET and lets the rest reach
+      the network untouched. A `navigate` to `/admin/editor` or
+      `/admin/view/*` is network-first, writing each ok response back
+      and falling back to the shell (cached under `/admin/editor`
+      whatever the path was, since the shell is slug-independent), then
+      to a 503. `/admin/static/*` is cache-first — immutable for a
+      given hash — with a network fallback. `/admin/api`,
+      `/admin/posts` and `/admin/post-bundle` are among the untouched:
+      the outbox owns their offline behavior.
 - [x] `src/site/sw-admin-register.ts` registers the admin SW at scope
-      `/admin/` and listens for the `rkr-pages-flush` postMessage.
-      Loaded only from the admin SPA template.
+      `/admin/`. Loaded only from the admin SPA template.
 - [x] `src/site/sw-unregister.ts` loaded on all **public (anon) pages**
       instead of sw-register. Actively unregisters any previously
       installed SW at scope `/` so casual readers don't retain stale
       offline caching. Also strips the `?_rkr` cache-bust param and
       posts `rkr-pages-flush` to any still-active SW controller before
-      unregistering.
+      unregistering. `src/admin/save.ts` posts the same message. No
+      worker listens for it — it is a leftover from the public-page SW
+      that no longer ships.
 - [x] Content-hashed bundles via esbuild; bundle-size ratchet
-      via `coverage-baseline.json` sibling `bundle-size-baseline.json`.
+      via `scripts/bundle-size-baseline.json`.
 
 ### Step 14 — Offline outbox + drain (admin SPA)
 
@@ -531,7 +572,7 @@ step N's signal is green.
 - [x] `status-badge.ts` bottom-right indicator.
 - [x] Save-waits-for-uploads guard: `extractFigureIds` blocks
       `savePost` until referenced uploads drain.
-- [x] e2e: `test-e2e/offline-resilience.spec.ts` covers multi-op
+- [x] e2e: `test/e2e/offline-resilience.spec.ts` covers multi-op
       queue, retry-with-backoff, intermittent drain recovery,
       persistent-5xx halt, save-waits-for-uploads.
 
@@ -641,23 +682,16 @@ Pinned implementation calls; revisit if real-world data contradicts.
 
 1. **Markdown directive serializer**: TipTap output → markdown
    round-trip via a small custom plugin atop `remark-stringify`.
-2. **Sync vs async render budget on miss**: 30 s default. Generous
-   so the 202+placeholder fallback only fires for genuinely slow
-   variants. Tune lower once production timings exist.
+2. **Sync vs async render budget on miss**: 8 s default. Long enough
+   that the 202+placeholder fallback only fires for genuinely slow
+   variants. Retune once production timings exist.
 3. **AVIF cost/benefit**: encoding is ~10× slower than WebP. Currently
    eager (rendered ahead of time via `site-admin render`); can shift to
    on-demand if publish latency hurts.
 4. **Bundling vs vendoring TipTap**: bundled via esbuild. CDN-with-SRI
    was rejected in favor of an offline-capable, CSP-tight bundle.
 
-## 14. Sample fixtures
-
-`test/fixtures/posts/2026-05-06-first-post.md`, sample sidecars, and
-small JPEG/PNG images (under 100 KB each, varied aspect ratios, one
-with embedded EXIF orientation) live in `test/fixtures/`. They're
-committed and used by the test suite.
-
-## 15. Markdown → HTML rendering: the image map
+## 14. Markdown → HTML rendering: the image map
 
 `renderPostHtml` (`src/lib/content.ts`) and every widget's `WidgetCtx`
 take a prebuilt `images: ImageMap` (`src/lib/image-map.ts`) instead of

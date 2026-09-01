@@ -596,10 +596,17 @@ deletes everything in the cache not in the set; idempotent.
   gets a 403. There is no first-login-becomes-owner bootstrap — the
   operator invites their own email before their first login, so nobody
   who reaches the URL first can claim the site.
-- **Roles are recorded, not enforced.** `owner` and `editor` are stored
-  on the user and assigned from the invite, but no route consults them:
-  every admin route requires a user and nothing more. Treat an `editor`
-  invite as full admin access. See `DEFERRED.md`.
+- **Roles.** `owner` and `editor` are stored on the user and assigned
+  from the invite. `requireOwner` 403s a non-owner on 18 routes,
+  covering stored provider credentials (Drive and OneDrive connect,
+  OAuth callback, access/picker token, disconnect), site config
+  (`/admin/settings`, `/admin/settings/site`, `/admin/settings/banner`,
+  the two provider disconnects), whole-site export and import, and
+  `POST /admin/reset`. An `editor` keeps the rest: post CRUD, upload,
+  video, comments, tags, preview, sidecar edits, import-url, provider
+  status / import / fetch, and the editor shell. `POST /admin/reindex`
+  and `POST /admin/posts/:slug/delete` stay on `requireUser` by
+  choice; see `DEFERRED.md`.
 - **Sessions:** server-side, 30-day fixed expiry from login time;
   `last_seen_at` is updated on each authenticated request but does
   not extend the expiry window. Cookie is `HttpOnly`, `Secure`,

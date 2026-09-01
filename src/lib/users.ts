@@ -189,12 +189,12 @@ export function findOrCreateTokenAdmin(db: Db): User {
 
 /**
  * Resolve an OAuth identity to a user. Returns the existing user if the
- * (provider, sub) pair is known, or creates a new user when:
- *   - the email is on the allowlist (uses the allowlist's role), OR
- *   - there are zero users in the system (bootstrap: first user is `owner`).
+ * (provider, sub) pair is known, or creates one when the email is on the
+ * allowlist, using the allowlist's role. There is no first-login bootstrap:
+ * the operator must invite their own email before their first login.
  *
- * Throws NotInvitedError when the email is not allowed and the system has
- * existing users.
+ * Throws NotInvitedError when the email is not on the allowlist, and
+ * EmailLinkedError when it already belongs to a user from another provider.
  */
 export function findOrCreateOAuthUser(db: Db, identity: OAuthIdentity): User {
   const existing = findUserByOAuth(db, identity.provider, identity.sub);

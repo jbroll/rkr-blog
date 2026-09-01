@@ -310,11 +310,12 @@ scripts/walk-site.sh "$TARGET"
 
 If walk-site exits 0, the reset + seed + render path is healthy.
 
-A walk over an image-heavy seed will trip the per-IP rate limit on
-`/img/:filename` (120 req/min). The walk script handles this
+A walk over an image-heavy seed can trip the per-IP rate limit on
+`/img/:filename` (600 req/min). The walk script handles this
 transparently — on a 429 it sleeps until `x-ratelimit-reset` and
 retries once — but the wall-clock time scales with how often it has to
-back off. A 125-image seed lands in ~60s; budget accordingly.
+back off. A 125-image seed stays under the limit and finishes without
+backing off at all.
 
 ### 5. Refresh a single slug
 
@@ -335,7 +336,7 @@ the same bytes is a dedup hit on the target.
 Caveat: image IDs that the *previous* version of the post referenced
 but the *new* version doesn't end up orphaned in `originals/` +
 `sidecars/`. Run `bin/site-admin gc` (against the target) to reclaim
-them; the next scheduled gc on Fly does this automatically.
+them.
 
 ### 5a. Repair entity-encoded titles
 

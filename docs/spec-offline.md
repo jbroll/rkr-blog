@@ -127,7 +127,7 @@ opfs://originals/<id>.<ext>               # content-addressed bytes (matches ser
 opfs://image-state/<id>.json              # full LocalEditState (current ops, redo, baseline)
 opfs://bakes/<id>.webp                    # post-ops baked WebP
 opfs://outbox/<seq>.<op>.json             # pending API calls, sequenced
-opfs://outbox-blobs/<seq>.bin             # binary payload for upload/bake outbox entries
+opfs://outbox-blobs/<seq>.bin             # binary payload for commitImageEdit bakes
 opfs://meta/<draftId>.json                # { slug, lastSyncedAt, mode, refIds[] }
 opfs://meta/_root.json                    # { schemaVersion, deviceId }
 ```
@@ -174,8 +174,7 @@ Each entry is one of:
 | op | server endpoint | payload |
 |---|---|---|
 | `upload` | `POST /admin/upload` | multipart with the original blob |
-| `setOps` | `POST /admin/sidecar/:id/ops` | `{ ops, redoStack }` |
-| `bake` | `POST /admin/sidecar/:id/bake` | binary WebP body + `X-Rkr-Bake-Ops-Hash` header (see spec.md §7) |
+| `commitImageEdit` | `POST /admin/sidecar/:id/commit` | multipart: `ops` part `{ ops, redoStack }` plus an optional `bake` part (the client-baked WebP), with `X-Rkr-Sidecar-Base` when the entry carries an edit-start baseline (see spec.md §7) |
 | `savePost` | `POST /admin/posts` | `{ slug, title, status, markdown, date }` |
 
 Properties:
@@ -188,10 +187,11 @@ Properties:
 - **Idempotent on retry.** Every endpoint is content-addressed or
   upserts:
   - `upload` returns the same id for the same bytes.
-  - `setOps` overwrites with the same body.
-  - `bake` overwrites under the same id (gated by ops-hash).
+  - `commitImageEdit` overwrites ops and bake under the same id.
   - `savePost` upserts by slug.
-  A retry of an already-applied op is a safe no-op.
+  A retry of an already-applied op is a safe no-op. Retries also
+  short-circuit on the server's `(deviceId, seq)` record — see the
+  `X-Rkr-Outbox-Seq` row in §6.
 - **Atomic-in-log per entry.** Writing the OPFS file IS the commit;
   a crash mid-drain leaves the entry to retry. Drain order is
   "delete on 2xx".
@@ -216,8 +216,9 @@ Properties:
 }
 ```
 
-For ops that carry binary (`upload`, `bake`), the JSON file holds
-metadata only; the blob lives at `opfs://outbox-blobs/<seq>.bin`.
+For a `commitImageEdit` with a bake, the JSON file holds metadata only
+and the WebP lives at `opfs://outbox-blobs/<seq>.bin`; an `upload`
+sends the bytes already sitting in `opfs://originals/<id>.<ext>`.
 Drain deletes the blob first, the JSON last — a partial drain
 re-fetches from the JSON.
 
@@ -245,6 +246,16 @@ or aborts cleanly (the in-flight HTTP request either succeeds and the
 new leader sees the deleted outbox entry, or fails and the new leader
 retries — both safe due to idempotency).
 
+Inside the held lock the leader re-lists the outbox and drains again,
+up to `MAX_DRAIN_PASSES` (8) passes, stopping early when the queue is
+empty, the status is no longer `idle`, or the browser went offline. A
+`tryDrain` that arrives while the lock is held is a no-op and nothing
+re-triggers it: there is no periodic sweep, and the online-state probe
+(`PROBE_INTERVAL_MS` in `src/admin/online-state.ts`) only re-polls
+while offline. Without the re-check, an entry appended during a drain
+would sit until the next reconnect or page load. The bound keeps a
+queue that refills faster than it drains from pinning the lock.
+
 ### 5.2. Drain failure handling
 
 Single source of truth for what happens on each response class:
@@ -252,7 +263,8 @@ Single source of truth for what happens on each response class:
 | status | behaviour |
 |---|---|
 | 2xx | delete entry, advance to next |
-| 409 (conflict) | halt drain; surface conflict to user; do not advance until resolved |
+| 409 (conflict) on `savePost` | halt drain; surface conflict to user; do not advance until resolved |
+| 409 (conflict) on `commitImageEdit` | drop the entry (its ops are superseded by a newer edit to the same image), log a warning, advance to the next entry |
 | 4xx (other, e.g. 413, 422) | halt drain; surface "this request was rejected: \<message\>"; offer discard or fix-and-retry |
 | 5xx | retry with backoff (1s / 2s / 4s / 8s / 16s; `src/admin/sync.ts:RETRY_DELAYS_MS`); after the schedule is exhausted halt and surface |
 | network error | same as 5xx |
@@ -307,9 +319,10 @@ connection that drops mid-stream gets the user nothing usable.
 
 | header | added on | shape | meaning |
 |---|---|---|---|
-| `X-Rkr-Outbox-Seq` | upload, setOps, bake, savePost | integer | client-side seq number; server logs for replay debugging |
+| `X-Rkr-Outbox-Seq` | upload, commitImageEdit, savePost | integer | client-side seq number. With `X-Rkr-Device-Id` it is the idempotency key: the server stores the response under `(deviceId, seq)` in `applied_outbox` and replays it verbatim for a repeat of the same pair, so a lost ACK can't apply the write twice |
+| `X-Rkr-Device-Id` | upload, commitImageEdit, savePost | opaque id | the device's `meta/_root.json` `deviceId`; scopes `X-Rkr-Outbox-Seq`, which is only monotonic per device |
+| `X-Rkr-Sidecar-Base` | commitImageEdit | ISO-8601 | the sidecar `updatedAt` the client saw when the edit began. Compare-and-swap, same shape as `X-Rkr-Last-Synced-At`; omitted on entries queued before the field existed, which the server accepts without a 409 |
 | `X-Rkr-Last-Synced-At` | savePost | ISO-8601 | the `meta.lastSyncedAt` the client believed the server had at the time the OFFLINE EDITS BEGAN. Not the time of drain — the time of the last successful pull |
-| `X-Rkr-Bake-Ops-Hash` | bake | sha256 hex | (already required per spec.md §7) |
 | `X-Rkr-Build` | upload, commit, savePost | 12-hex git hash | the build the page was rendered from, stamped into the admin shell as `<meta name="rkr-build">` and read at drain time. A mismatch against the running server is refused with 426; a missing header is permissive (legacy queued entries, the WordPress importer, scripted clients) |
 
 ### `savePost` conflict response
@@ -348,10 +361,12 @@ mtime is dated in the future (clock skew, a restored backup) is still
 recoverable in-app: the 409 body names the mtime, and echoing it back
 satisfies the guard.
 
-`setOps` and `bake` use last-writer-wins without 409 (per the conflict
-policy table in §12) — image-edit ops are small and fast to redo, so
-the LWW failure mode is "your rotate got overwritten by another
-device's flip" which the user notices visually.
+`commitImageEdit` runs the same compare-and-swap on
+`X-Rkr-Sidecar-Base` and returns the same 409 (per the conflict policy
+table in §11), but the client resolves it without asking: a superseded
+image edit is dropped and the drain continues. Image-edit ops are
+small and fast to redo, and the failure mode is "your rotate lost to
+another device's flip", which the author notices visually.
 
 ## 7. Pin / cache / eviction
 
@@ -602,8 +617,7 @@ Single tabular summary of every reconciliation point.
 | Conflict | When | Resolution |
 |---|---|---|
 | `upload` for an id that already exists server-side | Same bytes uploaded by another device since this device went offline | Server returns `{id, deduplicated:true}`. Client deletes the outbox entry. No-op. |
-| `setOps` against an id whose ops changed server-side | Two devices ran ops on the same image | Last writer wins by server `updated_at`. Visual change is immediately apparent to the user; no 409. |
-| `bake` with stale ops-hash | Bake-ops-hash mismatch | 409 (per spec.md §7). Client re-bakes against current ops + re-POSTs. |
+| `commitImageEdit` against an id whose sidecar advanced past `X-Rkr-Sidecar-Base` | Two devices ran ops on the same image | 409 `sidecar-superseded`. The client drops the stale entry with a warning and drains on, rather than reverting the newer edit; an entry with no baseline header (queued before the field existed) applies last-writer-wins with no 409. |
 | `savePost` with stale `X-Rkr-Last-Synced-At` | Two devices edited the same post | 409. Author chooses discard vs. force-overwrite (§6). Force re-POSTs with the version the author was shown, so a write landing in between 409s again and re-prompts rather than being lost. |
 | A drain from a bundle older than the running server | Client launched offline, server redeployed before it reconnected | 426 `stale-client` on all three drain routes. The queue halts (no retry can fix it) and the badge asks the author to reload; the outbox is kept, so nothing is lost. A lost-ACK replay still short-circuits to its stored 2xx first. Shells cached before the stamp shipped carry no meta and stay permissive, so the guard only bites one deploy on. |
 | Pulled bundle for a post that's been edited offline | Author runs "Sync now" while a draft is dirty | Refuse the pull; surface "you have local changes; save or discard first". |
@@ -618,13 +632,13 @@ Single tabular summary of every reconciliation point.
 | OPFS unavailable (browser pre-2022) | Editor falls back to v1 behaviour. Status badge says "offline mode unavailable in this browser". |
 | `navigator.storage.persist()` denied | OPFS still works; warn that the browser may evict under storage pressure. |
 | Service worker fails to register | Public site still works. Logged to console; no user-visible effect on the happy path. |
-| Sync drain hits 5xx | Retry with backoff; after 3 retries halt (per §5.2). |
+| Sync drain hits 5xx | Retry with backoff; after 5 attempts (`MAX_DRAIN_ATTEMPTS`) halt (per §5.2). |
 | Sync drain hits 401 (session expired) | Outbox preserved across re-login. Surface "log in to sync N pending changes". OPFS contents and outbox survive sign-out — they're tied to the origin, not the session. |
 | Sync drain hits 413 (image too large) | Outbox entry stays for explicit retry-or-discard. Discarding offers to also drop dependent entries (§5.2). |
 | Browser tab killed mid-drain | Outbox JSON commits before HTTP request fires; partial drain re-attempts on next load. |
 | Browser cleared site data | OPFS gone. Outbox lost. Surface "your offline cache was cleared by the browser; pull pinned posts again" on next online connect. |
 | Two outbox entries for the same `slug`'s `savePost` | Coalesce within the not-yet-drained queue: keep only the latest. Drained entries are removed normally; coalesce applies only to pending. |
-| Two outbox entries `setOps` for the same `id` | Same coalescing as above. |
+| Two outbox entries `commitImageEdit` for the same `id` | Same coalescing as above. |
 | Image format the browser can't preview-decode (e.g. HEIC on a non-Safari) | Upload outbox entry succeeds (server has sharp); preview shows a placeholder; no failure. |
 | OPFS handle invalidated by long backgrounding | Some browsers expire handles. SPA re-acquires the root handle on every editor mount; doesn't rely on cross-load handle stability. |
 | User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Online, `/admin/view/:slug` is network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached shell. Unsynced work is not lost — a drain against `/admin/posts`, `/admin/upload`, or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
@@ -635,9 +649,10 @@ Single tabular summary of every reconciliation point.
 GET  /admin/post-bundle/:slug?manifest=1   new (§6) — manifest only
 GET  /manifest.webmanifest                 new (§9)
 GET  /sw.js                                new (§9)
-POST /admin/sidecar/:id/bake               (already requires X-Rkr-Bake-Ops-Hash per spec.md §7)
+POST /admin/sidecar/:id/commit             ops + optional bake in one request; honors X-Rkr-Sidecar-Base (§6)
 POST /admin/posts                          honors X-Rkr-Last-Synced-At (§6)
-POST /admin/upload, /admin/sidecar/:id/ops accept X-Rkr-Outbox-Seq (logging only)
+POST /admin/upload, /admin/posts, /admin/sidecar/:id/commit
+                                           accept X-Rkr-Outbox-Seq + X-Rkr-Device-Id as an idempotency key (§6)
 ```
 
 ## 14. Phasing
@@ -652,8 +667,8 @@ POST /admin/upload, /admin/sidecar/:id/ops accept X-Rkr-Outbox-Seq (logging only
 Phase 0 ships even without the rest; it's a strict win on the public
 side and risks nothing on the admin side. Phases 1-3 are sequential.
 
-The bake-ops-hash guard (called out in spec.md §7) is independent of
-phasing and should land in v1.
+The atomic ops+bake commit (spec.md §7) is independent of phasing and
+should land in v1.
 
 ## 15. Operator-facing debug
 
@@ -675,6 +690,7 @@ diagnosing a sync problem.
 | `rkr-images-v<n>` LRU cap | 200 | build-time constant |
 | Online-probe interval (offline state) | 5s | build-time constant |
 | Sync-drain 5xx backoff | 1s / 2s / 4s / 8s / 16s | build-time constant in `src/admin/sync.ts` |
+| Drain re-check passes per lock hold | 8 | `MAX_DRAIN_PASSES` in `src/admin/sync.ts` |
 | Public /img cache-miss backoff | 0.5s / 1.5s / 3s / 6s / 10s ±20%, capped at 10s | build-time constant in `src/site/img-retry.ts` |
 | Draft-write debounce | 500ms | build-time constant |
 | Draft in-use heartbeat / stale | 30s / 60s | `HEARTBEAT_MS` in `src/admin/draft.ts`, `LOCK_GRACE_MS` in `src/lib/eviction-pure.ts` |

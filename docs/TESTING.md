@@ -7,7 +7,7 @@ Practical guidelines for the e2e suite. Two layers:
    re-explain it. Read [playwright.dev/docs/best-practices][pw-bp]
    first.
 2. **Project-specific** — the patterns and gotchas particular to this
-   codebase. Hard-won from the existing 7 specs.
+   codebase, drawn from the 17 specs already in `test/e2e/`.
 
 [pw-bp]: https://playwright.dev/docs/best-practices
 
@@ -17,18 +17,18 @@ Practical guidelines for the e2e suite. Two layers:
 
 | Path | What |
 |---|---|
-| `test-e2e/*.spec.ts` | The specs. One per logical flow. |
-| `test-e2e/coverage-fixtures.ts` | Custom `test` fixture that wraps Playwright's `baseTest` to capture V8 coverage per spec. **Always import `test` + `expect` from here, not `@playwright/test`** — otherwise no coverage data is collected for the spec. |
-| `test-e2e/server-runner.ts` | Boots a fresh `buildApp()` against a tmp `SITE_ROOT` for the duration of a run. Single shared instance across all specs. |
-| `test-e2e/coverage-config.ts` | The monocart options both of the above construct a `CoverageReport` from: entry/source filters, source-map resolver, and the bundle-URL → repo-path mapping. mcr applies the filters at both `add()` and `generate()` time, so the two call sites must not disagree. |
-| `test-e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes. |
-| `playwright.config.ts` | Wires the webServer + global teardown. `workers: 1` (the suite shares one server). |
+| `test/e2e/*.spec.ts` | The specs. One per logical flow. |
+| `test/e2e/coverage-fixtures.ts` | Custom `test` fixture that wraps Playwright's `baseTest` to capture V8 coverage per spec. **Always import `test` + `expect` from here, not `@playwright/test`** — otherwise no coverage data is collected for the spec. |
+| `test/e2e/server-runner.ts` | Boots a fresh `buildApp()` against a tmp `SITE_ROOT` for the duration of a run. Single shared instance across all specs. |
+| `test/e2e/coverage-config.ts` | The monocart options both of the above construct a `CoverageReport` from: entry/source filters, source-map resolver, and the bundle-URL → repo-path mapping. mcr applies the filters at both `add()` and `generate()` time, so the two call sites must not disagree. |
+| `test/e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes. |
+| `test/playwright.config.ts` | Wires the webServer + global teardown. `testDir: './e2e'` is relative to `test/`. `workers: 1` (the suite shares one server). |
 | `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-admin.test.ts` and `sw-admin-entry.test.ts` for the service worker). These run under c8, not Playwright; see §10. |
 
 Run:
 
 ```bash
-npm run test:e2e            # full suite; ~7s; produces coverage/e2e/
+npm run test:e2e            # full suite; ~2 min; produces coverage/e2e/
 npm run test:e2e -- --headed   # see what's happening in chromium
 npm run test:e2e -- editor-flow.spec.ts -g "rotate"   # one test
 ```
@@ -130,7 +130,7 @@ await page.evaluate(({ a, b }) => {
 
 ## 5. The local server: rate limits and shared state
 
-`test-e2e/server-runner.ts` builds the app with a few production-relaxing tweaks:
+`test/e2e/server-runner.ts` builds the app with a few production-relaxing tweaks:
 
 ```ts
 auth: { secureCookies: false, tokenLoginRateMax: 100 }
@@ -145,9 +145,35 @@ Other production protections that can trip e2e if you're not careful:
 
 | Protection | Where | Impact |
 |---|---|---|
-| /img/:filename rate limit (120/min) | `src/routes/public.ts` | The walk script (`scripts/walk-site.sh`) hits this on a content-rich seed; e2e is unlikely to. |
-| Bake ops-hash header required | `src/routes/admin-sidecar-edit.ts` | Don't POST to `/admin/sidecar/:id/bake` from a test without computing `sha256(canonicalJson(ops))`. |
+| /img/:filename rate limit (600/min) | `src/routes/public-img.ts` | The walk script (`scripts/walk-site.sh`) hits this on a content-rich seed; e2e is unlikely to. |
+| Image-edit save is one atomic multipart POST | `src/routes/admin-sidecar-edit.ts` | `/admin/sidecar/:id/commit` takes `ops` and `bake` together. The old `/ops` + `/bake` split and its `X-Rkr-Bake-Ops-Hash` guard are gone. |
 | Token-login rate cap | `src/routes/auth.ts` | Already mitigated above. |
+
+### 5a. The standalone image PWA
+
+`image-pwa.spec.ts` drives `apps/image-pwa`, which the production server
+never serves. `server-runner.ts` mounts it under `ENABLE_TEST_ROUTES`
+(set in `playwright.config.ts`'s `webServer.env`):
+
+| Mount | Source |
+|---|---|
+| `/pwa/dist/` | `apps/image-pwa/dist/` |
+| `/pwa/icons/` | `apps/image-pwa/icons/` |
+| `GET /pwa/` | `apps/image-pwa/index.html` |
+| `GET /pwa/manifest.webmanifest` | the file of the same name |
+
+Three mounts rather than one because `index.html` addresses its assets
+relative to its own directory, not `dist/`.
+
+- **Run `npm run build:pwa` first.** `@fastify/static` doesn't fail on a
+  missing root, so without a `dist/` the spec dies on an opaque 30s
+  selector timeout. The runner `console.warn`s when `dist/` is absent —
+  Fastify's logger is a no-op stub here, so `console` is the only thing
+  that prints.
+- **`sw.js` is deliberately not served**: it sits beside `index.html`,
+  not in `dist/`, and its scope is wrong under `/pwa/`. The spec stubs
+  `navigator.serviceWorker.register` to reject via an init script so the
+  page's own `.catch(() => {})` never turns into a console 404.
 
 ---
 
@@ -179,7 +205,7 @@ Two non-obvious things:
 ## 7. Adding a new spec
 
 ```ts
-// test-e2e/my-new-flow.spec.ts
+// test/e2e/my-new-flow.spec.ts
 import { expect, test } from './coverage-fixtures.ts';
 
 const PNG_1X1_PURPLE = 'iVBORw0KGgo...';   // unique to this spec
@@ -248,8 +274,7 @@ Coverage gating lives in org-hooks (`profiles/sci-tiered.yml`), not in
 this repo. The tier-2 push runs the unit and e2e jobs in parallel on
 the CI host, merges `coverage/lcov.info` with `coverage/e2e/lcov.info`
 per line, and ratchets the union against `coverage-union-baseline.json`
-(213 files, committed at the root) minus
-`coverage-union-ratchet-exclude`.
+(committed at the root) minus `coverage-union-ratchet-exclude`.
 
 A staged file below its baseline percentage fails the commit. Files
 with no baseline entry must clear a 0.75 floor. There is 0.5 pp of
@@ -325,7 +350,7 @@ is still testable in Node with fakes: the service worker entry
 | Image-edit panel snapshots show unexpected ops | Shared sidecar from a prior test using the same PNG bytes | Generate a unique PNG color |
 | `window.__rkrEditor` is undefined | Loaded `/admin/editor` without `?e2e=1` | Add the query string |
 | Coverage report shows lots of node_modules | `entryFilter` / `sourceFilter` too loose | Tighten in `coverage-config.ts` |
-| Bake POST returns 409 | Stale ops-hash | Re-fetch ops, recompute `sha256(canonicalJson(ops))`, retry |
+| Commit POST returns 409 | Stale `X-Rkr-Sidecar-Base` — another write landed since the edit started | Re-fetch `GET /admin/sidecar/:id/meta`, echo its `updatedAt`, retry |
 | Selector for a button or input doesn't exist | Bundle wasn't rebuilt after a template/SPA change | `npm run build:admin && npm run build:site` |
 | Spec adds 200 lines and the ratchet still passes | Coverage came in via existing flows | Good — but also confirm the new behavior is actually exercised, not just walked over |
 | Test passes locally, fails in CI | Likely server reuse vs. fresh boot diff. Try `CI=1` locally. |
@@ -338,4 +363,4 @@ is still testable in Node with fakes: the service worker entry
 - A general intro to Playwright. The upstream docs are good. Read them first if you're new.
 - A page-object-model layer. We've stayed small enough that ad-hoc helper functions per spec are clearer than a framework.
 
-If you find yourself adding a fourth `login(page)` helper, **promote it** to a shared `test-e2e/helpers.ts`. Keep the doc updated.
+If you find yourself adding a fourth `login(page)` helper, **promote it** to a shared `test/e2e/helpers.ts`. Keep the doc updated.

@@ -10,8 +10,8 @@
 #   2. playwright install       (chromium binary for the e2e suite —
 #                                ~110 MB, downloads once into the
 #                                Playwright cache)
-#   3. hooks:install            (sets git core.hooksPath to .githooks/
-#                                so pre-commit runs the gate)
+#   3. hooks:install            (runs `lefthook install`, which writes
+#                                .git/hooks/pre-commit so the gate runs)
 #
 # Run via `npm run setup` or `bash scripts/setup.sh`.
 #
@@ -20,7 +20,7 @@
 #     deploy-time choice; see developer-quickstart.md §2.
 #   * Install OS packages. Sharp's prebuilds cover Debian / Ubuntu /
 #     macOS out of the box; on Void or musl distros, install vips
-#     manually before running this script (see Troubleshooting §9).
+#     manually before running this script (see Troubleshooting §10).
 #     ffmpeg + ffprobe are also OS packages — the video pipeline and
 #     the e2e suite need them (see developer-quickstart.md §1).
 
@@ -43,8 +43,8 @@ echo "[2/3] playwright install chromium"
 npx --no-install playwright install chromium
 
 echo "[3/3] git hooks"
-if [ "$(git config --get core.hooksPath || true)" = ".githooks" ]; then
-  echo "  hooksPath already set to .githooks — skip"
+if [ -f .git/hooks/pre-commit ] && grep -q lefthook .git/hooks/pre-commit; then
+  echo "  lefthook already installed — skip"
 else
   npm run --silent hooks:install
 fi

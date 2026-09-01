@@ -4,7 +4,7 @@
 //   GET  /static/*           → public + admin static assets (CSS, admin bundle)
 //   GET  /admin/preview/:id  → 302 to a derivative URL the editor can <img src>
 //   GET  /admin/original/:id → streams the original (master) bytes for client-side ops
-//   POST /admin/sidecar/:id/bake → upload the client-baked post-ops WebP
+//   POST /admin/sidecar/:id/commit → ops + the client-baked post-ops WebP, in one atomic request
 //   POST /admin/posts        → save editor JSON as a markdown post + reindex
 //   POST /admin/upload       → multipart image ingest (routed to ingestStream)
 //   POST /admin/import/url   → server-side fetch + ingest from a URL

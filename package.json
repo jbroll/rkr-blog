@@ -30,7 +30,7 @@
     "test:e2e": "playwright test --config test/playwright.config.ts",
     "test:e2e:headed": "playwright test --config test/playwright.config.ts --headed",
     "test:device": "set -a; [ -f secrets.env ] && . ./secrets.env; set +a; ENABLE_TEST_ROUTES=1 HOST=0.0.0.0 npm start",
-    "test:coverage:full": "rm -rf coverage && npm run --silent test:coverage:report && npm run --silent build:admin && npm run --silent build:site && npm run --silent test:e2e",
+    "test:coverage:full": "rm -rf coverage && npm run --silent test:coverage:report && npm run --silent build:packages && npm run --silent build:admin && npm run --silent build:site && npm run --silent build:pwa && npm run --silent test:e2e",
     "format": "biome format --write",
     "check": "npm run typecheck && biome check && npm run test:coverage",
     "build:admin": "rm -rf static/admin && esbuild src/admin/main.ts src/admin/posts-list.ts src/admin/settings-page.ts --bundle --splitting --format=esm --target=es2022 --outdir=static/admin --entry-names=[name] --minify --sourcemap && esbuild src/admin/opfs-worker.ts --bundle --format=esm --target=es2022 --outdir=static/admin --entry-names=[name] --minify --sourcemap",

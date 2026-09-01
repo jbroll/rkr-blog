@@ -2,7 +2,7 @@
 <img style="z-index=100" src="docs/rkr-blog.png" alt="rkr-blog icon" align="right" width="40%"/>
 
 
-A blog where writing and images work together naturally. Bring in photos from your desktop, Google Drive, OneDrive, or any URL; arrange them in rich layouts; publish. No markup, no plugins, no external services.
+A blog where writing and images work together. Bring in photos from your desktop, Google Drive, OneDrive, or any URL; arrange them in rich layouts; publish. No markup, no plugins, no external services.
 
 Authoring entirely from the browser. Runs on any Node 22 host — no other services required.
 
@@ -29,9 +29,9 @@ All image layouts share the same insertion and settings panel. Choose the arrang
 
 Crop, rotate, flip, resize, and correct perspective without leaving the editor. Every operation is recorded as a named step that can be removed, undone, or redone — and the edit history persists across browser reloads. The stored original is never overwritten; remove any step and the image regenerates from it.
 
-## Fast by default
+## Images served responsively
 
-Images are automatically served in multiple sizes and modern formats so every browser and screen gets the right file.
+Every image is served in multiple sizes and modern formats so each browser and screen gets the right file.
 
 ---
 
@@ -67,10 +67,10 @@ Node 22 and a reverse proxy. Apache configuration and a Dockerfile are included.
 
 ```bash
 git clone <repo> /opt/rkr-blog
-cd /opt/rkr-blog && npm ci
+cd /opt/rkr-blog && npm ci && npm run build
 SITE_ROOT=/var/www/site bin/site-admin init
-# configure reverse proxy from deploy/apache.conf
-systemctl enable --now rkroll
+# reverse proxy vhost is generated at deploy time — see deploy/hooks/
+systemctl enable --now rkr-blog
 ```
 
 Full setup: [docs/developer-quickstart.md](./docs/developer-quickstart.md)
@@ -82,3 +82,9 @@ Full setup: [docs/developer-quickstart.md](./docs/developer-quickstart.md)
 - [docs/spec.md](./docs/spec.md) — what the app does
 - [docs/implementation.md](./docs/implementation.md) — how it's built
 - [docs/developer-quickstart.md](./docs/developer-quickstart.md) — local setup
+- [docs/RUNBOOK.md](./docs/RUNBOOK.md) — operator procedures for the live site
+- [docs/TESTING.md](./docs/TESTING.md) — writing and debugging the e2e suite
+- [docs/theming.md](./docs/theming.md) — the CSS theme contract
+- [docs/backlog.md](./docs/backlog.md) — outstanding work
+- [docs/DEFERRED.md](./docs/DEFERRED.md) — known gaps, deliberately unaddressed, with revisit triggers
+- [docs/WILLNOTFIX.md](./docs/WILLNOTFIX.md) — deliberate choices, not deferred work

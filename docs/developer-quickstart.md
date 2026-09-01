@@ -41,11 +41,14 @@ SITE_ROOT=$HOME/site bin/site-admin init
 2. **`npx playwright install chromium`** — downloads Chrome Headless
    Shell (~110 MB) into the Playwright cache. Required for
    `npm run test:e2e`. Skipped on second run.
-3. **`npm run hooks:install`** — sets `git config core.hooksPath` to
-   `.githooks/` so `pre-commit` runs the full gate (biome / tsc /
-   duplicate-type / no-reexports / knip / circular-import / size /
-   c8 coverage thresholds; plus bundle-size ratchet + e2e + e2e
-   coverage ratchet when `src/admin/**` or `src/site/**` is staged).
+3. **`npm run hooks:install`** — runs `lefthook install`, wiring up
+   the pre-commit gate. The gate itself is defined in
+   `lefthook.yml` (pulled from the org-hooks `sci-tiered` profile,
+   with local knobs in `lefthook-rc.sh`): a fast local tier (hygiene,
+   secrets, format-lint, duplicate-type, no-reexports, size caps),
+   then a slower local tier (typecheck, knip, circular-import), then
+   — only if both pass — `ci/test` and `ci/e2e` dispatched in
+   parallel with a union coverage ratchet over their combined lcov.
 
 ### Distro-specific Sharp notes
 
@@ -151,7 +154,8 @@ npm run lint:fix             # biome check --write
 npm run format               # biome format --write
 ```
 
-The pre-commit hook runs `biome check --staged`.
+The pre-commit gate runs `biome check --write --error-on-warnings` on
+staged files and re-stages any auto-fix.
 
 ## 6. Tests
 
@@ -178,8 +182,8 @@ npm run test:e2e             # Playwright (chromium, headless)
                              # plus V8 coverage of the admin SPA bundle
                              # via monocart-coverage-reports → coverage/e2e/
 npm run test:e2e:headed      # Playwright (chromium, visible)
-npm run test:coverage:full   # c8 (server) + e2e (browser) end-to-end;
-                             # writes lcov to coverage/ + coverage/e2e/
+npm run test:coverage:full   # unit coverage summary + all builds + e2e;
+                             # only e2e writes lcov, to coverage/e2e/
 ```
 
 `test:coverage` excludes `src/admin/**` (browser code, requires a DOM
@@ -204,34 +208,36 @@ the pre-commit ratchet), see [`TESTING.md`](./TESTING.md).
 
 ### Other gates the pre-commit hook runs
 
-Beyond tests, biome, and tsc, the hook (`./.githooks/pre-commit`)
-also runs:
+Beyond tests, biome, and tsc, the gate (`lefthook.yml`, pulling
+org-hooks' `sci-tiered` profile) also runs:
 
 ```bash
-node scripts/check-duplicate-types.ts   # cross-file dupe interfaces / types
-node scripts/check-no-reexports.ts      # `export { … } from …` patterns
-npm run knip:gate                       # full knip report (dead code)
+node "$ORG_HOOKS/scripts/check-duplicate-types.mjs" src 'packages/*/src'
+node "$ORG_HOOKS/scripts/check-no-reexports.mjs" src 'packages/*/src'
+npm run knip                            # full knip report (dead code)
 npm run circular                        # dpdm circular-import survey
 ```
 
 Each is invokable on demand if you want to debug a specific failure.
 The size hook (per-file 500-line ceiling for `src/`/`bin/`; tests
-exempt) is inline in the hook itself. When `src/admin/**` or
-`src/site/**` files are staged the hook additionally runs:
-`build:admin`, `build:site`, the bundle-size ratchet
-(`scripts/check-bundle-size.ts`), the full e2e suite, and the e2e
-coverage ratchet (`scripts/check-e2e-coverage.ts`).
+exempt) runs in the same fast local tier. After both local tiers
+pass, the gate dispatches `ci/test` (unit tests, bundle build, the
+bundle-size ratchet) and `ci/e2e` (Playwright, driven off
+`build:packages`/`build:admin`/`build:site`/`build:pwa`) in parallel,
+then runs one coverage ratchet over their combined lcov.
 
-## 7. Building the admin bundle
+## 7. Building the bundles
 
 ```bash
+npm run build:packages       # esbuild → packages/image-edit/dist
 npm run build:admin          # esbuild → static/admin/ (main, posts-list, settings-page)
 npm run build:site           # esbuild → static/site/ (lightbox, carousel, img-retry, copy-link, comment-form, sw-unregister, sw-admin, sw-admin-register)
-npm run build                # both
+npm run build:pwa            # esbuild → apps/image-pwa/dist
+npm run build                # all four, plus the service-worker precache manifest
 ```
 
 The pre-commit hook does NOT run the build — you commit source, not
-the bundle. Production builds happen at deploy time.
+the bundle. Production builds happen at deploy time (and in CI).
 
 ## 8. Command cheatsheet
 
@@ -251,16 +257,18 @@ npm run knip                              # full dead-code report
 npm run knip:gate                         # gate subset (pre-commit step)
 npm run circular                          # dpdm circular-import check
 npm run check                             # typecheck + lint + test:coverage
-npm run hooks:install                     # one-time: enable .githooks/
+npm run hooks:install                     # one-time: lefthook install
 
 # server
 npm start                                 # boot Fastify
 SITE_ROOT=$HOME/site PORT=3000 npm start  # with explicit env
 
-# admin bundle
+# bundles
+npm run build:packages                    # esbuild → packages/image-edit/dist
 npm run build:admin                       # esbuild → static/admin/ (main, posts-list, settings-page)
 npm run build:site                        # esbuild → static/site/*.js
-npm run build                             # both
+npm run build:pwa                         # esbuild → apps/image-pwa/dist
+npm run build                             # all four, plus precache manifest
 npm run clean:admin                       # rm -rf static/admin
 npm run clean:site                        # rm -rf static/site
 
@@ -355,7 +363,7 @@ curl http://localhost:<port>/_test/reload
 The server logs every result JSON to stdout; the SSE client on the page
 shows results in real time.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 - **Sharp prebuild fails on Void.** Install libvips and rebuild:
   `xbps-install vips vips-devel && npm install --build-from-source sharp`.
