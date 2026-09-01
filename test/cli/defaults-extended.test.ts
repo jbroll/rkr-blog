@@ -7,8 +7,7 @@
 // pins the argv parsing + exit-status contract that the bin/site-admin
 // shim depends on.
 //
-// server.ts is intentionally not covered here — its default export
-// boots a Fastify listener and would leave a process around.
+// export, import, wp-dump and server live in test/cli/entry-points.test.ts.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

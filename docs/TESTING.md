@@ -248,7 +248,7 @@ Coverage gating lives in org-hooks (`profiles/sci-tiered.yml`), not in
 this repo. The tier-2 push runs the unit and e2e jobs in parallel on
 the CI host, merges `coverage/lcov.info` with `coverage/e2e/lcov.info`
 per line, and ratchets the union against `coverage-union-baseline.json`
-(209 files, committed at the root) minus
+(213 files, committed at the root) minus
 `coverage-union-ratchet-exclude`.
 
 A staged file below its baseline percentage fails the commit. Files
