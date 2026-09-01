@@ -178,7 +178,7 @@
     "src/routes/admin-video.ts": 93.23,
     "src/routes/admin.ts": 96.27,
     "src/routes/auth.ts": 94.36,
-    "src/routes/integrations-gdrive.ts": 92.47,
+    "src/routes/integrations-gdrive.ts": 93.01,
     "src/routes/integrations-onedrive.ts": 97.3,
     "src/routes/integrations-shared.ts": 98.31,
     "src/routes/post-base.ts": 100,

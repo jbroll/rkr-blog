@@ -94,7 +94,7 @@ export default async function integrationsGdriveRoutes(
 
   fastify.get<{ Querystring: ProviderCallbackQuery }>(
     '/admin/integrations/gdrive/callback',
-    { ...guard },
+    { ...ownerGuard },
     async (req, reply) => {
       if (req.query.error) {
         return reply.code(400).send({ error: `provider error: ${req.query.error}` });

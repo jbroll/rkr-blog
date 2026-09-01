@@ -6,10 +6,14 @@ import { type TestContext, test } from 'node:test';
 
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { ensureSecretKey } from '../../src/lib/secrets.ts';
 import { createSession } from '../../src/lib/sessions.ts';
 import { findOrCreateOAuthUser, inviteEmail, type Role } from '../../src/lib/users.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
+import type { DriveTokenExchange } from '../../src/routes/integrations-gdrive.ts';
+import type { OneDriveTokenExchange } from '../../src/routes/integrations-onedrive.ts';
 import { buildApp } from '../../src/server.ts';
+import { stubOAuth2Tokens } from '../helpers/oauth-fixtures.ts';
 
 const noopAuthExchange: TokenExchange = {
   authorizationUrl: () => new URL('https://example.com/'),
@@ -18,11 +22,26 @@ const noopAuthExchange: TokenExchange = {
   }
 };
 
+// Injecting an exchange is what makes buildApp register the provider
+// routes at all; without it they 404 and the guard is never reached.
+const providerTokens = () => stubOAuth2Tokens({ accessToken: 'a', expiresInSeconds: 3600 });
+const stubDriveExchange: DriveTokenExchange = {
+  authorizationUrl: (state) => new URL(`https://example.com/drive?state=${state}`),
+  exchange: async () => providerTokens(),
+  refresh: async () => providerTokens()
+};
+const stubOnedriveExchange: OneDriveTokenExchange = {
+  authorizationUrl: (state) => new URL(`https://example.com/onedrive?state=${state}`),
+  exchange: async () => providerTokens(),
+  refresh: async () => providerTokens()
+};
+
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-owner-guard-'));
   for (const sub of ['sidecars', 'originals', 'cache/img', 'content/posts', 'data']) {
     fs.mkdirSync(path.join(root, sub), { recursive: true });
   }
+  ensureSecretKey(root);
   const db = open(path.join(root, 'data', 'site.db'));
   migrate(db);
   db.close();
@@ -40,7 +59,9 @@ async function setup(t: TestContext, args: { role: Role }) {
     siteRoot: root,
     db,
     startWorker: false,
-    auth: { exchange: noopAuthExchange, secureCookies: false }
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    gdrive: { exchange: stubDriveExchange },
+    onedrive: { exchange: stubOnedriveExchange }
   });
   t.after(() => app.close());
 
@@ -71,17 +92,36 @@ async function setupBearerOwner(t: TestContext) {
     siteRoot: root,
     db,
     startWorker: false,
-    auth: { exchange: noopAuthExchange, secureCookies: false }
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    gdrive: { exchange: stubDriveExchange },
+    onedrive: { exchange: stubOnedriveExchange }
   });
   t.after(() => app.close());
 
   return { root, app, bearerHeader: `Bearer ${token}` };
 }
 
+// Every route carrying ownerGuard. requireOwner is a preHandler, so a
+// 403 lands before the handler runs and no route needs a fixture.
 const OWNER_ONLY = [
   { method: 'GET' as const, url: '/admin/export' },
+  { method: 'POST' as const, url: '/admin/import' },
+  { method: 'POST' as const, url: '/admin/reset' },
   { method: 'GET' as const, url: '/admin/settings' },
-  { method: 'POST' as const, url: '/admin/settings/site' }
+  { method: 'POST' as const, url: '/admin/settings' },
+  { method: 'POST' as const, url: '/admin/settings/site' },
+  { method: 'POST' as const, url: '/admin/settings/banner' },
+  { method: 'POST' as const, url: '/admin/settings/gdrive/disconnect' },
+  { method: 'POST' as const, url: '/admin/settings/onedrive/disconnect' },
+  { method: 'GET' as const, url: '/admin/integrations/gdrive/connect' },
+  { method: 'GET' as const, url: '/admin/integrations/gdrive/callback' },
+  { method: 'GET' as const, url: '/admin/integrations/gdrive/access-token' },
+  { method: 'POST' as const, url: '/admin/integrations/gdrive/disconnect' },
+  { method: 'GET' as const, url: '/admin/integrations/onedrive/connect' },
+  { method: 'GET' as const, url: '/admin/integrations/onedrive/callback' },
+  { method: 'GET' as const, url: '/admin/integrations/onedrive/access-token' },
+  { method: 'GET' as const, url: '/admin/integrations/onedrive/picker-token' },
+  { method: 'POST' as const, url: '/admin/integrations/onedrive/disconnect' }
 ];
 
 const EDITOR_OK = [

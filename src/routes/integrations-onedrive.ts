@@ -123,7 +123,7 @@ export default async function integrationsOnedriveRoutes(
 
   fastify.get<{ Querystring: OneDriveCallbackQuery }>(
     '/admin/integrations/onedrive/callback',
-    { ...guard },
+    { ...ownerGuard },
     async (req, reply) => {
       if (req.query.error) {
         const desc = req.query.error_description ? `: ${req.query.error_description}` : '';
