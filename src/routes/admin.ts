@@ -296,32 +296,34 @@ export default async function adminRoutes(
     // no longer describes the file on disk. The header is optional:
     // a fresh post that was never synced just omits it.
     const lastSyncedAtRaw = request.headers['x-rkr-last-synced-at'];
-    // The file can vanish between the existsSync above and here, the
-    // same window the no-op layer's read already contemplates. There is
-    // then no baseline to compare against, so write instead of 500ing.
-    let mtimeMs: number | null = null;
-    try {
-      mtimeMs = fs.statSync(finalPath).mtimeMs;
-    } catch {
-      mtimeMs = null;
-    }
-    if (!inserted && mtimeMs !== null) {
-      const verdict = evaluatePostBase(
-        typeof lastSyncedAtRaw === 'string' ? lastSyncedAtRaw : undefined,
-        mtimeMs
-      );
-      if (verdict.kind === 'invalid') {
-        return reply
-          .code(400)
-          .send({ error: 'X-Rkr-Last-Synced-At must be an ISO-8601 timestamp' });
+    if (!inserted) {
+      // The file can vanish between the existsSync above and here, the
+      // same window the no-op layer's read already contemplates. There is
+      // then no baseline to compare against, so write instead of 500ing.
+      let mtimeMs: number | null = null;
+      try {
+        mtimeMs = fs.statSync(finalPath).mtimeMs;
+      } catch {
+        mtimeMs = null;
       }
-      if (verdict.kind === 'superseded') {
-        return reply.code(409).send({
-          error: 'post-superseded',
-          slug,
-          serverUpdatedAt: verdict.serverUpdatedAt,
-          clientLastSyncedAt: lastSyncedAtRaw
-        });
+      if (mtimeMs !== null) {
+        const verdict = evaluatePostBase(
+          typeof lastSyncedAtRaw === 'string' ? lastSyncedAtRaw : undefined,
+          mtimeMs
+        );
+        if (verdict.kind === 'invalid') {
+          return reply
+            .code(400)
+            .send({ error: 'X-Rkr-Last-Synced-At must be an ISO-8601 timestamp' });
+        }
+        if (verdict.kind === 'superseded') {
+          return reply.code(409).send({
+            error: 'post-superseded',
+            slug,
+            serverUpdatedAt: verdict.serverUpdatedAt,
+            clientLastSyncedAt: lastSyncedAtRaw
+          });
+        }
       }
     }
 

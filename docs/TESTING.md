@@ -259,8 +259,8 @@ up to 5 pp without tripping either.
 To rebuild the baseline after a legitimate change in what's measured:
 
 ```bash
-npm run test:coverage && npm run build:admin && npm run build:site && \
-  npm run build:pwa && npm run test:e2e
+npm run test:coverage && npm run build:packages && npm run build:admin && \
+  npm run build:site && npm run build:pwa && npm run test:e2e
 node "$ORG_HOOKS/scripts/coverage-union-merge.mjs" \
   --unit coverage/lcov.info --e2e coverage/e2e/lcov.info \
   --out coverage/union/lcov.info --src-root src

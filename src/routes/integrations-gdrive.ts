@@ -150,7 +150,7 @@ export default async function integrationsGdriveRoutes(
         return reply.code(400).send({ error: 'token exchange failed' });
       }
 
-      // Store the tokens. user is guaranteed by requireUser preHandler.
+      // Store the tokens. user is guaranteed by requireOwner preHandler.
       const user = req.user;
       /* c8 ignore next -- requireOwner preHandler ensures user is non-null */
       if (!user) return reply.code(401).send({ error: 'unauthenticated' });

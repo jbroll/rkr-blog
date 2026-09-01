@@ -88,7 +88,9 @@ if (process.env.ENABLE_TEST_ROUTES) {
   // @fastify/static doesn't fail on a missing root, so without this the
   // spec dies on an opaque 30s selector timeout instead.
   if (!fs.existsSync(path.join(pwaRoot, 'dist'))) {
-    app.log.warn('apps/image-pwa/dist is missing — run npm run build:pwa');
+    // buildApp is called above with no logger, so app.log is Fastify's
+    // no-op stub; console.warn is the only way this actually prints.
+    console.warn('apps/image-pwa/dist is missing — run npm run build:pwa');
   }
   await app.register(fastifyStatic, {
     root: path.join(pwaRoot, 'dist'),

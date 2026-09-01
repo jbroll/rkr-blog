@@ -46,11 +46,13 @@ Format: **item** — _revisit when:_ trigger.
 - **Module-level mutable singletons** — `liveInflight` + `events` emitter in `src/lib/jobs.ts`, resolved-theme cache in `config.ts` are process-singletons (fine for single-instance deploy). _Revisit when:_ moving to multi-process/multi-instance.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
+- **`resolveSavedStatus`/`resolveSavedDate` vanish window** (`src/routes/admin-frontmatter.ts:17`, `:32`) — `existsSync` then `readFileSync`; a file deleted in between throws ENOENT. _Revisit when:_ this crash is observed, or the vanish-window class gets fixed elsewhere and this one should match.
 
 
 ## Test coverage
 
-- **Flaky: `editor: per-cell selection drives the image-edit panel for multi-image figures`** — `editor-flow.spec.ts:718` timed out waiting for the rotate status once and passed on retry; the rotate path is client-only, so the status write is racing the assertion, not the server. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
+- **Flaky: `editor: per-cell selection drives the image-edit panel for multi-image figures`** — `editor-flow.spec.ts:718` timed out waiting for the rotate status once and passed on retry. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
+- **Flaky: `about-page.spec.ts:46`** — timed out once during this branch's e2e runs. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
 - **Playwright: perspective-rectify + Google OAuth callback** —
   _revisit when:_ fixture infra grows, or a UI bug ships uncaught.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now

@@ -176,7 +176,7 @@
     "src/routes/admin-tags.ts": 100,
     "src/routes/admin-upload.ts": 100,
     "src/routes/admin-video.ts": 93.23,
-    "src/routes/admin.ts": 97.18,
+    "src/routes/admin.ts": 97.19,
     "src/routes/auth.ts": 94.36,
     "src/routes/integrations-gdrive.ts": 93.01,
     "src/routes/integrations-onedrive.ts": 97.3,

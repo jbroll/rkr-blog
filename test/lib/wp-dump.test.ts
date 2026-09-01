@@ -392,15 +392,16 @@ INSERT INTO \`wp_posts\` VALUES (1,'t',0xABC,0,NULL),(2,'u',0xZZ,0,NULL);
 });
 
 test('convertDump: a bare identifier before a quote is still not swallowed', (t) => {
-  // Only a known introducer is dropped: X is not one, so it survives.
+  // Only a known introducer is dropped: Y is not one (and not a MySQL
+  // literal prefix either), so it survives.
   const { db } = convert(
     t,
     `${POSTS_DDL}
-INSERT INTO \`wp_posts\` VALUES (1,X'41','x',0,NULL);
+INSERT INTO \`wp_posts\` VALUES (1,Y'41','x',0,NULL);
 `
   );
   const row = db
     .prepare<{ post_title: string }>('SELECT post_title FROM wp_posts WHERE ID = 1')
     .get();
-  assert.equal(row?.post_title, 'X41');
+  assert.equal(row?.post_title, 'Y41');
 });
