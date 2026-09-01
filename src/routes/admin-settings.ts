@@ -41,6 +41,7 @@ const VALID_THEME_NAME = /^[a-z][a-z0-9-]*$/;
 
 export interface AdminSettingsRoutesOpts {
   guard: Record<string, unknown>;
+  ownerGuard: Record<string, unknown>;
   db?: Db;
   siteRoot: string;
 }
@@ -49,11 +50,11 @@ export function registerAdminSettingsRoutes(
   fastify: FastifyInstance,
   opts: AdminSettingsRoutesOpts
 ): void {
-  const { guard, db, siteRoot } = opts;
+  const { guard, ownerGuard, db, siteRoot } = opts;
 
   fastify.get<{ Querystring: { flash?: string; err?: string } }>(
     '/admin/settings',
-    { ...guard },
+    { ...ownerGuard },
     async (req, reply) => {
       const persisted = readPersistedSiteConfig();
       const themes = listAvailableThemes();
@@ -87,7 +88,7 @@ export function registerAdminSettingsRoutes(
     }
   );
 
-  fastify.post('/admin/settings/onedrive/disconnect', { ...guard }, async (req, reply) => {
+  fastify.post('/admin/settings/onedrive/disconnect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     if (user && db) {
       deleteToken(db, user.id, 'onedrive');
@@ -95,7 +96,7 @@ export function registerAdminSettingsRoutes(
     return reply.redirect('/admin/settings', 303);
   });
 
-  fastify.post('/admin/settings/gdrive/disconnect', { ...guard }, async (req, reply) => {
+  fastify.post('/admin/settings/gdrive/disconnect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     if (user && db) {
       deleteToken(db, user.id, 'gdrive');
@@ -117,7 +118,7 @@ export function registerAdminSettingsRoutes(
       commentNotify?: unknown;
       notifyEmail?: unknown;
     };
-  }>('/admin/settings', { ...guard }, async (request, reply) => {
+  }>('/admin/settings', { ...ownerGuard }, async (request, reply) => {
     const body = request.body ?? {};
     const titleRaw = typeof body.title === 'string' ? body.title.trim() : '';
     const taglineRaw = typeof body.tagline === 'string' ? body.tagline.trim() : '';
@@ -224,7 +225,7 @@ export function registerAdminSettingsRoutes(
   // Called by `site-admin import-wp site-banner` to push WP site metadata.
   fastify.post<{ Body: { title?: unknown; tagline?: unknown } }>(
     '/admin/settings/site',
-    { ...guard },
+    { ...ownerGuard },
     async (request, reply) => {
       const { title, tagline } = request.body ?? {};
       if (typeof title !== 'string') {
@@ -277,7 +278,7 @@ export function registerAdminSettingsRoutes(
   // Called by `site-admin import-wp site-banner` after uploading the image.
   fastify.post<{ Body: { imageId?: unknown } }>(
     '/admin/settings/banner',
-    { ...guard },
+    { ...ownerGuard },
     async (request, reply) => {
       const { imageId } = request.body ?? {};
       if (typeof imageId !== 'string' || !/^[0-9a-f]{64}$/.test(imageId)) {

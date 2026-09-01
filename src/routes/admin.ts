@@ -17,7 +17,7 @@ import fastifyStatic, { type SetHeadersResponse } from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
 import { lookupApplied, pruneApplied, recordApplied } from '../lib/applied-outbox.ts';
 import { writeFileAtomic } from '../lib/atomic-write.ts';
-import { requireUser } from '../lib/auth-middleware.ts';
+import { requireOwner, requireUser } from '../lib/auth-middleware.ts';
 import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
 import { staleClientRejection } from '../lib/client-build.ts';
 import { paths } from '../lib/config.ts';
@@ -88,6 +88,7 @@ export default async function adminRoutes(
   const staticDir =
     opts.staticDir ?? (opts.adminBundleDir ? path.dirname(opts.adminBundleDir) : REPO_STATIC_DIR);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
+  const ownerGuard = opts.requireAuth ? { preHandler: requireOwner } : {};
   const urlFetcher: UrlFetcher = opts.urlFetcher ?? safeFetch;
 
   // One static handler at /static/. Public CSS lives at /static/site.css;
@@ -129,7 +130,7 @@ export default async function adminRoutes(
 
   // Site settings (title / tagline / theme) — surfaces the persisted
   // config that lib/config.ts already reads on every request.
-  registerAdminSettingsRoutes(fastify, { guard, db: opts.db, siteRoot });
+  registerAdminSettingsRoutes(fastify, { guard, ownerGuard, db: opts.db, siteRoot });
 
   const { invalidate: invalidateSidecarListCache } = registerImageLookupRoutes(fastify, {
     siteRoot,
@@ -140,7 +141,7 @@ export default async function adminRoutes(
   registerPostBundleRoutes(fastify, { siteRoot, guard });
   registerAdminTagsRoute(fastify, { siteRoot, guard, db: opts.db });
   registerAdminCommentsRoutes(fastify, { siteRoot, guard, db: opts.db });
-  registerArchiveRoutes(fastify, { siteRoot, guard });
+  registerArchiveRoutes(fastify, { siteRoot, ownerGuard });
 
   fastify.post<{
     Body: {
@@ -370,7 +371,7 @@ export default async function adminRoutes(
   // out by checking the synthetic id=0 user that auth-middleware
   // attaches when ADMIN_TOKEN matches. Defense in depth against an
   // accidental click-through from the editor.
-  fastify.post('/admin/reset', { ...guard }, async (request, reply) => {
+  fastify.post('/admin/reset', { ...ownerGuard }, async (request, reply) => {
     if (!request.user || request.user.id !== 0) {
       return reply
         .code(403)

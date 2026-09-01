@@ -15,7 +15,7 @@ import { Transform } from 'node:stream';
 
 import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from 'arctic';
 import type { FastifyInstance } from 'fastify';
-import { requireUser } from '../lib/auth-middleware.ts';
+import { requireOwner, requireUser } from '../lib/auth-middleware.ts';
 import { adminBaseUrl } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { fetchDriveFile } from '../lib/google-drive.ts';
@@ -66,10 +66,11 @@ export default async function integrationsGdriveRoutes(
   const { db, siteRoot, secureCookies = true } = opts;
   const exchange = opts.exchange ?? makeDriveExchange();
   const guard = { preHandler: requireUser };
+  const ownerGuard = { preHandler: requireOwner };
 
   const pendingFlows = createPendingStore(STATE_TTL_S * 1000);
 
-  fastify.get('/admin/integrations/gdrive/connect', { ...guard }, async (req, reply) => {
+  fastify.get('/admin/integrations/gdrive/connect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     /* c8 ignore next 2 -- requireUser ensures user */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });
@@ -189,7 +190,7 @@ export default async function integrationsGdriveRoutes(
     return { connected: token !== null };
   });
 
-  fastify.get('/admin/integrations/gdrive/access-token', { ...guard }, async (req, reply) => {
+  fastify.get('/admin/integrations/gdrive/access-token', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     /* c8 ignore next 2 -- requireUser preHandler */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });
@@ -199,7 +200,7 @@ export default async function integrationsGdriveRoutes(
     return { accessToken: fresh.access_token, expiresAt: fresh.expires_at };
   });
 
-  fastify.post('/admin/integrations/gdrive/disconnect', { ...guard }, async (req, reply) => {
+  fastify.post('/admin/integrations/gdrive/disconnect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     /* c8 ignore next 2 -- requireUser preHandler */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });

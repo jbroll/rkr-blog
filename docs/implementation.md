@@ -124,6 +124,10 @@ $SITE_ROOT/
 
 See `src/migrations/` for the full schema. `site-admin migrate` applies any unapplied file numerically, each in its own transaction. No down-migrations in v1; rollback by restore from backup.
 
+### Roles
+
+`requireUser` (any authenticated user) and `requireOwner` (`role === 'owner'` only) are the two `/admin/*` route guards, built once in `src/routes/admin.ts` as `guard` and `ownerGuard` and threaded into each route registrar the same way. Owner gates credentials (OAuth access tokens, connect/disconnect), site config (`/admin/settings*`), and whole-site export/import — actions with either account-level or destructive-to-everything blast radius. Everything else — post CRUD, uploads, comments, the editor shell — stays on `requireUser`, since an editor who cannot write content isn't an editor. When adding a route, default to `requireUser`; reach for `requireOwner` only when the route touches a stored credential, global config, or the whole site's data rather than a single post.
+
 ## 5. Image pipeline internals
 
 ### Server: `lib/render.ts → renderDerivative`

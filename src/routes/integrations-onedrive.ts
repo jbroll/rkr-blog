@@ -23,7 +23,7 @@ import { Transform } from 'node:stream';
 
 import { generateCodeVerifier, generateState, MicrosoftEntraId, type OAuth2Tokens } from 'arctic';
 import type { FastifyInstance } from 'fastify';
-import { requireUser } from '../lib/auth-middleware.ts';
+import { requireOwner, requireUser } from '../lib/auth-middleware.ts';
 import { adminBaseUrl } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import {
@@ -93,10 +93,11 @@ export default async function integrationsOnedriveRoutes(
   const { db, siteRoot, secureCookies = true } = opts;
   const exchange = opts.exchange ?? makeOneDriveExchange();
   const guard = { preHandler: requireUser };
+  const ownerGuard = { preHandler: requireOwner };
 
   const pendingFlows = createPendingStore(STATE_TTL_S * 1000);
 
-  fastify.get('/admin/integrations/onedrive/connect', { ...guard }, async (req, reply) => {
+  fastify.get('/admin/integrations/onedrive/connect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     /* c8 ignore next 2 -- requireUser ensures user */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });
@@ -219,15 +220,19 @@ export default async function integrationsOnedriveRoutes(
     return { connected: token !== null };
   });
 
-  fastify.get('/admin/integrations/onedrive/access-token', { ...guard }, async (req, reply) => {
-    const user = req.user;
-    /* c8 ignore next 2 -- requireUser preHandler */
-    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
-    const key = readSecretKey(siteRoot);
-    const fresh = await ensureFresh(db, key, user.id, exchange);
-    if (!fresh) return reply.code(404).send({ error: 'onedrive not connected' });
-    return { accessToken: fresh.access_token, expiresAt: fresh.expires_at };
-  });
+  fastify.get(
+    '/admin/integrations/onedrive/access-token',
+    { ...ownerGuard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'onedrive not connected' });
+      return { accessToken: fresh.access_token, expiresAt: fresh.expires_at };
+    }
+  );
 
   // Returns a short-lived access token scoped to a specific resource URI —
   // used by the client-side File Picker v8 authenticate handler. Personal
@@ -237,7 +242,7 @@ export default async function integrationsOnedriveRoutes(
   // get it without touching the persisted Graph token.
   fastify.get<{ Querystring: { resource?: string } }>(
     '/admin/integrations/onedrive/picker-token',
-    { ...guard },
+    { ...ownerGuard },
     async (req, reply) => {
       const user = req.user;
       /* c8 ignore next 2 -- requireUser preHandler */
@@ -283,7 +288,7 @@ export default async function integrationsOnedriveRoutes(
     }
   );
 
-  fastify.post('/admin/integrations/onedrive/disconnect', { ...guard }, async (req, reply) => {
+  fastify.post('/admin/integrations/onedrive/disconnect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
     /* c8 ignore next 2 -- requireUser preHandler */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });

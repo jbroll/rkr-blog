@@ -26,12 +26,12 @@ function bearerOnly(
 
 export function registerArchiveRoutes(
   fastify: FastifyInstance,
-  opts: { siteRoot: string; guard: RouteShorthandOptions }
+  opts: { siteRoot: string; ownerGuard: RouteShorthandOptions }
 ): void {
-  const { siteRoot, guard } = opts;
+  const { siteRoot, ownerGuard } = opts;
 
   // GET /admin/export — build and stream the archive as a download.
-  fastify.get('/admin/export', { ...guard }, async (request, reply) => {
+  fastify.get('/admin/export', { ...ownerGuard }, async (request, reply) => {
     if (!bearerOnly(request as never, reply as never)) return;
 
     const date = new Date().toISOString().slice(0, 10);
@@ -64,7 +64,7 @@ export function registerArchiveRoutes(
   // POST /admin/import[?mode=replace] — restore from an uploaded archive.
   fastify.post<{ Querystring: { mode?: string } }>(
     '/admin/import',
-    { ...guard },
+    { ...ownerGuard },
     async (request, reply) => {
       if (!bearerOnly(request as never, reply as never)) return;
 
