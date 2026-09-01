@@ -102,9 +102,9 @@ test('gcUnderAppendLock does not delete an in-flight append’s blob', async () 
 
 // ---- (b) legacy drop awaited before first drain --------------------
 
-// sync.ts uses a TS parameter property and so can't be imported under
-// node --experimental-strip-types (strip-only). The drain loop's halt
-// trigger is purely: it reads outboxList(), takes entries[0], finds no
+// This test observes the drain's *input*, not sync.ts itself: the
+// race is about what the outbox holds at drain time. The drain loop's
+// halt trigger is purely: it reads outboxList(), takes entries[0], finds no
 // registered drainer for entries[0].op, and publishes `halted`. So the
 // faithful, sync-free observation point for "the first drain" is
 // `(await list())[0]?.op`. The race is whether the legacy entry is

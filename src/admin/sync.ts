@@ -18,19 +18,24 @@ import {
 const LOCK_NAME = 'rkr-sync-leader';
 const CHANNEL_NAME = 'rkr-sync';
 
+interface SavePostConflictInfo {
+  slug: string;
+  seq: number;
+  serverUpdatedAt: string;
+  clientLastSyncedAt: string;
+}
+
 /** Owned here (not in drainers.ts) so drainers can throw it without
  * a circular import — sync.ts already owns DrainStatus.
  * @public */
 export class SavePostConflictError extends Error {
-  constructor(
-    public readonly info: {
-      slug: string;
-      seq: number;
-      serverUpdatedAt: string;
-      clientLastSyncedAt: string;
-    }
-  ) {
+  // A plain field, not a parameter property: node's strip-only type
+  // stripping rejects parameter properties, and the unit tests import
+  // this module directly.
+  readonly info: SavePostConflictInfo;
+  constructor(info: SavePostConflictInfo) {
     super(`savePost conflict on /${info.slug}: server updated ${info.serverUpdatedAt}`);
+    this.info = info;
     this.name = 'SavePostConflictError';
   }
 }
@@ -270,7 +275,16 @@ export function tryDrain(): Promise<void> {
   return navigator.locks
     .request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
       if (!lock) return;
-      await drainLoop();
+      // Re-check before releasing. A tryDrain that arrived while we
+      // held the lock was a no-op, and nothing else re-triggers it —
+      // there is no periodic sweep. Bounded so a permanently
+      // re-filling queue can't pin the lock.
+      for (let pass = 0; pass < MAX_DRAIN_PASSES; pass++) {
+        await drainLoop();
+        if (getStatus().kind !== 'idle') return;
+        if (getOnlineState() !== 'online') return;
+        if ((await outboxList()).length === 0) return;
+      }
     })
     .then(() => {});
 }
@@ -301,6 +315,9 @@ export function awaitDrainSettled(): Promise<DrainStatus> {
 // no-drainer-registered are NOT retried.
 const MAX_DRAIN_ATTEMPTS = 5;
 const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000] as const;
+
+// Upper bound on tryDrain's re-check passes.
+const MAX_DRAIN_PASSES = 8;
 
 /** Sleep for `ms`. Hoisted so the retry loop reads cleanly and
  * tests can stub setTimeout via fake timers if needed. */
