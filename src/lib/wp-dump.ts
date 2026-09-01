@@ -156,7 +156,11 @@ const UNESCAPE: Record<string, string> = {
   '"': '"'
 };
 
-type Cell = string | number | null;
+type Cell = string | number | Uint8Array | null;
+
+/** MySQL charset introducers and the binary marker that may precede a
+ * quoted literal. `N'…'` is the SQL-standard national-character form. */
+const INTRODUCER = /^(?:_[A-Za-z0-9]+|N)$/;
 
 /** Parse `(a,b),(c,d)` into rows of JS values. Quoted fields stay
  * strings; bare NULL becomes null; bare numerics become numbers. */
@@ -173,6 +177,11 @@ function parseValues(text: string): Cell[][] {
     while (i < text.length) {
       const c = text[i] as string;
       if (c === "'") {
+        // A charset introducer (_binary, _utf8mb4, N, …) abuts the
+        // opening quote. Without this reset it is prepended to the
+        // decoded value — `_binary` ends up in post titles and
+        // attachment paths.
+        if (INTRODUCER.test(field)) field = '';
         quoted = true;
         i++;
         while (i < text.length) {
@@ -211,9 +220,18 @@ function parseValues(text: string): Cell[][] {
 function bareValue(raw: string): Cell {
   const tok = raw.trim();
   if (tok.toUpperCase() === 'NULL' || tok === '') return null;
+  if (/^0x(?:[0-9a-fA-F]{2})*$/.test(tok)) return hexBytes(tok.slice(2));
   if (/^-?\d+$/.test(tok)) return Number(tok);
   if (/^-?[\d.]+(e[-+]?\d+)?$/i.test(tok)) return Number(tok);
   return tok;
+}
+
+function hexBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let n = 0; n < out.length; n++) {
+    out[n] = Number.parseInt(hex.slice(n * 2, n * 2 + 2), 16);
+  }
+  return out;
 }
 
 /** Render a dump's `(a,b,c)` column list as ``(`a`,`b`,`c`)``. Empty for a

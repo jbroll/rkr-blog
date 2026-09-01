@@ -311,3 +311,97 @@ for (const [label, dump, message] of [
     assert.equal(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM wp_posts').get()?.n, 1);
   });
 }
+
+// ---- binary and charset-introducer literals ----
+
+test('convertDump: _binary introducer is stripped, not prefixed onto the value', (t) => {
+  const { db } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES (1,_binary'My Blog','body',0,NULL);
+`
+  );
+  const row = db
+    .prepare<{ post_title: string }>('SELECT post_title FROM wp_posts WHERE ID = 1')
+    .get();
+  assert.equal(row?.post_title, 'My Blog');
+});
+
+test('convertDump: charset introducers N and _utf8mb4 are stripped', (t) => {
+  const { db } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES (1,_utf8mb4'Café','x',0,NULL),(2,N'Plain','y',0,NULL);
+`
+  );
+  const rows = db
+    .prepare<{ ID: number; post_title: string }>('SELECT ID, post_title FROM wp_posts ORDER BY ID')
+    .all();
+  assert.equal(rows[0]?.post_title, 'Café');
+  assert.equal(rows[1]?.post_title, 'Plain');
+});
+
+test('convertDump: _binary with a space before the quote is also stripped', (t) => {
+  const { db } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES (1,_binary 'Spaced','x',0,NULL);
+`
+  );
+  const row = db
+    .prepare<{ post_title: string }>('SELECT post_title FROM wp_posts WHERE ID = 1')
+    .get();
+  assert.equal(row?.post_title, 'Spaced');
+});
+
+test('convertDump: 0x hex literal lands in a BLOB column as bytes', (t) => {
+  const { db } = convert(
+    t,
+    `CREATE TABLE \`wp_blobs\` (
+  \`ID\` bigint(20) unsigned NOT NULL,
+  \`payload\` longblob
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO \`wp_blobs\` VALUES (1,0x4142),(2,0x),(3,NULL);
+`
+  );
+  const rows = db
+    .prepare<{ ID: number; payload: Uint8Array | null }>(
+      'SELECT ID, payload FROM wp_blobs ORDER BY ID'
+    )
+    .all();
+  assert.deepEqual(Array.from(rows[0]?.payload ?? []), [0x41, 0x42]);
+  assert.equal(rows[0] && typeof rows[0].payload, 'object');
+  assert.deepEqual(Array.from(rows[1]?.payload ?? []), []);
+  assert.equal(rows[2]?.payload, null);
+});
+
+test('convertDump: an odd-length or malformed hex literal stays a string', (t) => {
+  const { db } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES (1,'t',0xABC,0,NULL),(2,'u',0xZZ,0,NULL);
+`
+  );
+  const rows = db
+    .prepare<{ ID: number; post_content: string }>(
+      'SELECT ID, post_content FROM wp_posts ORDER BY ID'
+    )
+    .all();
+  assert.equal(rows[0]?.post_content, '0xABC');
+  assert.equal(rows[1]?.post_content, '0xZZ');
+});
+
+test('convertDump: a bare identifier before a quote is still not swallowed', (t) => {
+  // Guards the reset: only a known introducer is dropped, and the
+  // reset must not eat a value that legitimately abuts a quote.
+  const { db } = convert(
+    t,
+    `${POSTS_DDL}
+INSERT INTO \`wp_posts\` VALUES (1,'a''b','x',0,NULL);
+`
+  );
+  const row = db
+    .prepare<{ post_title: string }>('SELECT post_title FROM wp_posts WHERE ID = 1')
+    .get();
+  assert.equal(row?.post_title, "a'b");
+});

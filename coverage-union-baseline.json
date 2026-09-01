@@ -150,7 +150,7 @@
     "src/lib/video.ts": 99.2,
     "src/lib/widget-helpers.ts": 100,
     "src/lib/widgets.ts": 100,
-    "src/lib/wp-dump.ts": 99.35,
+    "src/lib/wp-dump.ts": 99.38,
     "src/lib/wp-import-emit.ts": 100,
     "src/lib/wp-import.ts": 99.36,
     "src/lib/wp-push.ts": 95.96,
