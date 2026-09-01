@@ -29,4 +29,5 @@ fi
 npm run --silent build:packages
 npm run --silent build:admin
 npm run --silent build:site
+npm run --silent build:pwa
 npm run test:e2e

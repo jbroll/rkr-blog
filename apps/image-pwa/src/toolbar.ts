@@ -33,13 +33,13 @@ export interface ToolbarCtx {
 }
 
 const TOOLBAR_HTML = `
-  <button type="button" data-act="rotL" title="Rotate left">⟲ 90°</button>
-  <button type="button" data-act="rotR" title="Rotate right">⟳ 90°</button>
+  <button type="button" data-act="rotL" title="Rotate left" aria-label="Rotate left">⟲ 90°</button>
+  <button type="button" data-act="rotR" title="Rotate right" aria-label="Rotate right">⟳ 90°</button>
   <label class="tilt">tilt
     <input data-act="tilt" type="range" min="-15" max="15" step="0.5" value="0" />
   </label>
-  <button type="button" data-act="flipH" title="Flip horizontal">⇆</button>
-  <button type="button" data-act="flipV" title="Flip vertical">⇅</button>
+  <button type="button" data-act="flipH" title="Flip horizontal" aria-label="Flip horizontal">⇆</button>
+  <button type="button" data-act="flipV" title="Flip vertical" aria-label="Flip vertical">⇅</button>
   <button type="button" data-act="crop">Crop</button>
   <button type="button" data-act="persp">Perspective</button>
   <button type="button" data-act="undo">Undo</button>

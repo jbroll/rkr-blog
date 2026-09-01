@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import fastifyStatic from '@fastify/static';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { open } from '../../src/lib/db.ts';
@@ -75,6 +76,34 @@ app.post<{ Params: { slug: string }; Body: { offsetMs?: number } }>(
     return { mtime: future.toISOString() };
   }
 );
+
+// Static mount for the standalone image PWA, gated like production's
+// ENABLE_TEST_ROUTES routes (src/server.ts) even though this runner
+// never reaches production buildApp. index.html's asset paths are
+// relative to its own directory, not dist/, so dist/, icons/ and
+// manifest.webmanifest each get their own mount — sw.js is a sibling
+// left out on purpose (see brief: wrong scope, not needed here).
+if (process.env.ENABLE_TEST_ROUTES) {
+  const pwaRoot = path.resolve(import.meta.dirname, '../../apps/image-pwa');
+  await app.register(fastifyStatic, {
+    root: path.join(pwaRoot, 'dist'),
+    prefix: '/pwa/dist/',
+    decorateReply: false
+  });
+  await app.register(fastifyStatic, {
+    root: path.join(pwaRoot, 'icons'),
+    prefix: '/pwa/icons/',
+    decorateReply: false
+  });
+  app.get('/pwa/', async (_req, reply) => {
+    return reply.type('text/html').send(fs.readFileSync(path.join(pwaRoot, 'index.html'), 'utf8'));
+  });
+  app.get('/pwa/manifest.webmanifest', async (_req, reply) => {
+    return reply
+      .type('application/manifest+json')
+      .send(fs.readFileSync(path.join(pwaRoot, 'manifest.webmanifest'), 'utf8'));
+  });
+}
 
 app.addHook('onClose', async () => {
   db.close();
