@@ -10,16 +10,11 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Security
 
-- **Roles stored but never enforced** — `owner` / `editor` are assigned from the invite and carried on the user, but no route consults `role`; every admin route requires only a user. Stub `requireOwner` at `src/lib/auth-middleware.ts` (tested in `test/lib/require-owner.test.ts`) enforces `role === 'owner'`. _Revisit when:_ second editor invited — wire `requireOwner` to owner-only routes.
+- **`/admin/reindex` and post-delete stay on `requireUser`, not `requireOwner`** — `requireOwner` is wired to the credential/config/archive routes and `POST /admin/reset`; reindex and post-delete were deliberately left open to any admin user. _Revisit when:_ second editor invited and these two routes need owner-only treatment too.
 - **Multi-tenant deployability gaps** — no infra rate-limit (only
   in-process `@fastify/rate-limit`), in-process PKCE state, no
   auth-write logging. _Revisit when:_ any shared/team/multi-tenant
   pivot.
-
-
-## WordPress import
-
-- **`_binary` / `0x` hex literals stored as text** — the dump converter writes blob literals verbatim into TEXT columns rather than decoding them. _Revisit when:_ a dump whose post content or options carry real binary data is imported.
 
 ## Editor & figures
 
@@ -34,11 +29,6 @@ Format: **item** — _revisit when:_ trigger.
 - **Cross-figure image move** — drag an image from one figure into
   another (two-node PM transaction + emptied-source deletion).
   _Revisit when:_ an author wants an image moved between two figures.
-
-## Local-first / sync
-
-- **A future-dated post mtime wedges the slug with no in-app escape** — the server clamps a client's `X-Rkr-Last-Synced-At` to now, so `mtime > now` 409s every save, and force-overwrite now carries the header too. Recovery is `touch` on the file. _Revisit when:_ clock skew or a restored backup actually strands a post; fix is a compare-and-swap force header the server matches exactly instead of clamping.
-- **A queued outbox entry can sit unsynced until the next online transition** — `tryDrain` in `src/admin/sync.ts` takes the leader lock with `ifAvailable`, and a drain that finds an empty queue publishes `idle`. An entry appended while a previous drain is still finishing gets a no-op `tryDrain` and nothing re-triggers it; there is no periodic sweep. Found while de-flaking `editor: offline rotate+save queues setOps+bake, drains on reconnect`. _Revisit when:_ an author reports edits that never reached the server; fix is a re-check after the lock releases, or a periodic sweep.
 
 ## Image pipeline
 
@@ -57,10 +47,6 @@ Format: **item** — _revisit when:_ trigger.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
 
-
-## image-pwa (apps/image-pwa)
-
-- **PWA e2e smoke not in CI** — the standalone editor (upload → rotate → crop → download) is verified by headless workflow tests + a manual browser smoke, but has no Playwright spec in the suite (the webServer serves the blog, not the app). _Revisit when:_ the app gains non-trivial UI or a regression ships; wire a static-serve route for `apps/image-pwa/dist`.
 
 ## Test coverage
 

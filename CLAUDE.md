@@ -41,10 +41,12 @@ See `docs/developer-quickstart.md §4` for the project's coding conventions
 
 ## Repo-specific
 
-- The pre-commit hook (`.githooks/pre-commit`) runs the gauntlet:
-  biome / tsc / duplicate-types / no-reexports / knip:gate / circular /
-  size / c8 coverage. If it fails, fix the underlying issue — don't
-  use `--no-verify` without a stated reason.
+- The commit gate is `lefthook.yml` plus `lefthook-rc.sh`; all hook
+  logic (biome / tsc / duplicate-types / no-reexports / knip:gate /
+  circular / size / c8 coverage) lives in org-hooks
+  (`profiles/sci-tiered.yml`), not in this repo — there is no local
+  pre-commit block by design. If it fails, fix the underlying issue —
+  don't use `--no-verify` without a stated reason.
 - Tests are exempt from the 500-line size cap; production source
   (`src/`, `bin/`) is not.
 - `npm run setup` is the one-shot bootstrap (idempotent: npm install
