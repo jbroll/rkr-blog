@@ -181,6 +181,7 @@
     "src/routes/integrations-gdrive.ts": 92.45,
     "src/routes/integrations-onedrive.ts": 97.28,
     "src/routes/integrations-shared.ts": 98.31,
+    "src/routes/post-base.ts": 100,
     "src/routes/public-comments.ts": 97.26,
     "src/routes/public-img.ts": 96.7,
     "src/routes/public-search.ts": 100,

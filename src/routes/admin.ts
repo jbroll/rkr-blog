@@ -48,6 +48,7 @@ import { registerSidecarEditRoutes } from './admin-sidecar-edit.ts';
 import { registerAdminTagsRoute } from './admin-tags.ts';
 import { registerAdminUploadRoute } from './admin-upload.ts';
 import { registerAdminVideoRoutes } from './admin-video.ts';
+import { evaluatePostBase, postUpdatedAt } from './post-base.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -278,7 +279,7 @@ export default async function adminRoutes(
         onDisk = null;
       }
       if (onDisk === file) {
-        const updatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
+        const updatedAt = postUpdatedAt(fs.statSync(finalPath).mtimeMs);
         const body = { slug, inserted, updatedAt, date: dateStr };
         if (idem && opts.db) {
           recordApplied(opts.db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
@@ -288,42 +289,27 @@ export default async function adminRoutes(
       }
     }
 
-    // Optimistic-concurrency guard (spec-offline §6). When the
-    // client supplies X-Rkr-Last-Synced-At — the server's
-    // updated_at the client believed at the time the offline edits
-    // BEGAN — refuse the write if the server's actual updated_at
-    // has advanced since. The header is optional: a fresh post that
-    // was never synced just omits it and we accept unconditionally.
-    //
-    // Compare numerically (Date.parse → ms-since-epoch) so the
-    // string-vs-string lex compare doesn't wave through:
-    //   • a malformed header like "banana" (NaN > number is false →
-    //     would silently accept), or
-    //   • a future-dated header like "9999-12-31T..." (lexicographic
-    //     compare would defeat the guard outright).
-    // Clamp the client's claim to "now" — clock skew or a
-    // malicious client can't bypass the check by claiming the
-    // future.
+    // Optimistic-concurrency guard (spec-offline §6). The client
+    // echoes the server's updated_at it believed when the offline
+    // edits BEGAN; anything but an exact match means that baseline
+    // no longer describes the file on disk. The header is optional:
+    // a fresh post that was never synced just omits it.
     const lastSyncedAtRaw = request.headers['x-rkr-last-synced-at'];
-    if (typeof lastSyncedAtRaw === 'string' && !inserted) {
-      const lastSyncedMs = Date.parse(lastSyncedAtRaw);
-      if (Number.isNaN(lastSyncedMs)) {
+    if (!inserted) {
+      const verdict = evaluatePostBase(
+        typeof lastSyncedAtRaw === 'string' ? lastSyncedAtRaw : undefined,
+        fs.statSync(finalPath).mtimeMs
+      );
+      if (verdict.kind === 'invalid') {
         return reply
           .code(400)
           .send({ error: 'X-Rkr-Last-Synced-At must be an ISO-8601 timestamp' });
       }
-      const clampedLastSyncedMs = Math.min(lastSyncedMs, Date.now());
-      // fs.statSync().mtimeMs is a float with sub-millisecond
-      // precision on some filesystems; the header's ISO timestamp
-      // round-trips through ms. Compare at ms granularity so a file
-      // whose mtime matches the header (modulo nanosecond noise)
-      // doesn't 409 against itself.
-      const serverMtimeMs = Math.floor(fs.statSync(finalPath).mtimeMs);
-      if (serverMtimeMs > clampedLastSyncedMs) {
+      if (verdict.kind === 'superseded') {
         return reply.code(409).send({
           error: 'post-superseded',
           slug,
-          serverUpdatedAt: new Date(serverMtimeMs).toISOString(),
+          serverUpdatedAt: verdict.serverUpdatedAt,
           clientLastSyncedAt: lastSyncedAtRaw
         });
       }
@@ -350,7 +336,7 @@ export default async function adminRoutes(
     // saw to detect concurrent writes).
     // Also echo back the resolved date so new posts can populate
     // the date input without a full reload.
-    const updatedAt = new Date(fs.statSync(finalPath).mtimeMs).toISOString();
+    const updatedAt = postUpdatedAt(fs.statSync(finalPath).mtimeMs);
     const body = { slug, inserted, updatedAt, date: dateStr };
     if (idem && opts.db) {
       recordApplied(opts.db, idem.deviceId, idem.seq, 200, JSON.stringify(body));

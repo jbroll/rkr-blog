@@ -10,8 +10,8 @@
 // a byte-identical cheap no-op that run BEFORE this guard.
 //
 // Pure (no Fastify coupling) so both the /meta route and the commit
-// handler can share the exact same mtime read + ms-granularity /
-// future-clamp compare savePost uses.
+// handler can share the exact same mtime read + ms-granularity
+// compare-and-swap savePost uses.
 
 import fs from 'node:fs';
 import type { Sidecar } from '@rkr/image-edit';
@@ -24,7 +24,7 @@ import { sidecarPath } from '../lib/sidecar.ts';
  * server's current value to compare against. */
 export function sidecarUpdatedAt(siteRoot: string, id: string): string | null {
   try {
-    return new Date(fs.statSync(sidecarPath(siteRoot, id)).mtimeMs).toISOString();
+    return new Date(Math.floor(fs.statSync(sidecarPath(siteRoot, id)).mtimeMs)).toISOString();
   } catch (err) {
     /* c8 ignore next 2 -- ENOENT only; /meta + commit both 404 a
        missing sidecar before this is called */
@@ -50,13 +50,13 @@ export function opsUnchanged(
 }
 
 /** Optimistic-concurrency verdict for a drained commit, mirroring
- * savePost's mtime guard exactly (ms-granularity floor + future-clamp
- * of the client's claim). Returns:
+ * savePost's compare-and-swap exactly (ms-granularity floor, exact
+ * match). Returns:
  *  - 'no-baseline'  : header absent (legacy entry) → caller proceeds
  *                     (backward compatible, no 409).
  *  - 'invalid'      : header present but not an ISO-8601 timestamp.
- *  - 'superseded'   : sidecar advanced past the client's edit-start
- *                     baseline → caller returns 409.
+ *  - 'superseded'   : the sidecar's mtime is not the client's
+ *                     edit-start baseline → caller returns 409.
  *  - 'ok'           : baseline still current → caller proceeds. */
 export function evaluateSidecarBase(
   clientBaseRaw: string | string[] | undefined,
@@ -68,9 +68,6 @@ export function evaluateSidecarBase(
   if (typeof clientBaseRaw !== 'string') return { verdict: 'no-baseline' };
   const clientBaseMs = Date.parse(clientBaseRaw);
   if (Number.isNaN(clientBaseMs)) return { verdict: 'invalid' };
-  // Clamp the client's claim to "now" so clock skew / a malicious
-  // client can't bypass the guard by claiming a future baseline.
-  const clampedClientMs = Math.min(clientBaseMs, Date.now());
   let serverMtimeMs: number;
   try {
     serverMtimeMs = Math.floor(fs.statSync(sidecarPath(siteRoot, id)).mtimeMs);
@@ -83,7 +80,7 @@ export function evaluateSidecarBase(
   // filesystems but the baseline round-trips through ms, so a sidecar
   // whose mtime matches the baseline (modulo nanosecond noise) must
   // not 409 against itself.
-  if (serverMtimeMs > clampedClientMs) {
+  if (serverMtimeMs !== clientBaseMs) {
     return { verdict: 'superseded', serverUpdatedAt: new Date(serverMtimeMs).toISOString() };
   }
   return { verdict: 'ok' };

@@ -314,8 +314,10 @@ connection that drops mid-stream gets the user nothing usable.
 
 ### `savePost` conflict response
 
-When a `savePost` arrives with `X-Rkr-Last-Synced-At` older than the
-post's current `updated_at`, the server returns:
+The header is a compare-and-swap: the server accepts the write only
+when `X-Rkr-Last-Synced-At` is exactly the post's current `updated_at`
+(both floored to whole milliseconds). Any other value — older, newer,
+or from a file whose mtime is dated in the future — returns:
 
 ```
 HTTP/1.1 409 Conflict
@@ -332,10 +334,19 @@ Content-Type: application/json
 The client surfaces this to the author with two options:
 
 - **Discard local edits**: drop the outbox entry, re-fetch the bundle.
-- **Force overwrite**: re-POST `/admin/posts` without the
-  `X-Rkr-Last-Synced-At` header. Server accepts.
+- **Force overwrite**: re-POST `/admin/posts` with
+  `X-Rkr-Last-Synced-At` set to the `serverUpdatedAt` the author was
+  just shown — the version they chose to overwrite, not the stale one
+  the drain sent. If a third write lands in the gap between the 409
+  and the force, the force 409s again with the new `serverUpdatedAt`
+  and the author is re-prompted against what exists now.
 
 The client cannot silently overwrite. The author makes the call.
+
+Because the match is exact rather than "not older than", a post whose
+mtime is dated in the future (clock skew, a restored backup) is still
+recoverable in-app: the 409 body names the mtime, and echoing it back
+satisfies the guard.
 
 `setOps` and `bake` use last-writer-wins without 409 (per the conflict
 policy table in §12) — image-edit ops are small and fast to redo, so

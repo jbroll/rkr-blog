@@ -1632,10 +1632,8 @@ test('editor: online-save 409 surfaces conflict, not a "queued" toast; network f
 
   // Competing write bumps the file mtime so the next save's
   // X-Rkr-Last-Synced-At header looks stale → the DIRECT online POST
-  // returns 409 (not a drained one). offsetMs 0 keeps the mtime in
-  // the past, as a real competing write would leave it — the server
-  // clamps a client's claim to now, so a future-dated mtime would
-  // 409 the force-overwrite too.
+  // returns 409 (not a drained one). offsetMs 0 leaves the mtime
+  // where a real competing write would.
   const bump = await page.request.post(`/admin/test/bump-mtime/${slug}`, {
     data: { offsetMs: 0 }
   });

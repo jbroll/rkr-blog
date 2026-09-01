@@ -182,14 +182,11 @@ test('POST /admin/posts: fresh X-Rkr-Last-Synced-At permits overwrite', async (t
   assert.match(onDisk, /title: v2 in-sync/);
 });
 
-// Force-overwrite path (§6): when the client decides to clobber,
-// they re-POST without the X-Rkr-Last-Synced-At header. The server
-// accepts unconditionally — even though the file is newer.
 // Regression: the original `serverUpdatedAt > lastSyncedAt` byte-
 // string compare let a future-dated header bypass the guard
 // (lexicographic compare puts any real ISO timestamp behind
-// "9999-..."). The fix parses + clamps the client's claim to now.
-test('POST /admin/posts: future-dated X-Rkr-Last-Synced-At still 409s (clamped)', async (t) => {
+// "9999-..."). Exact equality forecloses it for any claimed value.
+test('POST /admin/posts: a future-dated X-Rkr-Last-Synced-At that does not match still 409s', async (t) => {
   const { root, app } = await setup(t);
 
   const payload = {
@@ -199,9 +196,6 @@ test('POST /admin/posts: future-dated X-Rkr-Last-Synced-At still 409s (clamped)'
     markdown: 'first\n'
   };
   await app.inject({ method: 'POST', url: '/admin/posts', payload });
-  // Bump the file forward so the server's mtime is a few ms past
-  // "now" — without the clamp, a 9999-... header would compare
-  // greater than ANY real mtime and the guard would no-op.
   const filePath = path.join(root, 'content', 'posts', 'future-dated.md');
   const future = new Date(Date.now() + 5_000);
   fs.utimesSync(filePath, future, future);
@@ -260,6 +254,64 @@ test('POST /admin/posts: force-overwrite (no header) bypasses the conflict guard
   assert.equal(ok.statusCode, 200, ok.body);
   const onDisk = fs.readFileSync(filePath, 'utf8');
   assert.match(onDisk, /title: v2 forced/);
+});
+
+test('POST /admin/posts: a future-dated mtime is recoverable by echoing serverUpdatedAt', async (t) => {
+  const { root, app } = await setup(t);
+  const payload = {
+    slug: 'wedged',
+    title: 'v1',
+    status: 'draft',
+    date: '2026-01-01',
+    markdown: 'body'
+  };
+  const first = await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  assert.equal(first.statusCode, 200, first.body);
+
+  const filePath = path.join(root, 'content', 'posts', 'wedged.md');
+  const future = Date.now() + 60_000;
+  fs.utimesSync(filePath, new Date(future), new Date(future));
+
+  const conflict = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': new Date(Date.now() - 1000).toISOString() },
+    payload: { ...payload, title: 'v2' }
+  });
+  assert.equal(conflict.statusCode, 409, conflict.body);
+  const { serverUpdatedAt } = JSON.parse(conflict.body) as { serverUpdatedAt: string };
+
+  // Echoing it back is the escape hatch the clamp used to deny.
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': serverUpdatedAt },
+    payload: { ...payload, title: 'v2' }
+  });
+  assert.equal(ok.statusCode, 200, ok.body);
+  assert.match(fs.readFileSync(filePath, 'utf8'), /title: v2/);
+});
+
+test('POST /admin/posts: a baseline newer than mtime is a conflict, not a pass', async (t) => {
+  const { root, app } = await setup(t);
+  const payload = {
+    slug: 'ahead',
+    title: 'v1',
+    status: 'draft',
+    date: '2026-01-01',
+    markdown: 'body'
+  };
+  await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  const filePath = path.join(root, 'content', 'posts', 'ahead.md');
+  const mtime = Math.floor(fs.statSync(filePath).mtimeMs);
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': new Date(mtime + 5000).toISOString() },
+    payload: { ...payload, title: 'v2' }
+  });
+  assert.equal(res.statusCode, 409, res.body);
 });
 
 // Status flip via the per-row select on /admin/posts. The form posts
