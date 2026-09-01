@@ -256,6 +256,39 @@ test('POST /admin/posts: force-overwrite (no header) bypasses the conflict guard
   assert.match(onDisk, /title: v2 forced/);
 });
 
+// The route decides `inserted` from an existsSync and then stats the
+// path; a delete landing in between leaves nothing to compare a
+// baseline against. Mocking existsSync makes that window deterministic
+// — status and date are sent so the frontmatter helpers short-circuit
+// and the route's own check is the only one the mock reaches.
+test('POST /admin/posts: a file that vanishes after the existence check is written, not a 500', async (t) => {
+  const { root, app } = await setup(t);
+
+  const payload = {
+    slug: 'vanished',
+    title: 'v1',
+    status: 'draft' as const,
+    date: '2026-01-01',
+    markdown: 'first\n'
+  };
+  await app.inject({ method: 'POST', url: '/admin/posts', payload });
+  const filePath = path.join(root, 'content', 'posts', 'vanished.md');
+  const baseline = new Date(Math.floor(fs.statSync(filePath).mtimeMs)).toISOString();
+  fs.rmSync(filePath);
+
+  const realExistsSync = fs.existsSync;
+  t.mock.method(fs, 'existsSync', (p: fs.PathLike) => (p === filePath ? true : realExistsSync(p)));
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    headers: { 'x-rkr-last-synced-at': baseline },
+    payload: { ...payload, title: 'v2' }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.match(fs.readFileSync(filePath, 'utf8'), /title: v2/);
+});
+
 test('POST /admin/posts: a future-dated mtime is recoverable by echoing serverUpdatedAt', async (t) => {
   const { root, app } = await setup(t);
   const payload = {
