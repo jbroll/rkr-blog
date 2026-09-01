@@ -33,5 +33,5 @@
   // A new test/<dir>/ defaults here (no-DOM); add it to tsconfig.e2e.json
   // if it uses DOM/Playwright types.
   "include": ["src/**/*.ts", "test/**/*.ts", "test/e2e/server-runner.ts", "bin/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["node_modules", "src/admin/**", "src/site/**", "static/**", "test/e2e/**/*.spec.ts", "test/e2e/coverage-fixtures.ts", "test/admin/**", "test/image-pwa/**", "test/site/sw-admin.test.ts", "test/lib/image-map-equivalence.test.ts"]
+  "exclude": ["node_modules", "src/admin/**", "src/site/**", "static/**", "test/e2e/**/*.spec.ts", "test/e2e/coverage-fixtures.ts", "test/admin/**", "test/image-pwa/**", "test/site/sw-admin*.test.ts", "test/lib/image-map-equivalence.test.ts"]
 }

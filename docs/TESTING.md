@@ -23,7 +23,7 @@ Practical guidelines for the e2e suite. Two layers:
 | `test-e2e/coverage-config.ts` | The monocart options both of the above construct a `CoverageReport` from: entry/source filters, source-map resolver, and the bundle-URL → repo-path mapping. mcr applies the filters at both `add()` and `generate()` time, so the two call sites must not disagree. |
 | `test-e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes. |
 | `playwright.config.ts` | Wires the webServer + global teardown. `workers: 1` (the suite shares one server). |
-| `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-core.test.ts` for the service worker). These run under c8, not Playwright; see §10 for the ratchet's carve-out list. |
+| `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-admin.test.ts` and `sw-admin-entry.test.ts` for the service worker). These run under c8, not Playwright; see §10. |
 
 Run:
 
@@ -248,10 +248,8 @@ Coverage gating lives in org-hooks (`profiles/sci-tiered.yml`), not in
 this repo. The tier-2 push runs the unit and e2e jobs in parallel on
 the CI host, merges `coverage/lcov.info` with `coverage/e2e/lcov.info`
 per line, and ratchets the union against `coverage-union-baseline.json`
-(203 files, committed at the root) minus an optional
-`coverage-union-ratchet-exclude`, which this repo does not carry — the
-service worker is already held at ≥ 90% by the c8 per-file gate, so
-nothing needs a carve-out yet.
+(209 files, committed at the root) minus
+`coverage-union-ratchet-exclude`.
 
 A staged file below its baseline percentage fails the commit. Files
 with no baseline entry must clear a 0.75 floor. There is 0.5 pp of
@@ -270,8 +268,24 @@ node "$ORG_HOOKS/scripts/coverage-ratchet.mjs" --reseed \
 ```
 
 `--reseed` merges over the existing baseline per-file max, so it can
-never lower a mark. `--seed` is the hard reset and forgets old marks;
-use it only when code was genuinely removed.
+never lower a mark. Use `--seed` — the hard reset — when the line
+universe itself changed, not just the coverage: adding a file to
+`coverage:ungated` gives it its full set of executable lines where
+before it had only the lines the e2e sourcemap attributed, so the
+denominator grows and the old percentage is not comparable. A
+`--reseed` there preserves a mark the new measurement can never meet.
+
+`test:coverage` runs c8 twice. The first pass is the gated one
+(≥ 90% lines / ≥ 75% branches / ≥ 90% functions per file) and cannot
+include `src/admin/**`, because most of the admin SPA is covered by
+e2e rather than unit tests and would fail that threshold. The second,
+`coverage:ungated`, measures what the first excludes but which unit
+tests do reach — `src/admin/**`, `src/lib/oauth-pending.ts`, the
+canvas barrel — and appends its lcov, which the union merge takes the
+max over. Do not add the rest of `packages/image-edit/src/canvas/**`
+to it: c8 counts every executable line in those DOM-heavy files while
+e2e attributes far fewer, so the union's denominator grows faster than
+its covered count and every canvas file's percentage drops.
 
 Its `--glob` (`^(src|packages)/.*\.(ts|tsx|js|jsx|mjs|cjs)$`) selects
 which *staged* files a commit is gated on. lcov paths are a separate
@@ -284,21 +298,20 @@ Two paths to passing once it is live:
 1. Add an e2e spec that exercises the new lines. (The right answer for new behavior.)
 2. Make the change without adding net-uncovered lines (refactor only, change deletes lines, etc.).
 
-### Carve-outs: code Playwright structurally can't see
+### Carve-outs: files that emit no JavaScript
 
-The union ratchet reads a carve-out list from
-`coverage-union-ratchet-exclude` at the repo root, for files no test
-layer can reach. The service worker (`src/site/sw.ts`,
-`src/site/sw-core.ts`) is invisible to Playwright — `page.coverage`
-only sees the page's JS context, not the SW thread — but it is
-unit-tested in Node via `test/site/sw-core.test.ts` with a Map-backed
-mock `CacheStorage`, so the union covers it and it needs no entry.
-That is why the file doesn't exist here.
+`coverage-union-ratchet-exclude` at the repo root holds the four
+type-only `.ts` modules. They compile to nothing, so they can never
+appear in an lcov — the same reason the ratchet already special-cases
+`.d.ts`. Check a candidate with `npx esbuild <file> --format=esm` and
+add it only if the output is empty.
 
-When you add code that's structurally invisible to e2e (web workers,
-SharedWorker, AudioWorklet, etc.), add it to the exclude file and pair
-it with a unit test. Don't exclude code that *is* reachable from a
-page — add an e2e spec instead.
+Nothing else belongs there. Code that runs off the page's JS context
+is still testable in Node with fakes: the service worker entry
+(`src/site/sw-admin.ts`) and the OPFS worker
+(`src/admin/opfs-worker.ts`) both are, in
+`test/site/sw-admin-entry.test.ts` and `test/admin/opfs-worker.test.ts`.
+"No test covers it yet" is a reason to write the test.
 
 ---
 
