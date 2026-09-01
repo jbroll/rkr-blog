@@ -50,6 +50,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Test coverage
 
+- **Flaky: `editor: per-cell selection drives the image-edit panel for multi-image figures`** — `editor-flow.spec.ts:718` timed out waiting for the rotate status once and passed on retry; the rotate path is client-only, so the status write is racing the assertion, not the server. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
 - **Playwright: perspective-rectify + Google OAuth callback** —
   _revisit when:_ fixture infra grows, or a UI bug ships uncaught.
 - **e2e-uncovered: perspective-modal WebGL UI** — math is now

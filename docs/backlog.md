@@ -2,7 +2,7 @@
 
 Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped. For one-line deferred format with revisit triggers see `DEFERRED.md`.
 
-Build hygiene, security, video, and the WordPress permalink redirect are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4, the dump converter's binary literals (group 5), and the long-tail items in groups 6-8.
+Build hygiene, security, video, the WordPress permalink redirect and the dump converter's binary literals are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4 and the long-tail items in groups 5-8.
 
 ## 0. Build hygiene — quick wins (no spec needed)
 
@@ -50,7 +50,7 @@ Build hygiene, security, video, and the WordPress permalink redirect are done, a
 
 - [x] **Legacy WordPress permalinks 404** — `/%year%/%monthnum%/%day%/%postname%/` → `/:slug` without redirect; ~47 in-content links broken. Add `GET /:y/:m/:d/:slug` 301. (`DEFERRED.md: Deployment`)
 - [x] **Push drops resolved tags** — `import-wp push` doesn't forward tag names to `/admin/posts`. (`DEFERRED.md: WordPress import`)
-- [ ] **`_binary`/`0x` hex literals stored as text** — dump converter writes blob literals verbatim into TEXT. (`DEFERRED.md: WordPress import`)
+- [x] **`_binary`/`0x` hex literals stored as text** — dump converter writes blob literals verbatim into TEXT. (`DEFERRED.md: WordPress import`)
 - [x] **Failed conversion leaves partial `.db`** — `convertDump` writes in place. Fix: temp + rename. (`DEFERRED.md: WordPress import`)
 - [ ] **Website: no app CTA** — no "Try it" / sign-up button; the app has no public entry flow yet. (`DEFERRED.md: Website`)
 
@@ -65,7 +65,7 @@ Build hygiene, security, video, and the WordPress permalink redirect are done, a
 - [x] **Flaky: `offline ops bake drains on reconnect`** — save-btn disabled races `ensureLocalState`. (`DEFERRED.md: Test coverage`)
 - [x] **Flaky: `rotate single image then save edits`** — 404 on `loadOriginal` races OPFS drain under CI load. (`DEFERRED.md: Test coverage`)
 - [x] **Flaky: `online-save 409 surfaces conflict`** — mtime-bump + 409 timing-sensitive under CI. (`DEFERRED.md: Test coverage`)
-- [ ] **PWA e2e smoke not in CI** — `apps/image-pwa` verified via workflow tests + manual smoke, no Playwright spec. (`DEFERRED.md: image-pwa`)
+- [x] **PWA e2e smoke not in CI** — `apps/image-pwa` verified via workflow tests + manual smoke, no Playwright spec. (`DEFERRED.md: image-pwa`)
 - [ ] **Uncovered: perspective-rectify, Google OAuth callback, perspective-modal WebGL UI** — math unit-tested, shell uncovered. (`DEFERRED.md: Test coverage` — 2 items)
 
 ## 8. UI / UX

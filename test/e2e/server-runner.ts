@@ -85,6 +85,11 @@ app.post<{ Params: { slug: string }; Body: { offsetMs?: number } }>(
 // left out on purpose (see brief: wrong scope, not needed here).
 if (process.env.ENABLE_TEST_ROUTES) {
   const pwaRoot = path.resolve(import.meta.dirname, '../../apps/image-pwa');
+  // @fastify/static doesn't fail on a missing root, so without this the
+  // spec dies on an opaque 30s selector timeout instead.
+  if (!fs.existsSync(path.join(pwaRoot, 'dist'))) {
+    app.log.warn('apps/image-pwa/dist is missing — run npm run build:pwa');
+  }
   await app.register(fastifyStatic, {
     root: path.join(pwaRoot, 'dist'),
     prefix: '/pwa/dist/',

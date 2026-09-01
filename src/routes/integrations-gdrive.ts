@@ -72,7 +72,7 @@ export default async function integrationsGdriveRoutes(
 
   fastify.get('/admin/integrations/gdrive/connect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
-    /* c8 ignore next 2 -- requireUser ensures user */
+    /* c8 ignore next 2 -- requireOwner ensures user */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
@@ -128,7 +128,7 @@ export default async function integrationsGdriveRoutes(
           return reply.code(400).send({ error: 'state mismatch' });
         }
         const userForFlow = req.user;
-        /* c8 ignore next 2 -- requireUser ensures user */
+        /* c8 ignore next 2 -- requireOwner ensures user */
         if (!userForFlow) return reply.code(400).send({ error: 'unauthenticated' });
         codeVerifier = pendingFlows.take(incomingState, userForFlow.id);
         if (!codeVerifier) {
@@ -152,7 +152,7 @@ export default async function integrationsGdriveRoutes(
 
       // Store the tokens. user is guaranteed by requireUser preHandler.
       const user = req.user;
-      /* c8 ignore next -- requireUser preHandler ensures user is non-null */
+      /* c8 ignore next -- requireOwner preHandler ensures user is non-null */
       if (!user) return reply.code(401).send({ error: 'unauthenticated' });
       const key = readSecretKey(siteRoot);
       upsertToken(db, key, {
@@ -192,7 +192,7 @@ export default async function integrationsGdriveRoutes(
 
   fastify.get('/admin/integrations/gdrive/access-token', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
-    /* c8 ignore next 2 -- requireUser preHandler */
+    /* c8 ignore next 2 -- requireOwner preHandler */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });
     const key = readSecretKey(siteRoot);
     const fresh = await ensureFresh(db, key, user.id, exchange);
@@ -202,7 +202,7 @@ export default async function integrationsGdriveRoutes(
 
   fastify.post('/admin/integrations/gdrive/disconnect', { ...ownerGuard }, async (req, reply) => {
     const user = req.user;
-    /* c8 ignore next 2 -- requireUser preHandler */
+    /* c8 ignore next 2 -- requireOwner preHandler */
     if (!user) return reply.code(401).send({ error: 'unauthenticated' });
     const removed = deleteToken(db, user.id, PROVIDER);
     return reply.send({ removed });
