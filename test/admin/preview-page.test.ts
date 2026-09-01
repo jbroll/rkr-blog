@@ -234,3 +234,200 @@ test('preview: findMarkdown ignores _-prefixed meta-of-meta files', async () => 
   const found = await findMarkdown('hello');
   assert.equal(found, null);
 });
+
+// renderPreviewDocument calls buildImageMapFromOpfs with no opts, so a
+// figure in the body takes the real createImageBitmap/createObjectURL
+// path rather than the injected one image-map-opfs.test.ts always uses.
+const IMAGE_ID = 'd'.repeat(64);
+const IMAGE_SIDECAR = {
+  version: 1,
+  original: IMAGE_ID,
+  source: { kind: 'upload', uploadWidth: 300, uploadHeight: 150 },
+  ops: [],
+  outputs: [],
+  variants: []
+};
+
+async function seedSidecar(overrides: Record<string, unknown> = {}): Promise<void> {
+  const { writeJson } = await import('../../src/admin/opfs.ts');
+  await writeJson(`sidecars/${IMAGE_ID}.json`, { ...IMAGE_SIDECAR, ...overrides });
+}
+
+async function seedBlob(path: string): Promise<void> {
+  const { writeBlob } = await import('../../src/admin/opfs.ts');
+  await writeBlob(path, new Blob([new Uint8Array([1, 2, 3])]));
+}
+
+test('preview: a figure resolves through the real decode + object-URL path', async () => {
+  const { renderPreviewDocument } = await import('../../src/admin/preview-page.ts');
+  const origBitmap = globalThis.createImageBitmap;
+  const origCreateUrl = globalThis.URL.createObjectURL;
+  globalThis.createImageBitmap = (async () => ({
+    width: 640,
+    height: 480,
+    close() {}
+  })) as unknown as typeof createImageBitmap;
+  globalThis.URL.createObjectURL = () => 'blob:preview';
+  try {
+    await seedSidecar();
+    await seedBlob(`originals/${IMAGE_ID}.jpg`);
+    const html = await renderPreviewDocument({
+      slug: 'hello',
+      title: 'Hello',
+      markdown: `::figure{ids="${IMAGE_ID}"}`,
+      snapshot: null
+    });
+    assert.match(html, /src="blob:preview"/);
+    // dims came from createImageBitmap, not the sidecar's uploadWidth/Height.
+    assert.match(html, /data-pswp-width="640" data-pswp-height="480"/);
+  } finally {
+    globalThis.createImageBitmap = origBitmap;
+    globalThis.URL.createObjectURL = origCreateUrl;
+  }
+});
+
+// bootPreview (the /admin/view/:slug entry point) isn't reachable from
+// renderPreviewDocument/findMarkdown tests above — it reads location and
+// swaps the live document's head/body, so it needs its own DOM stand-ins.
+function makeTargetDocument(): {
+  doc: {
+    querySelector: () => null;
+    querySelectorAll: () => never[];
+    head: { replaceChildren(): void; appendChild(el: unknown): void; children: unknown[] };
+    body: {
+      replaceChildren(): void;
+      appendChild(el: unknown): void;
+      children: unknown[];
+      textContent: string;
+    };
+    importNode(el: unknown, deep: boolean): unknown;
+  };
+  headList: unknown[];
+  bodyList: unknown[];
+} {
+  const headList: unknown[] = [];
+  const bodyList: unknown[] = [];
+  let bodyText = '';
+  return {
+    headList,
+    bodyList,
+    doc: {
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      head: {
+        replaceChildren: () => {
+          headList.length = 0;
+        },
+        appendChild: (el: unknown) => {
+          headList.push(el);
+        },
+        get children() {
+          return headList;
+        }
+      },
+      body: {
+        replaceChildren: () => {
+          bodyList.length = 0;
+        },
+        appendChild: (el: unknown) => {
+          bodyList.push(el);
+        },
+        get children() {
+          return bodyList;
+        },
+        get textContent() {
+          return bodyText;
+        },
+        set textContent(v: string) {
+          bodyText = v;
+        }
+      },
+      importNode: (el: unknown, _deep: boolean) => el
+    } as unknown as {
+      querySelector: () => null;
+      querySelectorAll: () => never[];
+      head: { replaceChildren(): void; appendChild(el: unknown): void; children: unknown[] };
+      body: {
+        replaceChildren(): void;
+        appendChild(el: unknown): void;
+        children: unknown[];
+        textContent: string;
+      };
+      importNode(el: unknown, deep: boolean): unknown;
+    }
+  };
+}
+
+async function withBootGlobals<T>(
+  pathname: string,
+  document: unknown,
+  domParser: unknown,
+  fn: () => Promise<T>
+): Promise<T> {
+  const g = globalThis as { document?: unknown; DOMParser?: unknown };
+  const hadDocument = 'document' in g;
+  const savedDocument = g.document;
+  const hadDOMParser = 'DOMParser' in g;
+  const savedDOMParser = g.DOMParser;
+  const savedLocation = (globalThis as { location?: unknown }).location;
+  g.document = document;
+  g.DOMParser = domParser;
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: { origin: 'http://localhost', pathname }
+  });
+  try {
+    return await fn();
+  } finally {
+    if (hadDocument) g.document = savedDocument;
+    else delete g.document;
+    if (hadDOMParser) g.DOMParser = savedDOMParser;
+    else delete g.DOMParser;
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      value: savedLocation
+    });
+  }
+}
+
+test('bootPreview: renders the found draft into the live document', async () => {
+  const { writeJson } = await import('../../src/admin/opfs.ts');
+  const { writeRoot } = await import('../../src/admin/opfs-schema.ts');
+  const { bootPreview } = await import('../../src/admin/preview-page.ts');
+
+  await writeJson('meta/boot-draft.json', {
+    schemaVersion: 1,
+    draftId: 'boot-draft',
+    slug: 'hello',
+    title: 'Booted',
+    lastAccessedAt: new Date().toISOString()
+  });
+  await writeJson('drafts/boot-draft.json', {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'booted body' }] }]
+  });
+  await writeRoot({ schemaVersion: 1, deviceId: 'dev', currentDraftId: 'boot-draft' });
+
+  const headEl = { marker: 'head' };
+  const bodyEl = { marker: 'body' };
+  class FakeDOMParser {
+    parseFromString(_html: string, _type: string) {
+      return { head: { children: [headEl] }, body: { children: [bodyEl] } };
+    }
+  }
+  const { doc, headList, bodyList } = makeTargetDocument();
+
+  await withBootGlobals('/admin/view/hello', doc, FakeDOMParser, () => bootPreview());
+
+  assert.deepEqual(headList, [headEl]);
+  assert.deepEqual(bodyList, [bodyEl]);
+});
+
+test('bootPreview: no local copy shows the unavailable message', async () => {
+  const { bootPreview } = await import('../../src/admin/preview-page.ts');
+  const { doc } = makeTargetDocument();
+
+  await withBootGlobals('/admin/view/missing', doc, class {}, () => bootPreview());
+
+  assert.equal(doc.body.textContent, 'No local copy of "missing". Pin it while online first.');
+});
