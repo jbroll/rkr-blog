@@ -62,7 +62,7 @@
     "src/admin/upload.ts": 100,
     "src/admin/video-insert.ts": 93.33,
     "src/admin/video-map-opfs.ts": 60.31,
-    "src/admin/video-node.ts": 52.78,
+    "src/admin/video-node.ts": 54.79,
     "src/admin/video-upload.ts": 75,
     "src/cli/export.ts": 100,
     "src/cli/fix-wp-dates.ts": 100,

@@ -36,13 +36,19 @@ export const VideoNode = Node.create({
   draggable: true,
   selectable: true,
   addAttributes() {
+    // Tiptap's default attribute parser coerces numeric-looking strings
+    // to numbers on paste (poster "1.0" → 1). Read strings raw.
+    const str = (k: string) => ({
+      default: null,
+      parseHTML: (el: Element) => el.getAttribute(k) || null
+    });
     return {
-      ids: { default: null },
-      trim: { default: null },
-      poster: { default: null },
-      caption: { default: null },
-      width: { default: null },
-      justify: { default: null },
+      ids: str('ids'),
+      trim: str('trim'),
+      poster: str('poster'),
+      caption: str('caption'),
+      width: str('width'),
+      justify: str('justify'),
       controls: { default: true },
       autoplay: { default: false },
       muted: { default: false },

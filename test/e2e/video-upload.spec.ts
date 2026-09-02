@@ -221,4 +221,42 @@ test('video: toolbar +Video uploads the picked file and inserts a video node', a
     return found;
   });
   expect(ids).toMatch(/^[0-9a-f]{64}$/);
+
+  // Copy → paste through ProseMirror's clipboard path (toDOM → parseDOM)
+  // must reproduce the node's attrs as strings; Tiptap's default parser
+  // turned poster "1.0" into the number 1.
+  const attrs = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed; ?e2e=1 missing');
+    let pos = -1;
+    let size = 0;
+    ed.state.doc.descendants((node, p) => {
+      if (node.type.name === 'video') {
+        pos = p;
+        size = node.nodeSize;
+      }
+      return pos < 0;
+    });
+    ed.chain()
+      .setNodeSelection(pos)
+      .updateAttributes('video', { trim: '0.5-1.5', poster: '1.0', caption: 'copied', muted: true })
+      .run();
+    const { dom } = ed.view.serializeForClipboard(ed.state.doc.slice(pos, pos + size));
+    ed.commands.focus('end');
+    ed.view.pasteHTML(dom.innerHTML);
+    const out: Record<string, unknown>[] = [];
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'video') out.push(node.attrs);
+      return true;
+    });
+    return out;
+  });
+  expect(attrs).toHaveLength(2);
+  expect(attrs[1]).toEqual(attrs[0]);
+  expect(attrs[1]).toMatchObject({
+    trim: '0.5-1.5',
+    poster: '1.0',
+    caption: 'copied',
+    muted: true
+  });
 });

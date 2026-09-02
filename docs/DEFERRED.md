@@ -18,17 +18,14 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Editor & figures
 
-- **parseHTML doesn't recover attrs** (9b) — rendered-HTML/clipboard
-  round-trip drops figure attrs. _Revisit when:_ a "duplicate post" /
-  "paste from preview" feature lands, or authors lose data via
-  clipboard.
 - **Per-instance crops in multi-image directives** — crops are
   per-sidecar (global to every post using the image). _Revisit when:_
   an author wants the same image cropped differently in two posts.
-- **Container directive form for galleries** — leaf directive can't carry per-image captions. _Revisit when:_ per-image captions inside a multi-image directive are needed.
 - **Cross-figure image move** — drag an image from one figure into
-  another (two-node PM transaction + emptied-source deletion).
-  _Revisit when:_ an author wants an image moved between two figures.
+  another (two-node PM transaction, per-frame target hit-test; ~100
+  lines on a file near the size cap). Two-step path exists: remove
+  from one figure, add via the other's + picker. _Revisit when:_ an
+  author asks for the one-step move.
 
 ## Image pipeline
 

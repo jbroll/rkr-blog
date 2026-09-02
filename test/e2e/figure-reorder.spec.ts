@@ -249,4 +249,42 @@ test('keyboard ArrowRight reorders a focused thumb and keeps focus', async ({ pa
       { timeout: 3_000 }
     )
     .toBe('Moved to position 2 of 2');
+
+  // Copy → paste through ProseMirror's clipboard path (toDOM → parseDOM)
+  // must reproduce the figure's attrs as strings; Tiptap's default
+  // parser turned a numeric-looking caption into a number.
+  const attrs = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed; ?e2e=1 missing');
+    let pos = -1;
+    let size = 0;
+    ed.state.doc.descendants((node, p) => {
+      if (node.type.name === 'figure') {
+        pos = p;
+        size = node.nodeSize;
+      }
+      return pos < 0;
+    });
+    ed.chain()
+      .setNodeSelection(pos)
+      .updateAttributes('figure', { alts: 'a\\, b,c', captions: 'x|y', caption: '2024', timer: 5 })
+      .run();
+    const { dom } = ed.view.serializeForClipboard(ed.state.doc.slice(pos, pos + size));
+    ed.commands.focus('end');
+    ed.view.pasteHTML(dom.innerHTML);
+    const out: Record<string, unknown>[] = [];
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') out.push(node.attrs);
+      return true;
+    });
+    return out;
+  });
+  expect(attrs).toHaveLength(2);
+  expect(attrs[1]).toEqual(attrs[0]);
+  expect(attrs[1]).toMatchObject({
+    ids: `${before[1]},${before[0]}`,
+    captions: 'x|y',
+    caption: '2024',
+    timer: 5
+  });
 });

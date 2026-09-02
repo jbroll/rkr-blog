@@ -56,7 +56,17 @@ export const FigureNode = Node.create({
   selectable: true,
   draggable: true,
   addAttributes() {
-    return Object.fromEntries(Object.entries(FIGURE_DEFAULTS).map(([k, v]) => [k, { default: v }]));
+    // Tiptap's default attribute parser coerces numeric-looking strings
+    // to numbers on paste (a caption of "2024", an all-digit id prefix),
+    // and the string methods downstream then throw. Read strings raw.
+    return Object.fromEntries(
+      Object.entries(FIGURE_DEFAULTS).map(([k, v]) => [
+        k,
+        typeof v === 'number'
+          ? { default: v, parseHTML: (el: Element) => Number(el.getAttribute(k)) || v }
+          : { default: v, parseHTML: (el: Element) => el.getAttribute(k) ?? v }
+      ])
+    );
   },
   parseHTML() {
     return [{ tag: 'div.rkr-figure-placeholder' }];
