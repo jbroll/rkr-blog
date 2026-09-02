@@ -62,17 +62,21 @@ Themes can assume this structure on every public page:
 <a class="rkr-skip" href="#main">…</a>
 <header class="rkr-site-head">
   <div class="rkr-site-head-inner">
-    <p class="rkr-site-title"><a href="/">…</a></p>
-    <span class="rkr-site-tagline">…</span>          <!-- optional -->
+    <div class="rkr-site-head-brand">
+      <p class="rkr-site-title"><a href="/">…</a></p>
+      <span class="rkr-site-tagline">…</span>        <!-- optional -->
+    </div>
+    <nav class="rkr-site-head-nav" aria-label="Site">
+      <a class="rkr-site-head-auth-btn" href="/">Home</a>   <!-- omitted on / -->
+      <a class="rkr-site-head-auth-btn" href="/about">About</a>
+      <div class="rkr-site-head-auth">
+        <a class="rkr-site-head-auth-btn" href="/login">Login</a>      <!-- anonymous -->
+        <form class="rkr-site-head-auth-form" method="post" action="/admin/logout">
+          <button class="rkr-site-head-auth-btn">Logout</button>     <!-- logged in -->
+        </form>
+      </div>
+    </nav>
   </div>
-  <nav class="rkr-admin-strip" aria-label="Admin">  <!-- when logged in -->
-    <a class="rkr-admin-strip-link" href="/admin/editor">New post</a>
-    <a class="rkr-admin-strip-link" href="/admin/posts">Posts</a>
-    <a class="rkr-admin-strip-link" href="…">Edit this post</a>  <!-- on /:slug -->
-    <form class="rkr-admin-strip-logout" method="post" action="/admin/logout">
-      <button class="rkr-admin-strip-link">Logout</button>
-    </form>
-  </nav>
 </header>
 <main id="main" tabindex="-1">…</main>
 <footer class="rkr-site-foot">
@@ -88,8 +92,16 @@ Per surface:
   and a `<ul class="post-list">` of `<li>` entries with `<time>` +
   `<a>`. Pagination, when present, is `<nav aria-label="pagination">`.
 - **Post** (`/:slug`): `<main>` contains `<article>` with `<header>`
-  (`<h1>` + `<time>`) and the post body. Images render through
-  `<figure class="rkr-figure …">` — see "Figure widget" below.
+  (`<h1>` + `<time>` + `<a class="rkr-comment-bubble" href="#respond">`)
+  and the post body. Images render through
+  `<figure class="rkr-figure …">` — see "Figure widget" below. After
+  the article: `<section class="rkr-comments" id="comments">` and
+  `<section class="rkr-comment-form-wrap" id="respond">`.
+- **About** (`/about`): the post surface without the bubble or the
+  comment sections.
+- **Search** (`/search`): the index layout with a `.post-list
+  rkr-search-results` list; each `<li>` adds `<p
+  class="rkr-search-snippet">` containing `<mark>` spans.
 - **Admin posts** (`/admin/posts`, admin-only): `<table
   class="rkr-admin-posts">` with status pills
   (`.rkr-admin-posts-status.is-draft` / `.is-published`) and edit /
@@ -163,17 +175,42 @@ should be added here at the same time.
 ### Site chrome
 - `.rkr-skip` — visually-hidden skip-to-content link (revealed on focus).
 - `.rkr-site-head`, `.rkr-site-head-inner` — header band + centred inner column.
+- `.rkr-site-head-brand` — title + tagline group.
 - `.rkr-site-title` — site title wordmark; child `a` for the home link.
 - `.rkr-site-tagline` — optional tagline next to the title.
-- `.rkr-admin-strip` — admin-only navigation bar inside the header.
-- `.rkr-admin-strip-link` — every clickable in the strip (anchor or button).
-- `.rkr-admin-strip-logout` — wrapping `<form>` for the logout POST.
+- `.rkr-site-head-nav` — the Home / About / Login|Logout group. Layout
+  lives in `base.css`; colour comes from `.rkr-site-head-auth-btn`.
+- `.rkr-site-head-auth-btn` — every clickable in the nav (anchor or button).
+- `.rkr-site-head-auth`, `.rkr-site-head-auth-form` — login/logout slot
+  and the logout POST form.
+- `.rkr-fab` — the admin floating action buttons (edit, new post,
+  settings, comments) shown bottom-right when logged in.
 - `.rkr-site-foot`, `.rkr-site-foot-sep`, `.rkr-site-foot-admin` — footer + dot separator + small admin link.
 
 ### Index
 - `.rkr-index-heading` — visually-hidden h1 on `/`.
 - `.post-list`, `.post-list li`, `.post-list time`, `.post-list a`.
 - `nav[aria-label="pagination"]` — pager block.
+- `.rkr-tag-rail`, `.rkr-rail-controls` — right-hand rail and its
+  sort + search row.
+- `.rkr-sort-toggle`, `.rkr-site-search`, `.rkr-site-search input` —
+  the two rail controls.
+- `.rkr-search-results`, `.rkr-search-snippet`, `.rkr-search-empty` —
+  search page additions; `mark` inside a snippet is the match.
+
+### Comments
+- `.rkr-comment-bubble`, `.rkr-comment-bubble-count` — header
+  count-and-jump anchor. Absolutely positioned in `default.css`; the
+  post `<header>` is its containing block.
+- `.rkr-comments`, `.rkr-comment-list`, `.rkr-comment`,
+  `.rkr-comment-meta`, `.rkr-comment-body`, `.rkr-comment-replies`,
+  `.rkr-comments-empty` — the list.
+- `.rkr-comment-form-wrap`, `.rkr-comment-form`, `.rkr-cf-name`,
+  `.rkr-cf-email`, `.rkr-cf-comment`, `.rkr-cf-submit`,
+  `.rkr-comment-notice` — the form. Grid layout is in `base.css`.
+- `.rkr-hp` — the honeypot wrapper. Never restyle it: its `base.css`
+  rule is what keeps the decoy field invisible, and a theme that shows
+  it silently drops real comments.
 
 ### Post body (prose)
 - `article` — body wrapper; max-width via `--rkr-prose`.

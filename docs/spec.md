@@ -231,6 +231,23 @@ More prose.
 Custom widgets use the [CommonMark generic directive](https://talk.commonmark.org/t/generic-directives-plugins-syntax/444)
 syntax (`::name{attrs}`).
 
+### System posts
+
+A post whose slug starts with `_` is a system post: it lives in
+`content/posts/` and is edited with the normal editor, but it is never
+indexed, never listed, never searchable, and `GET /_<slug>` is always
+404. Two exist:
+
+| slug | served as | comments |
+|---|---|---|
+| `_site-banner` | the header banner figure on every page | none |
+| `_about` | `GET /about`, a standalone page | none |
+
+Both are created on demand from the settings page (`Create About` /
+`Create banner`), which writes a stub file and opens it in the editor.
+`/about` with no `_about.md` on disk is a 404, as is a malformed one.
+`import-wp about` seeds `_about` from a WordPress page.
+
 ### Editor
 
 A single `figure` node type — the author sees image / gallery /
@@ -573,6 +590,8 @@ jobs failed             list jobs in state='failed' from the queue (id, kind, at
 import-wp list <base-url>                    list posts on a WordPress source
 import-wp post <base-url> <id-or-slug>       import one WP post + every image it references
 import-wp push <base-url> <slug> --to <url>  push one post to a remote rkr-blog via /admin
+import-wp about <base-url> --to <url>        push the WP page `about` as the `_about` system post
+import-wp site-banner <base-url> --to <url>  push the WP header image as the `_site-banner` system post
 import-wp-comments <base-url>               import approved comments from a WordPress source
 wp-dump <dump.sql> <out.db>                 convert a mysqldump file to SQLite
 import-wp … --from-dump <db> --uploads <d>  read a backup instead of a live WordPress site
@@ -635,15 +654,59 @@ deletes everything in the cache not in the set; idempotent.
 
 Readers submit comments without an account via `POST /:slug/comments`.
 
+### Form and display
+
+The form collects Name, Email, and Comment. Email is required but
+never shown; there is no website field, and author names render as
+plain text. It works without JavaScript: a native POST answers with a
+303 back to `/:slug?submitted=1#respond`, which shows a "received,
+will appear shortly after review" notice above the form. With
+JavaScript the same POST goes over `fetch` and the notice is swapped
+in without a reload; any failure falls back to the native submit.
+
+Published comments render below the post oldest-first, replies
+indented one level under their parent, each with author name, date,
+and escaped body. The post header carries a comment bubble flush
+right: a speech-bubble icon with the published count (top-level plus
+replies), or no number at zero, linking to `#respond`. It is an
+in-page anchor, no script.
+
 ### Spam triage
 
 Each submission is written with `status = 'pending'` and a `classify` job is enqueued. The job calls the Ollama proxy (`SPAM_MODEL`, default `llama3.2:3b`) and auto-publishes ham; spam, timeouts, and errors leave the comment `queued` for manual review. The fail-safe is explicit: unscored comments never auto-publish. If `OLLAMA_BASE_URL` is unset the classify step is skipped and all comments go to `queued`.
 
-Pre-LLM guards run first: a honeypot field, a minimum fill-time check, per-IP rate-limiting (5 per 10 minutes), and length caps on name and body.
+Pre-LLM guards run first, in this order:
+
+- Honeypot: a hidden `website` field. A non-empty value gets the same
+  success response as a real submission and nothing is stored.
+- Validation: name, email, and body required; length caps 80 / 200 /
+  5000; email shape; no control characters.
+- Per-IP rate limit, 5 submissions per 10 minutes.
+- Minimum fill time: a submission under 3 s after the form rendered
+  goes straight to `queued` and skips the classifier.
+
+There is no CAPTCHA and no max-links heuristic.
 
 ### Email notification
 
-When a comment is submitted (before triage), the server sends an email notification to the `NOTIFY_TO` address via SMTP. Notification is optional: if `SMTP_HOST` is unset the mailer silently no-ops.
+The owner can be emailed when a comment resolves out of `pending`.
+The level is a Settings value, `commentNotify`:
+
+| level | mails on |
+|---|---|
+| `off` | never |
+| `ham` (default) | a comment auto-publishing |
+| `queued` | a comment landing in the moderation queue (spam, classifier failure, too-fast fill) |
+| `all` | both |
+
+Manual approve in moderation never mails. Delivery needs SMTP
+configured (`SMTP_HOST`) and a recipient: the Settings `notifyEmail`
+address, falling back to `NOTIFY_TO`. Without either the mailer is a
+silent no-op. Mail is plain text: subject `New comment on "<title>" by
+<name>` or `[moderation] Held comment on "<title>" by <name>`; body
+has author name and email, post title, the comment verbatim, a
+permalink to the comment on `PUBLIC_BASE_URL`, and a link to
+`/admin/comments` on `ADMIN_BASE_URL`.
 
 ### Moderation
 
@@ -651,7 +714,32 @@ When a comment is submitted (before triage), the server sends an email notificat
 
 ### Threading
 
-One level only. A reply's `parent_id` must reference a `published` top-level comment (one with no `parent_id` of its own). The data model does not support deeper nesting.
+One level only. A reply's `parent_id` must reference a `published` top-level comment (one with no `parent_id` of its own). The data model does not support deeper nesting. WordPress-imported threads deeper than one level are flattened to top-level.
+
+## 14a. Header navigation and search
+
+Every public page's header has the site title (linking to `/`), a
+nav of `Home` (omitted on the index itself), `About`, and `Login` or
+a `Logout` form.
+
+The index page has a right-hand rail holding a sort toggle
+(newest/oldest first), a search box, and tag pills. The search page
+keeps the search box, pre-filled, and drops the sort toggle because
+results are ranked by relevance, not date.
+
+`GET /search?q=` is a no-JS GET form. Words are AND-ed, the last word
+matches as a prefix, and there are no user-facing operators; anything
+that is not a letter, digit, or underscore is stripped, and the query
+is capped at 200 characters. Title, tags, and plain-text body are
+indexed; title outranks tags outranks body. Anonymous visitors see
+published posts only, a logged-in admin also sees drafts. Results are
+a single list of at most 50 hits, each with title, date, and a body
+snippet with the matching words marked. An empty or all-punctuation
+query renders a prompt; no hits renders "No results for …". No
+pagination, fuzzy matching, or typeahead.
+
+The index is rebuilt by `reindex`, which every post save and delete
+already runs, so search is current without a separate step.
 
 ## 15. Deployment configuration
 
@@ -677,12 +765,14 @@ Per-deployment environment surface:
 | `OLLAMA_BASE_URL` | (unset) | base URL of the Ollama proxy for comment spam classification; leave unset to disable LLM triage |
 | `OLLAMA_TOKEN` | (unset) | bearer token for the Ollama proxy |
 | `SPAM_MODEL` | `llama3.2:3b` | Ollama model used for spam classification |
+| `SPAM_TIMEOUT_MS` | `8000` | per-attempt timeout on the classifier call |
+| `SPAM_MAX_ATTEMPTS` | `3` | classifier attempts before the comment is queued unscored |
 | `SMTP_HOST` | (unset) | SMTP server hostname for email notifications; leave unset to disable email |
-| `SMTP_PORT` | `587` | SMTP port |
-| `SMTP_USER` | (unset) | SMTP login username |
+| `SMTP_PORT` | `587` | SMTP port; 465 switches to implicit TLS |
+| `SMTP_USER` | (unset) | SMTP login username; omit for an unauthenticated relay |
 | `SMTP_PASS` | (unset) | SMTP login password |
-| `SMTP_FROM` | (unset) | From address for outgoing notification email |
-| `NOTIFY_TO` | (unset) | Recipient address for new-comment notifications |
+| `SMTP_FROM` | `SMTP_USER` | From address for outgoing notification email |
+| `NOTIFY_TO` | (unset) | Recipient for comment notifications when Settings has no `notifyEmail` |
 
 The session-signing and token-encryption secret lives in
 `$SITE_ROOT/data/secret.key` (mode 0600), generated by `init` if

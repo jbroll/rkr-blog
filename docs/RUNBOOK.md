@@ -223,6 +223,30 @@ Output per slug: `pushed <slug> (inserted): images=N (failed=0)`.
 The target's `<target>/admin/upload` is bearer-auth only — the bearer
 token is the same `ADMIN_TOKEN` the reset step used.
 
+The two system posts seed the same way, from a WordPress page and the
+header image respectively:
+
+```bash
+bin/site-admin import-wp about <wp-base-url> --to <target-url> --token "$ADMIN_TOKEN"
+bin/site-admin import-wp site-banner <wp-base-url> --to <target-url> --token "$ADMIN_TOKEN"
+```
+
+`about` needs a page with slug `about` on the source and lands it as
+`_about`, served at `/about`. Either can also be created empty from
+`/admin/settings` and written in the editor.
+
+### Importing comments
+
+```bash
+# on the VPS, as the service user, from /opt/<APP_NAME>
+bin/site-admin import-wp-comments <wp-base-url> [--from-dump <db>]
+```
+
+Writes to the local site DB directly, so it runs on the host, not
+against a `--to` target. Only approved comments are imported; re-runs
+skip anything already present. Comments on posts that have not been
+imported yet are skipped, so run it after the posts.
+
 ### Importing from a database backup
 
 When the WordPress install is gone, the importer can read a
@@ -417,6 +441,37 @@ file). The other writable subtrees — `content/posts`, `originals`,
 
 This is local-dev only: on the deployed VPS the site root is owned by
 the service user and managed via deploy, not by an interactive wipe.
+
+## Comments
+
+### Spam classifier
+
+`OLLAMA_BASE_URL` (site env) and `OLLAMA_TOKEN` (secrets) point at
+the token-authenticated Apache proxy in front of the GPU box's Ollama;
+the blog VPS cannot reach the LAN directly. With them unset every
+comment lands in the moderation queue. `SPAM_MODEL`, `SPAM_TIMEOUT_MS`
+and `SPAM_MAX_ATTEMPTS` tune the call; a proxy outage never blocks a
+submission, it only queues the comment.
+
+### Notifications
+
+Two independent switches, both needed:
+
+1. Transport: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in
+   `deploy/secrets/<site>.secrets.env`; `SMTP_PORT` in the site env.
+2. Level and recipient: `/admin/settings` → "Email me about comments"
+   (off / ham / queued / all, default ham) and the notification
+   address. `NOTIFY_TO` in secrets is the fallback when the Settings
+   address is empty.
+
+`journalctl -u <APP_NAME>` shows `[mailer] SMTP_HOST or NOTIFY_TO unset`
+once at first send when transport is missing, and `[mailer] send
+failed:` per delivery error. A failed send is dropped, not retried.
+
+### Moderation
+
+`/admin/comments` lists queued comments first. Approving from there
+never sends a notification.
 
 ## Troubleshooting
 

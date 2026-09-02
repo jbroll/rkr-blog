@@ -611,15 +611,78 @@ realization of the spec's "bounded retries, queue on failure". If
 fails safe: after bounded retries the comment is set to `queued` for manual
 review.
 
+The classifier (`src/lib/spam-classifier.ts`) POSTs a pinned prompt
+with `format: 'json'` to `/api/generate` and parses a
+`{verdict, score, reason}` object; the prompt carries author name,
+email, and body only. Each attempt is bounded by `SPAM_TIMEOUT_MS`
+(default 8000) with a `(attempt-1) × 200 ms` pause between attempts.
+
 ### Anti-abuse (pre-LLM)
 
-Honeypot field (hidden input; any fill → `queued`), minimum fill-time
-check (too-fast submit → `queued`), per-IP rate limit (5 submissions per
-10 minutes via `@fastify/rate-limit`), and length caps on name/body.
+`src/routes/public-comments.ts` runs the cheap checks before any row is
+written. A filled honeypot (`website`) returns the same response as a
+real submission and inserts nothing, so a script cannot tell it was
+filtered. Length caps (80 / 200 / 5000), an email-shape regex, and
+control-character rejection come next, then the per-IP rate limit (5
+per 10 minutes via `@fastify/rate-limit`). A submission whose hidden
+`t` render timestamp is under 3 s old is inserted and set straight to
+`queued`, skipping the classify job: it is already distrusted, so no
+GPU time is spent on it.
+
+The honeypot's hiding rule lives in `static/base.css`, which every
+page loads before any theme, because a visible honeypot is a
+functional bug (a reader who fills in "Website" is silently dropped),
+not a cosmetic one, and must not depend on the active theme. It is
+clipped to 1 px rather than `display:none` because some bots skip
+`display:none` inputs.
+
+### Form and comment bubble
+
+`src/templates/comments.ts` renders the list and the form; the form
+is Name / Email / Comment plus hidden `t`, optional `parent_id`, and
+the honeypot. `author_url` was dropped in migration `005` and names
+render as plain text. `src/site/comment-form.ts` intercepts submit and
+re-POSTs the same form body over `fetch` with `x-rkr-ajax: 1`; the
+route answers that header with `200 {ok, notice}` instead of the 303,
+and the script swaps the notice in. The two "accepted" responses are
+byte-identical between a real submission and a honeypot hit.
+
+The bubble in the post header (`src/templates/post.ts`) is an anchor
+to `#respond` with `countThread` (`src/lib/comment-types.ts`) summing
+top-level comments and their replies. It is absolutely positioned at
+the header's top-right, mirroring the Twenty Eleven treatment on the
+WordPress source site; putting it inline after the copy-link button
+was rejected because two right-aligned controls collide on long
+titles. Like `.rkr-post-copylink`, it is styled only in
+`static/themes/default.css`; the other themes inherit it.
 
 ### Email notification
 
-`src/lib/notify-handler.ts` fires on every new web submission (before triage) and sends an email via `src/lib/mailer.ts` (nodemailer). The mailer is a no-op when `SMTP_HOST` is unset, so notification is opt-in at deploy time.
+A `notify` job kind (`src/lib/notify-handler.ts`) sends one plain-text
+email per resolved comment through `src/lib/mailer.ts` (nodemailer).
+It is a separate job from `classify` so SMTP latency or failure never
+touches classification, and the single worker serialises sends.
+
+The level gate runs at enqueue time, not in the handler, so no dead
+jobs reach the queue: `classify-handler.ts` enqueues after
+`applyClassification` when `siteConfig().commentNotify` (default
+`ham`) covers the resulting status, and `public-comments.ts` does the
+same for the too-fast path, which never sees the classifier. Changing
+the level in Settings therefore affects only later comments. The
+handler loads comment and post, branches subject on `published` vs
+`queued`, and returns quietly if the comment is missing or in any
+other status. `classify-handler.ts` takes `enqueue` as an argument
+rather than importing it, because `jobs.ts` imports the handler and
+the circular gate would fail.
+
+The mailer never throws: unconfigured (`SMTP_HOST` or recipient
+unset) returns `{sent:false}` with a one-shot stderr warning, and a
+transport error is logged and swallowed. The job completes either
+way, since `jobs.ts` has no auto-retry and a thrown handler would sit
+`failed` forever. The recipient is resolved at send time from the
+persisted `notifyEmail`, falling back to `NOTIFY_TO`; subject, from,
+and to are stripped of CR/LF. Plain text only, so there is no escaping
+surface.
 
 ### Moderation
 
@@ -630,9 +693,91 @@ the existing admin auth (`requireUser`).
 ### WordPress import
 
 `site-admin import-wp-comments <wp-base-url>` fetches approved comments
-from the WP REST API and inserts them as `published` / `source='wp-import'`.
-Idempotent: `wp_comment_id` has a UNIQUE constraint. Threads deeper than
-one level are flattened to top-level.
+from the WP REST API and inserts them as `published` / `source='wp-import'`
+without classification. Idempotent: `wp_comment_id` has a UNIQUE
+constraint. Threads deeper than one level are flattened to top-level, as
+is a reply whose parent lands on a later page. The public API exposes no
+commenter email, so `author_email` is the sentinel `imported@roll-along`.
+Bodies are stripped to text since comments are stored raw and escaped on
+render.
+
+## 12a. Search
+
+Migration `006_search_fts.sql` creates `posts_fts`, a standalone FTS5
+table (`slug UNINDEXED, title, tags, body`, `tokenize = 'porter
+unicode61'`). It is not an external-content table because `posts`
+does not hold body text: the filesystem is the source of truth and
+this table is the only place the body is indexed. `slug` is stored
+purely for the join back to `posts`.
+
+`doReindex` (`src/lib/post-index.ts`) already parses every
+`content/posts/*.md`; it keeps the mdast and, inside the same upsert
+transaction, does `DELETE FROM posts_fts WHERE slug = ?` then
+`INSERT`, with `tags` as the tag names joined by spaces and `body`
+from `extractPlainText` (`src/lib/post-text.ts`). A slug rename
+matched by path deletes the old slug's row; orphan cleanup deletes
+rows for removed files; `_`-slugs are skipped. Hooking population into
+reindex, which every save and delete already calls, means there is no
+incremental index path to keep correct.
+
+`extractPlainText` walks the tree and joins `text` and `inlineCode`
+values with single spaces, skipping `yaml`, fenced `code`, and the
+three directive node types.
+
+`buildFtsMatch` (`src/lib/search-query.ts`) trims and caps the query
+at 200 characters, replaces everything outside `\p{L}\p{N}_` and
+whitespace with spaces, splits, and returns `null` when no token
+survives. Tokens are joined by spaces (FTS5 implicit AND) and the last
+gets a `*`. Stripping every syntax character is what makes the MATCH
+argument safe to bind untouched.
+
+`GET /search` (`src/routes/public-search.ts`) runs one query:
+`snippet(posts_fts, 3, char(1), char(2), '…', 12)` on the body column,
+joined to `posts` for `status`/`published_at` scoping
+(`p.status = 'published' OR ? = 1` with `isAdmin`), `ORDER BY
+bm25(posts_fts, 0.0, 10.0, 5.0, 1.0)` (the leading `0.0` is the
+unindexed slug column), `LIMIT 50`. The snippet is HTML-escaped whole
+and only then are the U+0001/U+0002 sentinels swapped for
+`<mark>`/`</mark>`, so a literal `<mark>` in a post cannot be
+injected. The route probes `posts_fts` once at registration and, while
+absent, once per request, so a database that has not run `006` yet
+returns an empty result set instead of an error and picks the table
+up as soon as a reindex creates it.
+
+The search form is `renderSearchForm` in `src/templates/layout.ts`,
+placed by the index and search templates in the tag rail next to the
+sort toggle; the search page (`src/templates/search.ts`) reuses
+`.post-list` and adds `.rkr-search-snippet`.
+
+## 12b. System posts and `/about`
+
+A `_`-prefixed slug marks a system post. `post-index.ts` skips it for
+both indexing and orphan cleanup, so it lives on disk with no `posts`
+row, and `GET /:slug` 404s any `_` slug so no system post is reachable
+by its file name. `_site-banner` is embedded into the header;
+`_about` needs its own route.
+
+`GET /about` (`src/routes/public.ts`) reads `content/posts/_about.md`
+directly, and any read or parse failure is a 404 rather than a 500.
+It renders through `renderPostPage` with `showComments: false`, which
+drops the bubble, list, and form. A flag was chosen over a separate
+page template because the head, header, title, banner, and prose
+width are identical; one renderer is the smaller change. `isValidSlug`
+already accepts `_` slugs, so the editor, bundle, and save pipeline
+edit `_about` unchanged.
+
+`GET /admin/about/edit` (`admin-settings.ts`) writes a stub
+(`slug: _about`, `title: About`, `status: published`) if the file is
+absent and redirects to `/admin/editor?slug=_about`; the settings page
+shows `Create About` or `Edit About →` by file presence, mirroring the
+banner link.
+
+`import-wp about` calls `pushPage` (`src/lib/wp-push.ts`), which
+fetches a WordPress page (`fetchWpPage`, `wp/v2/pages?slug=`) and sets
+`page.slug = '_about'` before handing it to the same `pushWpObject`
+path `pushPost` uses. A WP page has the fields the importer consumes,
+and the emitted frontmatter slug is whatever the fetched object says,
+so overwriting `.slug` is all it takes to land it as the system post.
 
 ### Content sources
 
