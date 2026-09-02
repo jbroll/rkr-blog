@@ -96,7 +96,7 @@ save mutates the sidecar but never the original.
 | type | shape | meaning |
 |---|---|---|
 | `crop` | `{x, y, w, h}` | extract a region in current-canvas coords |
-| `rotate` | `{degrees}` | multiple of 90° |
+| `rotate` | `{degrees}` | any angle, stored normalised to `[0, 360)`; `0` is dropped. Multiples of 90° turn the canvas whole. Any other angle also crops to the largest axis-aligned rectangle, centred on the image centre, that fits inside the rotated image, so the output has no empty corners |
 | `flip` | `{axis: 'horizontal' \| 'vertical'}` | mirror along an axis |
 | `resample` | `{w?, h?, fit}` | downscale only — never enlarges |
 | `perspective` | `{corners: [[x,y]×4]}` | rectify a tilted quadrilateral; tl/tr/br/bl in current-canvas coords |
@@ -106,7 +106,9 @@ save mutates the sidecar but never the original.
 - `ops` is the author's click order. Coords on each op are interpreted
   in the canvas state at the time it runs (post-prior-ops). A `crop`
   recorded after a `rotate` therefore stores coords in the rotated
-  canvas's coordinate space.
+  canvas's coordinate space; after a non-orthogonal rotate that space
+  is the inscribed rectangle, and validation bounds-checks later crops
+  against it.
 - `redoStack` is parallel: ops popped via undo, in pop order (last
   entry redoes first). Persisted with the sidecar so undo/redo survives
   reload. Adding a new op clears the redo stack — the standard
@@ -124,8 +126,9 @@ save mutates the sidecar but never the original.
 
 ## 6. Image-edit model
 
-The author opens an image in the editor, applies ops (rotate / flip /
-crop / resample / perspective / undo / redo / delete-step / reset),
+The author opens an image in the editor, applies ops (rotate / tilt /
+flip / crop / resample / perspective / undo / redo / delete-step /
+reset),
 and clicks **Save edits**.
 
 - Each op click updates an in-browser local edit state for the active
@@ -165,6 +168,39 @@ Degenerate quads (three colinear corners) are refused with a status
 message; perspective rectify requires the browser to support a
 hardware-accelerated 2D pixel transform (the button is disabled
 otherwise).
+
+### Tilt
+
+The 90° buttons stay as they are. A slider and a number input, both
+`−45..45` in 0.1° steps, straighten a horizon. While either control
+moves, the dialog preview rotates by CSS for instant feedback without
+re-running the pipeline; **Apply** appends a `rotate` op of that angle
+(a negative angle is stored as its `[0, 360)` equivalent, `−15` →
+`345`), merged into a directly preceding `rotate` so a 90° turn
+followed by a 3° tilt stores one `rotate 93`. The edits list shows
+angles over 180° as negative (`345` → `rotate -15°`). Apply at 0° does
+nothing.
+
+## 6a. Standalone image editor
+
+`apps/image-pwa` is the same crop / rotate / tilt / flip / perspective
+/ resample tool set with no server behind it: open one image from a
+file picker or by dropping it on the page, edit, download, repeat.
+Nothing is uploaded or persisted; a reload starts fresh. It is
+installable as a PWA. Where it is served
+is a deployment choice (`DEPLOY_IMAGE_EDITOR`, see `RUNBOOK.md`); it is
+off by default.
+
+- **Open.** The picker is unfiltered; a file with a stated non-image
+  type is refused with a status message. The image goes through the
+  same EXIF bake and long-edge clamp as a blog upload before editing.
+- **Edit.** Rotate ±90°, flip, crop and perspective modals, undo, redo.
+  Tilt is a `−15..15` slider in 0.5° steps; the angle is absolute
+  within one drag and merges into the rotation on release, after
+  which the slider re-centres at 0.
+- **Download.** Format picker: PNG (lossless), WebP or JPEG with a
+  quality slider `0.3..1` (default WebP at 0.9). The file is named
+  `<stem>-edited.<ext>` from the input filename.
 
 ## 7. Derivative rendering
 
@@ -257,6 +293,19 @@ Round-trips through markdown on save and reload. The TipTap ⇄
 markdown conversion happens in the browser; `POST /admin/posts`
 accepts markdown directly so the same endpoint can be driven by other
 tools (e.g. the WordPress importer).
+
+#### Reordering images within a figure
+
+A multi-image figure shows its images as a thumb grid. Dragging a
+thumb (touch, pen or mouse) to another slot reorders the figure; a tap
+or click without movement still opens that cell's edit panel. Each
+thumb is also focusable, and Left/Up moves it one position earlier,
+Right/Down one later (the order is linear whatever the layout, so all
+four arrows map to earlier/later); Enter or Space opens the cell edit.
+Alt text and caption travel with their image. A reorder is one undo
+step, and a screen reader hears "Moved to position K of M". Dragging
+near the top or bottom edge of the editor scrolls it. Moving an image
+between two figures is not supported (`DEFERRED.md`).
 
 ## 9. Image widgets
 

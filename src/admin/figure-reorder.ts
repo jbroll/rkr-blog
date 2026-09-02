@@ -1,6 +1,5 @@
 // Figure image reorder: pure permute/hit-test helpers + delegated
-// pointer/keyboard wiring. Spec:
-// docs/superpowers/specs/2026-05-16-figure-reorder-design.md
+// pointer/keyboard wiring. Design notes: docs/implementation.md §8a.
 // Reorder is one permutation applied in lockstep to the figure's
 // three parallel arrays (ids ',', alts ',', captions '|').
 

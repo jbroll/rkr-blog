@@ -193,6 +193,22 @@ import it. Holds:
 - `opsEqual` — sorted-key JSON canonicalization for cache-prefix
   comparison.
 
+`core/rotation.ts` holds `inscribedRect(W, H, angleDeg)`: the largest
+axis-aligned rectangle, centred on the image centre, inside a W×H
+image rotated by that angle, plus its `left`/`top` offset within the
+rotated bounding box `(W·cosθ + H·sinθ) × (W·sinθ + H·cosθ)`. The
+angle is folded into `[0°, 90°]` first, since the geometry repeats
+across quadrants. Two regimes: with all four sides binding,
+`rw = (W·c − H·s)/cos 2θ`, `rh = (H·c − W·s)/cos 2θ`; when only the
+shorter pair binds, `rw = H/(2s)`, `rh = H/(2c)` for landscape (W and H
+swapped for portrait). The fully-constrained branch is skipped when
+`|cos 2θ| ≤ 1e-6` (division blows up near 45°), and where both
+regimes apply the larger area wins, because the first formula is not
+the maximum across the whole mid-angle range. Results are floored so
+sharp's `extract` gets integers. It is the one copy of the formula:
+validation, the canvas pipeline and the sharp pipeline all import it,
+which is what keeps client and server dimensions in agreement.
+
 `canvas/canvas.ts` is the DOM-touching half:
 
 - `applyOps(source, ops): HTMLCanvasElement` — runs the simplified
@@ -212,6 +228,34 @@ import it. Holds:
   HTMLCanvasElement-based. WebGL unavailability falls through to
   pass-through (the perspective button is disabled in the editor's
   UI when WebGL is unavailable).
+
+### Arbitrary-angle rotation
+
+`rotate` takes any finite angle; `validateOps` normalises it to
+`[0, 360)`, drops `0`, and tracks running dimensions so a later `crop`
+is bounds-checked against what the rotate leaves: a swap for 90°/270°,
+unchanged for 180°, `inscribedRect` otherwise. The op schema did not
+change; only the multiple-of-90 check went.
+
+- **Client (`applyRotate`).** 90°/180°/270° keep the whole-canvas
+  path. Any other angle draws into a canvas already sized `iw × ih`,
+  translated to its centre and rotated, with
+  `imageSmoothingQuality = 'high'` (bicubic); no separate crop step,
+  the canvas bounds are the crop.
+- **Server (`applyOp`).** The orthogonal angles go to `sharp.rotate`,
+  which libvips handles without resampling. Otherwise
+  `rotate(deg, {background: transparent})` expands to the bounding box
+  and `extract` cuts the inscribed rect. `applyOp` needs the current
+  dimensions for that, so `renderDerivative` threads `{w, h}` through
+  the ops loop via `nextDims`, mirroring the validator's rule.
+- **Which pixels get published.** The bake wins whenever one exists,
+  so a published tilt is the canvas's bicubic result. The sharp path
+  (Lanczos from the original) runs only when there is no bake, such as
+  a sidecar written by a scripted client.
+
+`appendRotate` merges a new angle into a directly preceding `rotate`,
+so the tilt control never grows the op list; `describeOp` shows angles
+over 180° as negative.
 
 ### Editor state machine: `src/admin/main.ts`
 
@@ -412,6 +456,121 @@ All served at `/static/*` by `@fastify/static` in dev (Apache in
 prod). The editor bundle has zero CDN runtime dependency; the only
 third-party script-src is `apis.google.com` (the Google Drive picker
 SDK, loaded dynamically by the gdrive integration).
+
+## 8a. Figure image reorder
+
+`src/admin/figure-reorder.ts`. A figure node carries three parallel
+strings, `ids` (comma), `alts` (comma) and `captions` (pipe); a
+reorder is one permutation applied to all three. `reorderFigureCells`
+pads `alts` and `captions` to the `ids` length before moving, since
+older posts have shorter arrays, and returns its input object on a
+no-op (`from === to`, out of range, single image) so the caller can
+skip the transaction on reference equality.
+
+The figure is a plain node with no NodeView, so `wireFigureReorder`
+installs delegated `pointerdown` and `keydown` listeners on the editor
+root, the same attach point as the tap-to-edit `click` handler in
+`main.ts`. It lives outside `main.ts` because that file sits at the
+500-line cap.
+
+- **Click vs. drag.** A press on `img[data-cell-index]` becomes a drag
+  once the pointer moves `DRAG_THRESHOLD_PX = 8` (loose enough for a
+  finger, tight enough that a tap never trips it); pointer capture
+  then keeps the stream on the thumb. A capture-phase `click`
+  listener swallows the synthetic click that follows a drag, so edit
+  never co-fires. `pointermove`/`pointerup`/`pointercancel` are
+  attached to `window` in the capture phase because ProseMirror's own
+  handlers may stop propagation on the root.
+- **Native drag.** Both `<img>` drag-and-drop and ProseMirror's node
+  drag (the figure is `draggable`) fire `dragstart` on the placeholder
+  and would take the pointer stream. `dragstart` is cancelled only
+  between a thumb `pointerdown` and its `pointerup`, so a press
+  elsewhere on the figure still moves the whole figure.
+- **Drop slot.** `dropIndexFor2D` takes every thumb's rect, anchors on
+  the one nearest the pointer, and decides before/after in reading
+  order (row above → before, row below → after, same row → by the
+  centre's x). A one-axis midpoint scan only worked for the first row
+  of a wrapped grid. A vertical indicator bar sits at the slot; a
+  clone of the thumb follows the pointer; within `EDGE_AUTOSCROLL_PX
+  = 48` of the editor's top or bottom the container scrolls 12 px per
+  frame. `.rkr-multi-thumbs` has `touch-action: none` so a finger drag
+  on a thumb is not eaten by page scroll.
+- **Commit.** The node is found by walking `doc.descendants` and
+  matching `view.nodeDOM(pos)` to the placeholder (the same lookup the
+  delete path uses; `posAtDOM` is ambiguous on atoms). One
+  `setNodeMarkup` transaction per reorder, so one undo step.
+- **Keyboard.** Thumbs render with `tabindex="0"`, `role="button"` and
+  an `aria-label` naming their position. Arrows move one step;
+  Enter/Space synthesise a click, which is the tap-to-edit path.
+  After the transaction ProseMirror replaces the figure's DOM, so the
+  figure position is captured before the commit and the moved thumb
+  is re-resolved through `nodeDOM` on the next frame to restore focus.
+- **Announcement.** The `aria-live` region is a single element on
+  `<body>`, not a node inside the figure: the figure's `renderHTML`
+  re-runs on every transaction and would wipe any text written into
+  it. `data-reorder-status` is the hook the e2e asserts on.
+
+Cross-figure moves would need a two-node transaction, deletion of an
+emptied source figure and a slot-count rule for diptych/triptych
+targets; they stay in `DEFERRED.md`.
+
+## 8b. `@rkr/image-edit` and the standalone image editor
+
+`packages/image-edit` holds the image-edit code both the blog and
+`apps/image-pwa` run, so ops-model work lands once. The blog's server
+already imported the op model at runtime (`ops-validation`,
+`sidecar-types`, `image-constants` from the sidecar routes and the
+figure widget), which fixed most of the shape:
+
+- **npm workspaces, not tsconfig `paths`.** Node resolves
+  `@rkr/image-edit` at runtime only through a real
+  `node_modules/@rkr/image-edit`, which the workspace symlink
+  provides; `paths` affects `tsc` alone. The sibling `wicketmap`
+  monorepo gets by without the `workspaces` field because its shared
+  package is only ever bundled.
+- **Built JS, plus a `development` condition.** Node's strip-types
+  loader refuses to strip files under `node_modules`, so the package
+  emits `dist/{core,canvas}` (`tsc`, `rewriteRelativeImportExtensions`
+  turns the `.ts` specifiers into `.js`) and `exports` points there.
+  `npm test` and the c8 runs pass `--conditions=development`, which
+  maps both entries to `src/` so tests and coverage see source without
+  a build; `npm start` does not, so the server needs `build:packages`
+  first (`typecheck` and `build` run it).
+- **One package, two entries.** `.` is the DOM-free core, `./canvas`
+  the browser layer, each with its own tsconfig (`lib: es2023` vs.
+  `dom`). The server imports only `.`, so DOM types never enter its
+  resolution graph; `tsconfig.core.json` is what keeps core DOM-free.
+  The barrels re-export by name rather than `export *` so a leaf
+  cannot widen the public API by accident.
+- **Modals take an injected source.** `openCropper` and
+  `openPerspective` used to take an image id and reach for the blog's
+  `loadOriginal`/`getPipelineCache`/`setStatus`. In the package they
+  take a decoded `CanvasSource`, a `PipelineCache`, the edit state and
+  a status callback. The blog resolves those from its id-based loaders
+  in `image-edit-panel.ts` (`withCanvasSource`); the PWA hands over the
+  decoded `File`. The id/OPFS loaders, the LRU caches, the outbox and
+  everything server-sync stay in `src/admin/`.
+
+`apps/image-pwa` is glue over the package: file input or drop →
+`resizeForUpload` (the same EXIF bake and long-edge clamp as a blog
+upload) → `createImageBitmap` → `MemoryState`, a `LocalEditState`
+driven by the core mutators with no server, OPFS or cross-tab
+machinery → `PipelineCache.apply` into a data-URL preview → toolbar →
+`canvas.toBlob(mime, quality)` and an anchor download. The tilt slider
+is a `TiltSession`: each drag re-applies its absolute angle onto the
+ops as they stood when the drag began, so one drag is one undo step
+and an undo in between cannot leave the thumb out of step with the
+image, which a delta-per-event slider does. `sw.ts` is install-only,
+no caching, and is built to the app root rather than `dist/` because a
+worker's default scope is its own directory and must cover the
+manifest's `start_url` for the install prompt to appear.
+
+Gate coverage: `type-check` fans out to both workspaces, knip reads a
+`workspaces` map, biome globs by extension, and the org-hooks
+duplicate-type and no-reexport checks take `packages/*/src`. The dpdm
+circular check is still `src/**` only. The core is under the c8
+per-file gate; the canvas layer needs a DOM and is measured by the e2e
+V8 report instead (`TESTING.md`).
 
 ## 9. CLI: `bin/site-admin`
 
