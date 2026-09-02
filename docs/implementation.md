@@ -440,7 +440,7 @@ step N's signal is green.
 - [x] `bin/site-admin init` creates `$SITE_ROOT` directory tree if absent, runs migrations.
 - [x] `bin/server.js` starts a Fastify server, `GET /health` returns `200 {"ok":true}`.
 - [x] `node --test` runs and at least one trivial test passes.
-- [x] Apache vhost and systemd unit written; not deployed yet. (Both were static files then; they now come from `deploy/hooks/`, and the originals survive under `fly-deploy/` from the retired Fly demo.)
+- [x] Apache vhost and systemd unit written; not deployed yet. (Both were static files then; they now come from `deploy/hooks/`.)
 
 ### Step 2 — Originals + sidecars
 

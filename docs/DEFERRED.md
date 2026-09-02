@@ -59,6 +59,10 @@ Format: **item** — _revisit when:_ trigger.
   unit-tested; only the WebGL shell is uncovered. _Revisit when:_ a
   stable headless WebGL path or a Canvas2D fallback exists.
 
+## Deployment
+
+- **Apache fast path for `/video/` derivatives** — `deploy/hooks/apache.build.post.sh` rewrites only `/img/` to `cache/`; video mp4s and posters always proxy through Node. The rules existed in the pre-`deploy.sh` `fly-deploy/apache.conf` (git history before 2026-09-01). _Revisit when:_ video traffic is measurable on the VPS.
+
 ## Website (marketing site)
 
 - **No app CTA on the landing page** — `website/` ships no "Try it" / sign-up button because the app has no public entry flow. _Revisit when:_ the app gains a public entry/sign-up flow; wire CTAs in `index.html` nav/hero/footer to the app domain.
