@@ -226,6 +226,17 @@ bundle-size ratchet) and `ci/e2e` (Playwright, driven off
 `build:packages`/`build:admin`/`build:site`/`build:pwa`) in parallel,
 then runs one coverage ratchet over their combined lcov.
 
+The dispatch goes through simple-ci (`sci`). `ci/simple-ci.conf` lists
+the hosts in probe order, `gpu` over direct HTTP on port 8080 and then
+`home.rkroll.com` through an SSH tunnel, and the first reachable one
+runs both jobs from an rsynced copy of the working tree, which is why
+the gate first refuses a tree with unstaged changes. The jobs carry no
+secrets: each runs `npm install` on the host, and `ci/e2e` also
+installs chromium and needs ffmpeg/ffprobe there. Without an executable
+`sci` the tier runs `test:coverage` and `test:e2e` locally instead;
+with `sci` installed but no host reachable, the push fails and so does
+the commit.
+
 ## 7. Building the bundles
 
 ```bash

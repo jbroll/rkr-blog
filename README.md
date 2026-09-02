@@ -88,3 +88,4 @@ Full setup: [docs/developer-quickstart.md](./docs/developer-quickstart.md)
 - [docs/backlog.md](./docs/backlog.md) — outstanding work
 - [docs/DEFERRED.md](./docs/DEFERRED.md) — known gaps, deliberately unaddressed, with revisit triggers
 - [docs/WILLNOTFIX.md](./docs/WILLNOTFIX.md) — deliberate choices, not deferred work
+- [website/README.md](./website/README.md) — the static marketing site, deployed separately

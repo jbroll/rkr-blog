@@ -1,6 +1,6 @@
 # Post teaser — design / implementation plan
 
-Status: **implemented** (2026-05-16). See `docs/superpowers/plans/2026-05-16-teaser.md`. Note: the on-disk read path is `siteRoot/<post.path>` (path already includes `content/posts/`), not `siteRoot/content/<post.path>` as drafted in §3.
+Status: **implemented** (2026-05-16). Note: the on-disk read path is `siteRoot/<post.path>` (path already includes `content/posts/`), not `siteRoot/content/<post.path>` as drafted in §3.
 
 ## Summary
 

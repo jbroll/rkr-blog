@@ -6,8 +6,7 @@
 > admin shell offline launch and published-form preview at
 > `/admin/view/:slug` (§3, §1 goals). This document is the behavioral
 > spec; for the as-built code map see `implementation.md §11 Steps
-> 13–15`. The `IMPLEMENTATION.md` sibling is the per-task ledger of
-> how each phase was delivered.
+> 13–15`.
 
 What the application does when the network is gone, and how it recovers
 when the network returns. Implementation-agnostic — an alternate stack
@@ -146,9 +145,12 @@ Identity rules:
 Notes:
 
 - OPFS uses the FileSystemHandle API directly (not a hand-rolled VFS
-  over IndexedDB). Browser support: Chrome 86+, Safari 15.2+, Firefox
-  111+. Browsers below this floor get the v1 experience (no offline
-  authoring); the SPA detects support and surfaces "offline mode
+  over IndexedDB). Writes need `createSyncAccessHandle()` (Chrome
+  102+, Firefox 111+, Safari/iOS 17+), which only a worker can call;
+  see `implementation.md §8c`. Browsers below this floor get the v1
+  experience (no offline authoring). A browser that exposes
+  `getDirectory()` but cannot write (iOS 16) is caught at the first
+  write and treated the same way; the SPA surfaces "offline mode
   unavailable in this browser" rather than failing.
 - Sharding (`<aa>/<bb>/`) is omitted client-side. Browsers don't have
   the directory-fanout problem the server's bake/cache layouts solve

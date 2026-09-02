@@ -63,6 +63,8 @@ to add any of them.
 | `test/` | Unit + integration tests mirroring `src/` layout; e2e specs under `test/e2e/` |
 | `src/migrations/` | Numbered SQL migration files applied by `site-admin migrate` |
 | `deploy/` | Per-site deploy config (`common.conf`, `sites/*.conf`) and the `deploy.sh` hooks that generate the Apache vhost and patch the systemd unit |
+| `ci/` | The two jobs the pre-commit gate dispatches to the CI host (`test`, `e2e`) and `simple-ci.conf`, the host list. See `developer-quickstart.md §6` |
+| `website/` | The static marketing site at `rkr-blog-www.rkroll.com`, deployed on its own. Documented in `website/README.md` |
 
 The runtime data tree (`originals/`, `sidecars/`, `bakes/`, `cache/`,
 `content/`, `data/`) lives **outside** the repo, configured via
@@ -571,6 +573,51 @@ duplicate-type and no-reexport checks take `packages/*/src`. The dpdm
 circular check is still `src/**` only. The core is under the c8
 per-file gate; the canvas layer needs a DOM and is measured by the e2e
 V8 report instead (`TESTING.md`).
+
+## 8c. OPFS write worker
+
+`src/admin/opfs.ts` reads on the main thread and sends every write and
+delete to `src/admin/opfs-worker.ts`, a dedicated module worker. The
+split exists because `FileSystemFileHandle.createWritable()` is never
+wired up for OPFS handles on iOS: the method is on the prototype, so
+feature detection passes, and the first write throws a `TypeError` at
+runtime. `createSyncAccessHandle()` is the write API every browser with
+OPFS write support implements, and it exists only inside workers, so
+all writes go through one. Reads, `navigator.locks`, the schema code
+and everything above `opfs.ts` stay on the main thread unchanged.
+
+- **Protocol** (`opfs-worker-msg.ts`): `{id, op: 'write', path, data}`
+  or `{id, op: 'remove', path}`; the reply is `{id, ok: true}` or
+  `{id, ok: false, error, isCapabilityError, debug?}`. `id` is a
+  `crypto.randomUUID()` per request, so several requests can be in
+  flight with no queue. A Blob is converted to an `ArrayBuffer` on the
+  main thread and passed as a transferable.
+- **Atomic write.** The worker writes `.<name>.tmp-<uuid>` beside the
+  target through a sync access handle (`write` at 0, `flush`, `close`),
+  then `move()`s it over the final name. If the sync handle throws, it
+  retries the same temp file with `createWritable()`, which WebKit in
+  some contexts and the test mock accept where the sync handle raises a
+  `DOMException`. If both fail the temp file is removed and the error
+  rethrown with both descriptions in `debug`. `remove` is silent on a
+  missing file.
+- **Capability vs. transient errors.** A `TypeError` (sync handle
+  absent, iOS 16) or `DOMException` sets `isCapabilityError`; `opfs.ts`
+  then calls `markOpfsUnsupported()`, `ensureSchema` reports
+  `unsupported`, and the editor runs online-only. A failed script load
+  (`worker.onerror`) rejects every pending request and takes the same
+  path. Any other error rejects only its own request and reaches the
+  caller as an ordinary write failure.
+- **Build.** `build:admin` bundles the worker in a second esbuild call
+  without `--splitting`, so `static/admin/opfs-worker.js` is
+  self-contained. It is constructed from
+  `/admin/static/admin/opfs-worker.js` so it sits in the admin service
+  worker's scope (§8). `tsconfig.browser.json` lists `webworker` in
+  `lib` beside `dom`, so one typecheck covers both sides.
+- **Tests.** `atomicWriteWithRoot` and `removeFileWithRoot` take the
+  root handle as an argument and run in Node against
+  `test/admin/opfs-mock.ts`, whose `setNoSyncHandle` seam simulates the
+  missing API. The `onmessage` wiring runs only in e2e through the real
+  bundle.
 
 ## 9. CLI: `bin/site-admin`
 

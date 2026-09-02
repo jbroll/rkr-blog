@@ -34,6 +34,13 @@ manifest ships 192/512 icons plus a maskable variant from `icons/`.
 Both must reach `/opt/<app>/image-editor` or the browser withholds the
 install prompt without saying why.
 
+### Marketing site
+
+`website/` is a separate static deploy at `rkr-blog-www.rkroll.com`:
+`deploy.sh init website/` once DNS resolves, `deploy.sh update website/`
+after. It shares no vhost, unit, env, or OAuth client with the app.
+See `website/README.md`.
+
 ### Split public / admin hostnames
 
 roll-along serves both its hostnames directly — no canonical redirect —

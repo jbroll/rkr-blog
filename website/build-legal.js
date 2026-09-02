@@ -29,7 +29,7 @@ const brand = {
   websiteUrl: 'https://rkr-blog-www.rkroll.com',
 };
 
-// Shared palette + prose styling, matching index.html (crimson on warm paper).
+// Shared palette + prose styling, matching index.html (fuchsia accent on the rkroll-family canvas).
 const styles = `
         :root {
             --accent: #c026d3;
