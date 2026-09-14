@@ -2,7 +2,7 @@
 
 Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped. For one-line deferred format with revisit triggers see `DEFERRED.md`.
 
-Build hygiene, security, video, the WordPress permalink redirect and the dump converter's binary literals are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4 and the long-tail items in groups 5-8.
+Build hygiene, security, video, the WordPress permalink redirect and the dump converter's binary literals are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4 and the long-tail items in groups 5-9.
 
 ## 0. Build hygiene — quick wins (no spec needed)
 
@@ -72,6 +72,14 @@ Build hygiene, security, video, the WordPress permalink redirect and the dump co
 
 - [ ] **Owner / user management UI** — DB/CLI only. (`DEFERRED.md: UI`)
 - [ ] **User-facing theme picker** — env/ops only. (`DEFERRED.md: UI`)
+
+## 9. Spam classifier
+
+From the 2026-09-12 infra review. The evidence is in `~/Install/services.md`, under "The spam classifier timed out on every real comment".
+
+- [ ] **Requeue failed classify jobs with backoff.** `classifyComment` in `src/lib/spam-classifier.ts` retries at `(attempt - 1) * 200` ms, so all three attempts land within 0.6s and see the same contention when gpu is busy with chatterbox, gpt-sovits or openrouteservice. The jobs table has no auto-retry, so a failed comment queues for a human instead of being tried again later. Requeue the job with exponential backoff in minutes, capped at a few attempts, and cut the in-request retries to one or two. `SPAM_TIMEOUT_MS=120000` covers a 30s cold ollama load, but no fixed timeout covers a busy GPU.
+- [ ] **Log classify failures.** The `catch` in `src/lib/classify-handler.ts` writes the error only to the comment's `spam_reason` column, so a broken classifier is invisible unless someone opens the comment. One error log line puts it in the journal.
+- [ ] **Confirm a real comment classifies in production.** `SPAM_TIMEOUT_MS` went from 8000 to 120000 in `/etc/rkr-blog.env` on apps on 2026-09-12. No comment has arrived since 2026-05-16 to prove the path. That env file defines the variable twice and systemd takes the last, so edit both.
 
 ---
 
