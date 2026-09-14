@@ -93,7 +93,7 @@ test('stockademade site config uses the apex domain with a www alias', () => {
   const c = loadConfig('deploy/sites/stockademade.conf');
   assert.equal(c.APP_NAME, 'stockademade');
   assert.equal(c.DOMAIN_NAME, 'stockademade.com');
-  assert.equal(c.FASTIFY_APP_PORT, '3002');
+  assert.equal(c.FASTIFY_APP_PORT, '3004');
   assert.equal(c.APACHE_SERVER_ALIASES, 'www.stockademade.com');
 });
 

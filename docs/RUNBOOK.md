@@ -6,13 +6,12 @@ Day-to-day setup is in [`developer-quickstart.md`](developer-quickstart.md).
 ## Deploying a site
 
 Two sites are configured in this tree, each as its own systemd service.
-Only roll-along is deployed — stockademade has a site config and DNS
-pointing at the VPS but no vhost or service there yet.
+Both are deployed.
 
 | Site | Domain | `APP_NAME` | Port | Deployed |
 |---|---|---|---|---|
 | roll-along | roll-along.rkroll.com, admin on rkr-blog.rkroll.com | `rkr-blog` | 3000 | yes |
-| stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3002 | no |
+| stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3004 | yes |
 
 `APP_NAME` is `rkr-blog`, not `roll-along` — it names the unit and the
 server-side paths, and predates the domain move. Renaming it would move
@@ -87,8 +86,11 @@ the VPS, and an argument overrides it.
 
 ### First deploy of a new site
 
-1. Create a Google OAuth client for the host, authorised redirect URI
-   `https://<domain>/admin/auth/google/callback`. One client per host.
+1. Optional — create a Google OAuth client for the host, authorised
+   redirect URI `https://<domain>/admin/auth/google/callback`. One client
+   per host. Leaving `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` unset gives
+   a token-only site: the site boots, `/login` offers just the
+   `ADMIN_TOKEN` form, and the two `/admin/auth/google/*` routes 404.
    The Drive and OneDrive integrations add
    `https://<domain>/admin/integrations/gdrive/callback` and
    `.../onedrive/callback` on their own clients. All three derive from
@@ -101,11 +103,16 @@ the VPS, and an argument overrides it.
    (e.g. stockademade's `www.`), that alias needs an A record too:
    certbot requests the apex and the alias as one SAN cert, so a missing
    alias record fails issuance and leaves the vhost SSL-stripped.
-4. `DEPLOY_SH_CONF=deploy/sites/<site>.conf ~/src/deploy.sh/deploy.sh init .`
-5. Verify: the unit is active, `https://<domain>/` returns 200, Google
-   sign-in reaches the admin, and **the other sites are still up** — an
-   `init` reloads Apache, so a broken vhost takes every site with it.
-6. Confirm the sites are not sharing configuration:
+4. Pick a `FASTIFY_APP_PORT` no other service on the VPS claims — the
+   registry is `/var/lib/deploy.sh/ports`, one file per port named after
+   its owner. `deploy.sh` refuses the deploy on a conflict, but only
+   after it has already issued the cert and reloaded Apache.
+5. `DEPLOY_SH_CONF=deploy/sites/<site>.conf ~/src/deploy.sh/deploy.sh init .`
+6. Verify: the unit is active, `https://<domain>/` returns 200, admin
+   sign-in works (Google, or the `ADMIN_TOKEN` form on a token-only
+   site), and **the other sites are still up** — an `init` reloads
+   Apache, so a broken vhost takes every site with it.
+7. Confirm the sites are not sharing configuration:
 
    ```bash
    sudo grep -hE '^(SITE_ROOT|PUBLIC_BASE_URL|ADMIN_TOKEN|GOOGLE_CLIENT_ID)=' \

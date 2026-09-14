@@ -70,7 +70,10 @@ export default async function authRoutes(
   opts: AuthRoutesOpts
 ): Promise<void> {
   const { db, postLoginPath = '/', secureCookies = true } = opts;
-  const exchange = opts.exchange ?? makeGoogleExchange();
+  // A site with no Google client (bearer-token admin only) still has to
+  // boot. Same pattern as the gdrive/onedrive integrations in server.ts:
+  // unconfigured means the provider routes are absent, not a failed start.
+  const exchange = opts.exchange ?? tryMakeGoogleExchange();
   const verifier =
     opts.verifier ??
     /* c8 ignore next -- prod-only wiring; tests inject the verifier */
@@ -131,6 +134,7 @@ export default async function authRoutes(
       config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
     },
     async (_req, reply) => {
+      if (!exchange) return reply.code(404).send({ error: 'google sign-in not configured' });
       const state = generateState();
       const codeVerifier = generateCodeVerifier();
       const url = exchange.authorizationUrl(state, codeVerifier, ['openid', 'profile', 'email']);
@@ -156,6 +160,7 @@ export default async function authRoutes(
       config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
     },
     async (req, reply) => {
+      if (!exchange) return reply.code(404).send({ error: 'google sign-in not configured' });
       if (req.query.error) {
         return reply.code(400).send({ error: `provider error: ${req.query.error}` });
       }
@@ -264,7 +269,9 @@ export default async function authRoutes(
   // (POSTs aren't intercepted anyway).
   fastify.get('/login', async (_req, reply) => {
     const adminTokenAvailable = !!process.env.ADMIN_TOKEN;
-    return reply.type('text/html; charset=utf-8').send(renderLoginPage({ adminTokenAvailable }));
+    return reply
+      .type('text/html; charset=utf-8')
+      .send(renderLoginPage({ adminTokenAvailable, googleAvailable: !!exchange }));
   });
 
   // Failed-attempts ceiling — `@fastify/rate-limit` would count
@@ -381,8 +388,12 @@ function readCookie(req: FastifyRequest, name: string): string | undefined {
 // which is what was causing the "page reformats" flash on reload.
 // The page lives at /login (not /admin/login) so the public SW
 // caches it like any other anonymous route, no carve-out needed.
-function renderLoginPage(opts: { adminTokenAvailable: boolean }): string {
+function renderLoginPage(opts: { adminTokenAvailable: boolean; googleAvailable: boolean }): string {
   const site = siteConfig();
+  const googleLink = opts.googleAvailable
+    ? `<a class="google" href="/admin/auth/google/start">Sign in with Google</a>
+<hr/>`
+    : '';
   const tokenForm = opts.adminTokenAvailable
     ? `<form method="post" action="/admin/auth/token-login">
   <label>Admin token<input type="password" name="token" autocomplete="current-password" required/></label>
@@ -429,8 +440,7 @@ form button { padding: 0.5rem 1rem; font: inherit;
 <body>
 <main>
 <h1>Sign in to ${escapeText(site.title)}</h1>
-<a class="google" href="/admin/auth/google/start">Sign in with Google</a>
-<hr/>
+${googleLink}
 ${tokenForm}
 </main>
 </body>
@@ -438,15 +448,11 @@ ${tokenForm}
 }
 
 /* c8 ignore start -- production-only wiring; tests inject a stub TokenExchange */
-function makeGoogleExchange(): TokenExchange {
+function tryMakeGoogleExchange(): TokenExchange | undefined {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const baseUrl = adminBaseUrl();
-  if (!clientId || !clientSecret || !baseUrl) {
-    throw new Error(
-      'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and ADMIN_BASE_URL (or PUBLIC_BASE_URL) must be set'
-    );
-  }
+  if (!clientId || !clientSecret || !baseUrl) return undefined;
   const redirectURI = new URL('/admin/auth/google/callback', baseUrl).toString();
   const google = new Google(clientId, clientSecret, redirectURI);
   return {
