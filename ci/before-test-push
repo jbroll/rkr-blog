@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs locally before sci-tiered dispatches tier 2. The org-hooks writer records
+# the staged-source manifest (ci/.changed-files), without which the gate skips
+# the unit lcov, and the source tree the e2e baseline is anchored to
+# (ci/.source-tree).
+set -euo pipefail
+export ORG_HOOKS="${ORG_HOOKS:-$HOME/src/org-hooks}"
+exec "$ORG_HOOKS/ci/before-test-push.sh"

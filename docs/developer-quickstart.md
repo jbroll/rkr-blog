@@ -226,16 +226,43 @@ bundle-size ratchet) and `ci/e2e` (Playwright, driven off
 `build:packages`/`build:admin`/`build:site`/`build:pwa`) in parallel,
 then runs one coverage ratchet over their combined lcov.
 
-The dispatch goes through simple-ci (`sci`). `ci/simple-ci.conf` lists
-the hosts in probe order, `gpu` over direct HTTP on port 8080 and then
-`home.rkroll.com` through an SSH tunnel, and the first reachable one
-runs both jobs from an rsynced copy of the working tree, which is why
-the gate first refuses a tree with unstaged changes. The jobs carry no
-secrets: each runs `npm install` on the host, and `ci/e2e` also
-installs chromium and needs ffmpeg/ffprobe there. Without an executable
-`sci` the tier runs `test:coverage` and `test:e2e` locally instead;
-with `sci` installed but no host reachable, the push fails and so does
-the commit.
+The dispatch goes through simple-ci (`sci`).
+
+> **CI tests your working tree, not a commit.** `ci-rsync.sh` cuts a
+> worktree at `origin/HEAD` as a **base**, then rsyncs your entire local
+> working tree over it with `--delete`, filtered by `.gitignore` and
+> excluding `.git`. The tracked files under test therefore match yours
+> exactly, uncommitted edits, adds and deletes included. The base
+> contributes only `.git` and the gitignored artifacts the overlay does
+> not send, which is what makes `node_modules` survive between runs.
+>
+> The `Preparing worktree (detached HEAD <sha>)` line in the job output
+> names the **base**. Reading it as the revision under test is wrong, and
+> it is why a CI failure is never explained by "it ran against the parent
+> commit". To test a committed revision with no overlay, use the HTTP path
+> (`POST /job` with repo + commit + script).
+
+Host names come from `~/.config/simple-ci.conf`, not from this repo:
+`sci` sources `ci/simple-ci.conf` first for repo-specific settings, then
+layers the machine conf on top, which wins for hosts. Jobs land on the
+`s-ci` service user, whose SSH key is forced to `ci-rsync.sh` alone, and
+`ci-server` drops to that user to run them. The first reachable host runs
+both jobs, which is why the gate refuses a tree with unstaged changes.
+The jobs carry no secrets: each runs `npm install` on the host, and
+`ci/e2e` also installs chromium and needs ffmpeg/ffprobe there. Without
+an executable `sci` the tier runs `test:coverage` and `test:e2e` locally
+instead; with `sci` installed but no host reachable, the push fails and
+so does the commit.
+
+The coverage ratchet grades the union of this commit's unit lcov, its
+e2e lcov, and a full-run e2e baseline the CI host keeps (`sci baseline
+rkr-blog`). With no baseline, tier 2 fails. Refresh it after the e2e
+suite changes with `sci push rkr-blog/ci/e2e-map`, which runs `ci/e2e`
+and stores its lcov. Before dispatch, `ci/before-test-push` writes
+`ci/.changed-files`, the staged source list (when it is empty the gate
+fetches no unit lcov, so a changed `src/` file reads as uncovered), and
+`ci/.source-tree`, the tree the baseline is anchored to. Both are
+gitignored, so `ci/simple-ci.conf` force-includes them in the rsync.
 
 ## 7. Building the bundles
 

@@ -47,6 +47,11 @@ See `docs/developer-quickstart.md §4` for the project's coding conventions
   (`profiles/sci-tiered.yml`), not in this repo — there is no local
   pre-commit block by design. If it fails, fix the underlying issue —
   don't use `--no-verify` without a stated reason.
+- The gate's `tier2-gpu` jobs run on the CI host against an rsync of
+  your **working tree** laid over a base worktree — not against a
+  commit. The `Preparing worktree (detached HEAD <sha>)` line names
+  the base, so never explain a CI failure as "it tested the parent
+  commit". See `docs/developer-quickstart.md §6`.
 - Tests are exempt from the 500-line size cap; production source
   (`src/`, `bin/`) is not.
 - `npm run setup` is the one-shot bootstrap (idempotent: npm install

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Seeds the full-run e2e coverage baseline that sci-tiered's union ratchet
+# fetches with `sci baseline rkr-blog`; tier 2 fails without one. Push it by
+# hand after the e2e suite changes: `sci push rkr-blog/ci/e2e-map`.
+# ci/e2e already runs the whole suite, so it is the full run.
+set -euo pipefail
+WORKTREE="$(cd "$(dirname "$0")/.." && pwd)"; export WORKTREE
+export ORG_HOOKS="${ORG_HOOKS:-$HOME/src/org-hooks}"
+export CI_SETUP="$WORKTREE/ci/setup.sh"
+export CI_E2E_FULL_CMD="bash ci/e2e"
+exec "$ORG_HOOKS/ci/e2e-map.sh"

@@ -13,6 +13,10 @@ apps/image-pwa/sw.js.map
 
 # c8 coverage output (test:coverage / test:coverage:report)
 coverage/
+
+# Tier-2 manifests written locally by ci/before-test-push
+ci/.changed-files
+ci/.source-tree
 .nyc_output/
 *.log
 .DS_Store
