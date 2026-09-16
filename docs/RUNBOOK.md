@@ -5,13 +5,14 @@ Day-to-day setup is in [`developer-quickstart.md`](developer-quickstart.md).
 
 ## Deploying a site
 
-Two sites are configured in this tree, each as its own systemd service.
-Both are deployed.
+Three sites are configured in this tree, each as its own systemd service.
+All are deployed.
 
 | Site | Domain | `APP_NAME` | Port | Deployed |
 |---|---|---|---|---|
 | roll-along | roll-along.rkroll.com, admin on rkr-blog.rkroll.com | `rkr-blog` | 3000 | yes |
 | stockademade | stockademade.com (`www.` 301s to apex) | `stockademade` | 3004 | yes |
+| code | code.rkroll.com | `code` | 3005 | yes |
 
 `APP_NAME` is `rkr-blog`, not `roll-along` — it names the unit and the
 server-side paths, and predates the domain move. Renaming it would move

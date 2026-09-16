@@ -102,7 +102,24 @@ test('the image-editor PWA is opted into by rkr-blog alone', () => {
   assert.equal(loadConfig('deploy/sites/stockademade.conf').DEPLOY_IMAGE_EDITOR, undefined);
 });
 
-const SITES = ['rkr-blog', 'stockademade'];
+test('code site config uses the site domain with no aliases', () => {
+  const c = loadConfig('deploy/sites/code.conf');
+  assert.equal(c.APP_NAME, 'code');
+  assert.equal(c.DOMAIN_NAME, 'code.rkroll.com');
+  assert.equal(c.FASTIFY_APP_PORT, '3005');
+  assert.equal(c.SITE_ENV_FILE, 'deploy/sites/code.env');
+  assert.equal(c.FASTIFY_APP_SECRETS_FILE, 'deploy/secrets/code.secrets.env');
+  assert.equal(c.APACHE_SERVER_ALIASES, undefined);
+  assert.equal(c.APACHE_ADMIN_HOST, undefined);
+});
+
+test('code PUBLIC_BASE_URL matches the canonical domain', () => {
+  const c = loadConfig('deploy/sites/code.conf');
+  const publicBase = readEnvKeyAsHookWould('deploy/sites/code.env', 'PUBLIC_BASE_URL');
+  assert.equal(publicBase, `https://${c.DOMAIN_NAME}`);
+});
+
+const SITES = ['rkr-blog', 'stockademade', 'code'];
 
 test('every site config uses a distinct port, app name, env file, secrets file, and domain', () => {
   const sites = SITES.map((s) => loadConfig(`deploy/sites/${s}.conf`));
