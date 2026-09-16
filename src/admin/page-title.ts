@@ -16,6 +16,7 @@
 
 import type { Editor } from '@tiptap/core';
 
+import { postViewUrl } from '../lib/post-view-url.ts';
 import { $ } from './dom.ts';
 
 const BASE_TITLE_SUFFIX = ' — rkroll editor';
@@ -39,13 +40,13 @@ function render(): void {
   // when the user is focused on the editor.
   const saveBtn = document.querySelector('#rkroll-admin-toolbar button[data-cmd="save"]');
   if (saveBtn) saveBtn.classList.toggle('is-dirty', dirty);
-  // View link goes to /<slug>. Hidden until the post is saved so a
-  // brand-new draft doesn't show a dead "View" affordance.
+  // View link goes to the post's public URL. Hidden until the post
+  // is saved so a brand-new draft doesn't show a dead "View" affordance.
+  // System posts like _about and _site-banner have no public /:slug
+  // page, so postViewUrl maps them to their real public URL.
   const view = $<HTMLAnchorElement>('rkr-page-view');
   if (slug) {
-    // `_about` is a system post served at the clean /about URL
-    // (`_`-slugs 404 via /:slug by design); other slugs map 1:1.
-    view.href = slug === '_about' ? '/about' : `/${slug}`;
+    view.href = postViewUrl(slug);
     view.hidden = false;
   } else {
     view.removeAttribute('href');

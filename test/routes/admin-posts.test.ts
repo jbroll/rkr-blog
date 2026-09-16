@@ -64,6 +64,60 @@ test('POST /admin/posts saves a new post and reindexes (visible at /:slug)', asy
   assert.match(page.body, /<title>Hello world — [^<]+<\/title>/);
 });
 
+test('POST /admin/posts echoes viewUrl /:slug for regular slugs', async (t) => {
+  const { app } = await setup(t);
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: 'regular',
+      title: 'Regular',
+      status: 'published',
+      markdown: 'x\n'
+    }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json<{ slug: string; viewUrl: string }>();
+  assert.equal(body.viewUrl, '/regular');
+});
+
+test('POST /admin/posts echoes viewUrl /about for _about system slug', async (t) => {
+  const { app } = await setup(t);
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: '_about',
+      title: 'About',
+      status: 'published',
+      markdown: 'x\n'
+    }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json<{ slug: string; viewUrl: string }>();
+  assert.equal(body.viewUrl, '/about');
+});
+
+test('POST /admin/posts echoes viewUrl / for _site-banner system slug', async (t) => {
+  const { app } = await setup(t);
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/posts',
+    payload: {
+      slug: '_site-banner',
+      title: 'Site Banner',
+      status: 'published',
+      markdown: 'x\n'
+    }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json<{ slug: string; viewUrl: string }>();
+  assert.equal(body.viewUrl, '/');
+});
+
 test('POST /admin/posts accepts a body that opens with a horizontal rule', async (t) => {
   // Regression: proseToMarkdown emits `* * *` (not `---`) for a leading
   // horizontal rule precisely so the editor's own valid output isn't

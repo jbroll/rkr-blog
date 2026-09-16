@@ -38,7 +38,7 @@ import { readIdempotencyKey } from './admin-idempotency.ts';
 import { registerImageLookupRoutes } from './admin-image-lookup.ts';
 import { registerUrlImportRoute, type UrlFetcher } from './admin-import-url.ts';
 import { registerPostBundleRoutes } from './admin-post-bundle.ts';
-import { isValidSlug } from './admin-post-consts.ts';
+import { isValidSlug, postViewUrl } from './admin-post-consts.ts';
 import { registerAdminPostsRoutes } from './admin-posts.ts';
 import { prewarmVariants } from './admin-prewarm.ts';
 import { wipeRuntimeData } from './admin-reset-helpers.ts';
@@ -281,7 +281,7 @@ export default async function adminRoutes(
       }
       if (onDisk === file) {
         const updatedAt = postUpdatedAt(fs.statSync(finalPath).mtimeMs);
-        const body = { slug, inserted, updatedAt, date: dateStr };
+        const body = { slug, inserted, updatedAt, date: dateStr, viewUrl: postViewUrl(slug) };
         if (idem && opts.db) {
           recordApplied(opts.db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
           pruneApplied(opts.db);
@@ -349,7 +349,7 @@ export default async function adminRoutes(
     // Also echo back the resolved date so new posts can populate
     // the date input without a full reload.
     const updatedAt = postUpdatedAt(fs.statSync(finalPath).mtimeMs);
-    const body = { slug, inserted, updatedAt, date: dateStr };
+    const body = { slug, inserted, updatedAt, date: dateStr, viewUrl: postViewUrl(slug) };
     if (idem && opts.db) {
       recordApplied(opts.db, idem.deviceId, idem.seq, 200, JSON.stringify(body));
       pruneApplied(opts.db);

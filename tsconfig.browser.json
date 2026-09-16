@@ -31,6 +31,7 @@
   "include": [
     "src/admin/**/*.ts",
     "src/site/**/*.ts",
+    "src/lib/post-view-url.ts",
     "src/lib/prose-markdown.ts",
     "src/lib/safe-url.ts"
   ],

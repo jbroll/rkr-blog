@@ -284,6 +284,10 @@ Both are created on demand from the settings page (`Create About` /
 `/about` with no `_about.md` on disk is a 404, as is a malformed one.
 `import-wp about` seeds `_about` from a WordPress page.
 
+Because `GET /:slug` is always 404 for system posts, the editor's
+**Save & view** button (and the `view →` links) redirects to the real
+public URL: `/about` for `_about` and `/` for `_site-banner`.
+
 ### Editor
 
 A single `figure` node type — the author sees image / gallery /

@@ -978,6 +978,12 @@ absent and redirects to `/admin/editor?slug=_about`; the settings page
 shows `Create About` or `Edit About →` by file presence, mirroring the
 banner link.
 
+`postViewUrl` in `src/lib/post-view-url.ts` centralises the public URL
+mapping so `POST /admin/posts` returns a `viewUrl`, the editor navigates
+there after **Save & view**, and the editor heading's **View →** link
+points at the right public URL (`/about` for `_about`, `/` for
+`_site-banner`).
+
 `import-wp about` calls `pushPage` (`src/lib/wp-push.ts`), which
 fetches a WordPress page (`fetchWpPage`, `wp/v2/pages?slug=`) and sets
 `page.slug = '_about'` before handing it to the same `pushWpObject`

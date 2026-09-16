@@ -26,6 +26,7 @@ interface SaveResponse {
   inserted: boolean;
   updatedAt: string;
   date?: string;
+  viewUrl: string;
 }
 
 /** A non-2xx response from the direct online POST. Carries the HTTP
@@ -151,7 +152,7 @@ export async function handleSave(
       // serve the pre-save HTML via the SWR cache. Best-effort —
       // anonymous browsers without a controlling SW just skip.
       navigator.serviceWorker?.controller?.postMessage({ type: 'rkr-pages-flush' });
-      setStatusWithLink(`saved /${result.slug}`, `/${result.slug}`, 'view →');
+      setStatusWithLink(`saved /${result.slug}`, result.viewUrl, 'view →');
       // Transient bottom-right toast — the status line is small and
       // muted; the toast is the "you can stop holding your breath"
       // signal. Keep the status line update too for screen readers
@@ -159,10 +160,10 @@ export async function handleSave(
       showToast({
         kind: 'success',
         text: `Saved /${result.slug}`,
-        action: { href: `/${result.slug}`, label: 'View →' }
+        action: { href: result.viewUrl, label: 'View →' }
       });
       markClean();
-      opts?.navigate?.(`/${result.slug}`);
+      opts?.navigate?.(result.viewUrl);
       return;
     } catch (err) {
       // A 409 here means the user is editing a STALE post (a newer

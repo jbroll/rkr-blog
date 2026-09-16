@@ -4,6 +4,8 @@
 // status flip), and admin-post-bundle.ts (offline pin) all agree
 // without three drift-prone copies.
 
+import { postViewUrl as postViewUrlImpl } from '../lib/post-view-url.ts';
+
 // Hard cap on slug length + allowed character set. The cap matches
 // what the public-side URL list can render inline at a glance;
 // SLUG_RE mirrors the kebab-case derivation in src/lib/slugify.ts
@@ -23,3 +25,8 @@ const SLUG_RE = /^(_[a-z][a-z0-9-]*|[a-z0-9][a-z0-9-]*)$/i;
 export function isValidSlug(s: unknown): s is string {
   return typeof s === 'string' && s.length > 0 && s.length <= MAX_SLUG_LENGTH && SLUG_RE.test(s);
 }
+
+/** Public URL to visit after saving a post with the given slug.
+ * Re-exported from lib/post-view-url.ts so the browser bundle can
+ * share the same mapping (e.g. the editor heading's "View →" link). */
+export const postViewUrl = postViewUrlImpl;
