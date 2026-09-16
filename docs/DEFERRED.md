@@ -63,9 +63,9 @@ Format: **item** — _revisit when:_ trigger.
   keep each page non-empty and the walk runs to its page-200 guard. Affects
   both live sites. _Revisit when:_ the walk is needed as a real check; scope
   the slug grep to `<ul class="post-list">`.
-- **stockademade has no Google OAuth client** — admin access is
-  `ADMIN_TOKEN` only. _Revisit when:_ someone other than the token holder
-  needs to sign in.
+- **stockademade and code.rkroll.com have no Google OAuth client** — admin
+  access is `ADMIN_TOKEN` only. _Revisit when:_ someone other than the token
+  holder needs to sign in.
 - **Apache fast path for `/video/` derivatives** — `deploy/hooks/apache.build.post.sh` rewrites only `/img/` to `cache/`; video mp4s and posters always proxy through Node. The rules existed in the pre-`deploy.sh` `fly-deploy/apache.conf` (git history before 2026-09-01). _Revisit when:_ video traffic is measurable on the VPS.
 
 ## Website (marketing site)
