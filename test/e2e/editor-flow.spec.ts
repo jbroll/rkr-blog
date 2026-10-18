@@ -2935,6 +2935,301 @@ test('gdrive: video mode over images shows the video empty state', async ({ page
 });
 
 // ---------------------------------------------------------------------------
+// gphotos.ts — Google Photos session picking integration
+// ---------------------------------------------------------------------------
+
+function setupGphotosRoutes(
+  page: import('@playwright/test').Page,
+  opts: { connected?: boolean; done?: boolean; pollFails?: boolean; importStatus?: number } = {}
+): void {
+  const connected = opts.connected ?? true;
+  const done = opts.done ?? true;
+  const importStatus = opts.importStatus ?? 200;
+
+  void page.route('**/admin/integrations/gphotos/status', (route) =>
+    route.fulfill({ json: { connected } })
+  );
+  void page.route('**/admin/integrations/gphotos/sessions', (route) =>
+    route.fulfill({
+      json: { sessionId: 'sess-1', pickerUri: 'https://photos.google.com/picker/sess-1' }
+    })
+  );
+  void page.route('**/admin/integrations/gphotos/sessions/sess-1', (route) => {
+    if (route.request().method() === 'DELETE') {
+      return route.fulfill({ json: { deleted: true } });
+    }
+    if (opts.pollFails) return route.fulfill({ status: 500, body: 'poll failed' });
+    return route.fulfill({ json: { done } });
+  });
+  void page.route('**/admin/integrations/gphotos/sessions/sess-1/media-items**', (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: 'mi-photo-1',
+            name: 'beach.jpg',
+            mimeType: 'image/jpeg',
+            thumbnailUrl:
+              'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+            kind: 'image'
+          },
+          {
+            id: 'mi-video-1',
+            name: 'clip.mp4',
+            mimeType: 'video/mp4',
+            thumbnailUrl:
+              'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+            kind: 'video'
+          }
+        ],
+        nextPageToken: null
+      }
+    })
+  );
+  const importHandler = (route: import('@playwright/test').Route) => {
+    if (importStatus === 200) {
+      return route.fulfill({
+        json: {
+          id: 'ddd444eee555fff66677788899900',
+          bytes: 1500,
+          ext: 'webp',
+          deduplicated: false
+        }
+      });
+    }
+    return route.fulfill({ status: importStatus, body: 'import failed' });
+  };
+  void page.route('**/admin/import/gphotos', importHandler);
+  void page.route('**/admin/import/gphotos/video', (route) =>
+    route.fulfill({
+      json: {
+        id: 'eee555fff66677788899900011122',
+        bytes: 2000,
+        ext: 'mp4',
+        deduplicated: false,
+        videoUrl: '/video/eee555fff66677788899900011122.abc.mp4',
+        posterUrl: '/video/poster/eee555fff66677788899900011122.def.jpg'
+      }
+    })
+  );
+}
+
+async function stubPhotosOpener(page: import('@playwright/test').Page): Promise<string[]> {
+  const opened: string[] = [];
+  await page.exposeFunction('__rkrPhotosOpened', (url: string) => {
+    opened.push(url);
+  });
+  await page.addInitScript(() => {
+    (window as unknown as { open: unknown }).open = (url: string) => {
+      void (window as unknown as { __rkrPhotosOpened: (u: string) => void }).__rkrPhotosOpened(url);
+      return null;
+    };
+  });
+  return opened;
+}
+
+test('gphotos: happy path — open picker, poll, select, import → figure inserted', async ({
+  page
+}) => {
+  setupGphotosRoutes(page);
+  const opened = await stubPhotosOpener(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="photos"]').click();
+
+  const browser = page.locator('#rkr-cloud-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+
+  await browser.locator('.rkr-cb-open-photos').click();
+  expect(opened[0] ?? '').toMatch(/^https:\/\/photos\.google\.com\/picker\//);
+
+  const fileBtn = browser.locator('button.rkr-cb-file').filter({ hasText: 'beach.jpg' });
+  await expect(fileBtn).toBeVisible({ timeout: 10_000 });
+  await fileBtn.click();
+  await browser.locator('.rkr-cb-import').click();
+
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/imported.*Google Photos/, {
+    timeout: 10_000
+  });
+  await expect(browser).toHaveCount(0);
+
+  const figureIds = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed');
+    let ids = '';
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'figure') ids = String((node.attrs as { ids: string }).ids ?? '');
+    });
+    return ids;
+  });
+  expect(figureIds).toContain('ddd444eee555fff66677788899900');
+});
+
+test('gphotos: not connected + dismiss → no dialog opened', async ({ page }) => {
+  setupGphotosRoutes(page, { connected: false });
+
+  page.on('dialog', (dialog) => void dialog.dismiss());
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="photos"]').click();
+
+  await page.waitForTimeout(500);
+  await expect(page.locator('#rkr-cloud-browser')).toHaveCount(0);
+});
+
+test('gphotos: cancel deletes the session and resolves []', async ({ page }) => {
+  setupGphotosRoutes(page);
+  await stubPhotosOpener(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="photos"]').click();
+
+  const browser = page.locator('#rkr-cloud-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+
+  const deleted = page.waitForRequest(
+    (req) => req.method() === 'DELETE' && req.url().includes('/sessions/sess-1')
+  );
+  await browser.locator('.rkr-cb-cancel').click();
+  await deleted;
+  await expect(browser).toHaveCount(0);
+});
+
+test('gphotos: poll failure shows error with retry', async ({ page }) => {
+  setupGphotosRoutes(page, { pollFails: true });
+  await stubPhotosOpener(page);
+
+  const sessionPosts: string[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && req.url().includes('/integrations/gphotos/sessions')) {
+      sessionPosts.push(req.url());
+    }
+  });
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="photos"]').click();
+
+  const browser = page.locator('#rkr-cloud-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+  await expect(browser.locator('div.rkr-cb-status')).toContainText(/could not check/i, {
+    timeout: 10_000
+  });
+
+  // Retry creates a fresh session (second POST).
+  await browser.locator('.rkr-cb-retry').click();
+  await expect.poll(() => sessionPosts.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
+});
+
+test('gphotos: video mode imports through /video into a video node', async ({ page }) => {
+  setupGphotosRoutes(page);
+  await stubPhotosOpener(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  await page.getByRole('button', { name: '+Video' }).click();
+  const sourcePicker = page.locator('#rkr-source-picker');
+  await expect(sourcePicker).toBeVisible();
+  await sourcePicker.locator('button[data-source="photos"]').click();
+
+  const browser = page.locator('#rkr-cloud-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+
+  // Image picks are hidden in video mode.
+  await expect(browser.locator('button.rkr-cb-file').filter({ hasText: 'beach.jpg' })).toHaveCount(
+    0
+  );
+  const fileBtn = browser.locator('button.rkr-cb-file').filter({ hasText: 'clip.mp4' });
+  await expect(fileBtn).toBeVisible({ timeout: 10_000 });
+  await fileBtn.click();
+  await browser.locator('.rkr-cb-import').click();
+
+  await expect(page.locator('#rkroll-admin-status')).toContainText(/imported.*Google Photos/, {
+    timeout: 10_000
+  });
+
+  const videoId = await page.evaluate(() => {
+    const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
+    if (!ed) throw new Error('window.__rkrEditor not exposed');
+    let found: string | null = null;
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'video') found = (node.attrs as { ids?: string }).ids ?? null;
+    });
+    return found;
+  });
+  expect(videoId).toBe('eee555fff66677788899900011122');
+});
+
+test('gphotos: hostile filename renders as inert text', async ({ page }) => {
+  const evil = '<img src=x onerror=window.__rkrXss=1>';
+  await page.route('**/admin/integrations/gphotos/status', (route) =>
+    route.fulfill({ json: { connected: true } })
+  );
+  await page.route('**/admin/integrations/gphotos/sessions', (route) =>
+    route.fulfill({
+      json: { sessionId: 'sess-1', pickerUri: 'https://photos.google.com/picker/sess-1' }
+    })
+  );
+  await page.route('**/admin/integrations/gphotos/sessions/sess-1', (route) =>
+    route.fulfill({ json: { done: true } })
+  );
+  await page.route('**/admin/integrations/gphotos/sessions/sess-1/media-items**', (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          { id: 'mi-evil', name: evil, mimeType: 'image/jpeg', thumbnailUrl: null, kind: 'image' }
+        ],
+        nextPageToken: null
+      }
+    })
+  );
+  await stubPhotosOpener(page);
+
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const pickerDialog = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Image', exact: true }).click();
+  await expect(pickerDialog).toBeVisible();
+  await pickerDialog.locator('button[data-source="photos"]').click();
+
+  const browser = page.locator('#rkr-cloud-browser');
+  await expect(browser).toBeVisible({ timeout: 5_000 });
+  await expect(browser.locator('button.rkr-cb-file').filter({ hasText: evil })).toBeVisible({
+    timeout: 10_000
+  });
+  expect(
+    await page.evaluate(() => (window as unknown as { __rkrXss?: number }).__rkrXss)
+  ).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
 // onedrive.ts — OneDrive browser integration
 // ---------------------------------------------------------------------------
 

@@ -9,6 +9,7 @@ import type { Editor } from '@tiptap/core';
 import { $, setStatus } from './dom';
 import type { FigureAttrs } from './figure-node';
 import { pickFromDrive } from './integrations/gdrive';
+import { pickFromPhotos } from './integrations/gphotos';
 import { pickFromOneDrive } from './integrations/onedrive';
 import { hydrateLocalThumbs } from './local-thumb';
 import { uploadMany } from './pick';
@@ -108,6 +109,7 @@ export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
     let ids: string[] = [];
     try {
       if (choice === 'drive') ids = await pickFromDrive();
+      else if (choice === 'photos') ids = await pickFromPhotos();
       else ids = await pickFromOneDrive();
     } catch (err) {
       setStatus(`${choice} error: ${(err as Error).message}`);

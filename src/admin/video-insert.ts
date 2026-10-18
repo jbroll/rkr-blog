@@ -6,6 +6,7 @@ import type { Editor } from '@tiptap/core';
 
 import { $, setStatus } from './dom';
 import { pickFromDriveVideo } from './integrations/gdrive';
+import { pickFromPhotosVideo } from './integrations/gphotos';
 import { pickFromOneDriveVideo } from './integrations/onedrive';
 import { openSourcePicker, type SourceChoice } from './source-picker';
 import { uploadVideo } from './video-upload';
@@ -62,6 +63,7 @@ export function createVideoInserter(deps: VideoInserterDeps): VideoInserter {
     let ids: string[] = [];
     try {
       if (choice === 'drive') ids = await pickFromDriveVideo();
+      else if (choice === 'photos') ids = await pickFromPhotosVideo();
       else ids = await pickFromOneDriveVideo();
     } catch (err) {
       setStatus(`${choice} error: ${(err as Error).message}`);

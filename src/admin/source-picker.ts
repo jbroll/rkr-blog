@@ -7,7 +7,7 @@
 import { openModal } from './dialog-focus.ts';
 
 /** The source a user picked, or null for Cancel/Escape/close. */
-export type SourceChoice = 'local' | 'drive' | 'onedrive' | null;
+export type SourceChoice = 'local' | 'drive' | 'onedrive' | 'photos' | null;
 
 /** Show the source-picker dialog and resolve with the chosen source
  * (or null on cancel). Resolves and detaches every listener on all exit
@@ -40,7 +40,9 @@ export function openSourcePicker(dialog: HTMLDialogElement): Promise<SourceChoic
       const src = btn.dataset.source ?? '';
       // Settle before closing so a synchronously-dispatched `close`
       // event can't win the race and resolve null instead of the pick.
-      settle(src === 'local' || src === 'drive' || src === 'onedrive' ? src : null);
+      settle(
+        src === 'local' || src === 'drive' || src === 'onedrive' || src === 'photos' ? src : null
+      );
       dialog.close();
     };
     const onCancel = (): void => settle(null);

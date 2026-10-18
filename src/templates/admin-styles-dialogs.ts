@@ -397,4 +397,12 @@ export const ADMIN_CSS_DIALOGS = `  .rkr-meta { display: grid; grid-template-col
   }
   .rkr-cb-import:hover:not(:disabled) { background: var(--rkr-link-hover); border-color: var(--rkr-link-hover); }
   .rkr-cb-import:disabled { opacity: .5; cursor: default; }
+  .rkr-cb-open-photos {
+    padding: .35rem .85rem; cursor: pointer;
+    background: var(--rkr-link); color: var(--rkr-bg);
+    border: 1px solid var(--rkr-link); border-radius: 4px; font-weight: 600;
+  }
+  .rkr-cb-open-photos:hover:not(:disabled) { background: var(--rkr-link-hover); border-color: var(--rkr-link-hover); }
+  .rkr-cb-open-photos:disabled { opacity: .5; cursor: default; }
+  .rkr-cb-retry { padding: .35rem .85rem; cursor: pointer; }
 `;

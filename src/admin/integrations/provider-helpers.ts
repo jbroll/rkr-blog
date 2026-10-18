@@ -29,10 +29,17 @@ export async function ensureConnected(
  * and parse the JSON body as the caller's response shape. Shared by the
  * file and video wrappers below. */
 async function postImport<T>(importUrl: string, fileId: string): Promise<T> {
+  return postImportBody<T>(importUrl, { fileId });
+}
+
+/** POST an arbitrary JSON body to a provider import endpoint, throwing
+ * on a non-2xx. Used by session-based importers (Photos) whose body
+ * carries more than a fileId. */
+export async function postImportBody<T>(importUrl: string, body: unknown): Promise<T> {
   const res = await fetch(importUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fileId })
+    body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
   return (await res.json()) as T;

@@ -201,6 +201,7 @@ ${siteHead(data.site, { isAdmin: true })}
   <div class="rkr-source-actions">
     <button type="button" data-source="local">From this computer…</button>
     <button type="button" data-source="drive">From Google Drive…</button>
+    <button type="button" data-source="photos">From Google Photos…</button>
     <button type="button" data-source="onedrive">From OneDrive…</button>
     <button type="button" data-source="">Cancel</button>
   </div>
