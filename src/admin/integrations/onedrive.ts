@@ -1,362 +1,88 @@
-// OneDrive file browser. Opens a modal dialog that lists the user's
-// OneDrive folders and files (images by default; videos for the +Video
-// picker's mediaKind:'video' mode) via the server-side Graph API wrapper
-// (/admin/integrations/onedrive/files). The File Picker v8 SDK approach
-// was abandoned: the consumer picker (onedrive.live.com) requires
-// Live/MSA identity tokens that an Entra server-side OAuth flow cannot
-// produce for personal accounts.
+// OneDrive file browser: thin adapter over the shared cloud browser
+// dialog. Listing/import endpoints keep their exact shapes; the dialog
+// chrome lives in provider-browser.ts.
 
-import { openModal } from '../dialog-focus.ts';
-import { setStatus } from '../dom.ts';
-import { ensureConnected, importCloudFile, importCloudVideo } from './provider-helpers.ts';
+import { type CloudFilesPage, type MediaKind, pickFromCloudProvider } from './provider-browser.ts';
+import { importCloudFile, importCloudVideo } from './provider-helpers.ts';
 
-interface BrowseItem {
-  id: string;
-  name: string;
-  type: 'file' | 'folder';
-  mimeType?: string;
-  thumbnailUrl?: string;
-}
-
-interface FilesPage {
-  items: BrowseItem[];
+interface BrowsePage {
+  items: Array<{
+    id: string;
+    name: string;
+    type: 'file' | 'folder';
+    mimeType?: string;
+  }>;
   nextLink: string | null;
 }
 
-async function listOneDriveFiles(
+async function listPage(
   folderId: string,
-  nextLink: string | undefined,
-  kind: 'image' | 'video'
-): Promise<FilesPage> {
+  cursor: string | null,
+  kind: MediaKind
+): Promise<CloudFilesPage> {
   const params: Record<string, string> = { folderId };
-  if (nextLink) params.nextLink = nextLink;
+  if (cursor) params.nextLink = cursor;
   // Only sent for video; the server defaults any other request to image.
   if (kind === 'video') params.kind = 'video';
   const res = await fetch(`/admin/integrations/onedrive/files?${new URLSearchParams(params)}`);
   if (!res.ok) throw new Error(`files: ${res.status} ${await res.text()}`);
-  return (await res.json()) as FilesPage;
+  const page = (await res.json()) as BrowsePage;
+  return { items: page.items, cursor: page.nextLink };
+}
+
+async function fetchThumbnailUrl(itemId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `/admin/integrations/onedrive/thumbnail?${new URLSearchParams({ itemId })}`
+    );
+    if (!res.ok) return null;
+    const { url } = (await res.json()) as { url: string };
+    return url ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Open the OneDrive file browser modal → pick images → resolve with
  * the resulting stored image ids. Cancelled / no-pick resolves []. */
-export async function pickFromOneDrive(): Promise<string[]> {
-  return pickFromOneDriveInternal('image');
+export function pickFromOneDrive(): Promise<string[]> {
+  return pickFromCloudProvider(
+    {
+      providerName: 'OneDrive',
+      dialogTitle: 'OneDrive',
+      rootName: 'OneDrive',
+      statusUrl: '/admin/integrations/onedrive/status',
+      connectUrl: '/admin/integrations/onedrive/connect',
+      emptyCopy: 'No images or folders here.',
+      emptyVideoCopy: 'No videos or folders here.',
+      listPage,
+      fetchThumbnailUrl,
+      importFile: (fileId) => importCloudFile('/admin/import/onedrive', fileId),
+      importVideo: (fileId) => importCloudVideo('/admin/import/onedrive/video', fileId)
+    },
+    'image'
+  );
 }
 
 /**
  * OneDrive video variant of pickFromOneDrive: the browser lists only
  * videos + folders and import goes through the /video endpoint.
  */
-export async function pickFromOneDriveVideo(): Promise<string[]> {
-  return pickFromOneDriveInternal('video');
-}
-
-async function pickFromOneDriveInternal(mediaKind: 'image' | 'video'): Promise<string[]> {
-  const connected = await ensureConnected(
-    'OneDrive',
-    '/admin/integrations/onedrive/status',
-    '/admin/integrations/onedrive/connect'
+export function pickFromOneDriveVideo(): Promise<string[]> {
+  return pickFromCloudProvider(
+    {
+      providerName: 'OneDrive',
+      dialogTitle: 'OneDrive',
+      rootName: 'OneDrive',
+      statusUrl: '/admin/integrations/onedrive/status',
+      connectUrl: '/admin/integrations/onedrive/connect',
+      emptyCopy: 'No images or folders here.',
+      emptyVideoCopy: 'No videos or folders here.',
+      listPage,
+      fetchThumbnailUrl,
+      importFile: (fileId) => importCloudFile('/admin/import/onedrive', fileId),
+      importVideo: (fileId) => importCloudVideo('/admin/import/onedrive/video', fileId)
+    },
+    'video'
   );
-  if (!connected) return [];
-  return openOneDriveBrowser({ mediaKind });
-}
-
-type Crumb = { id: string; name: string };
-
-// Persists across picker openings within the same page session
-let savedCrumbs: Crumb[] = [{ id: 'root', name: 'OneDrive' }];
-
-function openOneDriveBrowser(opts: { mediaKind: 'image' | 'video' }): Promise<string[]> {
-  const { mediaKind } = opts;
-  return new Promise<string[]>((resolve) => {
-    // Build dialog DOM
-    const dialog = document.createElement('dialog');
-    dialog.id = 'rkr-onedrive-browser';
-
-    const head = document.createElement('div');
-    head.className = 'rkr-od-head';
-    const titleEl = document.createElement('span');
-    titleEl.className = 'rkr-od-title';
-    titleEl.textContent = 'OneDrive';
-    const breadcrumbEl = document.createElement('nav');
-    breadcrumbEl.className = 'rkr-od-breadcrumb';
-    breadcrumbEl.setAttribute('aria-label', 'folder path');
-    head.append(titleEl, breadcrumbEl);
-
-    const grid = document.createElement('div');
-    grid.className = 'rkr-od-grid';
-    grid.setAttribute('role', 'list');
-
-    const foot = document.createElement('div');
-    foot.className = 'rkr-od-foot';
-    const statusEl = document.createElement('span');
-    statusEl.className = 'rkr-od-status';
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'rkr-od-cancel';
-    cancelBtn.textContent = 'Cancel';
-    foot.append(statusEl, cancelBtn);
-
-    dialog.append(head, grid, foot);
-    document.body.append(dialog);
-
-    const crumbs: Crumb[] = [...savedCrumbs];
-    const selected = new Map<string, BrowseItem>(); // itemId → item
-    let loading = false;
-    let currentNextLink: string | null = null;
-    let currentFolderId = 'root';
-
-    // Import button — shown in footer when selection is non-empty
-    const importBtn = document.createElement('button');
-    importBtn.type = 'button';
-    importBtn.className = 'rkr-od-import';
-    importBtn.style.display = 'none';
-    importBtn.textContent = 'Import';
-    foot.prepend(importBtn);
-
-    function updateImportBtn() {
-      const n = selected.size;
-      if (n === 0) {
-        importBtn.style.display = 'none';
-      } else {
-        importBtn.style.display = '';
-        importBtn.textContent = `Import ${n}`;
-      }
-    }
-
-    function renderBreadcrumb() {
-      breadcrumbEl.innerHTML = '';
-      crumbs.forEach((crumb, i) => {
-        if (i > 0) {
-          const sep = document.createElement('span');
-          sep.className = 'rkr-od-sep';
-          sep.setAttribute('aria-hidden', 'true');
-          sep.textContent = ' › ';
-          breadcrumbEl.append(sep);
-        }
-        if (i === crumbs.length - 1) {
-          const span = document.createElement('span');
-          span.className = 'rkr-od-crumb';
-          span.textContent = crumb.name;
-          breadcrumbEl.append(span);
-        } else {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'rkr-od-crumb-btn';
-          btn.textContent = crumb.name;
-          btn.dataset.idx = String(i);
-          breadcrumbEl.append(btn);
-        }
-      });
-    }
-
-    // The grid only auto-loads more on scroll (grid.addEventListener below),
-    // so when a page is short its content may not overflow and no scroll
-    // ever fires. Render an explicit affordance whenever a nextLink is
-    // pending, so a sparse page (e.g. video mode over a folder of photos)
-    // can always reach the rest of the folder.
-    function renderLoadMore() {
-      grid.querySelector('.rkr-od-loadmore')?.remove();
-      if (!currentNextLink) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'rkr-od-loadmore';
-      btn.textContent = 'Load more';
-      btn.addEventListener('click', () => void loadMore());
-      grid.append(btn);
-    }
-
-    async function loadMore() {
-      if (loading || !currentNextLink) return;
-      loading = true;
-      try {
-        const page = await listOneDriveFiles(currentFolderId, currentNextLink, mediaKind);
-        currentNextLink = page.nextLink;
-        for (const item of page.items) {
-          grid.append(makeItemEl(item));
-        }
-        renderLoadMore();
-      } catch (err) {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'rkr-od-placeholder rkr-od-error';
-        errDiv.textContent = (err as Error).message;
-        grid.append(errDiv);
-      } finally {
-        loading = false;
-      }
-    }
-
-    async function loadFolder(folderId: string) {
-      if (loading) return;
-      loading = true;
-      currentFolderId = folderId;
-      currentNextLink = null;
-      grid.innerHTML = '';
-      const placeholder = document.createElement('div');
-      placeholder.className = 'rkr-od-placeholder';
-      placeholder.textContent = 'Loading…';
-      grid.append(placeholder);
-      statusEl.textContent = '';
-      try {
-        const page = await listOneDriveFiles(folderId, undefined, mediaKind);
-        grid.innerHTML = '';
-        currentNextLink = page.nextLink;
-        // Only claim the folder is empty when there is no further page:
-        // an empty filtered page with a nextLink still has items to show
-        // behind the Load more affordance.
-        if (page.items.length === 0 && !page.nextLink) {
-          const empty = document.createElement('div');
-          empty.className = 'rkr-od-placeholder';
-          empty.textContent =
-            mediaKind === 'video' ? 'No videos or folders here.' : 'No images or folders here.';
-          grid.append(empty);
-        }
-        for (const item of page.items) {
-          grid.append(makeItemEl(item));
-        }
-        renderLoadMore();
-      } catch (err) {
-        grid.innerHTML = '';
-        const errDiv = document.createElement('div');
-        errDiv.className = 'rkr-od-placeholder rkr-od-error';
-        errDiv.textContent = (err as Error).message;
-        grid.append(errDiv);
-      } finally {
-        loading = false;
-      }
-    }
-
-    grid.addEventListener('scroll', () => {
-      if (!currentNextLink || loading) return;
-      if (grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 200) {
-        void loadMore();
-      }
-    });
-
-    async function fetchThumbnail(itemId: string, thumb: HTMLDivElement) {
-      try {
-        const res = await fetch(
-          `/admin/integrations/onedrive/thumbnail?${new URLSearchParams({ itemId })}`
-        );
-        if (!res.ok) return;
-        const { url } = (await res.json()) as { url: string };
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = '';
-        thumb.innerHTML = '';
-        thumb.append(img);
-      } catch {
-        // leave placeholder icon
-      }
-    }
-
-    function makeItemEl(item: BrowseItem): HTMLButtonElement {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = `rkr-od-item rkr-od-${item.type}`;
-      if (selected.has(item.id)) el.classList.add('rkr-od-selected');
-
-      const thumb = document.createElement('div');
-      thumb.className = 'rkr-od-thumb';
-      if (item.type === 'folder') {
-        thumb.innerHTML =
-          '<svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32" aria-hidden="true"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>';
-      } else {
-        thumb.innerHTML =
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/></svg>';
-        void fetchThumbnail(item.id, thumb);
-      }
-      el.append(thumb);
-
-      const name = document.createElement('span');
-      name.className = 'rkr-od-name';
-      name.textContent = item.name;
-      el.append(name);
-
-      if (item.type === 'folder') {
-        el.addEventListener('click', () => {
-          crumbs.push({ id: item.id, name: item.name });
-          savedCrumbs = [...crumbs];
-          renderBreadcrumb();
-          void loadFolder(item.id);
-        });
-      } else {
-        el.addEventListener('click', () => {
-          if (selected.has(item.id)) {
-            selected.delete(item.id);
-            el.classList.remove('rkr-od-selected');
-          } else {
-            selected.set(item.id, item);
-            el.classList.add('rkr-od-selected');
-          }
-          updateImportBtn();
-        });
-      }
-      return el;
-    }
-
-    async function importSelected() {
-      if (selected.size === 0) return;
-      const items = [...selected.values()];
-      importBtn.disabled = true;
-      cancelBtn.disabled = true;
-      grid.querySelectorAll<HTMLButtonElement>('.rkr-od-item').forEach((b) => {
-        b.disabled = true;
-      });
-      const ids: string[] = [];
-      const importItem =
-        mediaKind === 'video'
-          ? (id: string) => importCloudVideo('/admin/import/onedrive/video', id)
-          : (id: string) => importCloudFile('/admin/import/onedrive', id);
-      for (const item of items) {
-        statusEl.textContent = `Importing ${item.name}…`;
-        try {
-          const r = await importItem(item.id);
-          ids.push(r.id);
-        } catch (err) {
-          statusEl.textContent = (err as Error).message;
-          importBtn.disabled = false;
-          cancelBtn.disabled = false;
-          grid.querySelectorAll<HTMLButtonElement>('.rkr-od-item').forEach((b) => {
-            b.disabled = false;
-          });
-          return;
-        }
-      }
-      const noun = mediaKind === 'video' ? 'video' : 'image';
-      setStatus(`imported ${ids.length} ${noun}${ids.length === 1 ? '' : 's'} from OneDrive`);
-      closeDialog(ids);
-    }
-
-    function closeDialog(ids: string[]) {
-      savedCrumbs = [...crumbs];
-      dialog.close();
-      dialog.remove();
-      resolve(ids);
-    }
-
-    importBtn.addEventListener('click', () => void importSelected());
-    breadcrumbEl.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.rkr-od-crumb-btn');
-      if (!btn) return;
-      const idx = Number(btn.dataset.idx);
-      crumbs.splice(idx + 1);
-      savedCrumbs = [...crumbs];
-      renderBreadcrumb();
-      const cur = crumbs[crumbs.length - 1];
-      if (cur) void loadFolder(cur.id);
-    });
-
-    cancelBtn.addEventListener('click', () => closeDialog([]));
-    dialog.addEventListener('cancel', () => {
-      savedCrumbs = [...crumbs];
-      resolve([]);
-      dialog.remove();
-    });
-
-    renderBreadcrumb();
-    openModal(dialog);
-    const cur = crumbs[crumbs.length - 1];
-    if (cur) void loadFolder(cur.id);
-  });
 }
