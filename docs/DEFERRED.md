@@ -58,6 +58,7 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Deployment
 
+- **Remove unused `GET /admin/integrations/gdrive/picker-config`** — the Picker SDK is gone; no client references it. _Revisit when:_ touching the gdrive integration routes.
 - **`scripts/walk-site.sh` pagination never terminates** — it treats every
   root-relative `href` as a post slug, so chrome links (`/about`, `/login`)
   keep each page non-empty and the walk runs to its page-200 guard. Affects
