@@ -616,6 +616,57 @@ test('GET /admin/integrations/onedrive/files: returns items from Graph', async (
   assert.equal(body.items[0]?.name, 'photo.jpg');
 });
 
+test('GET /admin/integrations/onedrive/files: kind=video returns videos + folders only', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const mixedFetcher = (async (_url: string | URL) =>
+    new Response(
+      JSON.stringify({
+        value: [
+          { id: 'fold1', name: 'Clips', folder: {} },
+          { id: 'img1', name: 'photo.png', file: { mimeType: 'image/png' } },
+          { id: 'vid1', name: 'clip.mp4', file: { mimeType: 'video/mp4' } }
+        ]
+      }),
+      { headers: { 'content-type': 'application/json' } }
+    )) as typeof fetch;
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    onedrive: { exchange: stubExchange(), graphFetcher: mixedFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
+  });
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/onedrive/files?folderId=root&kind=video',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json<{ items: Array<{ id: string }> }>();
+  assert.deepEqual(
+    body.items.map((i) => i.id),
+    ['fold1', 'vid1']
+  );
+});
+
 test('GET /admin/integrations/onedrive/files: 400 when Graph call fails', async (t) => {
   const root = freshSiteRoot(t);
   const db = open(path.join(root, 'data', 'site.db'));

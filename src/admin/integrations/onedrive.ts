@@ -1,5 +1,6 @@
-// OneDrive image browser. Opens a modal dialog that lists the user's
-// OneDrive folders and images via the server-side Graph API wrapper
+// OneDrive file browser. Opens a modal dialog that lists the user's
+// OneDrive folders and files (images by default; videos for the +Video
+// picker's mediaKind:'video' mode) via the server-side Graph API wrapper
 // (/admin/integrations/onedrive/files). The File Picker v8 SDK approach
 // was abandoned: the consumer picker (onedrive.live.com) requires
 // Live/MSA identity tokens that an Entra server-side OAuth flow cannot
@@ -7,7 +8,7 @@
 
 import { openModal } from '../dialog-focus.ts';
 import { setStatus } from '../dom.ts';
-import { ensureConnected, importCloudFile } from './provider-helpers.ts';
+import { ensureConnected, importCloudFile, importCloudVideo } from './provider-helpers.ts';
 
 interface BrowseItem {
   id: string;
@@ -22,9 +23,15 @@ interface FilesPage {
   nextLink: string | null;
 }
 
-async function listOneDriveFiles(folderId: string, nextLink?: string): Promise<FilesPage> {
+async function listOneDriveFiles(
+  folderId: string,
+  nextLink: string | undefined,
+  kind: 'image' | 'video'
+): Promise<FilesPage> {
   const params: Record<string, string> = { folderId };
   if (nextLink) params.nextLink = nextLink;
+  // Only sent for video; the server defaults any other request to image.
+  if (kind === 'video') params.kind = 'video';
   const res = await fetch(`/admin/integrations/onedrive/files?${new URLSearchParams(params)}`);
   if (!res.ok) throw new Error(`files: ${res.status} ${await res.text()}`);
   return (await res.json()) as FilesPage;
@@ -33,13 +40,28 @@ async function listOneDriveFiles(folderId: string, nextLink?: string): Promise<F
 /** Open the OneDrive file browser modal → pick images → resolve with
  * the resulting stored image ids. Cancelled / no-pick resolves []. */
 export async function pickFromOneDrive(): Promise<string[]> {
+  return pickFromOneDriveInternal('image');
+}
+
+/**
+ * OneDrive video variant of pickFromOneDrive: the browser lists only
+ * videos + folders and import goes through the /video endpoint.
+ *
+ * @public — wired into the editor entry bundle by Task 3's +Video source
+ * picker; knip can't trace the dynamic picker path.
+ */
+export async function pickFromOneDriveVideo(): Promise<string[]> {
+  return pickFromOneDriveInternal('video');
+}
+
+async function pickFromOneDriveInternal(mediaKind: 'image' | 'video'): Promise<string[]> {
   const connected = await ensureConnected(
     'OneDrive',
     '/admin/integrations/onedrive/status',
     '/admin/integrations/onedrive/connect'
   );
   if (!connected) return [];
-  return openOneDriveBrowser();
+  return openOneDriveBrowser({ mediaKind });
 }
 
 type Crumb = { id: string; name: string };
@@ -47,7 +69,8 @@ type Crumb = { id: string; name: string };
 // Persists across picker openings within the same page session
 let savedCrumbs: Crumb[] = [{ id: 'root', name: 'OneDrive' }];
 
-function openOneDriveBrowser(): Promise<string[]> {
+function openOneDriveBrowser(opts: { mediaKind: 'image' | 'video' }): Promise<string[]> {
+  const { mediaKind } = opts;
   return new Promise<string[]>((resolve) => {
     // Build dialog DOM
     const dialog = document.createElement('dialog');
@@ -134,7 +157,7 @@ function openOneDriveBrowser(): Promise<string[]> {
       if (loading || !currentNextLink) return;
       loading = true;
       try {
-        const page = await listOneDriveFiles(currentFolderId, currentNextLink);
+        const page = await listOneDriveFiles(currentFolderId, currentNextLink, mediaKind);
         currentNextLink = page.nextLink;
         for (const item of page.items) {
           grid.append(makeItemEl(item));
@@ -161,13 +184,14 @@ function openOneDriveBrowser(): Promise<string[]> {
       grid.append(placeholder);
       statusEl.textContent = '';
       try {
-        const page = await listOneDriveFiles(folderId);
+        const page = await listOneDriveFiles(folderId, undefined, mediaKind);
         grid.innerHTML = '';
         currentNextLink = page.nextLink;
         if (page.items.length === 0) {
           const empty = document.createElement('div');
           empty.className = 'rkr-od-placeholder';
-          empty.textContent = 'No images or folders here.';
+          empty.textContent =
+            mediaKind === 'video' ? 'No videos or folders here.' : 'No images or folders here.';
           grid.append(empty);
         }
         for (const item of page.items) {
@@ -262,10 +286,14 @@ function openOneDriveBrowser(): Promise<string[]> {
         b.disabled = true;
       });
       const ids: string[] = [];
+      const importItem =
+        mediaKind === 'video'
+          ? (id: string) => importCloudVideo('/admin/import/onedrive/video', id)
+          : (id: string) => importCloudFile('/admin/import/onedrive', id);
       for (const item of items) {
         statusEl.textContent = `Importing ${item.name}…`;
         try {
-          const r = await importCloudFile('/admin/import/onedrive', item.id);
+          const r = await importItem(item.id);
           ids.push(r.id);
         } catch (err) {
           statusEl.textContent = (err as Error).message;
@@ -277,7 +305,8 @@ function openOneDriveBrowser(): Promise<string[]> {
           return;
         }
       }
-      setStatus(`imported ${ids.length} image${ids.length === 1 ? '' : 's'} from OneDrive`);
+      const noun = mediaKind === 'video' ? 'video' : 'image';
+      setStatus(`imported ${ids.length} ${noun}${ids.length === 1 ? '' : 's'} from OneDrive`);
       closeDialog(ids);
     }
 

@@ -299,7 +299,7 @@ export default async function integrationsOnedriveRoutes(
     return reply.send({ removed });
   });
 
-  fastify.get<{ Querystring: { folderId?: string; nextLink?: string } }>(
+  fastify.get<{ Querystring: { folderId?: string; nextLink?: string; kind?: string } }>(
     '/admin/integrations/onedrive/files',
     { ...guard },
     async (req, reply) => {
@@ -311,10 +311,14 @@ export default async function integrationsOnedriveRoutes(
       if (!fresh) return reply.code(404).send({ error: 'onedrive not connected' });
       const folderId = (req.query.folderId ?? 'root').trim() || 'root';
       const nextLink = req.query.nextLink?.trim() || undefined;
+      // The video picker asks for kind=video; anything else keeps the
+      // image behaviour (folders + image/*). See listOneDriveFolder.
+      const kind: 'image' | 'video' = req.query.kind === 'video' ? 'video' : 'image';
       try {
         const page = await listOneDriveFolder(fresh.access_token, folderId, {
           ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {}),
-          ...(nextLink ? { nextLink } : {})
+          ...(nextLink ? { nextLink } : {}),
+          kind
         });
         return page;
       } catch (err) {

@@ -39,9 +39,10 @@ interface OneDriveBrowseItem {
 }
 
 /**
- * List the direct children of a OneDrive folder, filtered to image files
- * and subfolders. folderId 'root' targets the drive root. Items are
- * returned folders-first, both groups sorted by name.
+ * List the direct children of a OneDrive folder, filtered to files of
+ * `opts.kind` (`'image'` by default, `'video'` for the video picker) and
+ * subfolders. folderId 'root' targets the drive root. Items are returned
+ * folders-first, both groups sorted by name.
  */
 export interface OneDriveFolderPage {
   items: OneDriveBrowseItem[];
@@ -51,7 +52,7 @@ export interface OneDriveFolderPage {
 export async function listOneDriveFolder(
   accessToken: string,
   folderId: string,
-  opts: { fetcher?: typeof fetch; nextLink?: string } = {}
+  opts: { fetcher?: typeof fetch; nextLink?: string; kind?: 'image' | 'video' } = {}
 ): Promise<OneDriveFolderPage> {
   const fetchImpl = opts.fetcher ?? fetch;
   let fetchUrl: string;
@@ -92,8 +93,9 @@ export async function listOneDriveFolder(
     '@odata.nextLink'?: string;
   };
   const raw = data.value ?? [];
+  const mimePrefix = opts.kind === 'video' ? 'video/' : 'image/';
   const items: OneDriveBrowseItem[] = raw
-    .filter((item) => item.folder != null || item.file?.mimeType?.startsWith('image/'))
+    .filter((item) => item.folder != null || item.file?.mimeType?.startsWith(mimePrefix))
     .map((item) => ({
       id: item.id ?? '',
       name: item.name ?? '',

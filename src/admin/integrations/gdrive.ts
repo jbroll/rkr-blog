@@ -1,14 +1,14 @@
 // Google Drive picker integration. Loads gapi + picker SDKs lazily,
 // exchanges a per-user access token, and imports each picked file via
-// POST /admin/import/gdrive (which streams Drive bytes through the
-// same ingestStream as a direct upload).
+// POST /admin/import/gdrive (or /admin/import/gdrive/video for the video
+// picker, which streams Drive bytes through the video ingest path).
 //
 // The Drive route uses the drive.file scope, so only files the user
 // creates or opens via the picker are reachable. Tokens and picker
 // config arrive from per-user OAuth state stored in oauth_tokens.
 
 import { setStatus } from '../dom';
-import { ensureConnected, importCloudFile } from './provider-helpers.ts';
+import { ensureConnected, importCloudFile, importCloudVideo } from './provider-helpers.ts';
 
 interface GdriveAccessToken {
   accessToken: string;
@@ -37,6 +37,9 @@ interface PickerResponseShape {
 interface PickerInstance {
   setVisible(visible: boolean): void;
 }
+interface DocsViewInstance {
+  setMimeTypes(mimeTypes: string): DocsViewInstance;
+}
 interface PickerBuilder {
   addView(view: unknown): PickerBuilder;
   setOAuthToken(token: string): PickerBuilder;
@@ -48,8 +51,8 @@ interface PickerBuilder {
 interface GoogleGlobal {
   picker: {
     PickerBuilder: new () => PickerBuilder;
-    DocsView: new (viewId?: unknown) => unknown;
-    ViewId: { DOCS_IMAGES: unknown };
+    DocsView: new (viewId?: unknown) => DocsViewInstance;
+    ViewId: { DOCS: unknown; DOCS_IMAGES: unknown; DOCS_VIDEOS?: unknown };
     Action: { PICKED: string; CANCEL: string; ERROR: string };
   };
 }
@@ -109,12 +112,16 @@ async function gdrivePickerConfig(): Promise<GdrivePickerConfig> {
 }
 
 /**
- * Open Drive picker → on selection, import each chosen file and resolve
- * with the resulting stored image ids. Cancelled / no-pick resolves []
- * so callers can branch without a try/catch. The caller decides how to
- * insert into the editor (new figure vs append to an existing one).
+ * Open the Drive picker with `makeView`'s view → on selection, import each
+ * chosen file via `importFile` and resolve with the resulting stored ids.
+ * Cancelled / no-pick resolves [] so callers can branch without a
+ * try/catch. The caller decides how to insert into the editor (new figure
+ * vs append, image vs video).
  */
-export async function pickFromDrive(): Promise<string[]> {
+async function pickFromDriveInternal(
+  makeView: (picker: GoogleGlobal['picker']) => unknown,
+  importFile: (fileId: string) => Promise<{ id: string; bytes: number }>
+): Promise<string[]> {
   const connected = await ensureConnected(
     'Google Drive',
     '/admin/integrations/gdrive/status',
@@ -131,7 +138,7 @@ export async function pickFromDrive(): Promise<string[]> {
   // Picker is callback-driven; bridge to a Promise so the caller can
   // await ids. CANCEL / no-pick resolves an empty array.
   return new Promise<string[]>((resolve) => {
-    const view = new picker.DocsView(picker.ViewId.DOCS_IMAGES);
+    const view = makeView(picker);
     let builder = new picker.PickerBuilder()
       .addView(view)
       .setOAuthToken(token.accessToken)
@@ -153,7 +160,7 @@ export async function pickFromDrive(): Promise<string[]> {
         for (const doc of data.docs ?? []) {
           setStatus(`importing ${doc.name ?? doc.id} from Drive…`);
           try {
-            const r = await importCloudFile('/admin/import/gdrive', doc.id);
+            const r = await importFile(doc.id);
             ids.push(r.id);
             setStatus(`imported ${doc.name ?? doc.id} (${r.bytes} bytes)`);
           } catch (err) {
@@ -165,4 +172,35 @@ export async function pickFromDrive(): Promise<string[]> {
       .build();
     instance.setVisible(true);
   });
+}
+
+/** Open the Drive picker restricted to images and import each pick. */
+export function pickFromDrive(): Promise<string[]> {
+  return pickFromDriveInternal(
+    (picker) => new picker.DocsView(picker.ViewId.DOCS_IMAGES),
+    (fileId) => importCloudFile('/admin/import/gdrive', fileId)
+  );
+}
+
+/**
+ * Drive video variant of pickFromDrive: restricted to video files and
+ * imported through the /video endpoint so the returned ids point at
+ * stored video masters.
+ *
+ * @public — wired into the editor entry bundle by Task 3's +Video source
+ * picker; knip can't trace the dynamic picker path.
+ */
+export function pickFromDriveVideo(): Promise<string[]> {
+  return pickFromDriveInternal(driveVideoView, (fileId) =>
+    importCloudVideo('/admin/import/gdrive/video', fileId)
+  );
+}
+
+/** Prefer Picker's dedicated video view; fall back to a DocsView limited
+ * to video mime types on SDK builds that don't expose DOCS_VIDEOS. */
+function driveVideoView(picker: GoogleGlobal['picker']): unknown {
+  if (picker.ViewId.DOCS_VIDEOS) {
+    return new picker.DocsView(picker.ViewId.DOCS_VIDEOS);
+  }
+  return new picker.DocsView(picker.ViewId.DOCS).setMimeTypes('video/*');
 }

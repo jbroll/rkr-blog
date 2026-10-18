@@ -1,6 +1,7 @@
 // Shared helpers for cloud storage provider integrations (gdrive, onedrive).
 
 import type { UploadResponse } from '../upload.ts';
+import type { VideoUploadResponse } from '../video-upload.ts';
 
 /**
  * Fetch the provider's /status endpoint and redirect to its connect flow
@@ -33,4 +34,19 @@ export async function importCloudFile(importUrl: string, fileId: string): Promis
   });
   if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
   return (await res.json()) as UploadResponse;
+}
+
+/** POST a fileId to a provider *video* import endpoint and return the
+ * VideoUploadResponse (id + cache URLs for the rendered master/poster). */
+export async function importCloudVideo(
+  importUrl: string,
+  fileId: string
+): Promise<VideoUploadResponse> {
+  const res = await fetch(importUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fileId })
+  });
+  if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
+  return (await res.json()) as VideoUploadResponse;
 }
