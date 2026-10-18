@@ -10,6 +10,7 @@
 //   GET  /admin/integrations/gdrive/access-token  → fresh access token for Picker
 //   POST /admin/integrations/gdrive/disconnect    → drop the row
 //   POST /admin/import/gdrive                     → fetch + ingest a file by id
+//   POST /admin/import/gdrive/video               → fetch + ingest a video by id
 
 import { Transform } from 'node:stream';
 
@@ -31,10 +32,12 @@ import { ingestStream } from '../lib/originals.ts';
 import { safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import {
+  ingestRemoteVideo,
   type ProviderCallbackQuery,
   type ProviderImportBody,
   REMOTE_IMPORT_MAX_BYTES,
-  streamImageWithCap
+  streamImageWithCap,
+  videoImportError
 } from './integrations-shared.ts';
 
 const PROVIDER = 'gdrive';
@@ -277,6 +280,59 @@ export default async function integrationsGdriveRoutes(
         const code = /exceeded limit/.test(msg) ? 413 : 400;
         req.log.warn({ err, fileId }, 'gdrive ingest failed');
         return reply.code(code).send({ error: msg });
+      }
+    }
+  );
+
+  // POST /admin/import/gdrive/video — cloud video ingest, mirroring the
+  // image handler above but for video/* bytes. The fetched body streams
+  // through ingestVideoStream (ffprobe caps + sha256 dedup + sidecar) and
+  // then renderVideoDerivative, so the returned cache URLs are immediately
+  // servable. Caps come from resolveVideoCaps(siteRoot); the byte pre-cap
+  // aborts an oversized source mid-stream rather than buffering it whole.
+  // Error mapping: cap violation / streamed-limit → 413, probe → 422.
+  fastify.post<{ Body: ProviderImportBody }>(
+    '/admin/import/gdrive/video',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const fileId = req.body?.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim()) {
+        return reply.code(400).send({ error: 'fileId is required' });
+      }
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(412).send({ error: 'gdrive not connected' });
+
+      let drive: Awaited<ReturnType<typeof fetchDriveFile>>;
+      try {
+        drive = await fetchDriveFile(fresh.access_token, fileId, {
+          ...(opts.driveFetcher ? { fetcher: opts.driveFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, fileId }, 'drive fetch failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+
+      if (!/^video\//i.test(drive.contentType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be video/*; got ${drive.contentType}` });
+      }
+
+      try {
+        return await ingestRemoteVideo({
+          body: drive.body,
+          siteRoot,
+          kind: 'gdrive',
+          originalName: drive.file.name
+        });
+      } catch (err) {
+        const { status, message } = videoImportError(err as Error);
+        req.log.warn({ err, fileId }, 'gdrive video ingest failed');
+        return reply.code(status).send({ error: message });
       }
     }
   );

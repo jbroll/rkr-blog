@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,7 @@ import { ensureSecretKey, readSecretKey } from '../../src/lib/secrets.ts';
 import { createSession } from '../../src/lib/sessions.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { findOrCreateOAuthUser, inviteEmail } from '../../src/lib/users.ts';
+import { readVideoSidecar } from '../../src/lib/video-sidecar.ts';
 import type { TokenExchange } from '../../src/routes/auth.ts';
 import type { DriveTokenExchange } from '../../src/routes/integrations-gdrive.ts';
 import { buildApp } from '../../src/server.ts';
@@ -581,6 +583,208 @@ test('GET /admin/integrations/gdrive/fetch 415s on non-image content-type', asyn
     headers: { cookie: sessionCookie }
   });
   assert.equal(res.statusCode, 415);
+});
+
+// ---- POST /admin/import/gdrive/video ---------------------------------
+
+/** Response body for the cloud video-import routes (image shape + urls). */
+interface VideoImportBody extends ImportResponseBody {
+  videoUrl: string;
+  posterUrl: string;
+}
+
+/** Fresh temp dir used as a PATH entry holding fake ffmpeg/ffprobe. */
+function freshBinDir(t: TestContext): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-gdrive-vid-bin-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+/** Fake ffprobe reporting the given probe, ignoring the input file. */
+function writeFakeProbe(
+  dir: string,
+  opts: { width?: number; height?: number; secs?: number; format?: string } = {}
+): void {
+  const { width = 640, height = 480, secs = 10, format = 'mov,mp4,m4a,3gp,3g2,mj2' } = opts;
+  const json = JSON.stringify({
+    streams: [
+      { index: 0, codec_type: 'video', codec_name: 'h264', width, height, duration: String(secs) }
+    ],
+    format: { format_name: format, duration: String(secs) }
+  });
+  fs.writeFileSync(path.join(dir, 'ffprobe'), `#!/bin/sh\ncat <<'EOF'\n${json}\nEOF\n`, {
+    mode: 0o755
+  });
+}
+
+/** Fake ffmpeg: writes fake bytes to its last arg (the output path). */
+function writeFakeFfmpeg(dir: string): void {
+  fs.writeFileSync(
+    path.join(dir, 'ffmpeg'),
+    ['#!/bin/sh', 'for last do :; done', 'printf \'fake-video\' > "$last"', 'exit 0'].join('\n'),
+    { mode: 0o755 }
+  );
+}
+
+function prependPath(t: TestContext, dir: string): void {
+  const prev = process.env.PATH;
+  process.env.PATH = prev ? `${dir}:${prev}` : dir;
+  t.after(() => {
+    if (prev === undefined) delete process.env.PATH;
+    else process.env.PATH = prev;
+  });
+}
+
+/** Persist a videoCaps override so resolveVideoCaps picks it up. */
+function writeVideoCaps(root: string, caps: { maxBytes?: number; maxDurationMs?: number }): void {
+  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'config', 'site.json'), JSON.stringify({ videoCaps: caps }));
+}
+
+/** Connected app + a Drive fetcher serving the given bytes as one file. */
+async function connectedVideoApp(
+  t: TestContext,
+  driveFetcher: typeof fetch,
+  caps?: { maxBytes?: number; maxDurationMs?: number }
+) {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  if (caps) writeVideoCaps(root, caps);
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    gdrive: { exchange: stubExchange(), driveFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  const cb = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_gdrive_state=${stateCookie}` }
+  });
+  assert.equal(cb.statusCode, 302);
+  return { root, app, sessionCookie };
+}
+
+test('POST /admin/import/gdrive/video ingests video/* via ingestVideoStream', async (t) => {
+  const binDir = freshBinDir(t);
+  writeFakeProbe(binDir, { width: 1280, height: 720, secs: 8 });
+  writeFakeFfmpeg(binDir);
+  prependPath(t, binDir);
+
+  const bytes = Buffer.from('fake-mp4-drive-bytes');
+  const expectedId = crypto.createHash('sha256').update(bytes).digest('hex');
+  const { root, app, sessionCookie } = await connectedVideoApp(
+    t,
+    stubDriveFetcher('clip.mp4', 'video/mp4', bytes)
+  );
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/gdrive/video',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'fake-id' }
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json<VideoImportBody>();
+  assert.match(body.id, /^[0-9a-f]{64}$/);
+  assert.equal(body.id, expectedId);
+  assert.equal(body.bytes, bytes.length);
+  assert.equal(body.ext, 'mp4');
+  assert.equal(body.deduplicated, false);
+  assert.match(body.videoUrl, new RegExp(`^/video/${expectedId}\\.[0-9a-f]{12}\\.mp4$`));
+  assert.match(body.posterUrl, new RegExp(`^/video/poster/${expectedId}\\.[0-9a-f]{12}\\.jpg$`));
+
+  const sidecar = await readVideoSidecar(root, expectedId);
+  assert.equal(sidecar?.source.kind, 'gdrive');
+  assert.equal(sidecar?.source.originalName, 'clip.mp4');
+});
+
+test('POST /admin/import/gdrive/video 415s on non-video content-type', async (t) => {
+  const { app, sessionCookie } = await connectedVideoApp(
+    t,
+    stubDriveFetcher('cat.png', 'image/png', Buffer.from('not-a-video'))
+  );
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/gdrive/video',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'fake-id' }
+  });
+  assert.equal(res.statusCode, 415);
+  assert.match(res.json<ErrorBody>().error, /content-type must be video\/\*/);
+});
+
+test('POST /admin/import/gdrive/video 413s when the source exceeds the video cap', async (t) => {
+  const binDir = freshBinDir(t);
+  writeFakeProbe(binDir, { secs: 10 });
+  writeFakeFfmpeg(binDir);
+  prependPath(t, binDir);
+
+  const { app, sessionCookie } = await connectedVideoApp(
+    t,
+    stubDriveFetcher('long.mp4', 'video/mp4', Buffer.from('fake-mp4-drive-bytes')),
+    { maxDurationMs: 1000 }
+  );
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/gdrive/video',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'fake-id' }
+  });
+  assert.equal(res.statusCode, 413);
+  assert.match(res.json<ErrorBody>().error, /maxDurationMs/);
+});
+
+test('POST /admin/import/gdrive/video 413s when the stream exceeds the byte pre-cap', async (t) => {
+  const { app, sessionCookie } = await connectedVideoApp(
+    t,
+    stubDriveFetcher('huge.mp4', 'video/mp4', Buffer.from('way-more-than-one-byte')),
+    { maxBytes: 1 }
+  );
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/gdrive/video',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'fake-id' }
+  });
+  assert.equal(res.statusCode, 413);
+  assert.match(res.json<ErrorBody>().error, /exceeded limit/);
+});
+
+test('POST /admin/import/gdrive/video 412s when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/gdrive/video',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: { fileId: 'fake-id' }
+  });
+  assert.equal(res.statusCode, 412);
+  assert.match(res.json<ErrorBody>().error, /not connected/);
+});
+
+test('POST /admin/import/gdrive/video 400s on missing fileId', async (t) => {
+  const { app, sessionCookie } = await connectFixture(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/import/gdrive/video',
+    headers: { cookie: sessionCookie, 'content-type': 'application/json' },
+    payload: {}
+  });
+  assert.equal(res.statusCode, 400);
 });
 
 // Avoid unused-import warning when Readable type-imports stay around.

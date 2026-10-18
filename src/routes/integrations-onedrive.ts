@@ -11,6 +11,7 @@
 //   GET  /admin/integrations/onedrive/picker-config → { clientId, baseUrl }
 //   POST /admin/integrations/onedrive/disconnect    → drop the row
 //   POST /admin/import/onedrive                     → fetch + ingest a file by id
+//   POST /admin/import/onedrive/video               → fetch + ingest a video by id
 //
 // The `picker-config` shape is intentionally lighter than gdrive's
 // (no developerKey/appId): the Microsoft File Picker SDK takes app-id
@@ -43,10 +44,12 @@ import { ingestStream } from '../lib/originals.ts';
 import { safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import {
+  ingestRemoteVideo,
   type ProviderCallbackQuery,
   type ProviderImportBody,
   REMOTE_IMPORT_MAX_BYTES,
-  streamImageWithCap
+  streamImageWithCap,
+  videoImportError
 } from './integrations-shared.ts';
 
 const PROVIDER = 'onedrive';
@@ -420,6 +423,56 @@ export default async function integrationsOnedriveRoutes(
         const code = /exceeded limit/.test(msg) ? 413 : 400;
         req.log.warn({ err, fileId }, 'onedrive ingest failed');
         return reply.code(code).send({ error: msg });
+      }
+    }
+  );
+
+  // POST /admin/import/onedrive/video — cloud video ingest, mirroring the
+  // image handler above but for video/* bytes. See the gdrive twin for the
+  // full rationale: stream → ingestVideoStream (resolveVideoCaps caps,
+  // sha256 dedup, sidecar) → renderVideoDerivative → curated cache URLs.
+  fastify.post<{ Body: ProviderImportBody }>(
+    '/admin/import/onedrive/video',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const fileId = req.body?.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim()) {
+        return reply.code(400).send({ error: 'fileId is required' });
+      }
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(412).send({ error: 'onedrive not connected' });
+
+      let drive: Awaited<ReturnType<typeof fetchOneDriveFile>>;
+      try {
+        drive = await fetchOneDriveFile(fresh.access_token, fileId, {
+          ...(opts.graphFetcher ? { fetcher: opts.graphFetcher } : {})
+        });
+      } catch (err) {
+        req.log.warn({ err, fileId }, 'onedrive fetch failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+
+      if (!/^video\//i.test(drive.contentType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be video/*; got ${drive.contentType}` });
+      }
+
+      try {
+        return await ingestRemoteVideo({
+          body: drive.body,
+          siteRoot,
+          kind: 'onedrive',
+          originalName: drive.file.name
+        });
+      } catch (err) {
+        const { status, message } = videoImportError(err as Error);
+        req.log.warn({ err, fileId }, 'onedrive video ingest failed');
+        return reply.code(status).send({ error: message });
       }
     }
   );
