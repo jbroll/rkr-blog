@@ -124,6 +124,7 @@
     "src/lib/originals.ts": 94.92,
     "src/lib/outbox-types.ts": 100,
     "src/lib/perspective-resample.ts": 91.19,
+    "src/lib/photos-picker.ts": 100,
     "src/lib/post-index.ts": 98.48,
     "src/lib/post-text.ts": 100,
     "src/lib/post-view-url.ts": 100,
