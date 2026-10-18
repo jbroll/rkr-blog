@@ -488,6 +488,7 @@ preserving the existing per-node-type editing affordances.
 | Plain URL | server-side fetch (size + content-type capped) | session |
 | OneDrive | Server-driven browser dialog + Graph API | OAuth2 |
 | Google Drive | Server-driven browser dialog + Drive v3 (`drive.readonly` scope) | OAuth2 |
+| Google Photos | Picker-API session (pick in Google UI) + server download | OAuth2 (`photospicker.mediaitems.readonly` grant) |
 
 Common path: picker returns a file handle → server streams bytes →
 sha256 during stream → if hash already in originals, dedupe; otherwise

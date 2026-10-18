@@ -135,7 +135,7 @@ serving.
    multiple redirect URIs per registration, so register every admin
    host's callbacks and paste the same id/secret pair into each
    `deploy/secrets/<site>.secrets.env`:
-   - Google (login + Drive, per admin host): `https://<admin-host>/admin/auth/google/callback` and `https://<admin-host>/admin/integrations/gdrive/callback`. Admin hosts: `rkr-blog.rkroll.com`, `code.rkroll.com`, `stockademade.com`. Authorized domains must include `rkroll.com` and `stockademade.com`.
+   - Google (login + Drive + Photos, per admin host): `https://<admin-host>/admin/auth/google/callback`, `https://<admin-host>/admin/integrations/gdrive/callback`, and `https://<admin-host>/admin/integrations/gphotos/callback`. Admin hosts: `rkr-blog.rkroll.com`, `code.rkroll.com`, `stockademade.com`. Authorized domains must include `rkroll.com` and `stockademade.com`. Google Photos picking additionally needs the **Google Photos Picker API** enabled in the shared Cloud project (the Library API alone is not enough — since 2025-04 it returns app-created items only).
    - Microsoft (OneDrive only — login is Google-only, per admin host): `https://<admin-host>/admin/integrations/onedrive/callback`. The Entra app must allow personal Microsoft accounts (the `common` tenant the server uses).
    All three callbacks derive from `ADMIN_BASE_URL` (which defaults to
    `PUBLIC_BASE_URL`), so changing a site's admin hostname means

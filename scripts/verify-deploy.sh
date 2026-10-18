@@ -8,7 +8,7 @@
 # 401s without a session. No auth needed, nothing is modified.
 #
 # Usage:
-#   scripts/verify-deploy.sh https://code.rkroll.com [--expect-gdrive] [--expect-onedrive] [--expect-hash <sha>]
+#   scripts/verify-deploy.sh https://code.rkroll.com [--expect-gdrive] [--expect-onedrive] [--expect-gphotos] [--expect-hash <sha>]
 #
 # Exit 0 iff /health is 200 and every --expect-* flag is satisfied.
 # Any other status code on a probed endpoint is a hard failure.
@@ -20,12 +20,14 @@ shift || true
 
 EXPECT_GDRIVE=0
 EXPECT_ONEDRIVE=0
+EXPECT_GPHOTOS=0
 EXPECT_HASH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --expect-gdrive) EXPECT_GDRIVE=1 ;;
     --expect-onedrive) EXPECT_ONEDRIVE=1 ;;
+    --expect-gphotos) EXPECT_GPHOTOS=1 ;;
     --expect-hash)
       shift
       EXPECT_HASH="${1:?--expect-hash needs a value}"
@@ -85,6 +87,7 @@ check_provider() {
 
 check_provider "gdrive" "/admin/integrations/gdrive/status" "$EXPECT_GDRIVE"
 check_provider "onedrive" "/admin/integrations/onedrive/status" "$EXPECT_ONEDRIVE"
+check_provider "gphotos" "/admin/integrations/gphotos/status" "$EXPECT_GPHOTOS"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "verify-deploy: $failures check(s) failed"

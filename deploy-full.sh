@@ -86,7 +86,7 @@ deploy_app_site() {
   local base expect=()
   base="$(probe_base "$site")"
   if secret_set "$site" "GOOGLE_CLIENT_ID" && secret_set "$site" "GOOGLE_CLIENT_SECRET"; then
-    expect+=(--expect-gdrive)
+    expect+=(--expect-gdrive --expect-gphotos)
   fi
   if secret_set "$site" "MICROSOFT_CLIENT_ID" && secret_set "$site" "MICROSOFT_CLIENT_SECRET"; then
     expect+=(--expect-onedrive)
