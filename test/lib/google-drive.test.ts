@@ -72,6 +72,36 @@ test('fetchDriveFile falls back to file.mimeType when response lacks content-typ
   assert.equal(r.contentType, 'image/png');
 });
 
+test('fetchDriveFile drops the bearer token when media redirects off Google', async () => {
+  // ?alt=media can 302 to another host. Forwarding our bearer token
+  // there 401s some hosts (and leaks the token); the follow-up must go
+  // unauthenticated. The download host is an IP literal so no DNS
+  // lookup escapes the test.
+  const body = Buffer.from('jpegbytes');
+  const fetcher = (async (url: string | URL, init?: { headers?: Record<string, string> }) => {
+    const u = typeof url === 'string' ? url : url.toString();
+    if (u.includes('?fields=')) {
+      return new Response(JSON.stringify({ id: 'fid', name: 'cat.jpg', mimeType: 'image/jpeg' }), {
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    if (u.includes('alt=media')) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: 'http://93.184.216.34/dl/cat.jpg' }
+      });
+    }
+    const auth = new Headers(init?.headers).get('authorization');
+    if (auth) return new Response('nope', { status: 401 });
+    return new Response(body, {
+      headers: { 'content-type': 'image/jpeg', 'content-length': String(body.length) }
+    });
+  }) as typeof fetch;
+  const r = await fetchDriveFile('tok', 'fid', { fetcher });
+  assert.equal(r.contentType, 'image/jpeg');
+  assert.equal(r.contentLength, body.length);
+});
+
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 function listFixture() {

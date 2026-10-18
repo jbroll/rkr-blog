@@ -155,11 +155,17 @@ async function fetchWithRedirectValidation(
   maxRedirects = 5
 ): Promise<Response> {
   let current = initialUrl;
+  let initialOrigin: string | null = null;
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const isStubInitial = fetcher !== fetch && hop === 0 && current.includes('www.googleapis.com');
     const url = isStubInitial ? new URL(current) : await assertSafeFetchUrl(current);
+    if (initialOrigin === null) initialOrigin = url.origin;
+    // ?alt=media can 302 off Google. Forwarding our bearer token there
+    // 401s some hosts (and leaks the token), so authorization stays on
+    // the initial origin only — same rule as the microsoft-graph twin.
+    const hopHeaders = url.origin === initialOrigin ? headers : withoutAuthHeader(headers);
     const res = await fetcher(url.toString(), {
-      headers,
+      headers: hopHeaders,
       signal,
       redirect: 'manual'
     } as RequestInit);
@@ -174,3 +180,10 @@ async function fetchWithRedirectValidation(
   throw new UnsafeUrlError(`too many redirects (>${maxRedirects})`);
 }
 /* c8 ignore stop */
+
+/** Drop the authorization header (case-insensitive); other headers pass through. */
+function withoutAuthHeader(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'authorization')
+  );
+}
