@@ -375,6 +375,12 @@ export const ADMIN_CSS_DIALOGS = `  .rkr-meta { display: grid; grid-template-col
   .rkr-od-placeholder.rkr-od-error {
     color: var(--rkr-warn, #c00); user-select: text; -webkit-user-select: text;
   }
+  .rkr-od-loadmore {
+    grid-column: 1/-1; justify-self: center; padding: .45rem 1rem;
+    border: 1px solid var(--rkr-rule); border-radius: 4px; background: none;
+    color: var(--rkr-text); font: inherit; font-size: .85rem; cursor: pointer;
+  }
+  .rkr-od-loadmore:hover { border-color: var(--rkr-link); color: var(--rkr-link); }
   .rkr-od-foot {
     padding: .65rem 1rem; border-top: 1px solid var(--rkr-rule);
     display: flex; align-items: center; gap: .75rem; flex-shrink: 0;

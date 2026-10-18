@@ -42,12 +42,40 @@ interface OneDriveBrowseItem {
  * List the direct children of a OneDrive folder, filtered to files of
  * `opts.kind` (`'image'` by default, `'video'` for the video picker) and
  * subfolders. folderId 'root' targets the drive root. Items are returned
- * folders-first, both groups sorted by name.
+ * folders-first, both groups sorted by name. A page whose items all
+ * filter out is followed forward (bounded to MAX_EMPTY_PAGES requests)
+ * so callers don't render an empty state while matches remain.
  */
 export interface OneDriveFolderPage {
   items: OneDriveBrowseItem[];
   nextLink: string | null;
 }
+
+/**
+ * Validate a Graph paging link. Graph paginates only via
+ * graph.microsoft.com URLs; anything else is an SSRF attempt carrying
+ * the user's bearer token.
+ */
+function assertGraphNextLink(nextLink: string): string {
+  let u: URL;
+  try {
+    u = new URL(nextLink);
+  } catch {
+    throw new Error('invalid nextLink');
+  }
+  if (u.protocol !== 'https:' || u.host !== 'graph.microsoft.com') {
+    throw new Error('unsafe nextLink (must be https://graph.microsoft.com)');
+  }
+  return nextLink;
+}
+
+/**
+ * Max Graph requests made by a single listOneDriveFolder call while it
+ * skips pages that filter down to nothing (see the sparse-folder note
+ * below). The unconsumed nextLink is still returned so the client keeps
+ * paging on demand.
+ */
+const MAX_EMPTY_PAGES = 5;
 
 export async function listOneDriveFolder(
   accessToken: string,
@@ -55,21 +83,8 @@ export async function listOneDriveFolder(
   opts: { fetcher?: typeof fetch; nextLink?: string; kind?: 'image' | 'video' } = {}
 ): Promise<OneDriveFolderPage> {
   const fetchImpl = opts.fetcher ?? fetch;
-  let fetchUrl: string;
-  if (opts.nextLink) {
-    let u: URL;
-    try {
-      u = new URL(opts.nextLink);
-    } catch {
-      throw new Error('invalid nextLink');
-    }
-    // Graph paginates only via graph.microsoft.com URLs. Anything
-    // else is an SSRF attempt carrying the user's bearer token.
-    if (u.protocol !== 'https:' || u.host !== 'graph.microsoft.com') {
-      throw new Error('unsafe nextLink (must be https://graph.microsoft.com)');
-    }
-    fetchUrl = opts.nextLink;
-  } else {
+  const mimePrefix = opts.kind === 'video' ? 'video/' : 'image/';
+  const initialUrl = () => {
     const base =
       folderId === 'root'
         ? `${GRAPH_BASE}/me/drive/root/children`
@@ -77,37 +92,50 @@ export async function listOneDriveFolder(
     const url = new URL(base);
     url.searchParams.set('$top', '50');
     url.searchParams.set('$orderby', 'lastModifiedDateTime desc');
-    fetchUrl = url.toString();
-  }
-  const res = await fetchImpl(fetchUrl, {
-    headers: { authorization: `Bearer ${accessToken}` }
-  });
-  if (!res.ok) throw new Error(`Graph ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as {
-    value?: Array<{
-      id?: string;
-      name?: string;
-      file?: { mimeType?: string } | null;
-      folder?: object | null;
-    }>;
-    '@odata.nextLink'?: string;
+    return url.toString();
   };
-  const raw = data.value ?? [];
-  const mimePrefix = opts.kind === 'video' ? 'video/' : 'image/';
-  const items: OneDriveBrowseItem[] = raw
-    .filter((item) => item.folder != null || item.file?.mimeType?.startsWith(mimePrefix))
-    .map((item) => ({
-      id: item.id ?? '',
-      name: item.name ?? '',
-      type: item.folder != null ? ('folder' as const) : ('file' as const),
-      mimeType: item.file?.mimeType
-    }));
+  let fetchUrl = opts.nextLink ? assertGraphNextLink(opts.nextLink) : initialUrl();
+
+  let items: OneDriveBrowseItem[] = [];
+  let nextLink: string | null = null;
+  // A page can filter down to nothing (e.g. video mode over a folder of
+  // photos). Keep following the nextLink so the picker doesn't render
+  // "No videos or folders here." while matching items sit on later
+  // pages — bounded by MAX_EMPTY_PAGES so a media-less drive isn't
+  // walked end to end.
+  for (let fetched = 0; fetched < MAX_EMPTY_PAGES; fetched++) {
+    const res = await fetchImpl(fetchUrl, {
+      headers: { authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) throw new Error(`Graph ${res.status}: ${await res.text()}`);
+    const data = (await res.json()) as {
+      value?: Array<{
+        id?: string;
+        name?: string;
+        file?: { mimeType?: string } | null;
+        folder?: object | null;
+      }>;
+      '@odata.nextLink'?: string;
+    };
+    const raw = data.value ?? [];
+    items = raw
+      .filter((item) => item.folder != null || item.file?.mimeType?.startsWith(mimePrefix))
+      .map((item) => ({
+        id: item.id ?? '',
+        name: item.name ?? '',
+        type: item.folder != null ? ('folder' as const) : ('file' as const),
+        mimeType: item.file?.mimeType
+      }));
+    nextLink = data['@odata.nextLink'] ?? null;
+    if (items.length > 0 || !nextLink) break;
+    fetchUrl = assertGraphNextLink(nextLink);
+  }
   // Folders first; files already newest-first from Graph
   items.sort((a, b) => {
     if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
     return 0;
   });
-  return { items, nextLink: data['@odata.nextLink'] ?? null };
+  return { items, nextLink };
 }
 
 /**

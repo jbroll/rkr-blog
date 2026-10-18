@@ -25,15 +25,22 @@ export async function ensureConnected(
   return true;
 }
 
-/** POST a fileId to a provider import endpoint and return the UploadResponse. */
-export async function importCloudFile(importUrl: string, fileId: string): Promise<UploadResponse> {
+/** POST a fileId to a provider import endpoint, throwing on a non-2xx,
+ * and parse the JSON body as the caller's response shape. Shared by the
+ * file and video wrappers below. */
+async function postImport<T>(importUrl: string, fileId: string): Promise<T> {
   const res = await fetch(importUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fileId })
   });
   if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
-  return (await res.json()) as UploadResponse;
+  return (await res.json()) as T;
+}
+
+/** POST a fileId to a provider import endpoint and return the UploadResponse. */
+export async function importCloudFile(importUrl: string, fileId: string): Promise<UploadResponse> {
+  return postImport<UploadResponse>(importUrl, fileId);
 }
 
 /** POST a fileId to a provider *video* import endpoint and return the
@@ -42,11 +49,5 @@ export async function importCloudVideo(
   importUrl: string,
   fileId: string
 ): Promise<VideoUploadResponse> {
-  const res = await fetch(importUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fileId })
-  });
-  if (!res.ok) throw new Error(`import: ${res.status} ${await res.text()}`);
-  return (await res.json()) as VideoUploadResponse;
+  return postImport<VideoUploadResponse>(importUrl, fileId);
 }

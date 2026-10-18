@@ -200,6 +200,89 @@ test('listOneDriveFolder throws on HTTP error', async () => {
   await assert.rejects(listOneDriveFolder('tok', 'root', { fetcher }), /Graph 400/);
 });
 
+const GRAPH_NEXT = 'https://graph.microsoft.com/v1.0/me/drive/root/children?$skiptoken=next';
+
+test('listOneDriveFolder pages past an all-non-video first page in video mode', async () => {
+  // Sparse-folder regression: a page of 50 images (or docs) filters down to
+  // nothing in video mode. Without following the nextLink the picker shows
+  // "No videos or folders here." while more videos exist.
+  const urls: string[] = [];
+  const fetcher = (async (url: string | URL) => {
+    const u = url.toString();
+    urls.push(u);
+    if (u.includes('$skiptoken=')) {
+      return new Response(
+        JSON.stringify({
+          value: [
+            { id: 'fold1', name: 'Clips', folder: {} },
+            { id: 'vid1', name: 'clip.mp4', file: { mimeType: 'video/mp4' } }
+          ]
+        }),
+        { headers: { 'content-type': 'application/json' } }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        value: [
+          { id: 'img1', name: 'photo.png', file: { mimeType: 'image/png' } },
+          { id: 'doc1', name: 'notes.txt', file: { mimeType: 'text/plain' } }
+        ],
+        '@odata.nextLink': GRAPH_NEXT
+      }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  const page = await listOneDriveFolder('tok', 'root', { fetcher, kind: 'video' });
+  assert.deepEqual(
+    page.items.map((i) => i.id),
+    ['fold1', 'vid1']
+  );
+  assert.equal(page.nextLink, null);
+  assert.equal(urls.length, 2);
+});
+
+test('listOneDriveFolder stops following empty pages after a bounded number of fetches', async () => {
+  // Bound the eager paging: a folder with no matching media must not walk
+  // the whole drive. The returned nextLink still lets the client page on.
+  let calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    return new Response(
+      JSON.stringify({
+        value: [{ id: 'img1', name: 'photo.png', file: { mimeType: 'image/png' } }],
+        '@odata.nextLink': `${GRAPH_NEXT}${calls}`
+      }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  const page = await listOneDriveFolder('tok', 'root', { fetcher, kind: 'video' });
+  assert.equal(page.items.length, 0);
+  // nextLink of the last page fetched — page 6 for the client to continue.
+  assert.equal(page.nextLink, `${GRAPH_NEXT}5`);
+  assert.equal(calls, 5);
+});
+
+test('listOneDriveFolder does not follow nextLink when the page has matching items', async () => {
+  let calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    return new Response(
+      JSON.stringify({
+        value: [{ id: 'img1', name: 'photo.png', file: { mimeType: 'image/png' } }],
+        '@odata.nextLink': GRAPH_NEXT
+      }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  const page = await listOneDriveFolder('tok', 'root', { fetcher });
+  assert.equal(calls, 1);
+  assert.equal(page.items.length, 1);
+  assert.equal(page.nextLink, GRAPH_NEXT);
+});
+
 // ---- getOneDriveThumbnail ------------------------------------------------
 
 test('getOneDriveThumbnail returns large URL', async () => {

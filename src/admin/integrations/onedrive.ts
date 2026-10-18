@@ -153,6 +153,22 @@ function openOneDriveBrowser(opts: { mediaKind: 'image' | 'video' }): Promise<st
       });
     }
 
+    // The grid only auto-loads more on scroll (grid.addEventListener below),
+    // so when a page is short its content may not overflow and no scroll
+    // ever fires. Render an explicit affordance whenever a nextLink is
+    // pending, so a sparse page (e.g. video mode over a folder of photos)
+    // can always reach the rest of the folder.
+    function renderLoadMore() {
+      grid.querySelector('.rkr-od-loadmore')?.remove();
+      if (!currentNextLink) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'rkr-od-loadmore';
+      btn.textContent = 'Load more';
+      btn.addEventListener('click', () => void loadMore());
+      grid.append(btn);
+    }
+
     async function loadMore() {
       if (loading || !currentNextLink) return;
       loading = true;
@@ -162,6 +178,7 @@ function openOneDriveBrowser(opts: { mediaKind: 'image' | 'video' }): Promise<st
         for (const item of page.items) {
           grid.append(makeItemEl(item));
         }
+        renderLoadMore();
       } catch (err) {
         const errDiv = document.createElement('div');
         errDiv.className = 'rkr-od-placeholder rkr-od-error';
@@ -187,7 +204,10 @@ function openOneDriveBrowser(opts: { mediaKind: 'image' | 'video' }): Promise<st
         const page = await listOneDriveFiles(folderId, undefined, mediaKind);
         grid.innerHTML = '';
         currentNextLink = page.nextLink;
-        if (page.items.length === 0) {
+        // Only claim the folder is empty when there is no further page:
+        // an empty filtered page with a nextLink still has items to show
+        // behind the Load more affordance.
+        if (page.items.length === 0 && !page.nextLink) {
           const empty = document.createElement('div');
           empty.className = 'rkr-od-placeholder';
           empty.textContent =
@@ -197,6 +217,7 @@ function openOneDriveBrowser(opts: { mediaKind: 'image' | 'video' }): Promise<st
         for (const item of page.items) {
           grid.append(makeItemEl(item));
         }
+        renderLoadMore();
       } catch (err) {
         grid.innerHTML = '';
         const errDiv = document.createElement('div');
