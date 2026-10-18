@@ -5,7 +5,7 @@
 //
 // Routes:
 //   GET  /admin/integrations/onedrive/connect       → redirect to Microsoft
-//   GET  /admin/integrations/onedrive/callback      → exchange code, store tokens
+//   GET  /admin/integrations/onedrive/callback      → exchange code, store tokens, back to settings
 //   GET  /admin/integrations/onedrive/status        → { connected: bool }
 //   GET  /admin/integrations/onedrive/access-token  → fresh access token for picker
 //   GET  /admin/integrations/onedrive/picker-config → { clientId, baseUrl }
@@ -198,7 +198,7 @@ export default async function integrationsOnedriveRoutes(
         scope: tokens.hasScopes() ? tokens.scopes().join(' ') : null
       });
 
-      return reply.redirect('/admin/editor', 302);
+      return reply.redirect('/admin/settings', 302);
     }
   );
 

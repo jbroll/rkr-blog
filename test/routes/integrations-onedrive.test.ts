@@ -153,7 +153,7 @@ test('GET /admin/integrations/onedrive/connect 401s without auth', async (t) => 
 
 // ---- /callback --------------------------------------------------------
 
-test('callback exchanges code, stores tokens, redirects to /admin/editor', async (t) => {
+test('callback exchanges code, stores tokens, redirects to /admin/settings', async (t) => {
   const { db, app, user, sessionCookie, root } = await setup(t);
   const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
 
@@ -163,7 +163,7 @@ test('callback exchanges code, stores tokens, redirects to /admin/editor', async
     headers: { cookie: `${sessionCookie}; rkr_onedrive_state=${stateCookie}` }
   });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor');
+  assert.equal(res.headers.location, '/admin/settings');
 
   const key = readSecretKey(root);
   const stored = readToken(db, key, user.id, 'onedrive');

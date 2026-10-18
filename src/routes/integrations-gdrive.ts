@@ -5,7 +5,7 @@
 //
 // Routes:
 //   GET  /admin/integrations/gdrive/connect       → redirect to Google
-//   GET  /admin/integrations/gdrive/callback      → exchange code, store tokens
+//   GET  /admin/integrations/gdrive/callback      → exchange code, store tokens, back to settings
 //   GET  /admin/integrations/gdrive/status        → { connected: bool }
 //   GET  /admin/integrations/gdrive/access-token  → fresh access token for Picker
 //   POST /admin/integrations/gdrive/disconnect    → drop the row
@@ -167,7 +167,7 @@ export default async function integrationsGdriveRoutes(
         scope: tokens.hasScopes() ? tokens.scopes().join(' ') : null
       });
 
-      return reply.redirect('/admin/editor', 302);
+      return reply.redirect('/admin/settings', 302);
     }
   );
 
