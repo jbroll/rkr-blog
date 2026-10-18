@@ -23,6 +23,74 @@ export interface DriveFileFetch {
   contentLength: number | null;
 }
 
+export interface DriveBrowseItem {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  mimeType?: string;
+  thumbnailUrl?: string;
+}
+
+/** Drive's folder mime type — the only non-file `type` the browser lists. */
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+/**
+ * List a Drive folder's direct children, filtered to `opts.kind`
+ * (`'image'` by default, `'video'` for the video picker) plus
+ * subfolders. folderId 'root' targets the drive root. Mirrors
+ * listOneDriveFolder in shape; pagination is Drive's opaque
+ * `pageToken`/`nextPageToken` pair.
+ */
+export async function listDriveFolder(
+  accessToken: string,
+  folderId: string,
+  opts: { fetcher?: typeof fetch; pageToken?: string; kind?: 'image' | 'video' } = {}
+): Promise<{ items: DriveBrowseItem[]; nextPageToken: string | null }> {
+  const fetchImpl = opts.fetcher ?? fetch;
+  const mimePrefix = opts.kind === 'video' ? 'video/' : 'image/';
+  const url = new URL(DRIVE_FILE_BASE);
+  url.searchParams.set(
+    'q',
+    `'${folderId}' in parents and trashed = false and (mimeType contains '${mimePrefix}' or mimeType = '${DRIVE_FOLDER_MIME}')`
+  );
+  url.searchParams.set('fields', 'files(id,name,mimeType,thumbnailLink),nextPageToken');
+  url.searchParams.set('pageSize', '50');
+  url.searchParams.set('orderBy', 'modifiedTime desc');
+  if (opts.pageToken) url.searchParams.set('pageToken', opts.pageToken);
+  const res = await fetchImpl(url.toString(), {
+    headers: { authorization: `Bearer ${accessToken}` }
+  });
+  if (!res.ok) throw new Error(`drive list: HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    files?: Array<{ id?: string; name?: string; mimeType?: string; thumbnailLink?: string }>;
+    nextPageToken?: string;
+  };
+  const items = (data.files ?? [])
+    .filter(
+      (f) =>
+        typeof f.id === 'string' &&
+        typeof f.name === 'string' &&
+        (f.mimeType === DRIVE_FOLDER_MIME || f.mimeType?.startsWith(mimePrefix) === true)
+    )
+    .map(
+      (f): DriveBrowseItem => ({
+        id: f.id as string,
+        name: f.name as string,
+        type: f.mimeType === DRIVE_FOLDER_MIME ? 'folder' : 'file',
+        ...(f.mimeType !== undefined && f.mimeType !== DRIVE_FOLDER_MIME
+          ? { mimeType: f.mimeType }
+          : {}),
+        ...(f.thumbnailLink !== undefined ? { thumbnailUrl: f.thumbnailLink } : {})
+      })
+    );
+  // Folders first; files already newest-first from Drive.
+  items.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+    return 0;
+  });
+  return { items, nextPageToken: data.nextPageToken ?? null };
+}
+
 /**
  * Fetch metadata + bytes for a Drive file. The caller streams `body`
  * into ingestStream. The fetch is gated by a 30s wall-clock timeout.
