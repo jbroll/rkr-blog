@@ -75,15 +75,27 @@ secrets win the merge, so a stale copy there silently overrides the site
 env. `fastify_app.build.post.sh` fails the deploy if it finds one.
 
 ```bash
-# roll-along — deploy.conf defaults to it
-~/src/deploy.sh/deploy.sh update .
+# one site (rkr-blog | stockademade | code | website), update by default
+./deploy-full.sh code
+./deploy-full.sh rkr-blog init
 
-# any other site
-DEPLOY_SH_CONF=deploy/sites/stockademade.conf ~/src/deploy.sh/deploy.sh update .
+# everything
+./deploy-full.sh all
 ```
 
-Never pass a `user@host` argument; each site config sets `REMOTE_HOST` to
-the VPS, and an argument overrides it.
+`deploy-full.sh` deploys each target with its `deploy/sites/<site>.conf`
+and then proves it with `scripts/verify-deploy.sh` — hash-pinned to the
+just-deployed commit when the tree is clean, with `--expect-gdrive` /
+`--expect-onedrive` derived from non-empty values in that site's own
+secrets file. Never pass a `user@host` argument to the underlying
+`deploy.sh`; each site config sets `REMOTE_HOST` to the VPS, and an
+argument overrides it.
+
+Raw `deploy.sh` (without the wrapper) is for emergencies only:
+
+```bash
+DEPLOY_SH_CONF=deploy/sites/stockademade.conf ~/src/deploy.sh/deploy.sh update .
+```
 
 ### Standard update (every deploy ends here)
 
