@@ -110,8 +110,12 @@ function mount(): void {
 
   // Source-picker + insertion plumbing in image-insert.ts.
   const inserter = createImageInserter({ editor, fileInput, sourceDialog });
-  // No source picker for video: local file only, straight to the server.
-  const videoInserter = createVideoInserter({ editor, fileInput: videoInput });
+  // Video uses the shared source picker in video mode.
+  const videoInserter = createVideoInserter({
+    editor,
+    fileInput: videoInput,
+    sourceDialog
+  });
 
   const figureOnly = document.body.dataset.mode === 'figure';
   const syncToolbarActiveStates = mountToolbar({

@@ -186,9 +186,6 @@ export function pickFromDrive(): Promise<string[]> {
  * Drive video variant of pickFromDrive: restricted to video files and
  * imported through the /video endpoint so the returned ids point at
  * stored video masters.
- *
- * @public — wired into the editor entry bundle by Task 3's +Video source
- * picker; knip can't trace the dynamic picker path.
  */
 export function pickFromDriveVideo(): Promise<string[]> {
   return pickFromDriveInternal(driveVideoView, (fileId) =>

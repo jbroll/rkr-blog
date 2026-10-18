@@ -197,7 +197,17 @@ test('video: toolbar +Video uploads the picked file and inserts a video node', a
   await page.goto('/admin/editor?e2e=1');
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
 
+  // +Video opens the shared source picker in video mode: the title is
+  // retitled to "Add video" and the Local branch triggers the hidden
+  // file input. Drive/OneDrive route through the video pickers.
+  const sourcePicker = page.locator('#rkr-source-picker');
+  await expect(sourcePicker).toBeHidden();
   await page.getByRole('button', { name: '+Video' }).click();
+  await expect(sourcePicker).toBeVisible();
+  await expect(page.locator('#rkr-source-picker-title')).toHaveText('Add video');
+  await sourcePicker.locator('button[data-source="local"]').click();
+  await expect(sourcePicker).toBeHidden();
+
   await page.locator('#rkr-video-input').setInputFiles({
     name: 'toolbar.mp4',
     mimeType: 'video/mp4',

@@ -46,9 +46,6 @@ export async function pickFromOneDrive(): Promise<string[]> {
 /**
  * OneDrive video variant of pickFromOneDrive: the browser lists only
  * videos + folders and import goes through the /video endpoint.
- *
- * @public — wired into the editor entry bundle by Task 3's +Video source
- * picker; knip can't trace the dynamic picker path.
  */
 export async function pickFromOneDriveVideo(): Promise<string[]> {
   return pickFromOneDriveInternal('video');

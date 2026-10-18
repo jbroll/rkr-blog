@@ -7,7 +7,7 @@
 import type { Editor } from '@tiptap/core';
 
 import { openModal } from './dialog-focus';
-import { setStatus } from './dom';
+import { $, setStatus } from './dom';
 import type { FigureAttrs } from './figure-node';
 import { pickFromDrive } from './integrations/gdrive';
 import { pickFromOneDrive } from './integrations/onedrive';
@@ -118,6 +118,9 @@ export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
    * through fileInput (the change listener then consumes pendingInsertMode);
    * Drive/OneDrive return ids synchronously and we apply them directly. */
   async function insertFromAnySource(mode: InsertMode): Promise<void> {
+    // The dialog is shared with the +Video branch, which retitles it to
+    // "Add video"; set it back whenever an image entry opens it.
+    $('rkr-source-picker-title').textContent = 'Add image';
     const choice = await openSourcePicker(sourceDialog);
     if (!choice) return;
     if (choice === 'local') {
