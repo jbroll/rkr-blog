@@ -21,9 +21,10 @@ sharp.concurrency(1);
 import { registerAuthMiddleware } from './lib/auth-middleware.ts';
 import { resolveGitHash } from './lib/build-info.ts';
 import {
-  adminBaseUrl,
   csrfAllowedOrigins,
   csrfPublicOnlyOrigins,
+  gdriveOAuthConfigured,
+  onedriveOAuthConfigured,
   paths,
   publicBaseUrl,
   type SiteConfig,
@@ -229,9 +230,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     // vars are set — otherwise we'd fail at registration trying to read
     // GOOGLE_CLIENT_ID. Skipping registration cleanly turns the routes
     // into 404s for unconfigured deployments.
-    const gdriveConfigured =
-      opts.gdrive?.exchange !== undefined ||
-      (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && adminBaseUrl());
+    const gdriveConfigured = opts.gdrive?.exchange !== undefined || gdriveOAuthConfigured();
     if (gdriveConfigured) {
       await app.register(integrationsGdriveRoutes, {
         db: opts.db,
@@ -245,9 +244,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     // OneDrive integration: same conditional-registration pattern as
     // gdrive. Production needs MICROSOFT_CLIENT_ID + SECRET +
     // PUBLIC_BASE_URL; tests inject opts.onedrive.exchange directly.
-    const onedriveConfigured =
-      opts.onedrive?.exchange !== undefined ||
-      (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && adminBaseUrl());
+    const onedriveConfigured = opts.onedrive?.exchange !== undefined || onedriveOAuthConfigured();
     if (onedriveConfigured) {
       await app.register(integrationsOnedriveRoutes, {
         db: opts.db,

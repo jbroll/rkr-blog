@@ -17,8 +17,10 @@ import type { FastifyInstance } from 'fastify';
 import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
+  gdriveOAuthConfigured,
   isValidEmail,
   listAvailableThemes,
+  onedriveOAuthConfigured,
   type PersistedIngestResize,
   readPersistedSiteConfig,
   siteConfig,
@@ -80,7 +82,9 @@ export function registerAdminSettingsRoutes(
           flash,
           gitHash,
           gdriveConnected,
+          gdriveConfigured: gdriveOAuthConfigured(),
           onedriveConnected,
+          onedriveConfigured: onedriveOAuthConfigured(),
           hasBanner,
           hasAbout
         })

@@ -339,6 +339,23 @@ export function csrfPublicOnlyOrigins(env: Env = process.env): string[] {
   return csrfAllowedOrigins(env).includes(origin) ? [] : [origin];
 }
 
+/** Whether the Google Drive picker integration routes are registered.
+ * Mirrors the gate in server.ts: without a client id + secret and a
+ * base URL to build the OAuth redirect_uri from, the
+ * /admin/integrations/gdrive/* routes stay unregistered and hit the
+ * 404 handler. The settings page uses this to offer a setup hint
+ * instead of a dead Connect link. */
+export function gdriveOAuthConfigured(env: Env = process.env): boolean {
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && adminBaseUrl(env));
+}
+
+/** Whether the OneDrive picker integration routes are registered.
+ * Same shape as gdriveOAuthConfigured — MICROSOFT_CLIENT_ID +
+ * MICROSOFT_CLIENT_SECRET plus a base URL. */
+export function onedriveOAuthConfigured(env: Env = process.env): boolean {
+  return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && adminBaseUrl(env));
+}
+
 function stripTrailingSlash(v: string | undefined): string | undefined {
   if (!v) return undefined;
   return v.replace(/\/+$/, '');

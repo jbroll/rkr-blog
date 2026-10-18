@@ -196,6 +196,46 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
   assert.match(htmlOnedrive, /Disconnect/);
 });
 
+test('renderAdminSettingsPage: unconfigured integration shows a setup hint, not a Connect link', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false,
+    gdriveConfigured: false,
+    onedriveConnected: false,
+    onedriveConfigured: false,
+    gitHash: 'unknown',
+    hasBanner: false,
+    hasAbout: false
+  });
+  // No dead-end links to routes the server did not register.
+  assert.doesNotMatch(html, /\/admin\/integrations\/gdrive\/connect/);
+  assert.doesNotMatch(html, /\/admin\/integrations\/onedrive\/connect/);
+  // Instead the operator sees which env vars enable each provider.
+  assert.match(html, /GOOGLE_CLIENT_ID/);
+  assert.match(html, /MICROSOFT_CLIENT_ID/);
+});
+
+test('renderAdminSettingsPage: configured but unconnected integration keeps the Connect link', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false,
+    gdriveConfigured: true,
+    onedriveConnected: false,
+    onedriveConfigured: true,
+    gitHash: 'unknown',
+    hasBanner: false,
+    hasAbout: false
+  });
+  assert.match(html, /href="\/admin\/integrations\/gdrive\/connect"/);
+  assert.match(html, /href="\/admin\/integrations\/onedrive\/connect"/);
+});
+
 // ---------------------------------------------------------------------------
 // Banner section
 // ---------------------------------------------------------------------------

@@ -630,3 +630,33 @@ test('POST /admin/settings persists a valid commentNotify, ignores an invalid on
   onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
   assert.equal(onDisk.commentNotify, 'all'); // unchanged — invalid ignored
 });
+
+test('GET /admin/settings: omits Connect links when provider OAuth env is absent', async (t) => {
+  const { app } = await setup(t);
+  // Strip the OAuth env so the integration routes would not register;
+  // the settings page must not link to routes that 404. Tests run
+  // sequentially so the process-env mutation is contained.
+  const keys = [
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'MICROSOFT_CLIENT_ID',
+    'MICROSOFT_CLIENT_SECRET'
+  ];
+  const saved: Record<string, string | undefined> = {};
+  for (const k of keys) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  t.after(() => {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+  const res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(res.body, /\/admin\/integrations\/gdrive\/connect/);
+  assert.doesNotMatch(res.body, /\/admin\/integrations\/onedrive\/connect/);
+  assert.match(res.body, /GOOGLE_CLIENT_ID/);
+  assert.match(res.body, /MICROSOFT_CLIENT_ID/);
+});

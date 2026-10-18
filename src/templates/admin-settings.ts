@@ -55,8 +55,15 @@ export interface AdminSettingsPageData extends SiteChrome {
   gitHash: string;
   /** Whether the current user has a stored Google Drive OAuth token. */
   gdriveConnected: boolean;
+  /** Whether the Drive integration routes are registered (OAuth env
+   * present). When false the Connect link would 404, so the row shows
+   * a setup hint instead. Defaults to true (legacy callers). */
+  gdriveConfigured?: boolean;
   /** Whether the current user has a stored OneDrive OAuth token. */
   onedriveConnected: boolean;
+  /** Whether the OneDrive integration routes are registered. Same
+   * shape as gdriveConfigured. Defaults to true. */
+  onedriveConfigured?: boolean;
   /** Whether content/posts/_site-banner.md exists on disk. */
   hasBanner: boolean;
   /** Whether content/posts/_about.md exists on disk. */
@@ -182,7 +189,7 @@ ${saveBtn}
   </p>
   <button type="submit" class="rkr-admin-settings-submit">Rebuild search index</button>
 </form>
-${renderIntegrations(data.gdriveConnected, data.onedriveConnected)}
+${renderIntegrations(data)}
 <p class="rkr-admin-settings-build">
   Build: <code title="${escapeAttr(data.gitHash)}">${escapeText(shortHash(data.gitHash))}</code>
 </p>
@@ -194,31 +201,52 @@ ${siteFoot(data.site, { isAdmin: true })}
 `;
 }
 
-function renderIntegrationRow(
-  label: string,
-  connected: boolean,
-  connectHref: string,
-  disconnectAction: string
-): string {
-  const statusLabel = connected ? 'Connected' : 'Not connected';
-  const statusClass = connected ? ' is-connected' : '';
-  const action = connected
-    ? `<form method="post" action="${disconnectAction}" style="margin:0"><button type="submit" class="rkr-admin-settings-submit">Disconnect</button></form>`
-    : `<a href="${connectHref}" class="rkr-admin-settings-submit">Connect</a>`;
+function renderIntegrationRow(opts: {
+  label: string;
+  connected: boolean;
+  /** False when the provider's routes are unregistered (OAuth env
+   * missing) — show a setup hint instead of a Connect link that 404s. */
+  configured: boolean;
+  connectHref: string;
+  disconnectAction: string;
+  /** Env vars the operator must set to enable the provider. */
+  setupHint: string;
+}): string {
+  const statusLabel = opts.connected ? 'Connected' : 'Not connected';
+  const statusClass = opts.connected ? ' is-connected' : '';
+  const action = opts.connected
+    ? `<form method="post" action="${opts.disconnectAction}" style="margin:0"><button type="submit" class="rkr-admin-settings-submit">Disconnect</button></form>`
+    : opts.configured
+      ? `<a href="${opts.connectHref}" class="rkr-admin-settings-submit">Connect</a>`
+      : `<span class="rkr-admin-settings-integration-status">Set ${opts.setupHint} to enable</span>`;
   return `<div class="rkr-admin-settings-integration">
-  <span class="rkr-admin-settings-integration-label">${label}</span>
+  <span class="rkr-admin-settings-integration-label">${opts.label}</span>
   <span class="rkr-admin-settings-integration-status${statusClass}">${statusLabel}</span>
   ${action}
 </div>`;
 }
 
-function renderIntegrations(gdriveConnected: boolean, onedriveConnected: boolean): string {
+function renderIntegrations(data: AdminSettingsPageData): string {
   return `<section class="rkr-admin-settings">
 <div class="rkr-admin-settings-heading-row">
 <h2 class="rkr-admin-settings-heading">Integrations</h2>
 </div>
-${renderIntegrationRow('Google Drive', gdriveConnected, '/admin/integrations/gdrive/connect', '/admin/settings/gdrive/disconnect')}
-${renderIntegrationRow('OneDrive', onedriveConnected, '/admin/integrations/onedrive/connect', '/admin/settings/onedrive/disconnect')}
+${renderIntegrationRow({
+  label: 'Google Drive',
+  connected: data.gdriveConnected,
+  configured: data.gdriveConfigured ?? true,
+  connectHref: '/admin/integrations/gdrive/connect',
+  disconnectAction: '/admin/settings/gdrive/disconnect',
+  setupHint: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET'
+})}
+${renderIntegrationRow({
+  label: 'OneDrive',
+  connected: data.onedriveConnected,
+  configured: data.onedriveConfigured ?? true,
+  connectHref: '/admin/integrations/onedrive/connect',
+  disconnectAction: '/admin/settings/onedrive/disconnect',
+  setupHint: 'MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET'
+})}
 </section>`;
 }
 

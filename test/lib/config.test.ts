@@ -9,7 +9,9 @@ import {
   adminBaseUrl,
   csrfAllowedOrigins,
   csrfPublicOnlyOrigins,
+  gdriveOAuthConfigured,
   listAvailableThemes,
+  onedriveOAuthConfigured,
   paths,
   publicBaseUrl,
   readPersistedSiteConfig,
@@ -309,4 +311,35 @@ test('origins keep a non-default port and drop any path', () => {
 test('both origin lists are empty when nothing is configured', () => {
   assert.deepEqual(csrfAllowedOrigins({}), []);
   assert.deepEqual(csrfPublicOnlyOrigins({}), []);
+});
+
+test('gdriveOAuthConfigured mirrors the server route-registration gate', () => {
+  const full = {
+    GOOGLE_CLIENT_ID: 'id',
+    GOOGLE_CLIENT_SECRET: 'secret',
+    PUBLIC_BASE_URL: 'https://ex.test'
+  };
+  assert.equal(gdriveOAuthConfigured(full), true);
+  assert.equal(gdriveOAuthConfigured({ ...full, GOOGLE_CLIENT_SECRET: undefined }), false);
+  assert.equal(gdriveOAuthConfigured({ ...full, GOOGLE_CLIENT_ID: undefined }), false);
+  // No base URL at all → no redirect_uri can be built → routes stay off.
+  assert.equal(
+    gdriveOAuthConfigured({ GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' }),
+    false
+  );
+});
+
+test('onedriveOAuthConfigured mirrors the server route-registration gate', () => {
+  const full = {
+    MICROSOFT_CLIENT_ID: 'id',
+    MICROSOFT_CLIENT_SECRET: 'secret',
+    ADMIN_BASE_URL: 'https://admin.test'
+  };
+  assert.equal(onedriveOAuthConfigured(full), true);
+  assert.equal(onedriveOAuthConfigured({ ...full, MICROSOFT_CLIENT_SECRET: undefined }), false);
+  assert.equal(onedriveOAuthConfigured({ ...full, MICROSOFT_CLIENT_ID: undefined }), false);
+  assert.equal(
+    onedriveOAuthConfigured({ MICROSOFT_CLIENT_ID: 'id', MICROSOFT_CLIENT_SECRET: 'secret' }),
+    false
+  );
 });
