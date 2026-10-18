@@ -85,18 +85,52 @@ DEPLOY_SH_CONF=deploy/sites/stockademade.conf ~/src/deploy.sh/deploy.sh update .
 Never pass a `user@host` argument; each site config sets `REMOTE_HOST` to
 the VPS, and an argument overrides it.
 
+### Standard update (every deploy ends here)
+
+`update` ships; `verify-deploy.sh` proves the running process picked it
+up. That pairing is the standard — no deploy is done until verify
+passes. This exists because editing `deploy/secrets/<site>.secrets.env`
+does nothing on its own: the secrets only reach the server when an
+update copies them into `/etc/<APP_NAME>.env` and restarts the unit. A
+missing redeploy/restart is the usual cause of integration Connect
+buttons 404ing while the secrets file looks correct locally.
+
+```bash
+# after every update, from this repo:
+scripts/verify-deploy.sh https://<domain> [--expect-gdrive] [--expect-onedrive]
+```
+
+Pass `--expect-<provider>` for each provider whose `*_CLIENT_ID` /
+`*_CLIENT_SECRET` is present in that site's secrets file. The probe is
+logged-out on purpose: a registered route 401s behind its auth gate,
+an unregistered one 404s for everyone. So:
+
+- `ok gdrive: registered` — routes live, Connect works.
+- `FAIL gdrive: NOT REGISTERED (expected registered …)` — the server
+  booted without the provider env: redeploy (`update`) and re-verify.
+  If it persists, `cut -d= -f1 /etc/<APP_NAME>.env` on the VPS shows
+  which keys the process actually received (key names only — never
+  print values).
+
+`--expect-hash <sha>` additionally pins the build, e.g. `--expect-hash
+$(git rev-parse HEAD)` to confirm the just-pushed commit is what's
+serving.
+
 ### First deploy of a new site
 
-1. Optional — create a Google OAuth client for the host, authorised
-   redirect URI `https://<domain>/admin/auth/google/callback`. One client
-   per host. Leaving `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` unset gives
-   a token-only site: the site boots, `/login` offers just the
-   `ADMIN_TOKEN` form, and the two `/admin/auth/google/*` routes 404.
-   The Drive and OneDrive integrations add
-   `https://<domain>/admin/integrations/gdrive/callback` and
-   `.../onedrive/callback` on their own clients. All three derive from
-   `ADMIN_BASE_URL` (which defaults to `PUBLIC_BASE_URL`), so changing a
-   site's admin hostname means re-authorising every one of them.
+1. OAuth clients are shared across all three sites — one Google OAuth
+   client, one Microsoft Entra app registration. Both providers allow
+   multiple redirect URIs per registration, so register every admin
+   host's callbacks and paste the same id/secret pair into each
+   `deploy/secrets/<site>.secrets.env`:
+   - Google (login + Drive, per admin host): `https://<admin-host>/admin/auth/google/callback` and `https://<admin-host>/admin/integrations/gdrive/callback`. Admin hosts: `rkr-blog.rkroll.com`, `code.rkroll.com`, `stockademade.com`. Authorized domains must include `rkroll.com` and `stockademade.com`.
+   - Microsoft (OneDrive only — login is Google-only, per admin host): `https://<admin-host>/admin/integrations/onedrive/callback`. The Entra app must allow personal Microsoft accounts (the `common` tenant the server uses).
+   All three callbacks derive from `ADMIN_BASE_URL` (which defaults to
+   `PUBLIC_BASE_URL`), so changing a site's admin hostname means
+   re-authorising its URIs. Leaving `GOOGLE_CLIENT_ID` /
+   `GOOGLE_CLIENT_SECRET` unset gives a token-only site: the site boots,
+   `/login` offers just the `ADMIN_TOKEN` form, and the two
+   `/admin/auth/google/*` routes 404.
 2. `cp deploy/secrets.env.example deploy/secrets/<site>.secrets.env` and
    fill it in; generate `ADMIN_TOKEN` with `openssl rand -hex 32`.
 3. Point DNS at the VPS — certbot's webroot challenge needs the name to
