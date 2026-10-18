@@ -48,3 +48,18 @@ export function safeErr(err: unknown): { name?: string; message?: string; code?:
   }
   return { message: typeof err === 'string' ? redact(err) : undefined };
 }
+
+/**
+ * Extracts a provider's `error_description` (arctic surfaces it as
+ * `.description` on OAuth request errors) through the same redaction
+ * as the message. Without this, failures like a Microsoft token
+ * exchange log only `invalid_request` and the actionable AADSTS code
+ * is lost. Returns undefined when the field is absent.
+ */
+export function safeDescription(err: unknown): string | undefined {
+  if (err && typeof err === 'object') {
+    const e = err as { description?: unknown };
+    return typeof e.description === 'string' ? redact(e.description) : undefined;
+  }
+  return undefined;
+}

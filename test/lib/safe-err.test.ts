@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { safeErr } from '../../src/lib/safe-err.ts';
+import { safeDescription, safeErr } from '../../src/lib/safe-err.ts';
 
 describe('safeErr', () => {
   it('extracts name, message, code from an Error object', () => {
@@ -117,5 +117,33 @@ describe('safeErr', () => {
 
   it('safeErr redacts a lowercase bearer token form', () => {
     assert.doesNotMatch(safeErr('fetch failed: bearer abcDEF12').message ?? '', /abcDEF12/);
+  });
+});
+
+describe('safeDescription', () => {
+  it('extracts the provider description (e.g. arctic error_description)', () => {
+    const err = Object.assign(new Error('OAuth request error: invalid_request'), {
+      description:
+        'AADSTS9002325: Proof Key for Code Exchange is required for cross-origin authorization code redemption.'
+    });
+    assert.equal(
+      safeDescription(err),
+      'AADSTS9002325: Proof Key for Code Exchange is required for cross-origin authorization code redemption.'
+    );
+  });
+
+  it('redacts secret patterns inside the description', () => {
+    const err = Object.assign(new Error('OAuth request error'), {
+      description: 'redeem failed for code=AUTHCODE123 client_secret=CSSECRET'
+    });
+    const out = safeDescription(err) ?? '';
+    assert.doesNotMatch(out, /AUTHCODE123|CSSECRET/);
+    assert.match(out, /redeem failed/);
+  });
+
+  it('returns undefined when there is no description', () => {
+    assert.equal(safeDescription(new Error('boom')), undefined);
+    assert.equal(safeDescription(null), undefined);
+    assert.equal(safeDescription({ message: 'no desc here' }), undefined);
   });
 });

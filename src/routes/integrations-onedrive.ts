@@ -41,7 +41,7 @@ import {
   upsertToken
 } from '../lib/oauth-tokens.ts';
 import { ingestStream } from '../lib/originals.ts';
-import { safeErr } from '../lib/safe-err.ts';
+import { safeDescription, safeErr } from '../lib/safe-err.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import {
   ingestRemoteVideo,
@@ -178,7 +178,10 @@ export default async function integrationsOnedriveRoutes(
       try {
         tokens = await exchange.exchange(code, codeVerifier);
       } catch (err) {
-        req.log.warn({ err: safeErr(err) }, 'onedrive token exchange failed');
+        req.log.warn(
+          { err: safeErr(err), description: safeDescription(err) },
+          'onedrive token exchange failed'
+        );
         return reply.code(400).send({ error: 'token exchange failed' });
       }
 
