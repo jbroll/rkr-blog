@@ -19,7 +19,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireOwner, requireUser } from '../lib/auth-middleware.ts';
 import { adminBaseUrl } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
-import { fetchDriveFile } from '../lib/google-drive.ts';
+import { fetchDriveFile, listDriveFolder } from '../lib/google-drive.ts';
 import { createPendingStore } from '../lib/oauth-pending.ts';
 import {
   deleteToken,
@@ -210,6 +210,35 @@ export default async function integrationsGdriveRoutes(
     const removed = deleteToken(db, user.id, PROVIDER);
     return reply.send({ removed });
   });
+
+  fastify.get<{ Querystring: { folderId?: string; pageToken?: string; kind?: string } }>(
+    '/admin/integrations/gdrive/files',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'gdrive not connected' });
+      const folderId = (req.query.folderId ?? 'root').trim() || 'root';
+      const pageToken = req.query.pageToken?.trim() || undefined;
+      // The video picker asks for kind=video; anything else keeps the
+      // image behaviour (folders + image/*). See listDriveFolder.
+      const kind: 'image' | 'video' = req.query.kind === 'video' ? 'video' : 'image';
+      try {
+        const page = await listDriveFolder(fresh.access_token, folderId, {
+          ...(opts.driveFetcher ? { fetcher: opts.driveFetcher } : {}),
+          ...(pageToken ? { pageToken } : {}),
+          kind
+        });
+        return page;
+      } catch (err) {
+        req.log.warn({ err: safeErr(err), folderId }, 'gdrive folder list failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    }
+  );
 
   fastify.post<{ Body: ProviderImportBody }>(
     '/admin/import/gdrive',

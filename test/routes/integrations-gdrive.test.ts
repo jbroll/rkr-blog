@@ -787,6 +787,166 @@ test('POST /admin/import/gdrive/video 400s on missing fileId', async (t) => {
   assert.equal(res.statusCode, 400);
 });
 
+// ---- /files --------------------------------------------------------------
+
+async function setupConnectedWithFetcher(t: TestContext, driveFetcher: typeof fetch) {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    gdrive: { exchange: stubExchange(), driveFetcher }
+  });
+  t.after(() => app.close());
+
+  inviteEmail(db, 'a@x.com', 'owner');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-1', email: 'a@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const sessionCookie = `rkr_session=${session.id}`;
+  const stateCookie = encodeURIComponent(JSON.stringify({ state: 'st', codeVerifier: 'cv' }));
+  await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/callback?code=abc&state=st',
+    headers: { cookie: `${sessionCookie}; rkr_gdrive_state=${stateCookie}` }
+  });
+  return { app, sessionCookie };
+}
+
+function filesFixture() {
+  return {
+    files: [
+      {
+        id: 'img1',
+        name: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        thumbnailLink: 'https://th/photo'
+      },
+      { id: 'vid1', name: 'clip.mp4', mimeType: 'video/mp4' },
+      { id: 'fld1', name: 'Photos', mimeType: 'application/vnd.google-apps.folder' }
+    ],
+    nextPageToken: 'p2'
+  };
+}
+
+function jsonFetcher(payload: unknown): typeof fetch {
+  return (async () =>
+    new Response(JSON.stringify(payload), {
+      headers: { 'content-type': 'application/json' }
+    })) as typeof fetch;
+}
+
+test('GET /admin/integrations/gdrive/files: 404 when not connected', async (t) => {
+  const { app, sessionCookie } = await setup(t);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/files?folderId=root',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 404);
+  assert.match(res.json<ErrorBody>().error, /not connected/);
+});
+
+test('GET /admin/integrations/gdrive/files: returns image files + folders', async (t) => {
+  const { app, sessionCookie } = await setupConnectedWithFetcher(t, jsonFetcher(filesFixture()));
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/files?folderId=root',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json<{
+    items: Array<{ id: string; thumbnailUrl?: string }>;
+    nextPageToken: string | null;
+  }>();
+  assert.deepEqual(
+    body.items.map((i) => i.id),
+    ['fld1', 'img1']
+  );
+  assert.equal(body.items.find((i) => i.id === 'img1')?.thumbnailUrl, 'https://th/photo');
+  assert.equal(body.nextPageToken, 'p2');
+});
+
+test('GET /admin/integrations/gdrive/files: kind=video filters to videos', async (t) => {
+  const seen: string[] = [];
+  const fetcher = (async (url: string | URL) => {
+    seen.push(typeof url === 'string' ? url : url.toString());
+    return new Response(JSON.stringify(filesFixture()), {
+      headers: { 'content-type': 'application/json' }
+    });
+  }) as typeof fetch;
+  const { app, sessionCookie } = await setupConnectedWithFetcher(t, fetcher);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/files?folderId=root&kind=video',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.match(new URL(seen[0] ?? '').searchParams.get('q') ?? '', /video\//);
+  assert.deepEqual(
+    res.json<{ items: Array<{ id: string }> }>().items.map((i) => i.id),
+    ['fld1', 'vid1']
+  );
+});
+
+test('GET /admin/integrations/gdrive/files: forwards pageToken', async (t) => {
+  const seen: string[] = [];
+  const fetcher = (async (url: string | URL) => {
+    seen.push(typeof url === 'string' ? url : url.toString());
+    return new Response(JSON.stringify({ files: [] }), {
+      headers: { 'content-type': 'application/json' }
+    });
+  }) as typeof fetch;
+  const { app, sessionCookie } = await setupConnectedWithFetcher(t, fetcher);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/files?folderId=root&pageToken=p2',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.match(seen[0] ?? '', /pageToken=p2/);
+});
+
+test('GET /admin/integrations/gdrive/files: 400 when Drive call fails', async (t) => {
+  const fetcher = (async () => new Response('internal error', { status: 500 })) as typeof fetch;
+  const { app, sessionCookie } = await setupConnectedWithFetcher(t, fetcher);
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/files?folderId=root',
+    headers: { cookie: sessionCookie }
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('GET /admin/integrations/gdrive/files: admits an editor role', async (t) => {
+  const root = freshSiteRoot(t);
+  const db = open(path.join(root, 'data', 'site.db'));
+  migrate(db);
+  t.after(() => db.close());
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    auth: { exchange: noopAuthExchange, secureCookies: false },
+    gdrive: { exchange: stubExchange() }
+  });
+  t.after(() => app.close());
+  inviteEmail(db, 'e@x.com', 'editor');
+  const user = findOrCreateOAuthUser(db, { provider: 'google', sub: 'g-2', email: 'e@x.com' });
+  const session = createSession(db, { userId: user.id });
+  const res = await app.inject({
+    method: 'GET',
+    url: '/admin/integrations/gdrive/files?folderId=root',
+    headers: { cookie: `rkr_session=${session.id}` }
+  });
+  // No token row, but requireUser (not owner) passed: 404, not 401/403.
+  assert.equal(res.statusCode, 404);
+});
+
 // Avoid unused-import warning when Readable type-imports stay around.
 test.after(() => {
   void Readable;
