@@ -115,7 +115,7 @@
     "src/lib/login-throttle.ts": 100,
     "src/lib/mailer.ts": 100,
     "src/lib/matrix.ts": 100,
-    "src/lib/microsoft-graph.ts": 99.62,
+    "src/lib/microsoft-graph.ts": 99.64,
     "src/lib/migrate.ts": 100,
     "src/lib/notify-handler.ts": 100,
     "src/lib/oauth-pending.ts": 84.62,

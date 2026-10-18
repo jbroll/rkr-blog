@@ -242,11 +242,18 @@ async function fetchWithRedirectValidation(
   maxRedirects = 5
 ): Promise<Response> {
   let current = initialUrl;
+  let initialOrigin: string | null = null;
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const isStubInitial = fetcher !== fetch && hop === 0 && current.includes('graph.microsoft.com');
     const url = isStubInitial ? new URL(current) : await assertSafeFetchUrl(current);
+    if (initialOrigin === null) initialOrigin = url.origin;
+    // The /content 302 lands on a preauthenticated download URL on
+    // another host. Forwarding our Graph bearer token there makes the
+    // host 401 (and leaks the token), so authorization stays on the
+    // initial origin only — same rule fetch() itself applies.
+    const hopHeaders = url.origin === initialOrigin ? headers : withoutAuthHeader(headers);
     const res = await fetcher(url.toString(), {
-      headers,
+      headers: hopHeaders,
       signal,
       redirect: 'manual'
     } as RequestInit);
@@ -261,3 +268,10 @@ async function fetchWithRedirectValidation(
   throw new UnsafeUrlError(`too many redirects (>${maxRedirects})`);
 }
 /* c8 ignore stop */
+
+/** Drop the authorization header (case-insensitive); other headers pass through. */
+function withoutAuthHeader(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'authorization')
+  );
+}

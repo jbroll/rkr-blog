@@ -74,6 +74,38 @@ test('fetchOneDriveFile throws when /content has no body', async () => {
   await assert.rejects(fetchOneDriveFile('tok', 'ms-id', { fetcher }), /empty body/);
 });
 
+test('fetchOneDriveFile drops the bearer token when /content redirects off Graph', async () => {
+  // Graph answers /content with a 302 to a preauthenticated download
+  // URL on another host. Forwarding our bearer token there makes the
+  // host 401 (and leaks the token); the follow-up must go unauthenticated.
+  // The download host is an IP literal so no DNS lookup escapes the test.
+  const seenAuth: Array<string | null> = [];
+  const fetcher = (async (url: string | URL, init?: { headers?: Record<string, string> }) => {
+    const u = typeof url === 'string' ? url : url.toString();
+    if (u.endsWith('/content')) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: 'http://93.184.216.34/dl/cat.jpg' }
+      });
+    }
+    if (u.startsWith('http://93.184.216.34/')) {
+      const auth = new Headers(init?.headers).get('authorization');
+      seenAuth.push(auth);
+      if (auth) return new Response('nope', { status: 401 });
+      return new Response(Buffer.from('jpegbytes'), {
+        headers: { 'content-type': 'image/jpeg', 'content-length': '9' }
+      });
+    }
+    return new Response(
+      JSON.stringify({ id: 'ms-id', name: 'cat.jpg', file: { mimeType: 'image/jpeg' } }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  }) as typeof fetch;
+  const r = await fetchOneDriveFile('tok', 'ms-id', { fetcher });
+  assert.equal(r.contentType, 'image/jpeg');
+  assert.deepEqual(seenAuth, [null]);
+});
+
 test('fetchOneDriveFile falls back to file.mimeType when /content omits content-type', async () => {
   const body = Buffer.from('x');
   const fetcher = fixedFetcher((url) => {
