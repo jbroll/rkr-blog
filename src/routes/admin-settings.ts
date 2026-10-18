@@ -18,6 +18,7 @@ import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
   gdriveOAuthConfigured,
+  gphotosOAuthConfigured,
   isValidEmail,
   listAvailableThemes,
   onedriveOAuthConfigured,
@@ -66,10 +67,12 @@ export function registerAdminSettingsRoutes(
       const user = req.user;
       let gdriveConnected = false;
       let onedriveConnected = false;
+      let gphotosConnected = false;
       if (user && db) {
         const key = readSecretKey(siteRoot);
         gdriveConnected = readToken(db, key, user.id, 'gdrive') !== null;
         onedriveConnected = readToken(db, key, user.id, 'onedrive') !== null;
+        gphotosConnected = readToken(db, key, user.id, 'gphotos') !== null;
       }
       const hasBanner = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_site-banner.md'));
       const hasAbout = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_about.md'));
@@ -85,6 +88,8 @@ export function registerAdminSettingsRoutes(
           gdriveConfigured: gdriveOAuthConfigured(),
           onedriveConnected,
           onedriveConfigured: onedriveOAuthConfigured(),
+          gphotosConnected,
+          gphotosConfigured: gphotosOAuthConfigured(),
           hasBanner,
           hasAbout
         })
@@ -104,6 +109,14 @@ export function registerAdminSettingsRoutes(
     const user = req.user;
     if (user && db) {
       deleteToken(db, user.id, 'gdrive');
+    }
+    return reply.redirect('/admin/settings', 303);
+  });
+
+  fastify.post('/admin/settings/gphotos/disconnect', { ...ownerGuard }, async (req, reply) => {
+    const user = req.user;
+    if (user && db) {
+      deleteToken(db, user.id, 'gphotos');
     }
     return reply.redirect('/admin/settings', 303);
   });

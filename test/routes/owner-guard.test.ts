@@ -112,6 +112,7 @@ const OWNER_ONLY = [
   { method: 'POST' as const, url: '/admin/settings/site' },
   { method: 'POST' as const, url: '/admin/settings/banner' },
   { method: 'POST' as const, url: '/admin/settings/gdrive/disconnect' },
+  { method: 'POST' as const, url: '/admin/settings/gphotos/disconnect' },
   { method: 'POST' as const, url: '/admin/settings/onedrive/disconnect' },
   { method: 'GET' as const, url: '/admin/integrations/gdrive/connect' },
   { method: 'GET' as const, url: '/admin/integrations/gdrive/callback' },

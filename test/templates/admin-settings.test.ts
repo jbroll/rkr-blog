@@ -11,6 +11,7 @@ test('renderAdminSettingsPage: form pre-fills persisted values', () => {
     themes: ['default', 'papermod', 'terminal'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -40,6 +41,7 @@ test('renderAdminSettingsPage: placeholder shows the env-derived default', () =>
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -56,6 +58,7 @@ test('renderAdminSettingsPage: title + tagline escape HTML', () => {
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -75,6 +78,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false,
@@ -89,6 +93,7 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false,
@@ -105,6 +110,7 @@ test('renderAdminSettingsPage: save button is in the heading row with a disk ico
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -125,6 +131,7 @@ test('renderAdminSettingsPage: build chip shows the short git hash with full sha
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'abc123def456789ffeed0011223344556677889a',
     hasBanner: false,
     hasAbout: false
@@ -144,6 +151,7 @@ test('renderAdminSettingsPage: build chip shows "unknown" verbatim', () => {
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -159,6 +167,7 @@ test('renderAdminSettingsPage: ingestResize fields show persisted values', () =>
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -176,6 +185,7 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
     themes: ['default'],
     gdriveConnected: true,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -189,6 +199,7 @@ test('renderAdminSettingsPage: connected integration shows Disconnect button', (
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: true,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -206,6 +217,7 @@ test('renderAdminSettingsPage: unconfigured integration shows a setup hint, not 
     gdriveConfigured: false,
     onedriveConnected: false,
     onedriveConfigured: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -228,12 +240,71 @@ test('renderAdminSettingsPage: configured but unconnected integration keeps the 
     gdriveConfigured: true,
     onedriveConnected: false,
     onedriveConfigured: true,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
   });
   assert.match(html, /href="\/admin\/integrations\/gdrive\/connect"/);
   assert.match(html, /href="\/admin\/integrations\/onedrive\/connect"/);
+});
+
+test('renderAdminSettingsPage: unconfigured Google Photos shows a setup hint, not a Connect link', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false,
+    gdriveConfigured: true,
+    onedriveConnected: false,
+    onedriveConfigured: true,
+    gphotosConnected: false,
+    gphotosConfigured: false,
+    gitHash: 'unknown',
+    hasBanner: false,
+    hasAbout: false
+  });
+  assert.doesNotMatch(html, /\/admin\/integrations\/gphotos\/connect/);
+  assert.match(html, /GOOGLE_CLIENT_ID/);
+});
+
+test('renderAdminSettingsPage: configured Google Photos keeps the Connect link', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false,
+    gdriveConfigured: true,
+    onedriveConnected: false,
+    onedriveConfigured: true,
+    gphotosConnected: false,
+    gphotosConfigured: true,
+    gitHash: 'unknown',
+    hasBanner: false,
+    hasAbout: false
+  });
+  assert.match(html, /href="\/admin\/integrations\/gphotos\/connect"/);
+});
+
+test('renderAdminSettingsPage: connected Google Photos shows Disconnect', () => {
+  const html = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false,
+    gdriveConfigured: true,
+    onedriveConnected: false,
+    onedriveConfigured: true,
+    gphotosConnected: true,
+    gphotosConfigured: true,
+    gitHash: 'unknown',
+    hasBanner: false,
+    hasAbout: false
+  });
+  assert.match(html, /action="\/admin\/settings\/gphotos\/disconnect"/);
 });
 
 // ---------------------------------------------------------------------------
@@ -248,6 +319,7 @@ test('renderAdminSettingsPage: hasBanner=true shows edit link to /admin/banner/e
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: true,
     hasAbout: false
@@ -265,6 +337,7 @@ test('renderAdminSettingsPage: hasBanner=false shows create link to /admin/banne
     themes: ['default'],
     gdriveConnected: false,
     onedriveConnected: false,
+    gphotosConnected: false,
     gitHash: 'unknown',
     hasBanner: false,
     hasAbout: false
@@ -283,6 +356,7 @@ test('renderAdminSettingsPage: banner section heading present in both states', (
       themes: ['default'],
       gdriveConnected: false,
       onedriveConnected: false,
+      gphotosConnected: false,
       gitHash: 'unknown',
       hasBanner,
       hasAbout: false

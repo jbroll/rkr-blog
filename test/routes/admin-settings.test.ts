@@ -657,6 +657,17 @@ test('GET /admin/settings: omits Connect links when provider OAuth env is absent
   assert.equal(res.statusCode, 200);
   assert.doesNotMatch(res.body, /\/admin\/integrations\/gdrive\/connect/);
   assert.doesNotMatch(res.body, /\/admin\/integrations\/onedrive\/connect/);
+  assert.doesNotMatch(res.body, /\/admin\/integrations\/gphotos\/connect/);
   assert.match(res.body, /GOOGLE_CLIENT_ID/);
   assert.match(res.body, /MICROSOFT_CLIENT_ID/);
+});
+
+test('POST /admin/settings/gphotos/disconnect redirects to settings', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings/gphotos/disconnect'
+  });
+  assert.equal(res.statusCode, 303);
+  assert.equal(res.headers.location, '/admin/settings');
 });

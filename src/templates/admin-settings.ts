@@ -64,6 +64,11 @@ export interface AdminSettingsPageData extends SiteChrome {
   /** Whether the OneDrive integration routes are registered. Same
    * shape as gdriveConfigured. Defaults to true. */
   onedriveConfigured?: boolean;
+  /** Whether the current user has a stored Google Photos OAuth token. */
+  gphotosConnected: boolean;
+  /** Whether the Google Photos integration routes are registered. Same
+   * shape as gdriveConfigured. Defaults to true. */
+  gphotosConfigured?: boolean;
   /** Whether content/posts/_site-banner.md exists on disk. */
   hasBanner: boolean;
   /** Whether content/posts/_about.md exists on disk. */
@@ -246,6 +251,14 @@ ${renderIntegrationRow({
   connectHref: '/admin/integrations/onedrive/connect',
   disconnectAction: '/admin/settings/onedrive/disconnect',
   setupHint: 'MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET'
+})}
+${renderIntegrationRow({
+  label: 'Google Photos',
+  connected: data.gphotosConnected,
+  configured: data.gphotosConfigured ?? true,
+  connectHref: '/admin/integrations/gphotos/connect',
+  disconnectAction: '/admin/settings/gphotos/disconnect',
+  setupHint: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET'
 })}
 </section>`;
 }
