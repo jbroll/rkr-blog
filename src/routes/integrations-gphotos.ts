@@ -1,0 +1,504 @@
+// Google Photos picking integration. Per-user OAuth grant with the
+// photospicker.mediaitems.readonly scope, via the Photos Picker API
+// (server creates a picking session, the user selects in Google's UI,
+// the server downloads the picks). Tokens stored encrypted in
+// oauth_tokens, keyed by (user_id, 'gphotos'). Same Google OAuth
+// client as Drive — no new secrets, just a different grant.
+// The Library API cannot do this: since 2025-04 it returns
+// app-created items only.
+//
+// Routes (guards mirror the gdrive module):
+//   GET  /admin/integrations/gphotos/connect       → redirect to Google
+//   GET  /admin/integrations/gphotos/callback      → exchange code, store tokens
+//   GET  /admin/integrations/gphotos/status        → { connected: bool }
+//   POST /admin/integrations/gphotos/disconnect    → drop the row
+//   POST /admin/integrations/gphotos/sessions      → create picking session
+//   GET  /admin/integrations/gphotos/sessions/:id  → { done: bool }
+//   DELETE /admin/integrations/gphotos/sessions/:id → delete the session
+//   GET  /admin/integrations/gphotos/sessions/:id/media-items → picked items (no download URLs)
+//   POST /admin/import/gphotos                     → fetch + ingest an image by session + item id
+//   POST /admin/import/gphotos/video               → fetch + ingest a video by session + item id
+
+import { Readable, Transform } from 'node:stream';
+
+import { Google, generateCodeVerifier, generateState, type OAuth2Tokens } from 'arctic';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { requireOwner, requireUser } from '../lib/auth-middleware.ts';
+import { adminBaseUrl } from '../lib/config.ts';
+import type { Db } from '../lib/db.ts';
+import { createPendingStore } from '../lib/oauth-pending.ts';
+import {
+  deleteToken,
+  isExpired,
+  readToken,
+  type StoredOAuthToken,
+  upsertToken
+} from '../lib/oauth-tokens.ts';
+import { ingestStream } from '../lib/originals.ts';
+import {
+  createPickingSession,
+  deletePickingSession,
+  getPickingSession,
+  listSessionMediaItems,
+  PHOTOS_PICKER_SCOPE,
+  type PickedItem
+} from '../lib/photos-picker.ts';
+import { safeDescription, safeErr } from '../lib/safe-err.ts';
+import { readSecretKey } from '../lib/secrets.ts';
+import { assertSafeFetchUrl } from '../lib/url-safety.ts';
+import {
+  ingestRemoteVideo,
+  type ProviderCallbackQuery,
+  REMOTE_IMPORT_MAX_BYTES,
+  videoImportError
+} from './integrations-shared.ts';
+
+const PROVIDER = 'gphotos';
+const SCOPES = [PHOTOS_PICKER_SCOPE];
+const STATE_COOKIE = 'rkr_gphotos_state';
+const STATE_TTL_S = 600;
+
+/** OAuth wire format used by integrations-gphotos. Tests inject a stub. */
+export interface PhotosTokenExchange {
+  authorizationUrl(state: string, codeVerifier: string, scopes: string[]): URL;
+  exchange(code: string, codeVerifier: string): Promise<OAuth2Tokens>;
+  refresh(refreshToken: string): Promise<OAuth2Tokens>;
+}
+
+export interface IntegrationsGphotosOpts {
+  db: Db;
+  siteRoot: string;
+  /** Inject a stub TokenExchange / fetch so tests don't hit Google. */
+  exchange?: PhotosTokenExchange;
+  /** Inject a stub fetcher for Picker API calls. */
+  pickerFetcher?: typeof fetch;
+  secureCookies?: boolean;
+}
+
+interface PhotosImportBody {
+  sessionId?: unknown;
+  mediaItemId?: unknown;
+}
+
+export default async function integrationsGphotosRoutes(
+  fastify: FastifyInstance,
+  opts: IntegrationsGphotosOpts
+): Promise<void> {
+  const { db, siteRoot, secureCookies = true } = opts;
+  const exchange = opts.exchange ?? makePhotosExchange();
+  const pickerOpts = opts.pickerFetcher ? { fetcher: opts.pickerFetcher } : {};
+  const guard = { preHandler: requireUser };
+  const ownerGuard = { preHandler: requireOwner };
+
+  const pendingFlows = createPendingStore(STATE_TTL_S * 1000);
+
+  fastify.get('/admin/integrations/gphotos/connect', { ...ownerGuard }, async (req, reply) => {
+    const user = req.user;
+    /* c8 ignore next 2 -- requireOwner ensures user */
+    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+    const state = generateState();
+    const codeVerifier = generateCodeVerifier();
+    const url = exchange.authorizationUrl(state, codeVerifier, SCOPES);
+    // Force refresh_token issuance even if user has previously consented.
+    url.searchParams.set('access_type', 'offline');
+    url.searchParams.set('prompt', 'consent');
+
+    pendingFlows.remember(state, codeVerifier, user.id);
+    reply.setCookie(STATE_COOKIE, state, {
+      httpOnly: true,
+      secure: secureCookies,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: STATE_TTL_S
+    });
+    return reply.redirect(url.toString(), 302);
+  });
+
+  fastify.get<{ Querystring: ProviderCallbackQuery }>(
+    '/admin/integrations/gphotos/callback',
+    { ...ownerGuard },
+    async (req, reply) => {
+      if (req.query.error) {
+        return reply.code(400).send({ error: `provider error: ${req.query.error}` });
+      }
+      const code = req.query.code;
+      const incomingState = req.query.state;
+      if (typeof code !== 'string' || typeof incomingState !== 'string') {
+        return reply.code(400).send({ error: 'missing code or state' });
+      }
+      const cookieRaw = (req.cookies as Record<string, string | undefined> | undefined)?.[
+        STATE_COOKIE
+      ];
+      if (!cookieRaw) return reply.code(400).send({ error: 'no state cookie' });
+      let codeVerifier: string | null = null;
+      // Legacy JSON cookie fallback (tests still inject JSON). New flow stores verifier server-side and cookie holds only state.
+      if (cookieRaw.startsWith('{')) {
+        try {
+          const raw = JSON.parse(cookieRaw) as Partial<{ state: unknown; codeVerifier: unknown }>;
+          if (typeof raw.state !== 'string' || typeof raw.codeVerifier !== 'string') {
+            return reply.code(400).send({ error: 'malformed state cookie' });
+          }
+          if (raw.state !== incomingState) {
+            return reply.code(400).send({ error: 'state mismatch' });
+          }
+          codeVerifier = raw.codeVerifier;
+        } catch {
+          return reply.code(400).send({ error: 'malformed state cookie' });
+        }
+      } else {
+        if (cookieRaw !== incomingState) {
+          return reply.code(400).send({ error: 'state mismatch' });
+        }
+        const userForFlow = req.user;
+        /* c8 ignore next 2 -- requireOwner ensures user */
+        if (!userForFlow) return reply.code(400).send({ error: 'unauthenticated' });
+        codeVerifier = pendingFlows.take(incomingState, userForFlow.id);
+        if (!codeVerifier) {
+          return reply.code(400).send({ error: 'oauth flow expired or unknown' });
+        }
+      }
+      reply.clearCookie(STATE_COOKIE, {
+        httpOnly: true,
+        secure: secureCookies,
+        sameSite: 'lax',
+        path: '/'
+      });
+
+      let tokens: OAuth2Tokens;
+      try {
+        tokens = await exchange.exchange(code, codeVerifier);
+      } catch (err) {
+        req.log.warn(
+          { err: safeErr(err), description: safeDescription(err) },
+          'gphotos token exchange failed'
+        );
+        return reply.code(400).send({ error: 'token exchange failed' });
+      }
+
+      // Store the tokens. user is guaranteed by requireOwner preHandler.
+      const user = req.user;
+      /* c8 ignore next -- requireOwner preHandler ensures user is non-null */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      upsertToken(db, key, {
+        userId: user.id,
+        provider: PROVIDER,
+        accessToken: tokens.accessToken(),
+        refreshToken: tokens.hasRefreshToken() ? tokens.refreshToken() : null,
+        expiresAt: tokens.accessTokenExpiresAt().toISOString(),
+        scope: tokens.hasScopes() ? tokens.scopes().join(' ') : null
+      });
+
+      return reply.redirect('/admin/settings', 302);
+    }
+  );
+
+  fastify.get('/admin/integrations/gphotos/status', { ...guard }, async (req) => {
+    /* c8 ignore next -- requireUser preHandler */
+    const user = req.user;
+    /* c8 ignore next */
+    if (!user) return { connected: false };
+    const key = readSecretKey(siteRoot);
+    const token = readToken(db, key, user.id, PROVIDER);
+    return { connected: token !== null };
+  });
+
+  fastify.post('/admin/integrations/gphotos/disconnect', { ...ownerGuard }, async (req, reply) => {
+    const user = req.user;
+    /* c8 ignore next 2 -- requireOwner preHandler */
+    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+    const removed = deleteToken(db, user.id, PROVIDER);
+    return reply.send({ removed });
+  });
+
+  fastify.post('/admin/integrations/gphotos/sessions', { ...guard }, async (req, reply) => {
+    const user = req.user;
+    /* c8 ignore next 2 -- requireUser preHandler */
+    if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+    const key = readSecretKey(siteRoot);
+    const fresh = await ensureFresh(db, key, user.id, exchange);
+    if (!fresh) return reply.code(404).send({ error: 'gphotos not connected' });
+    try {
+      const session = await createPickingSession(fresh.access_token, pickerOpts);
+      return { sessionId: session.sessionId, pickerUri: `${session.pickerUri}/autoclose` };
+    } catch (err) {
+      req.log.warn({ err: safeErr(err) }, 'gphotos session create failed');
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  fastify.get<{ Params: { id: string } }>(
+    '/admin/integrations/gphotos/sessions/:id',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'gphotos not connected' });
+      try {
+        return await getPickingSession(fresh.access_token, req.params.id, pickerOpts);
+      } catch (err) {
+        req.log.warn({ err: safeErr(err) }, 'gphotos session poll failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    }
+  );
+
+  fastify.delete<{ Params: { id: string } }>(
+    '/admin/integrations/gphotos/sessions/:id',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'gphotos not connected' });
+      try {
+        await deletePickingSession(fresh.access_token, req.params.id, pickerOpts);
+        return reply.send({ deleted: true });
+      } catch (err) {
+        req.log.warn({ err: safeErr(err) }, 'gphotos session delete failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    }
+  );
+
+  fastify.get<{ Params: { id: string }; Querystring: { pageToken?: string } }>(
+    '/admin/integrations/gphotos/sessions/:id/media-items',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'gphotos not connected' });
+      try {
+        const page = await listSessionMediaItems(fresh.access_token, req.params.id, {
+          ...pickerOpts,
+          ...(req.query.pageToken ? { pageToken: req.query.pageToken } : {})
+        });
+        // Download URLs stay server-side (like refresh tokens): the
+        // browser only ever sees thumbnails.
+        return {
+          items: page.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            mimeType: item.mimeType,
+            thumbnailUrl: item.thumbnailUrl,
+            kind: item.kind
+          })),
+          nextPageToken: page.nextPageToken
+        };
+      } catch (err) {
+        req.log.warn({ err: safeErr(err) }, 'gphotos media-items list failed');
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    }
+  );
+
+  fastify.post<{ Body: PhotosImportBody }>(
+    '/admin/import/gphotos',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const { sessionId, mediaItemId } = req.body ?? {};
+      if (typeof sessionId !== 'string' || !sessionId.trim()) {
+        return reply.code(400).send({ error: 'sessionId is required' });
+      }
+      if (typeof mediaItemId !== 'string' || !mediaItemId.trim()) {
+        return reply.code(400).send({ error: 'mediaItemId is required' });
+      }
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'gphotos not connected' });
+
+      const item = await resolvePickedItem(req, reply, fresh.access_token, sessionId, mediaItemId);
+      if (!item) return undefined;
+      if (!/^image\//i.test(item.mimeType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be image/*; got ${item.mimeType}` });
+      }
+
+      let bytes = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          bytes += chunk.length;
+          /* c8 ignore next 3 -- testing 50 MiB limit requires impractical stream size */
+          if (bytes > REMOTE_IMPORT_MAX_BYTES) {
+            cb(new Error('streamed bytes exceeded limit'));
+            return;
+          }
+          cb(null, chunk);
+        }
+      });
+
+      try {
+        const stream = await downloadBytes(item.downloadUrl);
+        const result = await ingestStream({
+          stream: stream.pipe(limiter),
+          siteRoot,
+          source: {
+            kind: 'gphotos',
+            originalName: item.name,
+            mediaItemId: item.id
+          }
+        });
+        return {
+          id: result.id,
+          bytes: result.bytes,
+          deduplicated: result.deduplicated,
+          ext: result.ext
+        };
+      } catch (err) {
+        const msg = (err as Error).message;
+        const code = /exceeded limit/.test(msg) ? 413 : 400;
+        req.log.warn({ err, sessionId, mediaItemId }, 'gphotos ingest failed');
+        return reply.code(code).send({ error: msg });
+      }
+    }
+  );
+
+  fastify.post<{ Body: PhotosImportBody }>(
+    '/admin/import/gphotos/video',
+    { ...guard },
+    async (req, reply) => {
+      const user = req.user;
+      /* c8 ignore next 2 -- requireUser preHandler */
+      if (!user) return reply.code(401).send({ error: 'unauthenticated' });
+      const { sessionId, mediaItemId } = req.body ?? {};
+      if (typeof sessionId !== 'string' || !sessionId.trim()) {
+        return reply.code(400).send({ error: 'sessionId is required' });
+      }
+      if (typeof mediaItemId !== 'string' || !mediaItemId.trim()) {
+        return reply.code(400).send({ error: 'mediaItemId is required' });
+      }
+      const key = readSecretKey(siteRoot);
+      const fresh = await ensureFresh(db, key, user.id, exchange);
+      if (!fresh) return reply.code(404).send({ error: 'gphotos not connected' });
+
+      const item = await resolvePickedItem(req, reply, fresh.access_token, sessionId, mediaItemId);
+      if (!item) return undefined;
+      if (!/^video\//i.test(item.mimeType)) {
+        return reply
+          .code(415)
+          .send({ error: `content-type must be video/*; got ${item.mimeType}` });
+      }
+
+      try {
+        const stream = await downloadBytes(item.downloadUrl);
+        return await ingestRemoteVideo({
+          body: stream,
+          siteRoot,
+          kind: 'gphotos',
+          originalName: item.name
+        });
+      } catch (err) {
+        const { status, message } = videoImportError(err as Error);
+        req.log.warn({ err, sessionId, mediaItemId }, 'gphotos video ingest failed');
+        return reply.code(status).send({ error: message });
+      }
+    }
+  );
+
+  /** Re-list the session and resolve the picked item. Replies 400
+   * (re-list failed) or 404 (item gone) and returns null; the 415
+   * content-type check stays with the caller like the gdrive routes. */
+  async function resolvePickedItem(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    accessToken: string,
+    sessionId: string,
+    mediaItemId: string
+  ): Promise<PickedItem | null> {
+    let items: PickedItem[];
+    try {
+      const page = await listSessionMediaItems(accessToken, sessionId, pickerOpts);
+      items = page.items;
+    } catch (err) {
+      req.log.warn({ err: safeErr(err), sessionId }, 'gphotos session re-list failed');
+      reply.code(400).send({ error: (err as Error).message });
+      return null;
+    }
+    const item = items.find((i) => i.id === mediaItemId) ?? null;
+    if (!item) {
+      reply.code(404).send({ error: 'media item not found in session' });
+      return null;
+    }
+    return item;
+  }
+
+  /** Stream download bytes for a baseUrl. The URL comes from Google's
+   * own API response (validated before fetch). Uses the injected
+   * fetcher in tests, plain fetch in production. */
+  async function downloadBytes(downloadUrl: string): Promise<Readable> {
+    const fetchImpl = opts.pickerFetcher ?? fetch;
+    const url = await assertSafeFetchUrl(downloadUrl);
+    const res = await fetchImpl(url.toString());
+    if (!res.ok || !res.body) {
+      throw new Error(`photos download: HTTP ${res.status}`);
+    }
+    return Readable.fromWeb(res.body);
+  }
+}
+
+/**
+ * Read the user's gphotos token; if expired and a refresh token exists,
+ * exchange it for a fresh access token and persist. Returns null when
+ * no token row exists at all.
+ */
+async function ensureFresh(
+  db: Db,
+  key: Buffer,
+  userId: number,
+  exchange: PhotosTokenExchange
+): Promise<StoredOAuthToken | null> {
+  const existing = readToken(db, key, userId, PROVIDER);
+  if (!existing) return null;
+  if (!isExpired(existing)) return existing;
+  if (!existing.refresh_token) return existing; // no refresh available; return as-is
+
+  const refreshed = await exchange.refresh(existing.refresh_token);
+  upsertToken(db, key, {
+    userId,
+    provider: PROVIDER,
+    accessToken: refreshed.accessToken(),
+    // Google often omits refresh_token on refresh; preserve the existing one.
+    refreshToken: refreshed.hasRefreshToken() ? refreshed.refreshToken() : existing.refresh_token,
+    expiresAt: refreshed.accessTokenExpiresAt().toISOString(),
+    scope: refreshed.hasScopes() ? refreshed.scopes().join(' ') : existing.scope
+  });
+  return readToken(db, key, userId, PROVIDER);
+}
+
+/* c8 ignore start -- production-only wiring; tests inject PhotosTokenExchange */
+function makePhotosExchange(): PhotosTokenExchange {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const baseUrl = adminBaseUrl();
+  if (!clientId || !clientSecret || !baseUrl) {
+    throw new Error(
+      'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and ADMIN_BASE_URL (or PUBLIC_BASE_URL) must be set'
+    );
+  }
+  const redirectURI = new URL('/admin/integrations/gphotos/callback', baseUrl).toString();
+  const google = new Google(clientId, clientSecret, redirectURI);
+  return {
+    authorizationUrl(state, codeVerifier, scopes) {
+      return google.createAuthorizationURL(state, codeVerifier, scopes);
+    },
+    exchange(code, codeVerifier) {
+      return google.validateAuthorizationCode(code, codeVerifier);
+    },
+    refresh(refreshToken) {
+      return google.refreshAccessToken(refreshToken);
+    }
+  };
+}
+/* c8 ignore stop */

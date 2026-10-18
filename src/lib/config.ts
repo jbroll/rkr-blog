@@ -356,6 +356,13 @@ export function onedriveOAuthConfigured(env: Env = process.env): boolean {
   return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && adminBaseUrl(env));
 }
 
+/** Whether the Google Photos picking integration routes are registered.
+ * Same Google OAuth client as Drive (no new secrets) — the grant just
+ * carries the Photos Picker scope instead. */
+export function gphotosOAuthConfigured(env: Env = process.env): boolean {
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && adminBaseUrl(env));
+}
+
 function stripTrailingSlash(v: string | undefined): string | undefined {
   if (!v) return undefined;
   return v.replace(/\/+$/, '');

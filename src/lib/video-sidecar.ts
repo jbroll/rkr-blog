@@ -23,7 +23,7 @@ export interface VideoSidecar {
   /** sha256 hex id of the original bytes; matches the sidecar filename. */
   original: string;
   source: {
-    kind: 'upload' | 'url' | 'gdrive' | 'onedrive';
+    kind: 'upload' | 'url' | 'gdrive' | 'onedrive' | 'gphotos';
     fetchedAt: string; // ISO
     originalName: string;
     storedHash: string; // sha256 hex of the bytes on disk

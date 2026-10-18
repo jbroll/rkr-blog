@@ -24,6 +24,7 @@ import {
   csrfAllowedOrigins,
   csrfPublicOnlyOrigins,
   gdriveOAuthConfigured,
+  gphotosOAuthConfigured,
   onedriveOAuthConfigured,
   paths,
   publicBaseUrl,
@@ -42,6 +43,9 @@ import adminRoutes from './routes/admin.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
 import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
+import integrationsGphotosRoutes, {
+  type PhotosTokenExchange
+} from './routes/integrations-gphotos.ts';
 import integrationsOnedriveRoutes, {
   type OneDriveTokenExchange
 } from './routes/integrations-onedrive.ts';
@@ -109,6 +113,16 @@ export interface BuildAppOpts {
   onedrive?: {
     exchange?: OneDriveTokenExchange;
     graphFetcher?: typeof fetch;
+  };
+  /**
+   * When set (and auth is wired), Google Photos picking integration
+   * routes register. Same Google OAuth client as Drive — no new
+   * secrets; tests inject stubs, production derives wiring from
+   * GOOGLE_CLIENT_ID / SECRET env vars.
+   */
+  gphotos?: {
+    exchange?: PhotosTokenExchange;
+    pickerFetcher?: typeof fetch;
   };
 }
 
@@ -251,6 +265,20 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
         siteRoot,
         ...(opts.onedrive?.exchange ? { exchange: opts.onedrive.exchange } : {}),
         ...(opts.onedrive?.graphFetcher ? { graphFetcher: opts.onedrive.graphFetcher } : {}),
+        secureCookies: opts.auth.secureCookies ?? true
+      });
+    }
+
+    // Google Photos picking: same conditional-registration pattern.
+    // Production needs GOOGLE_CLIENT_ID + SECRET + a base URL (shared
+    // with the Drive client); tests inject opts.gphotos directly.
+    const gphotosConfigured = opts.gphotos?.exchange !== undefined || gphotosOAuthConfigured();
+    if (gphotosConfigured) {
+      await app.register(integrationsGphotosRoutes, {
+        db: opts.db,
+        siteRoot,
+        ...(opts.gphotos?.exchange ? { exchange: opts.gphotos.exchange } : {}),
+        ...(opts.gphotos?.pickerFetcher ? { pickerFetcher: opts.gphotos.pickerFetcher } : {}),
         secureCookies: opts.auth.secureCookies ?? true
       });
     }

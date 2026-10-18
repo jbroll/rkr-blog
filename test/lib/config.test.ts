@@ -10,6 +10,7 @@ import {
   csrfAllowedOrigins,
   csrfPublicOnlyOrigins,
   gdriveOAuthConfigured,
+  gphotosOAuthConfigured,
   listAvailableThemes,
   onedriveOAuthConfigured,
   paths,
@@ -340,6 +341,20 @@ test('onedriveOAuthConfigured mirrors the server route-registration gate', () =>
   assert.equal(onedriveOAuthConfigured({ ...full, MICROSOFT_CLIENT_ID: undefined }), false);
   assert.equal(
     onedriveOAuthConfigured({ MICROSOFT_CLIENT_ID: 'id', MICROSOFT_CLIENT_SECRET: 'secret' }),
+    false
+  );
+});
+
+test('gphotosOAuthConfigured shares the Google client gate with gdrive', () => {
+  const full = {
+    GOOGLE_CLIENT_ID: 'id',
+    GOOGLE_CLIENT_SECRET: 'secret',
+    PUBLIC_BASE_URL: 'https://ex.test'
+  };
+  assert.equal(gphotosOAuthConfigured(full), true);
+  assert.equal(gphotosOAuthConfigured({ ...full, GOOGLE_CLIENT_SECRET: undefined }), false);
+  assert.equal(
+    gphotosOAuthConfigured({ GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' }),
     false
   );
 });

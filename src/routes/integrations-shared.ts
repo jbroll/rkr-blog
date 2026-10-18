@@ -106,7 +106,7 @@ function byteCapTransform(maxBytes: number): Transform {
 export async function ingestRemoteVideo(args: {
   body: Readable;
   siteRoot: string;
-  kind: 'gdrive' | 'onedrive';
+  kind: 'gdrive' | 'onedrive' | 'gphotos';
   originalName: string;
 }): Promise<VideoImportResponse> {
   const { body, siteRoot, kind, originalName } = args;
