@@ -4,10 +4,10 @@
 
 import type { Editor } from '@tiptap/core';
 
-import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 import { pickFromDriveVideo } from './integrations/gdrive';
 import { pickFromOneDriveVideo } from './integrations/onedrive';
+import { openSourcePicker, type SourceChoice } from './source-picker';
 import { uploadVideo } from './video-upload';
 
 export interface VideoInserter {
@@ -19,30 +19,6 @@ export interface VideoInserterDeps {
   editor: Editor;
   fileInput: HTMLInputElement;
   sourceDialog: HTMLDialogElement;
-}
-
-/** Show the source-picker dialog and resolve with the chosen source
- * (or null on cancel). The dialog has one button per source plus a
- * Cancel button; each carries `data-source` on the click target.
- * Mirrors image-insert.ts's openSourcePicker contract. */
-function openSourcePicker(
-  dialog: HTMLDialogElement
-): Promise<'local' | 'drive' | 'onedrive' | null> {
-  return new Promise((resolve) => {
-    const onClick = (ev: Event): void => {
-      const btn = (ev.target as HTMLElement | null)?.closest<HTMLButtonElement>(
-        'button[data-source]'
-      );
-      if (!btn) return;
-      dialog.removeEventListener('click', onClick);
-      dialog.close();
-      const src = btn.dataset.source ?? '';
-      if (src === 'local' || src === 'drive' || src === 'onedrive') resolve(src);
-      else resolve(null);
-    };
-    dialog.addEventListener('click', onClick);
-    openModal(dialog);
-  });
 }
 
 export function createVideoInserter(deps: VideoInserterDeps): VideoInserter {
@@ -77,7 +53,7 @@ export function createVideoInserter(deps: VideoInserterDeps): VideoInserter {
   async function insertFromAnySource(): Promise<void> {
     const title = $('rkr-source-picker-title');
     title.textContent = 'Add video';
-    const choice = await openSourcePicker(sourceDialog);
+    const choice: SourceChoice = await openSourcePicker(sourceDialog);
     if (!choice) return;
     if (choice === 'local') {
       fileInput.click();

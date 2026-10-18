@@ -270,3 +270,38 @@ test('video: toolbar +Video uploads the picked file and inserts a video node', a
     muted: true
   });
 });
+
+test('video: Escape on the source picker dismisses it and the next open still works', async ({
+  page
+}) => {
+  test.setTimeout(120_000);
+  await login(page);
+  await page.goto('/admin/editor?e2e=1');
+  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+
+  const sourcePicker = page.locator('#rkr-source-picker');
+  await page.getByRole('button', { name: '+Video' }).click();
+  await expect(sourcePicker).toBeVisible();
+
+  // Escape fires the dialog's `cancel` event, not a click on a source
+  // button. The picker must still dismiss (and detach its listener) so
+  // the next open isn't driven by a stale handler.
+  await page.keyboard.press('Escape');
+  await expect(sourcePicker).toBeHidden();
+
+  await page.getByRole('button', { name: '+Video' }).click();
+  await expect(sourcePicker).toBeVisible();
+  await expect(page.locator('#rkr-source-picker-title')).toHaveText('Add video');
+  await sourcePicker.locator('button[data-source="local"]').click();
+  await expect(sourcePicker).toBeHidden();
+
+  await page.locator('#rkr-video-input').setInputFiles({
+    name: 'escaped.mp4',
+    mimeType: 'video/mp4',
+    buffer: makeFixtureMp4()
+  });
+  await expect(page.locator('.rkr-video-placeholder[data-video]')).toHaveCount(1, {
+    timeout: 60_000
+  });
+  await expect(page.locator('#rkroll-admin-status')).toContainText('uploaded escaped.mp4');
+});

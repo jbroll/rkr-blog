@@ -6,13 +6,13 @@
 
 import type { Editor } from '@tiptap/core';
 
-import { openModal } from './dialog-focus';
 import { $, setStatus } from './dom';
 import type { FigureAttrs } from './figure-node';
 import { pickFromDrive } from './integrations/gdrive';
 import { pickFromOneDrive } from './integrations/onedrive';
 import { hydrateLocalThumbs } from './local-thumb';
 import { uploadMany } from './pick';
+import { openSourcePicker, type SourceChoice } from './source-picker';
 import { uploadImage } from './upload';
 
 type InsertMode = 'new' | 'append';
@@ -33,29 +33,6 @@ export interface ImageInserterDeps {
   editor: Editor;
   fileInput: HTMLInputElement;
   sourceDialog: HTMLDialogElement;
-}
-
-/** Show the source-picker dialog and resolve with the chosen source
- * (or null on cancel). The dialog has one button per source plus a
- * Cancel button; each carries `data-source` on the click target. */
-function openSourcePicker(
-  dialog: HTMLDialogElement
-): Promise<'local' | 'drive' | 'onedrive' | null> {
-  return new Promise((resolve) => {
-    const onClick = (ev: Event): void => {
-      const btn = (ev.target as HTMLElement | null)?.closest<HTMLButtonElement>(
-        'button[data-source]'
-      );
-      if (!btn) return;
-      dialog.removeEventListener('click', onClick);
-      dialog.close();
-      const src = btn.dataset.source ?? '';
-      if (src === 'local' || src === 'drive' || src === 'onedrive') resolve(src);
-      else resolve(null);
-    };
-    dialog.addEventListener('click', onClick);
-    openModal(dialog);
-  });
 }
 
 export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
@@ -121,7 +98,7 @@ export function createImageInserter(deps: ImageInserterDeps): ImageInserter {
     // The dialog is shared with the +Video branch, which retitles it to
     // "Add video"; set it back whenever an image entry opens it.
     $('rkr-source-picker-title').textContent = 'Add image';
-    const choice = await openSourcePicker(sourceDialog);
+    const choice: SourceChoice = await openSourcePicker(sourceDialog);
     if (!choice) return;
     if (choice === 'local') {
       pendingInsertMode = mode;
