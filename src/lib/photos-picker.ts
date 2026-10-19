@@ -110,7 +110,8 @@ export async function listSessionMediaItems(
   sessionId: string,
   opts: FetcherOpts & { pageToken?: string } = {}
 ): Promise<{ items: PickedItem[]; nextPageToken: string | null }> {
-  const url = new URL(`${PICKER_BASE}/sessions/${encodeURIComponent(sessionId)}/mediaItems`);
+  const url = new URL(`${PICKER_BASE}/mediaItems`);
+  url.searchParams.set('sessionId', sessionId);
   url.searchParams.set('pageSize', '100');
   if (opts.pageToken) url.searchParams.set('pageToken', opts.pageToken);
   const res = await authed(url.toString(), accessToken, opts);

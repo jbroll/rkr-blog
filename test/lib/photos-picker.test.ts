@@ -126,8 +126,9 @@ test('listSessionMediaItems forwards pageToken', async () => {
     });
   });
   await listSessionMediaItems('tok', 'sess-1', { fetcher, pageToken: 'pt9' });
+  assert.match(seen[0] ?? '', /\/v1\/mediaItems\?/);
+  assert.match(seen[0] ?? '', /sessionId=sess-1/);
   assert.match(seen[0] ?? '', /pageToken=pt9/);
-  assert.match(seen[0] ?? '', /sessions\/sess-1\/mediaItems/);
 });
 
 for (const [op, fn] of [

@@ -95,7 +95,7 @@ function stubPickerFetcher(
         { headers: { 'content-type': 'application/json' } }
       );
     }
-    if (/\/v1\/sessions\/sess-1\/mediaItems/.test(u)) {
+    if (/\/v1\/mediaItems/.test(u) && u.includes('sessionId=sess-1')) {
       return new Response(
         JSON.stringify({
           mediaItems: [
@@ -358,7 +358,7 @@ test('POST /admin/import/gphotos ingests the picked item', async (t) => {
 test('POST /admin/import/gphotos 415s on non-image content-type', async (t) => {
   const videoFetcher = (async (url: string | URL) => {
     const u = typeof url === 'string' ? url : url.toString();
-    if (/\/v1\/sessions\/sess-1\/mediaItems/.test(u)) {
+    if (/\/v1\/mediaItems/.test(u) && u.includes('sessionId=sess-1')) {
       return new Response(
         JSON.stringify({
           mediaItems: [
@@ -482,7 +482,7 @@ test('POST /admin/import/gphotos/video ingests video picks', async (t) => {
   const videoFetcher = (async (url: string | URL, init?: RequestInit) => {
     const u = typeof url === 'string' ? url : url.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
-    if (/\/v1\/sessions\/sess-1\/mediaItems/.test(u)) {
+    if (/\/v1\/mediaItems/.test(u) && u.includes('sessionId=sess-1')) {
       return new Response(
         JSON.stringify({
           mediaItems: [
@@ -794,7 +794,7 @@ test('POST /admin/import/gphotos 400s when session re-list fails', async (t) => 
 test('POST /admin/import/gphotos 400s when download fails', async (t) => {
   const fetcher = (async (url: string | URL) => {
     const u = typeof url === 'string' ? url : url.toString();
-    if (/\/v1\/sessions\/sess-1\/mediaItems/.test(u)) {
+    if (/\/v1\/mediaItems/.test(u) && u.includes('sessionId=sess-1')) {
       return new Response(
         JSON.stringify({
           mediaItems: [
@@ -853,7 +853,7 @@ test('POST /admin/import/gphotos/video 415s on non-video content-type', async (t
 test('POST /admin/import/gphotos/video maps ingest failure to an error status', async (t) => {
   const fetcher = (async (url: string | URL) => {
     const u = typeof url === 'string' ? url : url.toString();
-    if (/\/v1\/sessions\/sess-1\/mediaItems/.test(u)) {
+    if (/\/v1\/mediaItems/.test(u) && u.includes('sessionId=sess-1')) {
       return new Response(
         JSON.stringify({
           mediaItems: [

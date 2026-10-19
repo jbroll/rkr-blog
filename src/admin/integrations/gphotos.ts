@@ -159,7 +159,10 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
       }
       statusEl.textContent =
         'Choose photos in the Google Photos tab, then come back here — this dialog fills in on its own.';
-      openBtn.style.display = '';
+      // Open straight away while the source-button gesture is fresh;
+      // a blocker yields null and the Open button stays as fallback.
+      const win = window.open(pickerUri, '_blank', 'noopener');
+      openBtn.style.display = win ? 'none' : '';
       void poll(Date.now() + SESSION_TIMEOUT_MS);
     }
 
