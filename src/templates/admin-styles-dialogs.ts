@@ -390,6 +390,7 @@ export const ADMIN_CSS_DIALOGS = `  .rkr-meta { display: grid; grid-template-col
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .rkr-cb-cancel { padding: .35rem .85rem; cursor: pointer; }
+  .rkr-cb-close { padding: .35rem .85rem; cursor: pointer; }
   .rkr-cb-import {
     padding: .35rem .85rem; cursor: pointer;
     background: var(--rkr-link); color: var(--rkr-bg);

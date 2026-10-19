@@ -3041,19 +3041,23 @@ test('gphotos: happy path — open picker, poll, select, import → figure inser
   const pickerDialog = page.locator('#rkr-source-picker');
   await page.getByRole('button', { name: '+Image', exact: true }).click();
   await expect(pickerDialog).toBeVisible();
+  // Gate on the session POST: once it resolves the dialog must exist
+  // (it is created synchronously before the flow starts), so a slow
+  // host can't flake the visibility assertion below.
+  const sessionPosted = page.waitForResponse('**/integrations/gphotos/sessions');
   await pickerDialog.locator('button[data-source="photos"]').click();
+  await sessionPosted;
 
   const browser = page.locator('#rkr-cloud-browser');
   await expect(browser).toBeVisible({ timeout: 5_000 });
 
-  await browser.locator('.rkr-cb-open-photos').click();
+  // The tab opens itself once the session exists (the Open button is
+  // only the popup-blocker fallback, untouched here).
+  await expect.poll(() => opened.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
   expect(opened[0] ?? '').toMatch(/^https:\/\/photos\.google\.com\/picker\//);
 
-  const fileBtn = browser.locator('button.rkr-cb-file').filter({ hasText: 'beach.jpg' });
-  await expect(fileBtn).toBeVisible({ timeout: 10_000 });
-  await fileBtn.click();
-  await browser.locator('.rkr-cb-import').click();
-
+  // Picks import on their own — no re-selection — and the dialog
+  // closes itself once the import summary lands.
   await expect(page.locator('#rkroll-admin-status')).toContainText(/imported.*Google Photos/, {
     timeout: 10_000
   });
@@ -3092,6 +3096,11 @@ test('gphotos: not connected + dismiss → no dialog opened', async ({ page }) =
 test('gphotos: cancel deletes the session and resolves []', async ({ page }) => {
   setupGphotosRoutes(page);
   await stubPhotosOpener(page);
+  // Keep the session un-decided so Cancel stays enabled (the default
+  // mock reports done immediately and would auto-import first).
+  await page.route('**/admin/integrations/gphotos/sessions/sess-1', (route) =>
+    route.fulfill({ json: { done: false } })
+  );
 
   await login(page);
   await page.goto('/admin/editor?e2e=1');
@@ -3100,7 +3109,12 @@ test('gphotos: cancel deletes the session and resolves []', async ({ page }) => 
   const pickerDialog = page.locator('#rkr-source-picker');
   await page.getByRole('button', { name: '+Image', exact: true }).click();
   await expect(pickerDialog).toBeVisible();
+  // Gate on the session POST: once it resolves the dialog must exist
+  // (it is created synchronously before the flow starts), so a slow
+  // host can't flake the visibility assertion below.
+  const sessionPosted = page.waitForResponse('**/integrations/gphotos/sessions');
   await pickerDialog.locator('button[data-source="photos"]').click();
+  await sessionPosted;
 
   const browser = page.locator('#rkr-cloud-browser');
   await expect(browser).toBeVisible({ timeout: 5_000 });
@@ -3131,7 +3145,12 @@ test('gphotos: poll failure shows error with retry', async ({ page }) => {
   const pickerDialog = page.locator('#rkr-source-picker');
   await page.getByRole('button', { name: '+Image', exact: true }).click();
   await expect(pickerDialog).toBeVisible();
+  // Gate on the session POST: once it resolves the dialog must exist
+  // (it is created synchronously before the flow starts), so a slow
+  // host can't flake the visibility assertion below.
+  const sessionPosted = page.waitForResponse('**/integrations/gphotos/sessions');
   await pickerDialog.locator('button[data-source="photos"]').click();
+  await sessionPosted;
 
   const browser = page.locator('#rkr-cloud-browser');
   await expect(browser).toBeVisible({ timeout: 5_000 });
@@ -3155,20 +3174,15 @@ test('gphotos: video mode imports through /video into a video node', async ({ pa
   await page.getByRole('button', { name: '+Video' }).click();
   const sourcePicker = page.locator('#rkr-source-picker');
   await expect(sourcePicker).toBeVisible();
+  const sessionPosted = page.waitForResponse('**/integrations/gphotos/sessions');
   await sourcePicker.locator('button[data-source="photos"]').click();
+  await sessionPosted;
 
   const browser = page.locator('#rkr-cloud-browser');
   await expect(browser).toBeVisible({ timeout: 5_000 });
 
-  // Image picks are hidden in video mode.
-  await expect(browser.locator('button.rkr-cb-file').filter({ hasText: 'beach.jpg' })).toHaveCount(
-    0
-  );
-  const fileBtn = browser.locator('button.rkr-cb-file').filter({ hasText: 'clip.mp4' });
-  await expect(fileBtn).toBeVisible({ timeout: 10_000 });
-  await fileBtn.click();
-  await browser.locator('.rkr-cb-import').click();
-
+  // Image picks are hidden in video mode; the video pick imports on its own.
+  await expect(browser.locator('div.rkr-cb-item').filter({ hasText: 'beach.jpg' })).toHaveCount(0);
   await expect(page.locator('#rkroll-admin-status')).toContainText(/imported.*Google Photos/, {
     timeout: 10_000
   });
@@ -3217,11 +3231,16 @@ test('gphotos: hostile filename renders as inert text', async ({ page }) => {
   const pickerDialog = page.locator('#rkr-source-picker');
   await page.getByRole('button', { name: '+Image', exact: true }).click();
   await expect(pickerDialog).toBeVisible();
+  // Gate on the session POST: once it resolves the dialog must exist
+  // (it is created synchronously before the flow starts), so a slow
+  // host can't flake the visibility assertion below.
+  const sessionPosted = page.waitForResponse('**/integrations/gphotos/sessions');
   await pickerDialog.locator('button[data-source="photos"]').click();
+  await sessionPosted;
 
   const browser = page.locator('#rkr-cloud-browser');
   await expect(browser).toBeVisible({ timeout: 5_000 });
-  await expect(browser.locator('button.rkr-cb-file').filter({ hasText: evil })).toBeVisible({
+  await expect(browser.locator('div.rkr-cb-item').filter({ hasText: evil })).toBeVisible({
     timeout: 10_000
   });
   expect(

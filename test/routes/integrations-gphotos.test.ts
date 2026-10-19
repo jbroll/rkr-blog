@@ -499,7 +499,7 @@ test('POST /admin/import/gphotos/video ingests video picks', async (t) => {
         { headers: { 'content-type': 'application/json' } }
       );
     }
-    if (u.endsWith('=d')) {
+    if (u.endsWith('=dv')) {
       return new Response(bytes, {
         headers: { 'content-type': 'video/mp4', 'content-length': String(bytes.length) }
       });

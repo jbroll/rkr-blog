@@ -33,7 +33,7 @@
     "src/admin/image-insert.ts": 94.74,
     "src/admin/image-map-opfs.ts": 96.97,
     "src/admin/integrations/gdrive.ts": 100,
-    "src/admin/integrations/gphotos.ts": 89.17,
+    "src/admin/integrations/gphotos.ts": 90.35,
     "src/admin/integrations/onedrive.ts": 94.44,
     "src/admin/integrations/provider-browser.ts": 89.17,
     "src/admin/integrations/provider-helpers.ts": 100,

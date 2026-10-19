@@ -23,11 +23,6 @@ interface PickedListItem {
   kind: MediaKind;
 }
 
-interface MediaItemsPage {
-  items: PickedListItem[];
-  nextPageToken: string | null;
-}
-
 const POLL_MS = 2000;
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -91,14 +86,12 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
     cancelBtn.type = 'button';
     cancelBtn.className = 'rkr-cb-cancel';
     cancelBtn.textContent = 'Cancel';
-    foot.append(footStatus, cancelBtn);
-
-    const importBtn = document.createElement('button');
-    importBtn.type = 'button';
-    importBtn.className = 'rkr-cb-import';
-    importBtn.style.display = 'none';
-    importBtn.textContent = 'Import';
-    foot.prepend(importBtn);
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'rkr-cb-close';
+    closeBtn.textContent = 'Close';
+    closeBtn.style.display = 'none';
+    foot.append(footStatus, cancelBtn, closeBtn);
 
     dialog.append(head, statusEl, openBtn, retryBtn, grid, foot);
     document.body.append(dialog);
@@ -107,7 +100,7 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
     let pickerUri: string | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let settled = false;
-    const selected = new Map<string, PickedListItem>();
+    const importedIds: string[] = [];
 
     function stopTimer() {
       if (timer !== null) {
@@ -116,7 +109,7 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
       }
     }
 
-    function closeDialog(ids: string[]) {
+    function finish(ids: string[]) {
       settled = true;
       stopTimer();
       dialog.close();
@@ -158,7 +151,7 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
         return;
       }
       statusEl.textContent =
-        'Choose photos in the Google Photos tab, then come back here — this dialog fills in on its own.';
+        'Choose photos in the Google Photos tab, then come back here — imports start on their own.';
       // Open straight away while the source-button gesture is fresh;
       // a blocker yields null and the Open button stays as fallback.
       const win = window.open(pickerUri, '_blank', 'noopener');
@@ -180,7 +173,7 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
         return;
       }
       if (done) {
-        await loadItems();
+        await loadAndImport();
         return;
       }
       if (Date.now() >= deadline) {
@@ -190,119 +183,88 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
       timer = setTimeout(() => void poll(deadline), POLL_MS);
     }
 
-    async function loadItems() {
+    function makeRow(item: PickedListItem): HTMLDivElement {
+      const el = document.createElement('div');
+      el.className = 'rkr-cb-item';
+      const thumb = document.createElement('div');
+      thumb.className = 'rkr-cb-thumb';
+      thumb.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/></svg>';
+      el.append(thumb);
+      const name = document.createElement('span');
+      name.className = 'rkr-cb-name';
+      name.textContent = item.name;
+      el.append(name);
+      const state = document.createElement('span');
+      state.className = 'rkr-cb-rowstate';
+      state.textContent = 'waiting…';
+      el.append(state);
+      return el;
+    }
+
+    async function loadAndImport() {
       statusEl.textContent = 'Loading your selection…';
+      let items: PickedListItem[];
       try {
         const res = await fetch(
           `/admin/integrations/gphotos/sessions/${encodeURIComponent(sessionId ?? '')}/media-items`
         );
         if (!res.ok) throw new Error(`media-items: ${res.status}`);
-        const page = (await res.json()) as MediaItemsPage;
-        const items = page.items.filter((item) =>
+        const page = (await res.json()) as { items: PickedListItem[] };
+        items = (page.items ?? []).filter((item) =>
           mediaKind === 'video' ? item.kind === 'video' : item.kind === 'image'
         );
-        grid.innerHTML = '';
-        if (items.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'rkr-cb-placeholder';
-          empty.textContent =
-            mediaKind === 'video'
-              ? 'No videos were selected in Google Photos.'
-              : 'No photos were selected in Google Photos.';
-          grid.append(empty);
-        }
-        for (const item of items) grid.append(makeItemEl(item));
-        statusEl.textContent =
-          items.length > 0 ? 'Tick what to import, then Import.' : statusEl.textContent;
       } catch (err) {
         showRetry(`Could not load your selection: ${(err as Error).message}.`);
+        return;
       }
-    }
-
-    function updateImportBtn() {
-      const n = selected.size;
-      if (n === 0) {
-        importBtn.style.display = 'none';
-      } else {
-        importBtn.style.display = '';
-        importBtn.textContent = `Import ${n}`;
+      if (items.length === 0) {
+        statusEl.textContent =
+          mediaKind === 'video'
+            ? 'No videos were selected in Google Photos.'
+            : 'No photos were selected in Google Photos.';
+        cancelBtn.style.display = 'none';
+        closeBtn.style.display = '';
+        return;
       }
-    }
-
-    function makeItemEl(item: PickedListItem): HTMLButtonElement {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'rkr-cb-item rkr-cb-file';
-
-      const thumb = document.createElement('div');
-      thumb.className = 'rkr-cb-thumb';
-      if (item.thumbnailUrl) {
-        const img = document.createElement('img');
-        img.src = item.thumbnailUrl;
-        img.alt = '';
-        thumb.append(img);
-      } else {
-        thumb.innerHTML =
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/></svg>';
-      }
-      el.append(thumb);
-
-      const name = document.createElement('span');
-      name.className = 'rkr-cb-name';
-      name.textContent = item.name;
-      el.append(name);
-
-      el.addEventListener('click', () => {
-        if (selected.has(item.id)) {
-          selected.delete(item.id);
-          el.classList.remove('rkr-cb-selected');
-        } else {
-          selected.set(item.id, item);
-          el.classList.add('rkr-cb-selected');
-        }
-        updateImportBtn();
-      });
-      return el;
-    }
-
-    async function importSelected() {
-      if (selected.size === 0 || !sessionId) return;
-      const sid = sessionId;
-      const items = [...selected.values()];
-      importBtn.disabled = true;
-      cancelBtn.disabled = true;
-      grid.querySelectorAll<HTMLButtonElement>('.rkr-cb-item').forEach((b) => {
-        b.disabled = true;
-      });
-      const ids: string[] = [];
+      grid.innerHTML = '';
+      const rows = new Map<string, HTMLDivElement>();
       for (const item of items) {
-        footStatus.textContent = `Importing ${item.name}…`;
+        const row = makeRow(item);
+        rows.set(item.id, row);
+        grid.append(row);
+      }
+      statusEl.textContent = `Importing ${items.length}…`;
+      cancelBtn.disabled = true;
+      const noun = mediaKind === 'video' ? 'video' : 'image';
+      for (const item of items) {
+        const rowState = rows.get(item.id)?.querySelector('.rkr-cb-rowstate');
         try {
-          // Session import endpoints take { sessionId, mediaItemId }.
           const r =
             mediaKind === 'video'
               ? await postImportBody<VideoUploadResponse>('/admin/import/gphotos/video', {
-                  sessionId: sid,
+                  sessionId,
                   mediaItemId: item.id
                 })
               : await postImportBody<UploadResponse>('/admin/import/gphotos', {
-                  sessionId: sid,
+                  sessionId,
                   mediaItemId: item.id
                 });
-          ids.push(r.id);
+          importedIds.push(r.id);
+          if (rowState) rowState.textContent = 'imported ✓';
         } catch (err) {
-          footStatus.textContent = (err as Error).message;
-          importBtn.disabled = false;
+          const msg = (err as Error).message;
+          if (rowState) rowState.textContent = msg;
+          footStatus.textContent = msg;
           cancelBtn.disabled = false;
-          grid.querySelectorAll<HTMLButtonElement>('.rkr-cb-item').forEach((b) => {
-            b.disabled = false;
-          });
           return;
         }
       }
-      const noun = mediaKind === 'video' ? 'video' : 'image';
-      setStatus(`imported ${ids.length} ${noun}${ids.length === 1 ? '' : 's'} from Google Photos`);
-      closeDialog(ids);
+      setStatus(
+        `imported ${importedIds.length} ${noun}${importedIds.length === 1 ? '' : 's'} from Google Photos`
+      );
+      footStatus.textContent = `${importedIds.length} of ${items.length} imported.`;
+      finish(importedIds);
     }
 
     openBtn.addEventListener('click', () => {
@@ -311,12 +273,14 @@ function openPhotosDialog(mediaKind: MediaKind): Promise<string[]> {
     retryBtn.addEventListener('click', () => {
       void deleteSession().finally(() => void start());
     });
-    importBtn.addEventListener('click', () => void importSelected());
     cancelBtn.addEventListener('click', () => {
-      void deleteSession().finally(() => closeDialog([]));
+      void deleteSession().finally(() => finish([]));
+    });
+    closeBtn.addEventListener('click', () => {
+      finish([...importedIds]);
     });
     dialog.addEventListener('cancel', () => {
-      void deleteSession().finally(() => closeDialog([]));
+      void deleteSession().finally(() => finish([]));
     });
 
     openModal(dialog);

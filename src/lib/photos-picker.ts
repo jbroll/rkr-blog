@@ -138,12 +138,14 @@ export async function listSessionMediaItems(
         ? 'image'
         : null;
     if (!kind) continue;
+    // Video bytes require the =dv suffix (plain =d 403s on videos).
+    const downloadSuffix = kind === 'video' ? '=dv' : '=d';
     items.push({
       id: raw.id,
       name: file.filename,
       mimeType: file.mimeType,
       thumbnailUrl: `${file.baseUrl}=w256-h256`,
-      downloadUrl: `${file.baseUrl}=d`,
+      downloadUrl: `${file.baseUrl}${downloadSuffix}`,
       kind
     });
   }

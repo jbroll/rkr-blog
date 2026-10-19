@@ -113,7 +113,10 @@ test('listSessionMediaItems maps photo + video items with thumb/download URLs', 
   assert.equal(photo?.kind, 'image');
   assert.equal(photo?.thumbnailUrl, 'https://lh3.googleusercontent.com/base1=w256-h256');
   assert.equal(photo?.downloadUrl, 'https://lh3.googleusercontent.com/base1=d');
-  assert.equal(page.items.find((i) => i.id === 'mi-2')?.kind, 'video');
+  const video = page.items.find((i) => i.id === 'mi-2');
+  assert.equal(video?.kind, 'video');
+  // Video bytes require the =dv suffix (plain =d 403s on videos).
+  assert.equal(video?.downloadUrl, 'https://lh3.googleusercontent.com/base2=dv');
   assert.equal(page.nextPageToken, 'np2');
 });
 
