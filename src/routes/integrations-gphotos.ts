@@ -441,8 +441,15 @@ export default async function integrationsGphotosRoutes(
     const fetchImpl = opts.pickerFetcher ?? fetch;
     const url = await assertSafeFetchUrl(downloadUrl);
     const res = await fetchImpl(url.toString());
-    if (!res.ok || !res.body) {
-      throw new Error(`photos download: HTTP ${res.status}`);
+    if (!res.body) {
+      throw new Error(`photos download: HTTP ${res.status} (empty body)`);
+    }
+    if (!res.ok) {
+      // Google's error body names the cause (expired URL, wrong
+      // parameters…); include a snippet — it carries no credentials.
+      const detail = await res.text().catch(() => '');
+      const snippet = detail.slice(0, 300).replace(/\s+/g, ' ');
+      throw new Error(`photos download: HTTP ${res.status}${snippet ? ` — ${snippet}` : ''}`);
     }
     return Readable.fromWeb(res.body);
   }
