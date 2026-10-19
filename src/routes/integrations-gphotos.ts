@@ -446,10 +446,14 @@ export default async function integrationsGphotosRoutes(
     }
     if (!res.ok) {
       // Google's error body names the cause (expired URL, wrong
-      // parameters…); include a snippet — it carries no credentials.
+      // parameters…); include headers + a snippet — no credentials.
       const detail = await res.text().catch(() => '');
-      const snippet = detail.slice(0, 300).replace(/\s+/g, ' ');
-      throw new Error(`photos download: HTTP ${res.status}${snippet ? ` — ${snippet}` : ''}`);
+      const snippet = detail.slice(0, 120).replace(/\s+/g, ' ');
+      const ctype = res.headers.get('content-type') ?? 'none';
+      const clen = res.headers.get('content-length') ?? 'none';
+      throw new Error(
+        `photos download: HTTP ${res.status} (content-type=${ctype} content-length=${clen}) — ${snippet}`
+      );
     }
     return Readable.fromWeb(res.body);
   }

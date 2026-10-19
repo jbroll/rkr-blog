@@ -836,8 +836,11 @@ test('POST /admin/import/gphotos 400s when download fails', async (t) => {
     payload: { sessionId: 'sess-1', mediaItemId: 'mi-1' }
   });
   assert.equal(res.statusCode, 400);
-  // The upstream body snippet travels in the message for diagnosis.
-  assert.match(res.json<ErrorBody>().error, /photos download: HTTP 500 — gone/);
+  // The upstream headers + body snippet travel in the message for diagnosis.
+  assert.match(
+    res.json<ErrorBody>().error,
+    /photos download: HTTP 500 \(content-type=text\/plain[^)]*\) — gone/
+  );
 });
 
 test('POST /admin/import/gphotos/video 415s on non-video content-type', async (t) => {
