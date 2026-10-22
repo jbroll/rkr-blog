@@ -21,8 +21,17 @@ const HERO = {
 async function setup(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-blocks-routes-'));
   fs.mkdirSync(path.join(root, 'macros'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'content', 'blocks'), { recursive: true });
   fs.mkdirSync(path.join(root, 'data'), { recursive: true });
   fs.writeFileSync(path.join(root, 'macros', 'hero.json'), JSON.stringify(HERO));
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'hello.json'),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Hello page.' }] }],
+      fields: { title: 'Hello page', slug: 'hello' },
+    })
+  );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   const db = open(path.join(root, 'data', 'site.db'));
@@ -59,5 +68,19 @@ describe('blocks routes', () => {
     const res = await app.inject({ method: 'GET', url: '/admin/blocks/preview/hero' });
     assert.equal(res.statusCode, 200);
     assert.match(res.body, /Fresh food/);
+  });
+
+  it('GET /pages/:slug renders a stored JSON page', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({ method: 'GET', url: '/pages/hello' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /Hello page/);
+    assert.match(res.body, /rkr-flow/);
+  });
+
+  it('GET /pages/:slug 404s missing pages and bad slugs', async (t) => {
+    const { app } = await setup(t);
+    assert.equal((await app.inject({ method: 'GET', url: '/pages/nope' })).statusCode, 404);
+    assert.equal((await app.inject({ method: 'GET', url: '/pages/NOPE' })).statusCode, 404);
   });
 });
