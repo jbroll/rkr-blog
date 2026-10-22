@@ -112,17 +112,20 @@ export function getRootDefaults(lib: MacroLib): Slots {
   return { ...(lib.get('page')?.defaults ?? {}) };
 }
 
-/** Expand one macro instance to a concrete node. Curried macros recurse
- * with fixed slots; explicit overrides always win over fixed slots. */
+/** Expand one macro instance to a concrete node. Precedence, lowest
+ * first: macro defaults, the tree's own inline slots (the shipped
+ * content), explicit overrides. Curried macros recurse with fixed
+ * slots; explicit overrides always win over fixed slots. */
 export function expandMacro(lib: MacroLib, name: string, overrides: Slots): BlockNode {
   const def = lib.get(name);
   if (!def) throw new Error(`macro-library: unknown macro ${name}`);
+  const inline = isRecord(def.tree.slots) ? (def.tree.slots as Slots) : {};
   if (def.tree.type === 'macro') {
     const fixed = isRecord(def.tree.slots) ? (def.tree.slots as Slots) : {};
     const inner = expandMacro(lib, def.tree.macro, { ...fixed, ...overrides });
-    const merged = resolveSlots({ defaults: def.defaults }, overrides);
-    return { ...inner, slots: { ...(inner.slots ?? {}), ...merged.slots } };
+    const base = resolveSlots({ defaults: def.defaults }, {}).slots;
+    return { ...inner, slots: { ...base, ...(inner.slots ?? {}), ...overrides } };
   }
-  const merged = resolveSlots({ defaults: def.defaults }, overrides);
-  return { ...def.tree, slots: merged.slots };
+  const merged = resolveSlots({ defaults: def.defaults }, overrides).slots;
+  return { ...def.tree, slots: { ...merged, ...inline, ...overrides } };
 }

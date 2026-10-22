@@ -40,6 +40,7 @@ import { migrate } from './lib/migrate.ts';
 import { setPublicSecurityHeaders } from './lib/security-headers.ts';
 import { serverAssets } from './lib/site-assets.ts';
 import adminRoutes from './routes/admin.ts';
+import { registerBlockRoutes as blockRoutes } from './routes/blocks.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
 import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
@@ -298,6 +299,14 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       db: opts.db,
       renderBudgetMs: opts.renderBudgetMs,
       ...(opts.site ? { site: opts.site } : {})
+    });
+
+    // Experimental JSON-blocks demo routes (exp/reusable-blocks). Public
+    // render plus an editor preview; no existing URLs change.
+    await app.register(blockRoutes, {
+      siteRoot,
+      getSite: () => (opts.site ?? siteConfig()),
+      requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
     });
 
     if (opts.startWorker !== false) {

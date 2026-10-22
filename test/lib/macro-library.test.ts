@@ -55,8 +55,20 @@ describe('macro-library', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('unknown macro name throws', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-unk-'));
+  it('keeps the tree inline slots when overrides are empty', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-inline-'));
+    writeMacro(dir, 'hero', {
+      defaults: { heading: 'Default heading' },
+      tree: { type: 'section', slots: { theme: 'dark' } },
+    });
+    const lib = loadMacroLibrary(dir);
+    const node = expandMacro(lib, 'hero', {});
+    assert.equal(node.slots?.theme, 'dark');
+    assert.equal(node.slots?.heading, 'Default heading');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('unknown macro name throws', () => {    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-unk-'));
     const lib = loadMacroLibrary(dir);
     assert.throws(() => expandMacro(lib, 'nope', {}), /unknown macro/);
     fs.rmSync(dir, { recursive: true, force: true });
