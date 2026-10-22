@@ -26,7 +26,15 @@
 
 ---
 
-### Task 1: Staging access check
+### Task 1: Staging access check — DONE 2026-10-22
+
+Verified with curl: POST `/admin/auth/token-login` with the token plus an
+`Origin: http://localhost:3010` header returns 302 and mints the session
+cookie (without Origin the CSRF guard 403s); the cookie then gets 200 on
+`/admin/blocks/edit/glasgow` and the full 4-macro list from
+`/admin/blocks/macros`. Human path: open `/login`, submit `ADMIN_TOKEN`,
+then open the edit URL. Conclusion: the "missing palette" was the auth
+wall, not a rendering bug.
 
 **Files:** none (verification only)
 
