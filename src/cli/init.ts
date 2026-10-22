@@ -19,6 +19,7 @@ export default function init(): void {
     p.cacheImg,
     p.content,
     p.contentPosts,
+    p.blocks,
     p.data,
     p.macros,
     p.static

@@ -25,6 +25,9 @@ export interface Paths {
   cacheVideo: string;
   content: string;
   contentPosts: string;
+  /** JSON page trees (experimental blocks format). One file per page,
+   * written by `import-wp post --as-blocks` and `blocks-migrate`. */
+  blocks: string;
   /** Tag-named JSON macro files for reusable blocks. Seeded by `init`
    * from the repo's macros/ directory; never overwritten once present. */
   macros: string;
@@ -292,6 +295,7 @@ export function paths(env: Env = process.env): Paths {
     cacheVideo: path.join(root, 'cache', 'video'),
     content: path.join(root, 'content'),
     contentPosts: path.join(root, 'content', 'posts'),
+    blocks: path.join(root, 'content', 'blocks'),
     macros: path.join(root, 'macros'),
     data: path.join(root, 'data'),
     db: path.join(root, 'data', 'site.db'),

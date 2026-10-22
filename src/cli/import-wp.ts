@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { paths } from '../lib/config.ts';
+import { migratePostToTree } from '../lib/markdown-migrate.ts';
 import { importPost } from '../lib/wp-import.ts';
 import { pushPage, pushPost } from '../lib/wp-push.ts';
 import { restSource, type WpSource } from '../lib/wp-source.ts';
@@ -22,7 +23,7 @@ export default async function importWpCmd(argv: string[]): Promise<void> {
       `usage:
   site-admin import-wp about <wp-base-url> --to <target-url> [--token TOKEN] [--status draft|published]
   site-admin import-wp list <base-url> [--page N] [--per-page N] [--status publish|draft|any]
-  site-admin import-wp post <base-url> <id-or-slug> [--force]
+  site-admin import-wp post <base-url> <id-or-slug> [--force] [--as-blocks]
   site-admin import-wp push <wp-base-url> <slug> --to <fly-url> [--token TOKEN] [--status draft|published]
 
   without --status, a WP draft is pushed as a draft on the target
@@ -66,9 +67,10 @@ async function post(args: string[]): Promise<void> {
   const baseUrl = positional(args, 0);
   const idOrSlug = positional(args, 1);
   if (!baseUrl || !idOrSlug) {
-    throw new Error('usage: site-admin import-wp post <base-url> <id-or-slug> [--force]');
+    throw new Error('usage: site-admin import-wp post <base-url> <id-or-slug> [--force] [--as-blocks]');
   }
   const force = args.includes('--force');
+  const asBlocks = args.includes('--as-blocks');
 
   /* c8 ignore start -- success path makes real HTTP calls; covered by lib/wp-import tests */
   const p = paths();
@@ -94,6 +96,14 @@ async function post(args: string[]): Promise<void> {
 
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     writeFileAtomicSync(dest, result.markdown);
+
+    if (asBlocks) {
+      const tree = migratePostToTree(result.markdown);
+      const jsonDest = path.join(p.blocks, `${path.basename(filename, '.md')}.json`);
+      fs.mkdirSync(path.dirname(jsonDest), { recursive: true });
+      writeFileAtomicSync(jsonDest, `${JSON.stringify(tree, null, 2)}\n`);
+      console.log(`wrote ${jsonDest}`);
+    }
 
     const ok = result.imagesIngested.length;
     const fail = result.imageErrors.length;
