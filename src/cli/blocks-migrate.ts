@@ -35,6 +35,8 @@ export default async function blocksMigrateCmd(argv: string[]): Promise<void> {
   if (outIdx >= 0 && !out) usage();
   const tree = runBlocksMigrate(paths().root, slug as string);
   const json = `${JSON.stringify(tree, null, 2)}\n`;
-  if (out) fs.writeFileSync(out, json);
-  else console.log(json);
+  if (out) {
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, json);
+  } else console.log(json);
 }
