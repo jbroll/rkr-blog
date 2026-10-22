@@ -9,6 +9,7 @@ import path from 'node:path';
 import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import { parsePost } from '../lib/content.ts';
+import type { Db } from '../lib/db.ts';
 import { imageInfo } from '../lib/originals.ts';
 import {
   listSidecarIds,
@@ -16,6 +17,7 @@ import {
   scanPostForImageIds,
   scanPostForVideoIds
 } from '../lib/posts.ts';
+import { readIndexedPostBySlug } from '../lib/post-index.ts';
 import { read as sidecarRead } from '../lib/sidecar.ts';
 import { readVideoSidecar } from '../lib/video-sidecar.ts';
 import { isValidSlug } from './admin-post-consts.ts';
@@ -23,13 +25,16 @@ import { isValidSlug } from './admin-post-consts.ts';
 export interface PostBundleRouteOpts {
   siteRoot: string;
   guard: RouteShorthandOptions;
+  /** Post index for slug→path resolution. Imported and dated posts
+   * live at `<date>-<slug>.md`, so the slug alone is not a filename. */
+  db?: Db;
 }
 
 export function registerPostBundleRoutes(
   fastify: FastifyInstance,
   opts: PostBundleRouteOpts
 ): void {
-  const { siteRoot, guard } = opts;
+  const { siteRoot, guard, db } = opts;
   fastify.get<{ Params: { slug: string }; Querystring: { manifest?: string } }>(
     '/admin/post-bundle/:slug',
     { ...guard },
@@ -43,7 +48,14 @@ export function registerPostBundleRoutes(
       if (request.query.manifest !== '1') {
         return reply.code(400).send({ error: 'only ?manifest=1 is supported' });
       }
-      const filePath = path.join(siteRoot, 'content', 'posts', `${slug}.md`);
+      // Slug→path via the post index first: imported and dated posts
+      // live at `<date>-<slug>.md`, so the slug alone is not a
+      // filename. Fall back to the direct `<slug>.md` path for posts
+      // saved before their first reindex.
+      const indexed = db ? readIndexedPostBySlug(db, slug) : undefined;
+      const filePath = indexed
+        ? path.join(siteRoot, indexed.path)
+        : path.join(siteRoot, 'content', 'posts', `${slug}.md`);
       let stat: fs.Stats;
       try {
         stat = await fs.promises.stat(filePath);

@@ -138,7 +138,7 @@ export default async function adminRoutes(
   });
 
   registerSidecarEditRoutes(fastify, { siteRoot, guard, ...(opts.db ? { db: opts.db } : {}) });
-  registerPostBundleRoutes(fastify, { siteRoot, guard });
+  registerPostBundleRoutes(fastify, { siteRoot, guard, ...(opts.db ? { db: opts.db } : {}) });
   registerAdminTagsRoute(fastify, { siteRoot, guard, db: opts.db });
   registerAdminCommentsRoutes(fastify, { siteRoot, guard, db: opts.db });
   registerArchiveRoutes(fastify, { siteRoot, ownerGuard });

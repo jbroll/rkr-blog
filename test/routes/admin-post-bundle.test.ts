@@ -6,6 +6,7 @@ import { type TestContext, test } from 'node:test';
 import type { Sidecar } from '@rkr/image-edit';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -153,6 +154,18 @@ status: draft
   }>();
   assert.equal(body.sidecars.length, 1);
   assert.equal(body.originals.length, 0);
+});
+
+test('GET /admin/post-bundle/:slug resolves dated filenames via the index', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', '2026-05-18-dated.md'),
+    '---\nslug: dated\ntitle: Dated\nstatus: published\ndate: 2026-05-18T00:00:00Z\n---\n\nbody\n'
+  );
+  runReindex(root);
+  const res = await app.inject({ method: 'GET', url: '/admin/post-bundle/dated?manifest=1' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /"slug":"dated"/);
 });
 
 test('GET /admin/post-bundle/:slug returns 404 for unknown slug', async (t) => {
