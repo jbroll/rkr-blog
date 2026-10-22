@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 import { paths } from '../lib/config.ts';
 import { open } from '../lib/db.ts';
+import { seedSiteMacros } from '../lib/macro-library.ts';
 import { migrate } from '../lib/migrate.ts';
 import { ensureSecretKey } from '../lib/secrets.ts';
 
@@ -19,12 +20,15 @@ export default function init(): void {
     p.content,
     p.contentPosts,
     p.data,
+    p.macros,
     p.static
   ];
 
   for (const d of dirs) {
     fs.mkdirSync(d, { recursive: true });
   }
+
+  seedSiteMacros(p.root);
 
   const generatedKey = ensureSecretKey(p.root);
 

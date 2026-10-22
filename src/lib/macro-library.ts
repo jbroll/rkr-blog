@@ -6,6 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { type BlockNode, resolveSlots, type Slots } from './blocks.ts';
 
@@ -57,7 +58,28 @@ function checkNode(node: unknown): BlockNode {
   return node as unknown as BlockNode;
 }
 
-/** Load every `*.json` file in `dir` as a macro, sorted by name. */
+/** Repo-shipped macro seeds. Mirrors repoThemesDir() in config.ts:
+ * src/lib → ../../macros. */
+export function seedMacrosDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, '..', '..', 'macros');
+}
+
+/** Copy seed macros into a site root. Existing files are never
+ * overwritten, so an author's customizations survive re-init. */
+export function seedSiteMacros(siteRoot: string): string[] {
+  const dest = path.join(siteRoot, 'macros');
+  fs.mkdirSync(dest, { recursive: true });
+  const copied: string[] = [];
+  for (const file of fs.readdirSync(seedMacrosDir()).sort()) {
+    if (!file.endsWith('.json')) continue;
+    const target = path.join(dest, file);
+    if (fs.existsSync(target)) continue;
+    fs.copyFileSync(path.join(seedMacrosDir(), file), target);
+    copied.push(file);
+  }
+  return copied;
+}
 export function loadMacroLibrary(dir: string): MacroLib {
   const lib: MacroLib = new Map();
   if (!fs.existsSync(dir)) return lib;

@@ -1,0 +1,21 @@
+{
+  "defaults": { "title": "Our sponsors" },
+  "fieldSchema": {
+    "title": { "label": "Wall title", "type": "text" }
+  },
+  "tree": {
+    "type": "section",
+    "slots": { "theme": "light", "edge": "straight" },
+    "children": [
+      {
+        "type": "row",
+        "children": [
+          { "type": "col", "children": [{ "type": "text", "markdown": "Sponsor one" }] },
+          { "type": "col", "children": [{ "type": "text", "markdown": "Sponsor two" }] },
+          { "type": "col", "children": [{ "type": "text", "markdown": "Sponsor three" }] },
+          { "type": "col", "children": [{ "type": "text", "markdown": "Sponsor four" }] }
+        ]
+      }
+    ]
+  }
+}
