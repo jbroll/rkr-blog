@@ -65,11 +65,13 @@ export function registerAdminBlockRoutes(
         return reply.code(404).send({ error: 'not found' });
       }
       setPublicSecurityHeaders(reply);
+      const assets = serverAssets('/admin/static');
       return reply.type('text/html; charset=utf-8').send(
         renderBlocksEditPage({
           site: getSite(),
-          assets: serverAssets(),
+          assets,
           slug,
+          bundleUrl: `/admin/static/admin/blocks-page-editor-entry.js?v=${assets.hash}`,
           isAdmin: true
         })
       );

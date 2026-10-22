@@ -7,8 +7,9 @@ describe('blocks edit page template', () => {
   it('mounts the editor root with the page slug', () => {
     const html = renderBlocksEditPage({
       site: { title: 'rkroll' },
-      assets: { theme: 'default', hash: 'abc', base: '/static' },
+      assets: { theme: 'default', hash: 'abc', base: '/admin/static' },
       slug: 'hello',
+      bundleUrl: '/admin/static/admin/blocks-page-editor-entry.js?v=abc',
       isAdmin: true
     });
     assert.match(html, /rkr-blocks-edit-root/);

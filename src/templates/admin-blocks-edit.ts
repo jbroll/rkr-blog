@@ -3,17 +3,12 @@
 // fetches the page tree and macro list and owns the DOM from there.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
-import {
-  bundleVersion,
-  headIcons,
-  type SiteChrome,
-  siteFoot,
-  siteHead,
-  stylesheetLinks
-} from './layout.ts';
+import { headIcons, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface BlocksEditPageData extends SiteChrome {
   slug: string;
+  /** Full versioned URL of the editor bundle (admin static scope). */
+  bundleUrl: string;
   isAdmin?: boolean;
 }
 
@@ -35,7 +30,7 @@ ${siteHead(data.site, { isAdmin: data.isAdmin })}
 <div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}"></div>
 </main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
-<script type="module" src="${a.base}/admin/blocks-page-editor-entry.js${bundleVersion(a)}"></script>
+<script type="module" src="${data.bundleUrl}"></script>
 </body>
 </html>
 `;
