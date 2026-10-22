@@ -12,7 +12,7 @@ import { buildApp } from '../../src/server.ts';
 const TREE = {
   version: 1,
   body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Saved.' }] }],
-  fields: { title: 'Saved page', slug: 'saved' },
+  fields: { title: 'Saved page', slug: 'saved' }
 };
 
 async function setup(t: TestContext) {
@@ -40,7 +40,7 @@ describe('admin blocks save', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/admin/blocks/saved',
-      payload: { tree: TREE },
+      payload: { tree: TREE }
     });
     assert.equal(res.statusCode, 200);
     const saved = JSON.parse(
@@ -49,18 +49,30 @@ describe('admin blocks save', () => {
     assert.equal(saved.fields.slug, 'saved');
   });
 
+  it('GET /admin/blocks/macros lists the palette entries', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'macros', 'hero.json'),
+      JSON.stringify({ defaults: {}, tree: { type: 'text', markdown: 'Hi' } })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/macros' });
+    assert.equal(res.statusCode, 200);
+    const list = JSON.parse(res.body) as { name: string; label: string }[];
+    assert.ok(list.some((m) => m.name === 'hero' && typeof m.label === 'string'));
+  });
+
   it('rejects invalid trees and bad slugs', async (t) => {
     const { app } = await setup(t);
     const bad = await app.inject({
       method: 'POST',
       url: '/admin/blocks/saved',
-      payload: { tree: { version: 1, body: [{ type: 'nope' }] } },
+      payload: { tree: { version: 1, body: [{ type: 'nope' }] } }
     });
     assert.equal(bad.statusCode, 400);
     const slug = await app.inject({
       method: 'POST',
       url: '/admin/blocks/BAD',
-      payload: { tree: TREE },
+      payload: { tree: TREE }
     });
     assert.equal(slug.statusCode, 404);
   });

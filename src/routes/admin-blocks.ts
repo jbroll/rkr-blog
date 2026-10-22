@@ -11,6 +11,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
 import { parseBlockTree } from '../lib/blocks.ts';
+import { loadMacroLibrary } from '../lib/macro-library.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
 
@@ -20,9 +21,23 @@ export interface AdminBlockRoutesOpts {
   requireAuth: boolean;
 }
 
-export function registerAdminBlockRoutes(fastify: FastifyInstance, opts: AdminBlockRoutesOpts): void {
+export function registerAdminBlockRoutes(
+  fastify: FastifyInstance,
+  opts: AdminBlockRoutesOpts
+): void {
   const { siteRoot } = opts;
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
+
+  fastify.get('/admin/blocks/macros', { ...guard }, async (_req, _reply) => {
+    const lib = loadMacroLibrary(`${siteRoot}/macros`);
+    return [...lib.keys()].sort().map((name) => ({
+      name,
+      label: name
+        .split('-')
+        .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1) : w))
+        .join(' ')
+    }));
+  });
 
   fastify.post<{ Params: { slug: string }; Body: unknown }>(
     '/admin/blocks/:slug',
@@ -41,8 +56,8 @@ export function registerAdminBlockRoutes(fastify: FastifyInstance, opts: AdminBl
           ...parseBlockTree({ version: 1, body: rec.body }),
           fields: {
             ...((rec.fields ?? {}) as Record<string, unknown>),
-            slug,
-          },
+            slug
+          }
         };
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
