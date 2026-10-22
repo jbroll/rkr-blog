@@ -6,7 +6,9 @@
 // (script-src 'self' only, no esm.sh / CDN allowance).
 
 import { BUILD_META_NAME } from '../lib/build-contract.ts';
-import { escapeAttr, escapeText } from '../lib/content.ts';
+import { escapeAttr, escapeText, type RenderCtx } from '../lib/content.ts';
+import { renderBlockTree, type RenderMacroLib } from '../lib/blocks-render.ts';
+import type { BlockTree } from '../lib/blocks.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { icon } from './icons.ts';
@@ -21,6 +23,23 @@ export interface AdminPageData extends SiteChrome {
    * is an external self-hosted module; see routes/admin-csp.ts).
    */
   cspNonce: string;
+}
+
+/** Render one preview pane per width for the same block tree. The desktop
+ * pane (~1200px) and phone pane (~390px) prove flexbox stacking without
+ * author action. Listings keep the placeholder behavior of the editor
+ * preview; this helper only wraps rendered HTML. */
+export async function renderPreviewAtWidths(
+  tree: BlockTree,
+  widths: number[],
+  ctx: RenderCtx,
+  lib: RenderMacroLib
+): Promise<string[]> {
+  const html = await renderBlockTree(tree, ctx, lib);
+  return widths.map(
+    (w) =>
+      `<div class="rkr-preview" style="max-width: ${w}px" data-width="${w}">\n${html}</div>`
+  );
 }
 
 export function renderAdminPage(data: AdminPageData): string {
@@ -231,6 +250,10 @@ ${siteHead(data.site, { isAdmin: true })}
 </dialog>
 <div id="rkroll-admin-root">
   <aside id="rkr-blocks-palette-root" aria-label="Reusable blocks"></aside>
+  <div id="rkr-preview-toggle" role="group" aria-label="Preview width">
+    <button type="button" data-preview-width="1200" aria-pressed="true">Desktop</button>
+    <button type="button" data-preview-width="390" aria-pressed="false">Phone</button>
+  </div>
   <article id="rkroll-admin-article"></article>
   <button type="button" id="rkr-sync-badge" aria-label="Sync status (click for storage panel)">
     <span class="rkr-sync-dot" aria-hidden="true"></span>
