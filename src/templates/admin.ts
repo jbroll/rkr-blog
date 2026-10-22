@@ -5,10 +5,10 @@
 // network dependency at runtime, which keeps the editor's CSP tight
 // (script-src 'self' only, no esm.sh / CDN allowance).
 
+import type { BlockTree } from '../lib/blocks.ts';
+import { type RenderMacroLib, renderBlockTree } from '../lib/blocks-render.ts';
 import { BUILD_META_NAME } from '../lib/build-contract.ts';
 import { escapeAttr, escapeText, type RenderCtx } from '../lib/content.ts';
-import { renderBlockTree, type RenderMacroLib } from '../lib/blocks-render.ts';
-import type { BlockTree } from '../lib/blocks.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { icon } from './icons.ts';
@@ -37,8 +37,7 @@ export async function renderPreviewAtWidths(
 ): Promise<string[]> {
   const html = await renderBlockTree(tree, ctx, lib);
   return widths.map(
-    (w) =>
-      `<div class="rkr-preview" style="max-width: ${w}px" data-width="${w}">\n${html}</div>`
+    (w) => `<div class="rkr-preview" style="max-width: ${w}px" data-width="${w}">\n${html}</div>`
   );
 }
 

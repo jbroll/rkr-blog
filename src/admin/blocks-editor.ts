@@ -4,7 +4,7 @@
 // at most 3 container levels, and the palette refuses a 4th level with
 // a "save inner part as its own macro" nudge.
 
-import { containerDepth, type BlockNode, type Slots } from '../lib/blocks.ts';
+import { type BlockNode, containerDepth, type Slots } from '../lib/blocks.ts';
 
 const CONTAINER_KINDS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
 

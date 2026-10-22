@@ -1,16 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-
+import type { BlockTree } from '../../src/lib/blocks.ts';
 import type { ImageMap } from '../../src/lib/image-map.ts';
 import type { VideoMapView } from '../../src/lib/widgets.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
-import type { BlockTree } from '../../src/lib/blocks.ts';
 import { renderPreviewAtWidths } from '../../src/templates/admin.ts';
 
 const fakeCtx = {
   images: new Map() as ImageMap,
   videos: new Map() as VideoMapView,
-  widgets: new WidgetRegistry(),
+  widgets: new WidgetRegistry()
 };
 
 const emptyLib = { get: () => undefined };

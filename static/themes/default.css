@@ -1292,3 +1292,107 @@ body[data-mode="figure"] .rkr-meta {
   color: var(--rkr-link);
   border-color: var(--rkr-link);
 }
+
+/* ---- Reusable blocks (experimental JSON pages) ---- */
+.rkr-section {
+  margin: 0 auto;
+  max-width: var(--rkr-content);
+  padding: var(--rkr-gap) var(--rkr-main-pad, 1.5rem);
+}
+.rkr-section-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rkr-gap);
+}
+.rkr-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--rkr-gap);
+}
+.rkr-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.rkr-col,
+.rkr-flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rkr-gap);
+  min-width: 0;
+}
+.rkr-theme-dark {
+  background: #2a2438;
+  color: #f5f2ea;
+}
+.rkr-theme-dark a {
+  color: inherit;
+}
+.rkr-section-wave {
+  height: 24px;
+  background: transparent;
+}
+.rkr-btn {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  text-decoration: none;
+  border: 1px solid var(--rkr-link);
+  color: var(--rkr-bg);
+  background: var(--rkr-link);
+}
+.rkr-btn.is-secondary {
+  color: var(--rkr-link);
+  background: transparent;
+}
+.rkr-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.rkr-marquee > span {
+  display: inline-block;
+  animation: rkr-marquee 20s linear infinite;
+}
+@keyframes rkr-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rkr-marquee > span {
+    animation: none;
+  }
+}
+.rkr-accordion > details {
+  border-bottom: 1px solid var(--rkr-rule);
+  padding: 0.5rem 0;
+}
+.rkr-progress {
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--rkr-rule);
+  overflow: hidden;
+}
+.rkr-progress-bar {
+  height: 100%;
+  background: var(--rkr-link);
+}
+.rkr-embed {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+.rkr-preview {
+  margin: 0 auto;
+  border: 1px dashed var(--rkr-rule);
+}
+.rkr-blocks-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+@media (max-width: 720px) {
+  .rkr-row {
+    flex-direction: column;
+  }
+}

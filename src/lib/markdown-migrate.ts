@@ -7,9 +7,8 @@ import type { Root, RootContent } from 'mdast';
 import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
-
-import { parsePost } from './content.ts';
 import type { BlockNode, BlockTree } from './blocks.ts';
+import { parsePost } from './content.ts';
 import type { DirectiveNode } from './widgets.ts';
 
 export interface MigratedTree extends BlockTree {
@@ -24,7 +23,9 @@ export interface MigratedTree extends BlockTree {
 
 function stringifyOne(node: RootContent): string {
   const root: Root = { type: 'root', children: [node] };
-  return String(remark().use(remarkFrontmatter, ['yaml']).use(remarkDirective).stringify(root)).trim();
+  return String(
+    remark().use(remarkFrontmatter, ['yaml']).use(remarkDirective).stringify(root)
+  ).trim();
 }
 
 function directiveSlots(node: DirectiveNode): Record<string, string> {
@@ -75,7 +76,7 @@ export function migratePostToTree(raw: string): MigratedTree {
       slug: frontmatter.slug,
       ...(typeof frontmatter.date === 'string' ? { date: frontmatter.date } : {}),
       ...(typeof frontmatter.status === 'string' ? { status: frontmatter.status } : {}),
-      ...(Array.isArray(frontmatter.tags) ? { tags: frontmatter.tags as string[] } : {}),
-    },
+      ...(Array.isArray(frontmatter.tags) ? { tags: frontmatter.tags as string[] } : {})
+    }
   };
 }

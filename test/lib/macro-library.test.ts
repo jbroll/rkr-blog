@@ -6,8 +6,10 @@ import { describe, it, type TestContext } from 'node:test';
 
 import {
   expandMacro,
+  type FieldSpec,
   getRootDefaults,
   loadMacroLibrary,
+  type StoredMacro
 } from '../../src/lib/macro-library.ts';
 
 function freshDir(t: TestContext): string {
@@ -27,11 +29,11 @@ describe('macro-library', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-cur-'));
         writeMacro(dir, 'cards', {
           defaults: { title: 'Cards', layout: 'grid' },
-          tree: { type: 'list', slots: {} },
+          tree: { type: 'list', slots: {} }
         });
         writeMacro(dir, 'cards-home', {
           defaults: {},
-          tree: { type: 'macro', macro: 'cards', slots: { layout: 'cards' } },
+          tree: { type: 'macro', macro: 'cards', slots: { layout: 'cards' } }
         });
         return dir;
       })()
@@ -45,7 +47,7 @@ describe('macro-library', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-root-'));
     writeMacro(dir, 'page', {
       defaults: { menu: [{ label: 'Join', target: '/join' }] },
-      tree: { type: 'col', children: [] },
+      tree: { type: 'col', children: [] }
     });
     const lib = loadMacroLibrary(dir);
     const root = getRootDefaults(lib);
@@ -66,5 +68,15 @@ describe('macro-library', () => {
     writeMacro(dir, 'a-macro', { defaults: {}, tree: { type: 'text', markdown: 'a' } });
     const lib = loadMacroLibrary(dir);
     assert.deepEqual([...lib.keys()], ['a-macro', 'b-macro']);
+  });
+
+  it('types stored macros and field specs', () => {
+    const spec: FieldSpec = { label: 'Title', type: 'text' };
+    const stored: StoredMacro = {
+      defaults: {},
+      fieldSchema: { title: spec },
+      tree: { type: 'text' }
+    };
+    assert.equal(stored.defaults && typeof stored, 'object');
   });
 });

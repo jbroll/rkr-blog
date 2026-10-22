@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { resolveSlots, type BlockNode, type Slots } from './blocks.ts';
+import { type BlockNode, resolveSlots, type Slots } from './blocks.ts';
 
 export interface FieldSpec {
   label: string;
@@ -38,7 +38,7 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set([
   'accordion',
   'progress',
   'embed',
-  'macro',
+  'macro'
 ]);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -47,7 +47,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function checkNode(node: unknown): BlockNode {
   if (!isRecord(node) || typeof node.type !== 'string' || !KNOWN_TYPES.has(node.type)) {
-    throw new Error(`macro-library: unknown block type ${(node as { type?: unknown }).type ?? '?'}`);
+    throw new Error(
+      `macro-library: unknown block type ${(node as { type?: unknown }).type ?? '?'}`
+    );
   }
   if (node.type === 'macro' && typeof node.macro !== 'string') {
     throw new Error('macro-library: macro instance needs a macro name');
@@ -77,7 +79,7 @@ export function loadMacroLibrary(dir: string): MacroLib {
       fieldSchema: isRecord(parsed.fieldSchema)
         ? (parsed.fieldSchema as Record<string, FieldSpec>)
         : undefined,
-      tree: checkNode(parsed.tree),
+      tree: checkNode(parsed.tree)
     });
   }
   return lib;

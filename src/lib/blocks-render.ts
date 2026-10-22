@@ -5,16 +5,9 @@
 
 import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
-
-import { escapeAttr, escapeText, renderPostHtml, type RenderCtx } from './content.ts';
+import { type BlockNode, type BlockTree, detectCycle, resolveSlots, type Slots } from './blocks.ts';
+import { escapeAttr, escapeText, type RenderCtx, renderPostHtml } from './content.ts';
 import { safeLinkUrl } from './safe-url.ts';
-import {
-  detectCycle,
-  resolveSlots,
-  type BlockNode,
-  type BlockTree,
-  type Slots,
-} from './blocks.ts';
 import type { DirectiveNode } from './widgets.ts';
 
 /** Minimal macro source for the renderer. Task 3 provides the
@@ -79,11 +72,14 @@ async function renderNode(
   switch (node.type) {
     case 'section': {
       const slots = node.slots ?? {};
-      const theme = /^[a-z-]+$/.test(textOf(slots.theme, 'light')) ? textOf(slots.theme, 'light') : 'light';
+      const theme = /^[a-z-]+$/.test(textOf(slots.theme, 'light'))
+        ? textOf(slots.theme, 'light')
+        : 'light';
       const edge = textOf(slots.edge, 'straight');
       const kids = node.children ?? [];
       const inner = (await Promise.all(kids.map((k) => renderNode(k, ctx, lib, stack)))).join('');
-      const wave = edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
+      const wave =
+        edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
       return `<section class="rkr-section rkr-theme-${escapeAttr(theme)}">\n<div class="rkr-section-inner">\n${inner}</div>${wave}\n</section>\n`;
     }
     case 'row': {
@@ -111,7 +107,8 @@ async function renderNode(
     case 'button': {
       const label = textOf(node.slots?.label);
       const href = safeLinkUrl(textOf(node.slots?.href, '#'));
-      const variant = textOf(node.slots?.variant, 'primary') === 'secondary' ? 'secondary' : 'primary';
+      const variant =
+        textOf(node.slots?.variant, 'primary') === 'secondary' ? 'secondary' : 'primary';
       return `<a class="rkr-btn is-${variant}" href="${escapeAttr(href)}">${escapeText(label)}</a>\n`;
     }
     case 'marquee': {
@@ -157,7 +154,7 @@ async function renderNode(
       const tree: BlockNode =
         def.tree.type === 'macro'
           ? { ...def.tree, slots: merged.slots }
-          : { ...(def.tree as object), slots: merged.slots } as BlockNode;
+          : ({ ...(def.tree as object), slots: merged.slots } as BlockNode);
       return renderNode(tree, ctx, lib, [...stack, node.macro]);
     }
     default: {

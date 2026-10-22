@@ -56,7 +56,7 @@ const LEAVES: ReadonlySet<string> = new Set([
   'marquee',
   'accordion',
   'progress',
-  'embed',
+  'embed'
 ]);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -79,10 +79,7 @@ export function resolveSlots(
 
 /** Follow macro references transitively. Returns the cycle path when
  * `name` reaches itself, otherwise null. */
-export function detectCycle(
-  lib: Record<string, string[]>,
-  name: string
-): string[] | null {
+export function detectCycle(lib: Record<string, string[]>, name: string): string[] | null {
   const path: string[] = [name];
   const seen = new Set<string>([name]);
   const stack: string[] = [...(lib[name] ?? [])];
@@ -127,13 +124,11 @@ function parseNode(node: unknown): BlockNode {
     return {
       type: node.type as LeafNode['type'],
       slots: isRecord(node.slots) ? (node.slots as Slots) : undefined,
-      markdown: typeof node.markdown === 'string' ? node.markdown : undefined,
+      markdown: typeof node.markdown === 'string' ? node.markdown : undefined
     };
   }
   if (CONTAINERS.has(node.type)) {
-    const children = Array.isArray(node.children)
-      ? node.children.map(parseNode)
-      : undefined;
+    const children = Array.isArray(node.children) ? node.children.map(parseNode) : undefined;
     const blocks = Array.isArray((node as Record<string, unknown>).blocks)
       ? ((node as Record<string, unknown>).blocks as unknown[]).map(parseNode)
       : undefined;
@@ -141,7 +136,7 @@ function parseNode(node: unknown): BlockNode {
       type: node.type as ContainerKind,
       slots: isRecord(node.slots) ? (node.slots as Slots) : undefined,
       ...(children ? { children } : {}),
-      ...(blocks ? { blocks } : {}),
+      ...(blocks ? { blocks } : {})
     };
   }
   throw new Error(`parseBlockTree: unknown block type ${(node as { type: unknown }).type}`);

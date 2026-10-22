@@ -1,0 +1,27 @@
+{
+  "defaults": {
+    "heading": "Fresh food, owned by neighbors",
+    "text": "Join the co-op building a community grocery.",
+    "ctaLabel": "Join",
+    "ctaHref": "/join"
+  },
+  "fieldSchema": {
+    "heading": { "label": "Heading", "type": "text" },
+    "text": { "label": "Text", "type": "markdown" },
+    "ctaLabel": { "label": "Button label", "type": "text" },
+    "ctaHref": { "label": "Button link", "type": "link" }
+  },
+  "tree": {
+    "type": "section",
+    "slots": { "theme": "dark", "edge": "wave" },
+    "children": [
+      {
+        "type": "col",
+        "children": [
+          { "type": "text", "markdown": "# Fresh food, owned by neighbors\n\nJoin the co-op building a community grocery." },
+          { "type": "button", "slots": { "label": "Join", "href": "/join", "variant": "primary" } }
+        ]
+      }
+    ]
+  }
+}

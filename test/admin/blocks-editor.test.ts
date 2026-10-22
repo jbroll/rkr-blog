@@ -6,6 +6,9 @@ import {
   duplicateOverrides,
   insertAllowed,
   isValidMacroName,
+  MAX_MACRO_DEPTH,
+  mountBlocksPalette,
+  type PaletteMacro
 } from '../../src/admin/blocks-editor.ts';
 import type { BlockNode } from '../../src/lib/blocks.ts';
 
@@ -14,9 +17,9 @@ const depth3Macro: BlockNode = {
   children: [
     {
       type: 'row',
-      children: [{ type: 'col', children: [{ type: 'text', markdown: 'hi' }] }],
-    },
-  ],
+      children: [{ type: 'col', children: [{ type: 'text', markdown: 'hi' }] }]
+    }
+  ]
 };
 
 describe('blocks editor', () => {
@@ -46,10 +49,74 @@ describe('blocks editor', () => {
 
   it('labels depth for the meter', () => {
     assert.equal(depthLabel(2), 'Level 2 of 3');
+    assert.equal(depthLabel(MAX_MACRO_DEPTH), `Level ${MAX_MACRO_DEPTH} of ${MAX_MACRO_DEPTH}`);
   });
 
   it('validates macro names', () => {
     assert.equal(isValidMacroName('hero-band'), true);
     assert.equal(isValidMacroName('Bad Name'), false);
+  });
+
+  it('mounts palette buttons and handles insert', () => {
+    interface FakeButton {
+      type: string;
+      className: string;
+      textContent: string;
+      dataset: Record<string, string>;
+      click: () => void;
+    }
+    const buttons: FakeButton[] = [];
+    const appended: unknown[] = [];
+    let inserted: string | undefined;
+    const macros: PaletteMacro[] = [{ name: 'hero', label: 'Hero' }];
+    const fakeDocument = {
+      createElement: (_tag: string) => {
+        const listeners: Record<string, () => void> = {};
+        const el = {
+          type: '',
+          className: '',
+          textContent: '',
+          dataset: {} as Record<string, string>,
+          setAttribute: (_k: string, _v: string) => {},
+          addEventListener: (ev: string, fn: () => void) => {
+            listeners[ev] = fn;
+          },
+          append: (child: unknown) => {
+            buttons.push(child as FakeButton);
+          },
+          click: () => listeners.click?.()
+        };
+        return el;
+      }
+    };
+    const root = {
+      ownerDocument: fakeDocument,
+      prepend: (el: unknown) => {
+        appended.push(el);
+      }
+    } as unknown as Element;
+    mountBlocksPalette(root, macros, (name) => {
+      inserted = name;
+    });
+    assert.equal(appended.length, 1);
+    assert.equal(buttons.length, 1);
+    buttons[0]?.click();
+    assert.equal(inserted, 'hero');
+  });
+
+  it('renders nothing without macros', () => {
+    const appended: unknown[] = [];
+    const root = {
+      ownerDocument: {
+        createElement: (_tag: string) => {
+          throw new Error('should not create elements');
+        }
+      },
+      prepend: (el: unknown) => {
+        appended.push(el);
+      }
+    } as unknown as Element;
+    mountBlocksPalette(root, [], () => {});
+    assert.equal(appended.length, 0);
   });
 });

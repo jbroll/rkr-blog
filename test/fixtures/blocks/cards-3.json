@@ -1,0 +1,39 @@
+{
+  "defaults": { "title": "Latest", "tag": "recipe", "limit": 3 },
+  "fieldSchema": {
+    "title": { "label": "Band title", "type": "text" },
+    "tag": { "label": "Listing tag", "type": "text" }
+  },
+  "tree": {
+    "type": "section",
+    "slots": { "theme": "light", "edge": "straight" },
+    "children": [
+      {
+        "type": "row",
+        "children": [
+          {
+            "type": "col",
+            "children": [
+              { "type": "text", "markdown": "## Card one\n\nFirst story." },
+              { "type": "button", "slots": { "label": "Read more", "href": "/one", "variant": "secondary" } }
+            ]
+          },
+          {
+            "type": "col",
+            "children": [
+              { "type": "text", "markdown": "## Card two\n\nSecond story." },
+              { "type": "button", "slots": { "label": "Read more", "href": "/two", "variant": "secondary" } }
+            ]
+          },
+          {
+            "type": "col",
+            "children": [
+              { "type": "text", "markdown": "## Card three\n\nThird story." },
+              { "type": "button", "slots": { "label": "Read more", "href": "/three", "variant": "secondary" } }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
