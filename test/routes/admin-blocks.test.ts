@@ -76,4 +76,42 @@ describe('admin blocks save', () => {
     });
     assert.equal(slug.statusCode, 404);
   });
+
+  it('GET /admin/blocks/:slug returns the stored tree as JSON', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'saved.json'),
+      JSON.stringify({
+        version: 1,
+        body: [{ type: 'text', markdown: 'Hi' }],
+        fields: { title: 'Saved', slug: 'saved' }
+      })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/saved' });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body) as { tree: { version: number }; title: string };
+    assert.equal(body.tree.version, 1);
+    assert.equal(body.title, 'Saved');
+    assert.equal((await app.inject({ method: 'GET', url: '/admin/blocks/nope' })).statusCode, 404);
+  });
+
+  it('GET /admin/blocks/edit/:slug serves the editor shell', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'saved.json'),
+      JSON.stringify({
+        version: 1,
+        body: [{ type: 'text', markdown: 'Hi' }],
+        fields: { title: 'Saved', slug: 'saved' }
+      })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/edit/saved' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /rkr-blocks-edit-root/);
+    assert.match(res.body, /blocks-page-editor-entry/);
+    assert.equal(
+      (await app.inject({ method: 'GET', url: '/admin/blocks/edit/nope' })).statusCode,
+      404
+    );
+  });
 });

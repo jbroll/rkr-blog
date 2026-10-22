@@ -10,13 +10,19 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
+import { readBlockPage } from '../lib/block-pages.ts';
 import { parseBlockTree } from '../lib/blocks.ts';
+import type { SiteConfig } from '../lib/config.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
+import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
+import { serverAssets } from '../lib/site-assets.ts';
+import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
 
 export interface AdminBlockRoutesOpts {
   siteRoot: string;
+  getSite: () => SiteConfig;
   /** When true, saving requires a signed-in admin. */
   requireAuth: boolean;
 }
@@ -25,7 +31,7 @@ export function registerAdminBlockRoutes(
   fastify: FastifyInstance,
   opts: AdminBlockRoutesOpts
 ): void {
-  const { siteRoot } = opts;
+  const { siteRoot, getSite } = opts;
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
 
   fastify.get('/admin/blocks/macros', { ...guard }, async (_req, _reply) => {
@@ -38,6 +44,37 @@ export function registerAdminBlockRoutes(
         .join(' ')
     }));
   });
+
+  fastify.get<{ Params: { slug: string } }>(
+    '/admin/blocks/:slug',
+    { ...guard },
+    async (req, reply) => {
+      const { slug } = req.params;
+      const page = readBlockPage(siteRoot, slug);
+      if (!page) return reply.code(404).send({ error: 'not found' });
+      return { slug, title: page.title, tree: page.tree };
+    }
+  );
+
+  fastify.get<{ Params: { slug: string } }>(
+    '/admin/blocks/edit/:slug',
+    { ...guard },
+    async (req, reply) => {
+      const { slug } = req.params;
+      if (!/^[a-z0-9-]+$/.test(slug) || !readBlockPage(siteRoot, slug)) {
+        return reply.code(404).send({ error: 'not found' });
+      }
+      setPublicSecurityHeaders(reply);
+      return reply.type('text/html; charset=utf-8').send(
+        renderBlocksEditPage({
+          site: getSite(),
+          assets: serverAssets(),
+          slug,
+          isAdmin: true
+        })
+      );
+    }
+  );
 
   fastify.post<{ Params: { slug: string }; Body: unknown }>(
     '/admin/blocks/:slug',
