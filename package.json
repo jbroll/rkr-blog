@@ -93,6 +93,7 @@
           "src/cli/fix-wp-titles.ts",
           "src/cli/export.ts",
           "src/cli/import.ts",
+          "src/cli/blocks-migrate.ts",
           "src/admin/posts-list.ts",
           "src/admin/settings-page.ts",
           "src/admin/blocks-editor.ts",

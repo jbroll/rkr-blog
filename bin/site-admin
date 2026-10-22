@@ -31,7 +31,8 @@ const COMMANDS = {
   'import-wp-comments': () => import('../src/cli/import-wp-comments.ts'),
   'wp-dump':            () => import('../src/cli/wp-dump.ts'),
   export:               () => import('../src/cli/export.ts'),
-  import:               () => import('../src/cli/import.ts')
+  import:               () => import('../src/cli/import.ts'),
+  'blocks-migrate':     () => import('../src/cli/blocks-migrate.ts')
 };
 
 const KNOWN = Object.keys(COMMANDS);
