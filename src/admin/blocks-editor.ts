@@ -38,25 +38,60 @@ export interface PaletteMacro {
   label: string;
 }
 
-/** Mount the macro palette into `root`. Each macro becomes one insert
- * button; clicks call `onInsert` with the macro name. Safe to call when
- * the experimental blocks UI is disabled: renders nothing without macros. */
+/** Built-in primitives, always present even with an empty macro
+ * library. Names are `primitive:<kind>` so the page editor can build
+ * the node directly instead of expanding a macro. */
+export const PRIMITIVE_MACROS: PaletteMacro[] = [
+  { name: 'primitive:text', label: 'Text' },
+  { name: 'primitive:figure', label: 'Image' },
+  { name: 'primitive:button', label: 'Button' },
+  { name: 'primitive:row', label: 'Row' },
+  { name: 'primitive:col', label: 'Column' },
+  { name: 'primitive:section', label: 'Section' }
+];
+
+/** Node template for a primitive palette name. Throws on unknown names. */
+export function primitiveNode(name: string): BlockNode {
+  switch (name) {
+    case 'primitive:text':
+      return { type: 'text', markdown: '' };
+    case 'primitive:figure':
+      return { type: 'figure', slots: { ids: '' } };
+    case 'primitive:button':
+      return { type: 'button', slots: { label: 'Button', href: '/', variant: 'primary' } };
+    case 'primitive:row':
+      return { type: 'row', children: [] };
+    case 'primitive:col':
+      return { type: 'col', children: [] };
+    case 'primitive:section':
+      return { type: 'section', slots: { theme: 'light', edge: 'straight' }, children: [] };
+    default:
+      throw new Error(`blocks editor: unknown primitive ${name}`);
+  }
+}
+
+/** Mount the macro palette into `root`. Primitives come first, then
+ * the site macros. Click, double-click, or Enter inserts; the latter
+ * two exist so placement never requires a drag. */
 export function mountBlocksPalette(
   root: Element,
   macros: PaletteMacro[],
   onInsert: (name: string) => void
 ): void {
-  if (macros.length === 0) return;
   const aside = root.ownerDocument.createElement('aside');
   aside.className = 'rkr-blocks-palette';
   aside.setAttribute('aria-label', 'Reusable blocks');
-  for (const m of macros) {
+  for (const m of [...PRIMITIVE_MACROS, ...macros]) {
     const btn = root.ownerDocument.createElement('button');
     btn.type = 'button';
     btn.className = 'rkr-blocks-palette-item';
     btn.textContent = m.label;
     btn.dataset.macro = m.name;
     btn.addEventListener('click', () => onInsert(m.name));
+    btn.addEventListener('dblclick', () => onInsert(m.name));
+    btn.addEventListener('keydown', (ev) => {
+      if ((ev as KeyboardEvent).key === 'Enter') onInsert(m.name);
+    });
     aside.append(btn);
   }
   root.prepend(aside);

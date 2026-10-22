@@ -4,7 +4,7 @@
 // the next tree, re-render, then save the whole tree at once.
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
-import { mountBlocksPalette, type PaletteMacro } from './blocks-editor.ts';
+import { mountBlocksPalette, type PaletteMacro, primitiveNode } from './blocks-editor.ts';
 
 export type Path = number[];
 
@@ -214,11 +214,14 @@ export async function mountBlocksPageEditor(root: Element, opts: PageEditorOpts)
 
   const macros = await opts.loadMacros();
   mountBlocksPalette(root, macros, (name) => {
+    const node: BlockNode = name.startsWith('primitive:')
+      ? primitiveNode(name)
+      : { type: 'macro', macro: name };
     const at = selected;
     const parent =
       at && getAtPath(state, at) && getAtPath(state, at)?.type !== 'text' ? (at as Path) : [];
     const list = parent.length === 0 ? state.body : kids(getAtPath(state, parent) as BlockNode);
-    state = insertAtPath(state, parent, list.length, { type: 'macro', macro: name });
+    state = insertAtPath(state, parent, list.length, node);
     void refresh();
   });
 

@@ -8,7 +8,9 @@ import {
   isValidMacroName,
   MAX_MACRO_DEPTH,
   mountBlocksPalette,
-  type PaletteMacro
+  type PaletteMacro,
+  PRIMITIVE_MACROS,
+  primitiveNode
 } from '../../src/admin/blocks-editor.ts';
 import type { BlockNode } from '../../src/lib/blocks.ts';
 
@@ -64,6 +66,8 @@ describe('blocks editor', () => {
       textContent: string;
       dataset: Record<string, string>;
       click: () => void;
+      dblclick: () => void;
+      keydown: (key: string) => void;
     }
     const buttons: FakeButton[] = [];
     const appended: unknown[] = [];
@@ -71,20 +75,22 @@ describe('blocks editor', () => {
     const macros: PaletteMacro[] = [{ name: 'hero', label: 'Hero' }];
     const fakeDocument = {
       createElement: (_tag: string) => {
-        const listeners: Record<string, () => void> = {};
+        const listeners: Record<string, (ev?: { key?: string }) => void> = {};
         const el = {
           type: '',
           className: '',
           textContent: '',
           dataset: {} as Record<string, string>,
           setAttribute: (_k: string, _v: string) => {},
-          addEventListener: (ev: string, fn: () => void) => {
+          addEventListener: (ev: string, fn: (ev?: { key?: string }) => void) => {
             listeners[ev] = fn;
           },
           append: (child: unknown) => {
             buttons.push(child as FakeButton);
           },
-          click: () => listeners.click?.()
+          click: () => listeners.click?.(),
+          dblclick: () => listeners.dblclick?.(),
+          keydown: (key: string) => listeners.keydown?.({ key })
         };
         return el;
       }
@@ -99,24 +105,70 @@ describe('blocks editor', () => {
       inserted = name;
     });
     assert.equal(appended.length, 1);
-    assert.equal(buttons.length, 1);
-    buttons[0]?.click();
+    assert.ok(buttons.length > 1);
+    buttons[buttons.length - 1]?.click();
     assert.equal(inserted, 'hero');
   });
 
-  it('renders nothing without macros', () => {
+  it('shows primitives when no macros are configured', () => {
+    const buttons: { dataset: Record<string, string> }[] = [];
     const appended: unknown[] = [];
-    const root = {
-      ownerDocument: {
-        createElement: (_tag: string) => {
-          throw new Error('should not create elements');
+    const fakeDocument = {
+      createElement: (_tag: string) => ({
+        type: '',
+        className: '',
+        textContent: '',
+        dataset: {},
+        setAttribute: (_k: string, _v: string) => {},
+        addEventListener: (_ev: string, _fn: () => void) => {},
+        append: (child: unknown) => {
+          buttons.push(child as { dataset: Record<string, string> });
         }
-      },
+      })
+    };
+    const root = {
+      ownerDocument: fakeDocument,
       prepend: (el: unknown) => {
         appended.push(el);
       }
     } as unknown as Element;
     mountBlocksPalette(root, [], () => {});
-    assert.equal(appended.length, 0);
+    assert.equal(appended.length, 1);
+    assert.equal(buttons.length, PRIMITIVE_MACROS.length);
+  });
+
+  it('double-click and Enter insert like click', () => {
+    const listeners: Record<string, (ev?: { key?: string }) => void> = {};
+    const fakeDocument = {
+      createElement: (_tag: string) => ({
+        dataset: {},
+        setAttribute: (_k: string, _v: string) => {},
+        addEventListener: (ev: string, fn: (ev?: { key?: string }) => void) => {
+          listeners[ev] = fn;
+        },
+        append: (_child: unknown) => {},
+        click: () => listeners.click?.(),
+        dblclick: () => listeners.dblclick?.(),
+        keydown: (key: string) => listeners.keydown?.({ key })
+      })
+    };
+    const root = {
+      ownerDocument: fakeDocument,
+      prepend: (_el: unknown) => {}
+    } as unknown as Element;
+    const inserted: string[] = [];
+    mountBlocksPalette(root, [{ name: 'hero', label: 'Hero' }], (name) => {
+      inserted.push(name);
+    });
+    listeners.dblclick?.();
+    listeners.keydown?.({ key: 'Enter' });
+    listeners.keydown?.({ key: ' ' });
+    assert.deepEqual(inserted, ['hero', 'hero']);
+  });
+
+  it('builds primitive nodes from palette names', () => {
+    assert.equal(primitiveNode('primitive:text').type, 'text');
+    assert.equal((primitiveNode('primitive:row') as { children: unknown[] }).children.length, 0);
+    assert.throws(() => primitiveNode('hero'), /unknown primitive/);
   });
 });
