@@ -1,17 +1,25 @@
-import { escapeText } from '../lib/content.ts';
+import { escapeAttr, escapeText } from '../lib/content.ts';
 import {
   bundleVersion,
   headIcons,
   type SiteChrome,
   siteFoot,
   siteHead,
-  stylesheetLinks,
+  stylesheetLinks
 } from './layout.ts';
 
 export interface BlocksPageData extends SiteChrome {
   title: string;
   bodyHtml: string;
   isAdmin?: boolean;
+}
+
+/** Index of stored JSON pages: title links in slug order. */
+export function renderBlocksIndex(pages: { slug: string; title: string }[]): string {
+  const items = pages
+    .map((p) => `<li><a href="/pages/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></li>`)
+    .join('\n');
+  return `<ul class="post-list">\n${items}\n</ul>\n`;
 }
 
 /** Public chrome around one rendered macro. The body is trusted

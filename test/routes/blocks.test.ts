@@ -29,7 +29,7 @@ async function setup(t: TestContext) {
     JSON.stringify({
       version: 1,
       body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Hello page.' }] }],
-      fields: { title: 'Hello page', slug: 'hello' },
+      fields: { title: 'Hello page', slug: 'hello' }
     })
   );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -82,5 +82,13 @@ describe('blocks routes', () => {
     const { app } = await setup(t);
     assert.equal((await app.inject({ method: 'GET', url: '/pages/nope' })).statusCode, 404);
     assert.equal((await app.inject({ method: 'GET', url: '/pages/NOPE' })).statusCode, 404);
+  });
+
+  it('GET /pages lists stored pages', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({ method: 'GET', url: '/pages' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /\/pages\/hello/);
+    assert.match(res.body, /Hello page/);
   });
 });

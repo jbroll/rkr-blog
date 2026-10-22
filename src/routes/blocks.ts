@@ -10,17 +10,17 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
-import { readBlockPage } from '../lib/block-pages.ts';
+import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
+import type { BlockNode, BlockTree } from '../lib/blocks.ts';
+import { renderBlockTree } from '../lib/blocks-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
-import { buildVideoMap } from '../lib/video-map-fs.ts';
+import { expandMacro, loadMacroLibrary } from '../lib/macro-library.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
-import { expandMacro, loadMacroLibrary } from '../lib/macro-library.ts';
-import { renderBlockTree } from '../lib/blocks-render.ts';
-import type { BlockNode, BlockTree } from '../lib/blocks.ts';
+import { buildVideoMap } from '../lib/video-map-fs.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
-import { renderBlocksPage } from '../templates/blocks.ts';
+import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
 import figureWidget from '../widgets/figure.ts';
 import videoWidget from '../widgets/video.ts';
 
@@ -46,7 +46,10 @@ function figureLeaves(node: BlockNode, out: BlockNode[] = []): BlockNode[] {
 }
 
 function sendPages404(reply: FastifyReply) {
-  return reply.code(404).type('text/html; charset=utf-8').send(`<!DOCTYPE html>
+  return reply
+    .code(404)
+    .type('text/html; charset=utf-8')
+    .send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/><title>Not found</title></head><body><main><h1>Page not found</h1></main></body></html>`);
 }
 
@@ -67,12 +70,12 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
       type: 'leafDirective',
       name: 'figure',
       attributes: { ids: String((f.slots?.ids ?? '') as string) },
-      children: [],
+      children: []
     }));
     const ctx = {
       images: await buildImageMap(siteRoot, synthetic as unknown as DirectiveNode[], { log }),
       videos: await buildVideoMap(siteRoot),
-      widgets,
+      widgets
     };
     return renderBlockTree(tree, ctx, lib);
   }
@@ -85,8 +88,8 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
         get: (n: string) => {
           const d = lib.get(n);
           return d ? { defaults: d.defaults, tree: d.tree } : undefined;
-        },
-      },
+        }
+      }
     };
   }
 
@@ -110,12 +113,18 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
     const site = getSite();
     const { macro } = req.params;
     if (!VALID_MACRO.test(macro)) {
-      return reply.code(404).type('text/html; charset=utf-8').send(`<!DOCTYPE html>
+      return reply
+        .code(404)
+        .type('text/html; charset=utf-8')
+        .send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/><title>Not found</title></head><body><main><h1>Page not found</h1></main></body></html>`);
     }
     const bodyHtml = await renderMacro(macro, req.log);
     if (bodyHtml === null) {
-      return reply.code(404).type('text/html; charset=utf-8').send(`<!DOCTYPE html>
+      return reply
+        .code(404)
+        .type('text/html; charset=utf-8')
+        .send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/><title>Not found</title></head><body><main><h1>Page not found</h1></main></body></html>`);
     }
     setPublicSecurityHeaders(reply);
@@ -125,7 +134,22 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
         assets: serverAssets(),
         title: macro,
         bodyHtml,
-        isAdmin: !!req.user,
+        isAdmin: !!req.user
+      })
+    );
+  });
+
+  fastify.get('/pages', async (req, reply) => {
+    const site = getSite();
+    const pages = listBlockPages(siteRoot);
+    setPublicSecurityHeaders(reply);
+    return reply.type('text/html; charset=utf-8').send(
+      renderBlocksPage({
+        site,
+        assets: serverAssets(),
+        title: 'Pages',
+        bodyHtml: `<h1>Pages</h1>\n${renderBlocksIndex(pages)}`,
+        isAdmin: !!req.user
       })
     );
   });
@@ -143,7 +167,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
         assets: serverAssets(),
         title: rendered.title,
         bodyHtml: rendered.bodyHtml,
-        isAdmin: !!req.user,
+        isAdmin: !!req.user
       })
     );
   });
@@ -158,7 +182,8 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
         return reply.code(404).type('text/html; charset=utf-8').send('not found');
       }
       const bodyHtml = await renderMacro(macro, req.log);
-      if (bodyHtml === null) return reply.code(404).type('text/html; charset=utf-8').send('not found');
+      if (bodyHtml === null)
+        return reply.code(404).type('text/html; charset=utf-8').send('not found');
       setPublicSecurityHeaders(reply);
       return reply.type('text/html; charset=utf-8').send(
         renderBlocksPage({
@@ -166,7 +191,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
           assets: serverAssets(),
           title: `Preview: ${macro}`,
           bodyHtml,
-          isAdmin: true,
+          isAdmin: true
         })
       );
     }

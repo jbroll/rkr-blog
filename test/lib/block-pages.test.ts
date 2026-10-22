@@ -4,12 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
-import { readBlockPage } from '../../src/lib/block-pages.ts';
+import { listBlockPages, readBlockPage } from '../../src/lib/block-pages.ts';
 
 const PAGE = {
   version: 1,
   body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Hello world.' }] }],
-  fields: { title: 'Hello', slug: 'hello' },
+  fields: { title: 'Hello', slug: 'hello' }
 };
 
 function withBlocks(t: TestContext, files: Record<string, unknown>): string {
@@ -43,7 +43,7 @@ describe('block-pages', () => {
     const root = withBlocks(t, {
       'a.json': 'not json{{{',
       'b.json': { version: 1, body: [{ type: 'nope' }], fields: { slug: 'bad' } },
-      'c.json': PAGE,
+      'c.json': PAGE
     });
     const page = readBlockPage(root, 'hello');
     assert.ok(page);
@@ -54,5 +54,22 @@ describe('block-pages', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-block-pages-empty-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     assert.equal(readBlockPage(root, 'hello'), null);
+  });
+
+  it('lists stored pages sorted by slug', (t: TestContext) => {
+    const root = withBlocks(t, {
+      'b.json': { ...PAGE, fields: { title: 'Bee', slug: 'b' } },
+      'a.json': { ...PAGE, fields: { title: 'Aye', slug: 'a' } }
+    });
+    assert.deepEqual(listBlockPages(root), [
+      { slug: 'a', title: 'Aye' },
+      { slug: 'b', title: 'Bee' }
+    ]);
+  });
+
+  it('lists nothing when the blocks dir is absent', (t: TestContext) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-block-pages-empty-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    assert.deepEqual(listBlockPages(root), []);
   });
 });

@@ -4,12 +4,12 @@ import { describe, it } from 'node:test';
 import type { ImageMap } from '../../src/lib/image-map.ts';
 import type { VideoMapView } from '../../src/lib/widgets.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
-import { renderBlocksPage } from '../../src/templates/blocks.ts';
+import { renderBlocksIndex, renderBlocksPage } from '../../src/templates/blocks.ts';
 
 const fakeCtx = {
   images: new Map() as ImageMap,
   videos: new Map() as VideoMapView,
-  widgets: new WidgetRegistry(),
+  widgets: new WidgetRegistry()
 };
 void fakeCtx;
 
@@ -20,10 +20,20 @@ describe('blocks page template', () => {
       assets: { theme: 'default', hash: 'abc', base: '/static' },
       title: 'Hero <demo>',
       bodyHtml: '<section class="rkr-section">Hi</section>\n',
-      isAdmin: false,
+      isAdmin: false
     });
     assert.match(html, /rkr-site-head/);
     assert.match(html, /rkr-section/);
     assert.match(html, /Hero &lt;demo&gt;/);
+  });
+
+  it('renders an index of stored pages as escaped links', () => {
+    const html = renderBlocksIndex([
+      { slug: 'b', title: 'Bee <b>' },
+      { slug: 'a', title: 'Aye' }
+    ]);
+    assert.match(html, /post-list/);
+    assert.match(html, /\/pages\/b/);
+    assert.match(html, /Bee &lt;b&gt;/);
   });
 });
