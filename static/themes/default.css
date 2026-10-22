@@ -1396,3 +1396,18 @@ body[data-mode="figure"] .rkr-meta {
     flex-direction: column;
   }
 }
+
+/* ---- Blocks editor drag state (experimental) ---- */
+.rkr-block-card[data-drop='before'] {
+  box-shadow: 0 -3px 0 var(--rkr-link);
+}
+.rkr-block-card[data-drop='after'] {
+  box-shadow: 0 3px 0 var(--rkr-link);
+}
+.rkr-block-card[data-drop='inside'] {
+  outline: 2px dashed var(--rkr-link);
+  outline-offset: 2px;
+}
+.rkr-blocks-palette-item {
+  cursor: grab;
+}

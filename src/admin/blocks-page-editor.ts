@@ -122,10 +122,33 @@ export function moveNode(
   );
 }
 
+export type DropPosition = 'before' | 'after' | 'inside';
+
+/** Resolve a drop onto the card at `targetPath` to an insertion point.
+ * before/after land in the target's parent; inside lands at the end of
+ * the target, and only containers accept it — leaves and macro
+ * instances (whose internals are not editable here) return null. */
+export function resolveDrop(
+  tree: BlockTree,
+  targetPath: Path,
+  position: DropPosition
+): { parentPath: Path; index: number } | null {
+  const target = getAtPath(tree, targetPath);
+  if (!target) return null;
+  if (position === 'inside') {
+    if (!CONTAINERS.has(target.type)) return null;
+    return { parentPath: targetPath, index: kids(target).length };
+  }
+  const parentPath = targetPath.slice(0, -1);
+  const idx = targetPath[targetPath.length - 1] as number;
+  return { parentPath, index: position === 'after' ? idx + 1 : idx };
+}
+
 /** Short header for a collapsed card. */
 export function labelFor(node: BlockNode): string {
   if (node.type === 'macro') return `Macro: ${node.macro}`;
-  return node.type[0]!.toUpperCase() + node.type.slice(1);
+  const first = node.type[0]?.toUpperCase() ?? '';
+  return first + node.type.slice(1);
 }
 
 function summaryFor(node: BlockNode): string {
@@ -213,15 +236,75 @@ export async function mountBlocksPageEditor(root: Element, opts: PageEditorOpts)
   });
 
   const macros = await opts.loadMacros();
-  mountBlocksPalette(root, macros, (name) => {
+  const insertByName = (name: string, at: Path | null) => {
     const node: BlockNode = name.startsWith('primitive:')
       ? primitiveNode(name)
       : { type: 'macro', macro: name };
-    const at = selected;
     const parent =
       at && getAtPath(state, at) && getAtPath(state, at)?.type !== 'text' ? (at as Path) : [];
     const list = parent.length === 0 ? state.body : kids(getAtPath(state, parent) as BlockNode);
     state = insertAtPath(state, parent, list.length, node);
+    void refresh();
+  };
+  mountBlocksPalette(root, macros, (name) => {
+    insertByName(name, selected);
+  });
+
+  // Palette drag: buttons carry the macro name; dropping on a card
+  // resolves to an insertion point via resolveDrop. Containers accept
+  // inside drops; leaves and macro instances only before/after.
+  let dragName: string | null = null;
+  const clearDropMarks = () => {
+    for (const el of treeEl.querySelectorAll('[data-drop]')) el.removeAttribute('data-drop');
+  };
+  const cardPath = (card: Element): Path =>
+    String(card.getAttribute('data-path'))
+      .split(',')
+      .filter((s) => s !== '')
+      .map(Number);
+  for (const btn of root.querySelectorAll('.rkr-blocks-palette-item')) {
+    (btn as HTMLElement).draggable = true;
+    btn.addEventListener('dragstart', (ev) => {
+      dragName = (btn as HTMLElement).dataset.macro ?? null;
+      (ev as DragEvent).dataTransfer?.setData('text/plain', dragName ?? '');
+    });
+  }
+  treeEl.addEventListener('dragover', (ev) => {
+    ev.preventDefault();
+    clearDropMarks();
+    if (!dragName) return;
+    const card = (ev.target as Element).closest?.('[data-path]');
+    if (!card) return;
+    const rect = (card as Element).getBoundingClientRect();
+    const y = (ev as DragEvent).clientY;
+    const pos: DropPosition =
+      y < rect.top + rect.height / 3
+        ? 'before'
+        : y > rect.bottom - rect.height / 3
+          ? 'after'
+          : 'inside';
+    if (!resolveDrop(state, cardPath(card as Element), pos)) return;
+    (card as Element).setAttribute('data-drop', pos);
+  });
+  treeEl.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    const name = dragName;
+    dragName = null;
+    const card = (ev.target as Element).closest?.('[data-path]');
+    clearDropMarks();
+    if (!card || !name) return;
+    const pos = (card as Element).getAttribute('data-drop') as DropPosition | null;
+    const at = cardPath(card as Element);
+    const resolved = pos ? resolveDrop(state, at, pos) : resolveDrop(state, at, 'after');
+    if (!resolved) return;
+    const node: BlockNode = name.startsWith('primitive:')
+      ? primitiveNode(name)
+      : { type: 'macro', macro: name };
+    try {
+      state = insertAtPath(state, resolved.parentPath, resolved.index, node);
+    } catch {
+      return;
+    }
     void refresh();
   });
 

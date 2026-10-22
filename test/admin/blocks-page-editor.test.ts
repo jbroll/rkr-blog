@@ -8,6 +8,7 @@ import {
   moveNode,
   removeAtPath,
   renderCard,
+  resolveDrop,
   setSlotAtPath
 } from '../../src/admin/blocks-page-editor.ts';
 import type { BlockTree } from '../../src/lib/blocks.ts';
@@ -69,5 +70,21 @@ describe('blocks page editor ops', () => {
     const html = renderCard({ type: 'text', markdown: '<b>Hi</b>' }, [0]);
     assert.match(html, /data-path="0"/);
     assert.match(html, /&lt;b&gt;/);
+  });
+
+  it('resolves drops before and after a card to its parent', () => {
+    assert.deepEqual(resolveDrop(TREE, [0, 1], 'before'), { parentPath: [0], index: 1 });
+    assert.deepEqual(resolveDrop(TREE, [0, 1], 'after'), { parentPath: [0], index: 2 });
+    assert.deepEqual(resolveDrop(TREE, [0], 'before'), { parentPath: [], index: 0 });
+  });
+
+  it('resolves inside drops to container ends, never into leaves or macros', () => {
+    assert.deepEqual(resolveDrop(TREE, [0, 1], 'inside'), { parentPath: [0, 1], index: 1 });
+    assert.equal(resolveDrop(TREE, [0, 0], 'inside'), null);
+    assert.deepEqual(resolveDrop(TREE, [0], 'inside'), { parentPath: [0], index: 2 });
+    assert.equal(
+      resolveDrop({ ...TREE, body: [{ type: 'macro', macro: 'hero' }] }, [0], 'inside'),
+      null
+    );
   });
 });
