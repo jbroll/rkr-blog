@@ -64,5 +64,12 @@ describe('blocks page template', () => {
     assert.match(html, /post-list/);
     assert.match(html, /\/pages\/b/);
     assert.match(html, /Bee &lt;b&gt;/);
+    assert.doesNotMatch(html, /admin\/blocks\/new/);
+  });
+
+  it('adds a new-page link for admins', () => {
+    const html = renderBlocksIndex([], { newPageUrl: '/admin/blocks/new' });
+    assert.match(html, /href="\/admin\/blocks\/new"/);
+    assert.match(html, /aria-label="New page"/);
   });
 });

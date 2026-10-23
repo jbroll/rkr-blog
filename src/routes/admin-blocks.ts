@@ -17,6 +17,7 @@ import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
+import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
 
@@ -53,6 +54,32 @@ export function registerAdminBlockRoutes(
       const page = readBlockPage(siteRoot, slug);
       if (!page) return reply.code(404).send({ error: 'not found' });
       return { slug, title: page.title, tree: page.tree };
+    }
+  );
+
+  fastify.get('/admin/blocks/new', { ...guard }, async (_req, reply) => {
+    setPublicSecurityHeaders(reply);
+    const assets = serverAssets('/admin/static');
+    return reply
+      .type('text/html; charset=utf-8')
+      .send(renderBlocksNewPage({ site: getSite(), assets, isAdmin: true }));
+  });
+
+  fastify.post<{ Body: { slug?: string } }>(
+    '/admin/blocks/new',
+    { ...guard },
+    async (req, reply) => {
+      const slug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : '';
+      if (!/^[a-z0-9-]+$/.test(slug)) return reply.code(404).send({ error: 'not found' });
+      const dest = path.join(siteRoot, 'content', 'blocks', `${slug}.json`);
+      if (!fs.existsSync(dest)) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(
+          dest,
+          `${JSON.stringify({ version: 1, body: [], fields: { title: slug, slug, status: 'draft' } }, null, 2)}\n`
+        );
+      }
+      return reply.code(303).header('location', `/admin/blocks/edit/${slug}`).send();
     }
   );
 

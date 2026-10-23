@@ -18,12 +18,19 @@ export interface BlocksPageData extends SiteChrome {
   isAdmin?: boolean;
 }
 
-/** Index of stored JSON pages: title links in slug order. */
-export function renderBlocksIndex(pages: { slug: string; title: string }[]): string {
+/** Index of stored JSON pages: title links in slug order, with an
+ * optional "+" link to the new-page form for signed-in admins. */
+export function renderBlocksIndex(
+  pages: { slug: string; title: string }[],
+  opts: { newPageUrl?: string } = {}
+): string {
   const items = pages
     .map((p) => `<li><a href="/pages/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></li>`)
     .join('\n');
-  return `<ul class="post-list">\n${items}\n</ul>\n`;
+  const actions = opts.newPageUrl
+    ? `<p><a class="rkr-fab rkr-fab--slot-1" href="${escapeAttr(opts.newPageUrl)}" aria-label="New page" title="New page">+</a></p>\n`
+    : '';
+  return `${actions}<ul class="post-list">\n${items}\n</ul>\n`;
 }
 
 /** Pencil button into the JSON editor, mirroring postAdminFab for

@@ -142,14 +142,15 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
   fastify.get('/pages', async (req, reply) => {
     const site = getSite();
     const pages = listBlockPages(siteRoot);
+    const isAdmin = !!req.user;
     setPublicSecurityHeaders(reply);
     return reply.type('text/html; charset=utf-8').send(
       renderBlocksPage({
         site,
         assets: serverAssets(),
         title: 'Pages',
-        bodyHtml: `<h1>Pages</h1>\n${renderBlocksIndex(pages)}`,
-        isAdmin: !!req.user
+        bodyHtml: `<h1>Pages</h1>\n${renderBlocksIndex(pages, isAdmin ? { newPageUrl: '/admin/blocks/new' } : {})}`,
+        isAdmin
       })
     );
   });

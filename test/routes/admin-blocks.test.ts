@@ -114,4 +114,29 @@ describe('admin blocks save', () => {
       404
     );
   });
+
+  it('GET /admin/blocks/new renders the new-page form', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/new' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /name="slug"/);
+  });
+
+  it('POST /admin/blocks/new creates an empty page and redirects to edit', async (t) => {
+    const { root, app } = await setup(t);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/new',
+      payload: { slug: 'fresh-page' }
+    });
+    assert.equal(res.statusCode, 303);
+    assert.equal(res.headers.location, '/admin/blocks/edit/fresh-page');
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'fresh-page.json')));
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/new',
+      payload: { slug: 'BAD' }
+    });
+    assert.equal(bad.statusCode, 404);
+  });
 });
