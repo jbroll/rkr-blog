@@ -230,8 +230,9 @@ export function registerAdminSettingsRoutes(
   });
 
   // POST /admin/reindex — rebuild the posts table + search FTS index
-  // from the markdown files. Admin-guarded; idempotent (the same
-  // rebuild runs on every post save). Covers the one-time FTS
+  // from content/posts + content/blocks. Admin-guarded and idempotent;
+  // it is also the post-save step for remote pushes, since the blocks
+  // save route does not reindex on its own. Covers the one-time FTS
   // population without shell access.
   fastify.post('/admin/reindex', { ...guard }, async (_req, reply) => {
     runReindex(siteRoot);
@@ -262,7 +263,7 @@ export function registerAdminSettingsRoutes(
   );
 
   // GET /admin/banner/edit — create _site-banner.md if absent, then open it
-  // in the editor. Hides the _site-banner slug from the settings UI.
+  // in the blocks editor. Hides the _site-banner slug from the settings UI.
   fastify.get('/admin/banner/edit', { ...guard }, async (_req, reply) => {
     const bannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
     const exists = fs.existsSync(bannerPath);
@@ -276,19 +277,19 @@ export function registerAdminSettingsRoutes(
         `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n${body}`
       );
     }
-    return reply.redirect('/admin/editor?slug=_site-banner&mode=figure', 302);
+    return reply.redirect('/admin/blocks/edit/_site-banner', 302);
   });
 
   // GET /admin/about/edit — create _about.md from a stub if absent,
-  // then open it in the normal editor (NOT figure mode). Never
-  // overwrites existing content (idempotent seed).
+  // then open it in the blocks editor. Never overwrites existing
+  // content (idempotent seed).
   fastify.get('/admin/about/edit', { ...guard }, async (_req, reply) => {
     const aboutPath = path.join(siteRoot, 'content', 'posts', '_about.md');
     if (!fs.existsSync(aboutPath)) {
       fs.mkdirSync(path.dirname(aboutPath), { recursive: true });
       writeFileAtomicSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\n');
     }
-    return reply.redirect('/admin/editor?slug=_about', 302);
+    return reply.redirect('/admin/blocks/edit/_about', 302);
   });
 
   // POST /admin/settings/banner — set the site-wide banner image by ID.

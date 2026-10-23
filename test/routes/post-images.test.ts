@@ -24,6 +24,7 @@ import sharp from 'sharp';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
 async function makeJpeg(seed = 0): Promise<Buffer> {
@@ -77,6 +78,17 @@ async function setup(t: TestContext) {
     source: { kind: 'upload', originalName: 'pic.jpg' }
   });
   return { root, app, imageId: ingest.id };
+}
+
+/** Seed a published markdown post + reindex it. The markdown write
+ * route is retired, so tests that exercise the public renderer plant
+ * the source file directly. */
+function seedPost(root: string, slug: string, title: string, markdown: string): void {
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', `${slug}.md`),
+    `---\nslug: ${slug}\ntitle: ${title}\nstatus: published\ndate: 2026-05-01T00:00:00Z\n---\n\n${markdown}`
+  );
+  runReindex(root);
 }
 
 /** Pull every distinct /img/<id>.<ophash>.<fmt> URL from the rendered
@@ -140,19 +152,14 @@ test('::figure single image: rendered <img>/<srcset> URLs resolve', async (t) =>
   // Per spec.md §9 unification, ::figure is the only image directive
   // the public renderer recognises. Single-id figure replaces the
   // legacy ::image directive.
-  const { app, imageId } = await setup(t);
+  const { app, root, imageId } = await setup(t);
 
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'pic-roundtrip',
-      title: 'Pic roundtrip',
-      status: 'published',
-      markdown: `Body before.\n\n::figure{ids="${imageId}" alts="hi"}\n\nBody after.\n`
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
+  seedPost(
+    root,
+    'pic-roundtrip',
+    'Pic roundtrip',
+    `Body before.\n\n::figure{ids="${imageId}" alts="hi"}\n\nBody after.\n`
+  );
 
   const page = await app.inject({ method: 'GET', url: '/pic-roundtrip' });
   assert.equal(page.statusCode, 200);
@@ -165,18 +172,13 @@ test('::figure (matrix=2x2): rendered URLs resolve (sample one per image)', asyn
   // widgets' shapes (constants-alignment test guards this), so emitted
   // URLs all resolve via the standard /img/ pipeline — same plumbing
   // the legacy ::image / ::diptych / ::gallery use.
-  const { app, imageId } = await setup(t);
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'fig-roundtrip',
-      title: 'Figure roundtrip',
-      status: 'published',
-      markdown: `::figure{ids="${imageId},${imageId},${imageId},${imageId}" matrix=2x2}\n`
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
+  const { app, root, imageId } = await setup(t);
+  seedPost(
+    root,
+    'fig-roundtrip',
+    'Figure roundtrip',
+    `::figure{ids="${imageId},${imageId},${imageId},${imageId}" matrix=2x2}\n`
+  );
 
   const page = await app.inject({ method: 'GET', url: '/fig-roundtrip' });
   assert.equal(page.statusCode, 200);
@@ -193,17 +195,12 @@ test('::figure (matrix=masonry): rendered URLs resolve', async (t) => {
   // confirms the masonry branch reaches that path.
   const { app, root } = await setup(t);
   const ids = await ingestN(t, root, 4);
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'fig-masonry-roundtrip',
-      title: 'Masonry roundtrip',
-      status: 'published',
-      markdown: `::figure{ids="${ids.join(',')}" matrix=masonry:3}\n`
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
+  seedPost(
+    root,
+    'fig-masonry-roundtrip',
+    'Masonry roundtrip',
+    `::figure{ids="${ids.join(',')}" matrix=masonry:3}\n`
+  );
 
   const page = await app.inject({ method: 'GET', url: '/fig-masonry-roundtrip' });
   assert.equal(page.statusCode, 200);
@@ -221,17 +218,12 @@ test('::figure carousel (overflow): rendered URLs resolve across all pages', asy
   // image URLs resolve via /img/.
   const { app, root } = await setup(t);
   const ids = await ingestN(t, root, 5);
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'fig-carousel-roundtrip',
-      title: 'Figure carousel',
-      status: 'published',
-      markdown: `::figure{ids="${ids.join(',')}" matrix=1x2 timer=10}\n`
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
+  seedPost(
+    root,
+    'fig-carousel-roundtrip',
+    'Figure carousel',
+    `::figure{ids="${ids.join(',')}" matrix=1x2 timer=10}\n`
+  );
 
   const page = await app.inject({ method: 'GET', url: '/fig-carousel-roundtrip' });
   assert.equal(page.statusCode, 200);

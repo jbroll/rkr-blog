@@ -161,7 +161,30 @@ async function plainFetchImage(url: string): Promise<Readable> {
   return Readable.fromWeb(res.body);
 }
 
-test('pushPost: WP fixture → target via bearer; markdown + originals land', async (t) => {
+interface SavedBlock {
+  type: string;
+  markdown?: string;
+  slots?: Record<string, string>;
+  blocks?: SavedBlock[];
+}
+
+interface SavedTree {
+  version: number;
+  body: SavedBlock[];
+  fields: Record<string, unknown>;
+}
+
+function readSavedTree(root: string, slug: string): SavedTree {
+  return JSON.parse(
+    fs.readFileSync(path.join(root, 'content', 'blocks', `${slug}.json`), 'utf8')
+  ) as SavedTree;
+}
+
+function flowBlocks(tree: SavedTree): SavedBlock[] {
+  return tree.body.flatMap((node) => node.blocks ?? []);
+}
+
+test('pushPost: WP fixture → target via bearer; JSON blocks + originals land', async (t) => {
   const target = await startTargetApp(t, 'token-abc');
   const images = new Map<string, Buffer>([
     ['/img1.jpg', await makeJpeg(1)],
@@ -183,16 +206,24 @@ test('pushPost: WP fixture → target via bearer; markdown + originals land', as
   assert.equal(result.imagesFailed, 0);
   assert.equal(result.status, 'published');
 
-  // Markdown landed on the target.
-  const md = fs.readFileSync(path.join(target.siteRoot, 'content', 'posts', 'two-up.md'), 'utf8');
-  assert.match(md, /title: Two Images/);
-  assert.match(md, /status: published/);
-  assert.match(md, /Opening prose\./);
+  // A JSON block page landed on the target (no markdown is written).
+  assert.equal(fs.existsSync(path.join(target.siteRoot, 'content', 'posts', 'two-up.md')), false);
+  const tree = readSavedTree(target.siteRoot, 'two-up');
+  assert.equal(tree.fields.title, 'Two Images');
+  assert.equal(tree.fields.status, 'published');
+  assert.equal(tree.fields.slug, 'two-up');
+  const blocks = flowBlocks(tree);
+  assert.ok(blocks.some((b) => b.type === 'text' && /Opening prose\./.test(b.markdown ?? '')));
   // Two top-level figures (not a nested gallery) → two separate
-  // ::figure directives, each with its own sha256 id, alt, and (for
-  // the first) caption from the figcaption.
-  assert.match(md, /::figure\{ids="[0-9a-f]{64}" alts="one" caption="first"\}/);
-  assert.match(md, /::figure\{ids="[0-9a-f]{64}" alts="two"\}/);
+  // figure blocks, each with its own sha256 id, alt, and (for the
+  // first) caption from the figcaption.
+  const figures = blocks.filter((b) => b.type === 'figure');
+  assert.equal(figures.length, 2);
+  assert.match(figures[0]?.slots?.ids ?? '', /^[0-9a-f]{64}$/);
+  assert.equal(figures[0]?.slots?.alts, 'one');
+  assert.equal(figures[0]?.slots?.caption, 'first');
+  assert.match(figures[1]?.slots?.ids ?? '', /^[0-9a-f]{64}$/);
+  assert.equal(figures[1]?.slots?.alts, 'two');
 
   // Walk the sharded originals tree on the target — should find 2
   // image files (originals/<id[0:2]>/<id[2:4]>/<id>.<ext>).
@@ -256,11 +287,7 @@ test('pushPost: --status draft preserves draft on target', async (t) => {
   });
   assert.equal(result.status, 'draft');
 
-  const md = fs.readFileSync(
-    path.join(target.siteRoot, 'content', 'posts', 'draft-roundtrip.md'),
-    'utf8'
-  );
-  assert.match(md, /status: draft/);
+  assert.equal(readSavedTree(target.siteRoot, 'draft-roundtrip').fields.status, 'draft');
 });
 
 test('pushPost: trailing slash on target URL is normalised', async (t) => {
@@ -403,7 +430,7 @@ test('pushPost: per-image upload failure increments imagesFailed and continues',
   assert.equal(result.slug, 'partial-upload-fail');
 });
 
-test('pushPost: featured_media → banner uploaded, banner in post frontmatter', async (t) => {
+test('pushPost: featured_media → banner uploaded as the leading bleed figure', async (t) => {
   const target = await startTargetApp(t, 'tok-banner');
   const bannerBytes = await makeJpeg(99);
   const images = new Map<string, Buffer>([
@@ -467,82 +494,27 @@ test('pushPost: featured_media → banner uploaded, banner in post frontmatter',
   assert.equal(result.imagesUploaded, 3);
   assert.equal(result.imagesFailed, 0);
 
-  // Post frontmatter has banner: <id>.
-  const md = fs.readFileSync(
-    path.join(target.siteRoot, 'content', 'posts', 'with-banner.md'),
-    'utf8'
-  );
-  assert.match(md, /^banner: [0-9a-f]{64}$/m);
+  // The featured image becomes the leading full-bleed banner figure.
+  const banner = flowBlocks(readSavedTree(target.siteRoot, 'with-banner'))[0];
+  assert.equal(banner?.type, 'figure');
+  assert.equal(banner?.slots?.justify, 'bleed');
+  assert.match(banner?.slots?.ids ?? '', /^[0-9a-f]{64}$/);
 });
 
-test('pushPage: WP page fixture → target slug is _about', async (t) => {
-  const ABOUT_PAGE: WpPost = {
-    id: 10,
-    date: '2026-01-01T00:00:00',
-    modified: '2026-01-01T00:00:00',
-    slug: 'about',
-    status: 'publish',
-    title: { rendered: 'About' },
-    content: { rendered: '<p>about body</p>' },
-    excerpt: { rendered: '' },
-    link: 'http://wp.example/about/'
-  };
-
-  // Fake WP server that serves the page via /wp-json/wp/v2/pages?slug=about
-  let capturedAdminPostsSlug = '';
-  const wpServer = http.createServer((req, res) => {
-    const host = req.headers.host ?? '127.0.0.1';
-    const url = new URL(req.url ?? '/', `http://${host}`);
-    if (url.pathname === '/wp-json/wp/v2/pages' && url.searchParams.get('slug') === 'about') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify([ABOUT_PAGE]));
-      return;
-    }
-    res.writeHead(404);
-    res.end('not found');
-  });
-  await new Promise<void>((r) => wpServer.listen(0, '127.0.0.1', r));
-  t.after(() => new Promise<void>((r) => wpServer.close(() => r())));
-  const wpBaseUrl = `http://127.0.0.1:${(wpServer.address() as AddressInfo).port}`;
-
-  // Fake target server that records the slug from POST /admin/posts
-  const targetServer = http.createServer((req, res) => {
-    const url = new URL(req.url ?? '/', `http://127.0.0.1`);
-    if (req.method === 'POST' && url.pathname === '/admin/posts') {
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk;
-      });
-      req.on('end', () => {
-        const parsed = JSON.parse(body) as { slug: string };
-        capturedAdminPostsSlug = parsed.slug;
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ slug: parsed.slug, inserted: true }));
-      });
-      return;
-    }
-    if (req.method === 'POST' && url.pathname === '/admin/upload') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ id: 'fake' }));
-      return;
-    }
-    res.writeHead(404);
-    res.end('not found');
-  });
-  await new Promise<void>((r) => targetServer.listen(0, '127.0.0.1', r));
-  t.after(() => new Promise<void>((r) => targetServer.close(() => r())));
-  const targetBaseUrl = `http://127.0.0.1:${(targetServer.address() as AddressInfo).port}`;
-
-  const res = await pushPage({
-    wpBaseUrl,
-    slug: 'about',
-    toUrl: targetBaseUrl,
-    token: 'tok',
-    fetcher: fetch
-  });
-
-  assert.equal(capturedAdminPostsSlug, '_about');
-  assert.equal(res.slug, '_about');
+test('pushPage: refuses to push after the markdown write paths were retired', async () => {
+  // `_about` is a markdown-only system page and the blocks endpoints
+  // reject `_`-prefixed slugs, so there is no write route left to push
+  // it through. Fail loudly instead of silently skipping the page.
+  await assert.rejects(
+    () =>
+      pushPage({
+        wpBaseUrl: 'http://wp.invalid',
+        slug: 'about',
+        toUrl: 'http://target.invalid',
+        token: 'tok'
+      }),
+    /_about is a markdown-only system page/
+  );
 });
 
 // ---- injected WpSource (the --from-dump path) -------------------------
@@ -639,11 +611,7 @@ test('pushPost via source: published WP post with no --status stays published', 
 
   assert.equal(result.status, 'published');
   assert.deepEqual(calls.fetchPost, ['src-published']);
-  const md = fs.readFileSync(
-    path.join(target.siteRoot, 'content', 'posts', 'src-published.md'),
-    'utf8'
-  );
-  assert.match(md, /status: published/);
+  assert.equal(readSavedTree(target.siteRoot, 'src-published').fields.status, 'published');
 });
 
 test('pushPost via source: WP draft with no --status lands as a draft', async (t) => {
@@ -659,11 +627,7 @@ test('pushPost via source: WP draft with no --status lands as a draft', async (t
   });
 
   assert.equal(result.status, 'draft');
-  const md = fs.readFileSync(
-    path.join(target.siteRoot, 'content', 'posts', 'never-published.md'),
-    'utf8'
-  );
-  assert.match(md, /status: draft/);
+  assert.equal(readSavedTree(target.siteRoot, 'never-published').fields.status, 'draft');
   // A draft is not served publicly.
   const res = await fetch(`${target.baseUrl}/never-published`);
   assert.equal(res.status, 404);
@@ -683,11 +647,7 @@ test('pushPost via source: explicit status published overrides a WP draft', asyn
   });
 
   assert.equal(result.status, 'published');
-  const md = fs.readFileSync(
-    path.join(target.siteRoot, 'content', 'posts', 'forced-live.md'),
-    'utf8'
-  );
-  assert.match(md, /status: published/);
+  assert.equal(readSavedTree(target.siteRoot, 'forced-live').fields.status, 'published');
 });
 
 test("pushPost via source: the source's fetchImage, media URL and tag names are used", async (t) => {
@@ -731,55 +691,9 @@ test("pushPost via source: the source's fetchImage, media URL and tag names are 
   // share one sha256 id and upload once.
   assert.equal(result.imagesUploaded, 1);
   assert.equal(result.imagesFailed, 0);
-  const md = fs.readFileSync(
-    path.join(target.siteRoot, 'content', 'posts', 'src-images.md'),
-    'utf8'
-  );
-  assert.match(md, /^banner: [0-9a-f]{64}$/m);
-  assert.match(md, /^tags:\n- Alpha\n- Beta$/m);
-});
-
-test('pushPage via source: a draft About page lands as a draft _about', async (t) => {
-  const target = await startTargetApp(t, 'tok');
-  const { source, calls } = stubSource({
-    ...DRAFT_POST,
-    id: 10,
-    slug: 'about',
-    title: { rendered: 'About' },
-    content: { rendered: '<p>about body</p>' }
-  });
-
-  const result = await pushPage({
-    wpBaseUrl: UNREACHABLE_WP,
-    slug: 'about',
-    toUrl: target.baseUrl,
-    token: 'tok',
-    source
-  });
-
-  assert.deepEqual(calls.fetchPage, ['about']);
-  assert.equal(result.slug, '_about');
-  assert.equal(result.status, 'draft');
-});
-
-test('pushPage via source: explicit status published wins for the About page', async (t) => {
-  const target = await startTargetApp(t, 'tok');
-  const { source } = stubSource({
-    ...DRAFT_POST,
-    id: 11,
-    slug: 'about',
-    title: { rendered: 'About' },
-    content: { rendered: '<p>about body</p>' }
-  });
-
-  const result = await pushPage({
-    wpBaseUrl: UNREACHABLE_WP,
-    slug: 'about',
-    toUrl: target.baseUrl,
-    token: 'tok',
-    status: 'published',
-    source
-  });
-
-  assert.equal(result.status, 'published');
+  const tree = readSavedTree(target.siteRoot, 'src-images');
+  assert.deepEqual(tree.fields.tags, ['Alpha', 'Beta']);
+  const banner = flowBlocks(tree)[0];
+  assert.equal(banner?.type, 'figure');
+  assert.equal(banner?.slots?.justify, 'bleed');
 });

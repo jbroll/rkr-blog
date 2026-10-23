@@ -118,7 +118,7 @@ export function siteFoot(site: SiteChrome['site'], _opts: FootOpts = {}): string
 }
 
 /** FAB row rendered on the homepage when the visitor is authed:
- *  ⚙ Settings on top, + New post below. Stacked bottom-right. */
+ *  ⚙ Settings on top, + New page below. Stacked bottom-right. */
 export function indexAdminFabs(): string {
   return `<a class="rkr-fab rkr-fab--slot-3" href="/admin/comments" aria-label="Moderate comments" title="Moderate comments">
   ${icon('comment', 22)}
@@ -126,15 +126,15 @@ export function indexAdminFabs(): string {
 <a class="rkr-fab rkr-fab--slot-2" href="/admin/settings" aria-label="Settings" title="Settings">
   ${icon('settings', 22)}
 </a>
-<a class="rkr-fab rkr-fab--slot-1" href="/admin/editor?new=1" aria-label="New post" title="New post">
+<a class="rkr-fab rkr-fab--slot-1" href="/admin/blocks/new" aria-label="New page" title="New page">
   ${icon('plus', 24)}
 </a>`;
 }
 
 /** FAB rendered on /:slug pages when the visitor is authed:
- * a pencil that routes into the editor with the post's slug. */
+ * a pencil that routes into the blocks editor for this page's slug. */
 export function postAdminFab(slug: string): string {
-  const href = `/admin/editor?slug=${encodeURIComponent(slug)}`;
+  const href = `/admin/blocks/edit/${encodeURIComponent(slug)}`;
   return `<a class="rkr-fab rkr-fab--slot-1" href="${escapeAttr(href)}" aria-label="Edit this post" title="Edit this post">
   ${icon('pencil', 22)}
 </a>`;

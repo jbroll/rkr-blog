@@ -7,8 +7,13 @@
 //   2. importPost into a temp siteRoot   (lib/wp-import.importPost)
 //      → produces local markdown + originals/<id>.<ext> + sidecars
 //   3. POST each original to <to>/admin/upload  (multipart, bearer)
-//   4. POST the markdown body to <to>/admin/posts (JSON, bearer)
+//   4. Convert the markdown to a JSON block tree (lib/markdown-migrate)
+//      and POST it to <to>/admin/blocks/:slug (JSON, bearer); then
+//      POST <to>/admin/reindex so the new page is publicly visible.
 //   5. clean up the temp siteRoot
+//
+// The markdown write route (`POST /admin/posts`) was retired with the
+// JSON cutover, so the blocks endpoint is the only remote write path.
 //
 // Authentication is a bearer token matching the target's ADMIN_TOKEN env
 // var (see lib/auth-middleware.ts). The same auth bridge is what makes
@@ -19,11 +24,11 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 
+import { migratePostToTree } from './markdown-migrate.ts';
 import { imageInfo } from './originals.ts';
 import { safeFetch, UnsafeUrlError } from './url-safety.ts';
 import { importPost } from './wp-import.ts';
 import type { WpPost } from './wp-import-types.ts';
-import { fetchWpPage } from './wp-rest.ts';
 import type { WpSource } from './wp-source.ts';
 
 export interface PushOpts {
@@ -54,7 +59,7 @@ export interface PushResult {
   status: 'draft' | 'published';
   imagesUploaded: number;
   imagesFailed: number;
-  /** True if /admin/posts reported the post was new (false = overwrite). */
+  /** True if /admin/blocks reported the page was new (false = overwrite). */
   inserted: boolean;
 }
 
@@ -66,14 +71,14 @@ export async function pushPost(opts: PushOpts): Promise<PushResult> {
 }
 
 /** Push a WP *page* (e.g. roll-along's About) as the `_about` system
- * post: fetch the page, force its slug to `_about`, then run the same
- * import/upload/POST pipeline as pushPost. */
+ * post. There is no longer a write route for it: `_about` stays a
+ * markdown-only system page and the blocks endpoints reject
+ * `_`-prefixed slugs. Fail loudly rather than silently skipping it. */
 export async function pushPage(opts: PushOpts): Promise<PushResult> {
-  const page = opts.source
-    ? await opts.source.fetchPage(String(opts.slug))
-    : await fetchWpPage(opts.wpBaseUrl, String(opts.slug), opts.fetcher);
-  page.slug = '_about';
-  return pushWpObject(page, opts);
+  throw new Error(
+    `cannot push /${opts.slug} to ${opts.toUrl}: _about is a markdown-only system page ` +
+      'and the blocks endpoints reject _-prefixed slugs'
+  );
 }
 
 async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
@@ -134,38 +139,51 @@ async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
       }
     }
 
-    // 3. POST the markdown body to /admin/posts. The importer's emitted
-    //    file has YAML frontmatter; the endpoint wants the title/slug/
-    //    status/date as fields and the markdown body separate. Split.
-    const { frontmatter, body } = splitFrontmatter(result.markdown);
-    const postRes = await fetcher(`${targetBase}/admin/posts`, {
+    // 3. Convert the importer's markdown to a JSON block tree and POST
+    //    it to /admin/blocks/:slug. The URL slug wins server-side; the
+    //    tree still carries fields.slug/title/date/tags so the target's
+    //    index can list and pair the page. `status` is forced from the
+    //    WP object + --status, overriding the importer's `draft` default.
+    const tree = migratePostToTree(result.markdown);
+    const pageSlug = tree.fields.slug || String(post.slug);
+    tree.fields.slug = pageSlug;
+    tree.fields.title = tree.fields.title || post.title.rendered;
+    tree.fields.status = status;
+    const postRes = await fetcher(`${targetBase}/admin/blocks/${encodeURIComponent(pageSlug)}`, {
       method: 'POST',
       headers: {
         authorization: auth,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({
-        slug: frontmatter.slug ?? post.slug,
-        title: frontmatter.title ?? post.title.rendered,
-        status,
-        date: frontmatter.date ?? post.date,
-        markdown: body,
-        ...(result.bannerImageId ? { banner: result.bannerImageId } : {}),
-        ...(result.tagNames.length > 0 ? { tags: result.tagNames } : {})
-      })
+      body: JSON.stringify({ tree })
     });
     if (!postRes.ok) {
-      throw new Error(`POST /admin/posts: ${postRes.status} ${await postRes.text()}`);
+      throw new Error(`POST /admin/blocks/${pageSlug}: ${postRes.status} ${await postRes.text()}`);
     }
-    const created = (await postRes.json()) as { slug: string; inserted: boolean };
+    const created = (await postRes.json()) as { slug: string; inserted?: boolean };
+
+    // The retired /admin/posts handler reindexed on every save; the
+    // blocks save route does not. Rebuild the target index here so the
+    // pushed page is publicly visible without a manual reindex.
+    // Do not follow the 303: the reindex route redirects to the settings
+    // HTML page, which a scripted bearer client has no use for (and which
+    // reads site secrets that a freshly seeded target may not have yet).
+    const reindexRes = await fetcher(`${targetBase}/admin/reindex`, {
+      method: 'POST',
+      headers: { authorization: auth },
+      redirect: 'manual'
+    });
+    if (!(reindexRes.ok || reindexRes.status === 303)) {
+      throw new Error(`POST /admin/reindex: ${reindexRes.status} ${await reindexRes.text()}`);
+    }
 
     return {
       slug: created.slug,
-      title: frontmatter.title ?? post.title.rendered,
+      title: tree.fields.title,
       status,
       imagesUploaded: uploaded,
       imagesFailed: failed,
-      inserted: created.inserted
+      inserted: created.inserted ?? false
     };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -195,37 +213,6 @@ async function uploadOriginal(args: UploadArgs): Promise<void> {
   if (!res.ok) {
     throw new Error(`POST /admin/upload: ${res.status} ${await res.text()}`);
   }
-}
-
-interface SplitMarkdown {
-  frontmatter: Record<string, string>;
-  body: string;
-}
-
-/** Cheap splitter: peels the leading `---\n...\n---` block off, parses
- * its `key: value` lines into a record, and returns the body. The
- * importer's frontmatter is always well-formed (we wrote it), so a
- * full YAML parse isn't necessary. */
-function splitFrontmatter(raw: string): SplitMarkdown {
-  const m = /^---\n([\s\S]*?)\n---\n+([\s\S]*)$/.exec(raw);
-  /* c8 ignore next -- importPost always emits frontmatter; defensive */
-  if (!m) return { frontmatter: {}, body: raw };
-  const fm: Record<string, string> = {};
-  /* c8 ignore next -- regex capture group always populated when m matches */
-  const fmText = m[1] ?? '';
-  for (const line of fmText.split('\n')) {
-    const kv = /^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(line);
-    if (!kv) continue;
-    /* c8 ignore next -- regex capture always populated when kv matches */
-    let value = (kv[2] ?? '').trim();
-    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-    }
-    /* c8 ignore next -- kv[1] always populated when kv matches */
-    if (kv[1]) fm[kv[1]] = value;
-  }
-  /* c8 ignore next -- regex capture always populated when m matches */
-  return { frontmatter: fm, body: m[2] ?? '' };
 }
 
 function stripTrailingSlash(url: string): string {

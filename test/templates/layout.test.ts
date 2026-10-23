@@ -60,11 +60,11 @@ test('siteFoot: renders copyright line without auth links', () => {
   }
 });
 
-test('indexAdminFabs: renders New post, Settings and Comments-moderation anchors', () => {
+test('indexAdminFabs: renders New page, Settings and Comments-moderation anchors', () => {
   const html = indexAdminFabs();
   assert.match(
     html,
-    /class="rkr-fab[^"]*"[^>]*href="\/admin\/editor\?new=1"[^>]*aria-label="New post"/
+    /class="rkr-fab[^"]*"[^>]*href="\/admin\/blocks\/new"[^>]*aria-label="New page"/
   );
   assert.match(html, /class="rkr-fab[^"]*"[^>]*href="\/admin\/settings"[^>]*aria-label="Settings"/);
   assert.match(
@@ -76,7 +76,7 @@ test('indexAdminFabs: renders New post, Settings and Comments-moderation anchors
 test('postAdminFab: pencil FAB carries the URL-encoded slug', () => {
   const html = postAdminFab('hello world');
   assert.match(html, /aria-label="Edit this post"/);
-  assert.match(html, /href="\/admin\/editor\?slug=hello%20world"/);
+  assert.match(html, /href="\/admin\/blocks\/edit\/hello%20world"/);
 });
 
 test('stylesheetLinks: default theme loads base + default only, prefixed by color-scheme meta', () => {

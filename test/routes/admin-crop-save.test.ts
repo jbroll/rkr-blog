@@ -14,6 +14,7 @@ import { open } from '../../src/lib/db.ts';
 import { cacheKey } from '../../src/lib/hash.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
 import { buildApp } from '../../src/server.ts';
 
@@ -121,20 +122,15 @@ test('crop commit → sidecar ops updated, stale cache deleted', async (t) => {
 });
 
 test('crop commit → blog page uses new ophash → derivative resolves at correct size', async (t) => {
-  const { app, imageId } = await setup(t);
+  const { app, root, imageId } = await setup(t);
 
-  // Save the post so the blog page route can find it.
-  const postRes = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: 'crop-roundtrip',
-      title: 'Crop roundtrip',
-      status: 'published',
-      markdown: `::figure{ids="${imageId}" alts="crop test"}\n`
-    }
-  });
-  assert.equal(postRes.statusCode, 200, postRes.body);
+  // Plant the post source + reindex it so the blog page route can find
+  // it (the markdown write route is retired).
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', 'crop-roundtrip.md'),
+    `---\nslug: crop-roundtrip\ntitle: Crop roundtrip\nstatus: published\ndate: 2026-05-01T00:00:00Z\n---\n\n::figure{ids="${imageId}" alts="crop test"}\n`
+  );
+  runReindex(root);
 
   // Record the pre-crop page HTML to confirm it uses a different hash.
   const preCropPage = await app.inject({ method: 'GET', url: '/crop-roundtrip' });

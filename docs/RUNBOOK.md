@@ -275,8 +275,10 @@ Each `push` invocation:
    `<img>`, ingests the bytes, emits `::figure` directives in markdown).
 3. Uploads each unique original to `<target>/admin/upload` (multipart,
    bearer auth).
-4. POSTs the markdown body to `<target>/admin/posts` (JSON, bearer
-   auth) with `status=published`.
+4. Converts the body to a JSON block tree (`lib/markdown-migrate`) and
+   POSTs it to `<target>/admin/blocks/<slug>` (JSON, bearer auth) with
+   `status=published`, then POSTs `<target>/admin/reindex` so the page
+   is listed and publicly visible.
 5. Cleans up the temp directory.
 
 Output per slug: `pushed <slug> (inserted): images=N (failed=0)`.

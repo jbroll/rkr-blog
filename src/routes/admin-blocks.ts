@@ -11,7 +11,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
 import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
-import { parseBlockTree } from '../lib/blocks.ts';
+import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
@@ -42,7 +42,7 @@ export function registerAdminBlockRoutes(
       name,
       label: name
         .split('-')
-        .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1) : w))
+        .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
         .join(' ')
     }));
   });
@@ -127,7 +127,7 @@ export function registerAdminBlockRoutes(
       const { slug } = req.params;
       if (!VALID_SLUG.test(slug)) return reply.code(404).send({ error: 'not found' });
       const body = (req.body ?? {}) as Record<string, unknown>;
-      let tree;
+      let tree: BlockTree & { fields: Record<string, unknown> };
       try {
         if (!body || typeof body !== 'object' || !('tree' in body)) throw new Error('missing tree');
         const raw = (body as { tree: unknown }).tree;
@@ -144,9 +144,10 @@ export function registerAdminBlockRoutes(
         return reply.code(400).send({ error: (err as Error).message });
       }
       const dest = path.join(siteRoot, 'content', 'blocks', `${slug}.json`);
+      const inserted = !fs.existsSync(dest);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
-      return { slug };
+      return { slug, inserted };
     }
   );
 }

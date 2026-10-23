@@ -353,14 +353,14 @@ test('POST /admin/settings/banner: 400 on invalid imageId', async (t) => {
 // GET /admin/banner/edit
 // ---------------------------------------------------------------------------
 
-test('GET /admin/banner/edit: creates _site-banner.md when absent and redirects to editor', async (t) => {
+test('GET /admin/banner/edit: creates _site-banner.md when absent and redirects to the blocks editor', async (t) => {
   const { root, app } = await setup(t);
   const bannerPath = path.join(root, 'content', 'posts', '_site-banner.md');
   assert.ok(!fs.existsSync(bannerPath), 'precondition: no banner file');
 
   const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner&mode=figure');
+  assert.equal(res.headers.location, '/admin/blocks/edit/_site-banner');
   assert.ok(fs.existsSync(bannerPath), '_site-banner.md created');
 
   const content = fs.readFileSync(bannerPath, 'utf8');
@@ -377,7 +377,7 @@ test('GET /admin/banner/edit: redirects without overwriting existing _site-banne
 
   const res = await app.inject({ method: 'GET', url: '/admin/banner/edit' });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor?slug=_site-banner&mode=figure');
+  assert.equal(res.headers.location, '/admin/blocks/edit/_site-banner');
   assert.equal(fs.readFileSync(bannerPath, 'utf8'), existing, 'existing file unchanged');
 });
 
@@ -539,14 +539,14 @@ test('GET /admin/settings: teaserWords input reflects persisted value', async (t
   assert.match(res.body, /name="teaserWords"[^>]*value="60"/);
 });
 
-test('GET /admin/about/edit creates _about.md when absent and 302s to the editor', async (t) => {
+test('GET /admin/about/edit creates _about.md when absent and 302s to the blocks editor', async (t) => {
   const { root, app } = await setup(t);
   const aboutPath = path.join(root, 'content', 'posts', '_about.md');
   assert.equal(fs.existsSync(aboutPath), false);
 
   const res = await app.inject({ method: 'GET', url: '/admin/about/edit' });
   assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, '/admin/editor?slug=_about');
+  assert.equal(res.headers.location, '/admin/blocks/edit/_about');
   assert.equal(fs.existsSync(aboutPath), true);
   assert.match(fs.readFileSync(aboutPath, 'utf8'), /slug: _about/);
 

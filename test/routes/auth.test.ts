@@ -395,13 +395,13 @@ test('POST /admin/logout 403s on a cross-origin request when CSRF is wired', asy
 
 // ---- /admin/* gating ---------------------------------------------------
 
-test('GET /admin/editor 401s without a session cookie', async (t) => {
+test('GET /admin/blocks 401s without a session cookie', async (t) => {
   const { app } = await setup(t, { idTokenPayload: {} });
-  const res = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const res = await app.inject({ method: 'GET', url: '/admin/blocks' });
   assert.equal(res.statusCode, 401);
 });
 
-test('GET /admin/editor succeeds with a valid session cookie', async (t) => {
+test('GET /admin/blocks succeeds with a valid session cookie', async (t) => {
   const { db, app } = await setup(t, {
     idTokenPayload: { sub: 'g-1', email: 'first@example.com', email_verified: true }
   });
@@ -428,11 +428,11 @@ test('GET /admin/editor succeeds with a valid session cookie', async (t) => {
 
   const res = await app.inject({
     method: 'GET',
-    url: '/admin/editor',
+    url: '/admin/blocks',
     headers: { cookie: `rkr_session=${sid}` }
   });
   assert.equal(res.statusCode, 200, `body=${res.body}`);
-  assert.match(res.body, /<div id="rkroll-admin-root"/);
+  assert.match(res.body, /<h1>Blocks<\/h1>/);
 
   // Sanity: session and user actually exist in the db.
   assert.ok(findUserByEmail(db, 'first@example.com'));
@@ -646,7 +646,7 @@ test('token-login with the correct token succeeds even when the IP is over the c
   assert.ok(res.statusCode < 400);
 });
 
-test('token-login session lets user reach /admin/editor', async (t) => {
+test('token-login session lets user reach /admin/blocks', async (t) => {
   const orig = process.env.ADMIN_TOKEN;
   process.env.ADMIN_TOKEN = 'right-token';
   t.after(() => {
@@ -661,9 +661,9 @@ test('token-login session lets user reach /admin/editor', async (t) => {
 
   const editor = await app.inject({
     method: 'GET',
-    url: '/admin/editor',
+    url: '/admin/blocks',
     headers: { cookie: `rkr_session=${sid}` }
   });
   assert.equal(editor.statusCode, 200, `body=${editor.body}`);
-  assert.match(editor.body, /<div id="rkroll-admin-root"/);
+  assert.match(editor.body, /<h1>Blocks<\/h1>/);
 });

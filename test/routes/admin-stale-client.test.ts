@@ -11,7 +11,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
-import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
 import { BUILD_META_NAME } from '../../src/lib/build-contract.ts';
 import { _resetGitHashCache } from '../../src/lib/build-info.ts';
@@ -69,15 +68,6 @@ function makeJpeg(w: number, h: number): Promise<Buffer> {
     .toBuffer();
 }
 
-function savePost(app: FastifyInstance, slug: string, headers: Record<string, string>) {
-  return app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    headers,
-    payload: { title: 'Stale', slug, markdown: 'body' }
-  });
-}
-
 // ---- the pure guard ----------------------------------------------
 
 test('staleClientRejection: no header is permissive', () => {
@@ -103,43 +93,6 @@ test('staleClientRejection: a server that cannot resolve its own hash stays perm
   // Refusing every write because the server is outside a git checkout
   // would be worse than the drift the guard exists to catch.
   assert.equal(staleClientRejection(OLD_BUILD, 'unknown'), null);
-});
-
-// ---- POST /admin/posts -------------------------------------------
-
-test('POST /admin/posts: a stale build is refused with 426', async (t) => {
-  const { root, app } = await setup(t);
-  const res = await savePost(app, 'stale-post', { 'x-rkr-build': OLD_BUILD });
-  assert.equal(res.statusCode, 426);
-  assert.equal(res.json().error, 'stale-client');
-  assert.equal(res.json().serverBuild, BUILD);
-  assert.equal(
-    fs.existsSync(path.join(root, 'content', 'posts', 'stale-post.md')),
-    false,
-    'the refused write must not have landed'
-  );
-});
-
-test('POST /admin/posts: the current build and a missing header both write', async (t) => {
-  const { root, app } = await setup(t);
-  assert.equal((await savePost(app, 'current', { 'x-rkr-build': BUILD })).statusCode, 200);
-  assert.equal((await savePost(app, 'headerless', {})).statusCode, 200);
-  assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 'current.md')));
-  assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 'headerless.md')));
-});
-
-test('POST /admin/posts: a lost-ACK replay from a stale build still gets its stored 2xx', async (t) => {
-  const { app } = await setup(t);
-  const key = { 'x-rkr-device-id': 'dev-S', 'x-rkr-outbox-seq': '7' };
-  const first = await savePost(app, 'replayed', { ...key, 'x-rkr-build': BUILD });
-  assert.equal(first.statusCode, 200);
-
-  // The write already landed; the ACK was lost and the client has
-  // since gone stale. Re-running the guard here would turn a
-  // succeeded write into a permanent failure.
-  const replay = await savePost(app, 'replayed', { ...key, 'x-rkr-build': OLD_BUILD });
-  assert.equal(replay.statusCode, 200, 'replay must short-circuit before the staleness check');
-  assert.deepEqual(replay.json(), first.json());
 });
 
 // ---- POST /admin/upload ------------------------------------------

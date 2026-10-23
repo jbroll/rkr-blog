@@ -127,7 +127,7 @@ const OWNER_ONLY = [
 
 const EDITOR_OK = [
   { method: 'GET' as const, url: '/admin/api/tags' },
-  { method: 'GET' as const, url: '/admin/editor' }
+  { method: 'GET' as const, url: '/admin/blocks' }
 ];
 
 test('owner-only routes reject an editor with 403', async (t) => {

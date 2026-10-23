@@ -1,11 +1,11 @@
 // Index page template. Doubles as the admin posts list when the
-// visitor is authed (drafts join published, per-row status / pin /
-// delete affordances appear). Anonymous view stays the plain
-// reverse-chrono list of published titles.
+// visitor is authed (drafts join published, per-row edit affordances
+// appear). Anonymous view stays the plain reverse-chrono list of
+// published titles.
 //
 // Combining the two pages means an admin lands directly on a fully-
 // editable list — no separate "Posts" tab to discover, the homepage
-// IS the dashboard.
+// IS the dashboard. Edits go through the JSON blocks editor.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { icon } from './icons.ts';
@@ -54,7 +54,7 @@ export interface IndexPageData extends SiteChrome {
    * list and is expected to have been removed from `posts` by the route. */
   teaser?: IndexTeaser;
   /** Logged-in admin → render the admin strip in siteHead and the
-   * full posts table (drafts + status / pin / delete). */
+   * full posts table (drafts + edit links). */
   isAdmin?: boolean;
   /** Tag counts for the tag rail sidebar. When absent or empty, the
    * rail is not rendered. */
@@ -91,12 +91,6 @@ export function renderIndexPage(data: IndexPageData): string {
       : '';
   const sortToggle = renderSortToggle(isAsc, activeTags, data.isAdmin);
   const tagRail = renderTagRail(data.tagCounts, activeTags, `${sortToggle}${renderSearchForm()}`);
-  // The posts-list bundle wires status-select auto-submit + pin/unpin
-  // OPFS lookups. Only emit it for the admin view — anonymous visitors
-  // never see those controls.
-  const postsListScript = data.isAdmin
-    ? `<script type="module" src="${a.base}/admin/posts-list.js${v}"></script>`
-    : '';
   const head = siteHead(data.site, { isAdmin: data.isAdmin, hideHomeLink: true });
   const banner = data.bannerHtml ?? '';
   const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
@@ -124,7 +118,6 @@ ${tagRail}
 </main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
 ${data.isAdmin ? indexAdminFabs() : ''}
-${postsListScript}
 </body>
 </html>
 `;
@@ -198,15 +191,14 @@ function renderAdminTable(posts: IndexEntry[]): string {
   if (posts.length === 0) {
     return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
   <tbody>
-    <tr><td colspan="5" class="rkr-admin-posts-empty">No posts yet. <a href="/admin/editor">Create one</a>.</td></tr>
+    <tr><td colspan="3" class="rkr-admin-posts-empty">No posts yet. <a href="/admin/blocks/new">Create one</a>.</td></tr>
   </tbody>
 </table></div>`;
   }
   const dayCounts = countByDay(posts, (p) => p.date ?? p.updatedAt);
-  // No <thead>: title + date + icon controls speak for themselves;
-  // a header row of "Title / Updated / Status / Pin / Delete" is
-  // visual noise. Each control's aria-label carries the equivalent
-  // accessible name for screen readers.
+  // No <thead>: title + date + icon control speak for themselves;
+  // a header row of "Title / Updated / Edit" is visual noise. Each
+  // control's aria-label carries the accessible name for screen readers.
   return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
   <tbody>
 ${posts.map((p) => renderAdminRow(p, dayCounts)).join('\n')}
@@ -218,25 +210,11 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
   const iso = p.date ?? p.updatedAt ?? '';
   const label = iso ? formatListDate(iso, dayCounts.get(iso.slice(0, 10)) ?? 0) : '';
   const slugUri = encodeURIComponent(p.slug);
-  const status = p.status ?? 'draft';
   return `  <tr data-slug="${escapeAttr(p.slug)}">
     <td><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></td>
     <td>${iso ? `<time datetime="${escapeAttr(iso)}">${escapeText(label)}</time>` : ''}</td>
     <td class="rkr-admin-posts-action">
-      <form method="post" action="/admin/posts/${slugUri}/status" class="rkr-admin-posts-status-form">
-        <input type="hidden" name="status" value="${status === 'published' ? 'draft' : 'published'}"/>
-        <button type="submit" class="rkr-admin-posts-status-btn is-${status}"
-          aria-label="${status === 'published' ? 'Published — click to unpublish' : 'Draft — click to publish'}"
-          title="${status === 'published' ? 'Published' : 'Draft'}">${icon(status === 'published' ? 'globe' : 'lock', 18)}</button>
-      </form>
-    </td>
-    <td class="rkr-admin-posts-action">
-      <button type="button" class="rkr-admin-posts-pin" data-pin-toggle aria-label="Pin ${escapeAttr(p.title)} for offline editing" aria-pressed="false" disabled>${icon('pinOff', 18)}</button>
-    </td>
-    <td class="rkr-admin-posts-action">
-      <form method="post" action="/admin/posts/${slugUri}/delete" class="rkr-admin-posts-del" data-title="${escapeAttr(p.title)}">
-        <button type="submit" class="rkr-admin-posts-del-btn" aria-label="Delete ${escapeAttr(p.title)}">${icon('trash2', 18)}</button>
-      </form>
+      <a class="rkr-admin-posts-edit" href="/admin/blocks/edit/${slugUri}" aria-label="Edit ${escapeAttr(p.title)}" title="Edit">${icon('pencil', 18)}</a>
     </td>
   </tr>`;
 }

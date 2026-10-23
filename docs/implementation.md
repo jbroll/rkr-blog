@@ -984,12 +984,14 @@ there after **Save & view**, and the editor heading's **View →** link
 points at the right public URL (`/about` for `_about`, `/` for
 `_site-banner`).
 
-`import-wp about` calls `pushPage` (`src/lib/wp-push.ts`), which
-fetches a WordPress page (`fetchWpPage`, `wp/v2/pages?slug=`) and sets
-`page.slug = '_about'` before handing it to the same `pushWpObject`
-path `pushPost` uses. A WP page has the fields the importer consumes,
-and the emitted frontmatter slug is whatever the fetched object says,
-so overwriting `.slug` is all it takes to land it as the system post.
+`import-wp about` used to call `pushPage` (`src/lib/wp-push.ts`),
+which fetched a WordPress page (`wp/v2/pages?slug=`) and set
+`page.slug = '_about'` before running the `pushPost` write path. After
+the JSON cutover there is no remote write route for `_about`: it stays a
+markdown-only system page and the blocks endpoints reject `_`-prefixed
+slugs. `pushPage` now fails with an explanatory error; create or copy
+`_about.md` on the target directly until system pages move into the
+blocks format. Regular `import-wp push` writes JSON blocks.
 
 ### Content sources
 

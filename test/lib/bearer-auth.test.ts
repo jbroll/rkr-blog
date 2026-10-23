@@ -73,18 +73,19 @@ async function setup(
 }
 
 const POST_PAYLOAD = {
-  slug: 'bearer-test',
-  title: 'Bearer test',
-  status: 'published' as const,
-  markdown: 'Hello from bearer.\n'
+  tree: {
+    version: 1,
+    body: [],
+    fields: { title: 'Bearer test', slug: 'bearer-test', status: 'published' }
+  }
 };
 
-test('bearer: matching token authenticates a POST /admin/posts call', async (t) => {
+test('bearer: matching token authenticates a POST /admin/blocks call', async (t) => {
   const { root, app } = await setup(t, { adminToken: 'super-secret-123' });
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     headers: {
       authorization: 'Bearer super-secret-123',
       origin: 'https://attacker.example' // CSRF would normally block this
@@ -92,7 +93,7 @@ test('bearer: matching token authenticates a POST /admin/posts call', async (t) 
     payload: POST_PAYLOAD
   });
   assert.equal(res.statusCode, 200, res.body);
-  assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 'bearer-test.md')));
+  assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'bearer-test.json')));
 });
 
 test('bearer: missing token + missing cookie returns 401', async (t) => {
@@ -100,7 +101,7 @@ test('bearer: missing token + missing cookie returns 401', async (t) => {
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     headers: { origin: 'http://localhost' },
     payload: POST_PAYLOAD
   });
@@ -112,7 +113,7 @@ test('bearer: wrong token returns 401 (no fallback to cookie path)', async (t) =
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     headers: {
       authorization: 'Bearer not-the-right-one',
       origin: 'http://localhost'
@@ -131,7 +132,7 @@ test('bearer: token of wrong length still returns 401 cleanly', async (t) => {
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     // Include a same-origin Origin so CSRF doesn't fire before auth.
     // The token is wrong, so auth still rejects with 401.
     headers: { authorization: 'Bearer x', origin: 'http://localhost' },
@@ -145,7 +146,7 @@ test('bearer: header with no token (just "Bearer") returns 4xx', async (t) => {
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     headers: { authorization: 'Bearer' },
     payload: POST_PAYLOAD
   });
@@ -167,7 +168,7 @@ test('bearer: ADMIN_TOKEN unset → bearer header is rejected', async (t) => {
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     // Include a same-origin Origin so CSRF doesn't fire before auth.
     headers: { authorization: 'Bearer anything', origin: 'http://localhost' },
     payload: POST_PAYLOAD
@@ -186,12 +187,12 @@ test('csrf: bearer-authed POST is not subject to the Origin allow-list', async (
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/cross-origin-bearer',
     headers: {
       authorization: 'Bearer super-secret-123',
       origin: 'https://attacker.example'
     },
-    payload: { ...POST_PAYLOAD, slug: 'cross-origin-bearer' }
+    payload: POST_PAYLOAD
   });
   assert.equal(res.statusCode, 200, res.body);
 });
@@ -300,7 +301,7 @@ test('csrf: cookie-style POST with mismatched Origin still 403s (regression guar
 
   const res = await app.inject({
     method: 'POST',
-    url: '/admin/posts',
+    url: '/admin/blocks/bearer-test',
     headers: { origin: 'https://attacker.example' },
     payload: POST_PAYLOAD
   });

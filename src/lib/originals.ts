@@ -321,8 +321,8 @@ async function findExistingOriginal(
  * Used by:
  *   - validateOps callers (crop-bounds check needs width/height)
  *   - GET /admin/sidecar/:id/meta (returns dims + format to the editor)
- *   - admin-image-lookup, admin-post-bundle (need ext for the served
- *     filename + Content-Type)
+ *   - admin-image-lookup (needs ext for the served filename +
+ *     Content-Type)
  *   - cli/verify (checks ext is a recognized format)
  *
  * @public */

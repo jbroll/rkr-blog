@@ -41,9 +41,9 @@ import { setPublicSecurityHeaders } from './lib/security-headers.ts';
 import { serverAssets } from './lib/site-assets.ts';
 import adminRoutes from './routes/admin.ts';
 import { registerAdminBlockRoutes } from './routes/admin-blocks.ts';
-import { registerBlockRoutes as blockRoutes } from './routes/blocks.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
 import authRoutes, { type TokenExchange } from './routes/auth.ts';
+import { registerBlockRoutes as blockRoutes } from './routes/blocks.ts';
 import integrationsGdriveRoutes, { type DriveTokenExchange } from './routes/integrations-gdrive.ts';
 import integrationsGphotosRoutes, {
   type PhotosTokenExchange
@@ -306,22 +306,22 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     // render plus an editor preview; no existing URLs change.
     await app.register(blockRoutes, {
       siteRoot,
-      getSite: () => (opts.site ?? siteConfig()),
+      getSite: () => opts.site ?? siteConfig(),
       requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
     });
 
     await app.register(registerAdminBlockRoutes, {
       siteRoot,
-      getSite: () => (opts.site ?? siteConfig()),
+      getSite: () => opts.site ?? siteConfig(),
       requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
     });
 
     if (opts.startWorker !== false) {
       // Concurrency = 1: one render at a time leaves CPU headroom
-      // for live request handlers + Fastify itself. Pre-warm
-      // (enqueued by /admin/posts on save) trickles through the
-      // queue at a single image per slot rather than swamping the
-      // single-machine deployment.
+      // for live request handlers + Fastify itself. Pre-warm and
+      // upload render jobs trickle through the queue at a single
+      // image per slot rather than swamping the single-machine
+      // deployment.
       const ctrl = workQueue({
         db: opts.db,
         ctx: { siteRoot, db: opts.db },

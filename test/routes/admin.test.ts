@@ -122,48 +122,17 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
   assert.match(res.json<ErrorBody>().error, /not a recognized image/);
 });
 
-test('GET /admin/posts → 301 redirect to /; POST /:slug/delete still works', async (t) => {
-  // The standalone admin posts page is gone — the homepage doubles
-  // as the admin posts list when authed (see public.ts: drafts +
-  // status / pin / delete render when req.user is set). The legacy
-  // URL 301s so bookmarks and any pre-removal admin-strip clicks
-  // still land in the right place. The POST /:slug/delete endpoint
-  // is unchanged — the new homepage's per-row delete form points at
-  // it directly.
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
-  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
-    fs.mkdirSync(path.join(root, sub), { recursive: true });
-  }
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(
-    path.join(root, 'content', 'posts', 'wip.md'),
-    '---\ntitle: WIP\nslug: wip\nstatus: draft\ndate: 2026-05-02T00:00:00Z\n---\n\nbody\n'
-  );
-  const db = open(path.join(root, 'data', 'site.db'));
-  migrate(db);
-  const app = await buildApp({ siteRoot: root, db });
-  t.after(async () => {
-    await app.close();
-    db.close();
-  });
-  const { runReindex } = await import('../../src/lib/post-index.ts');
-  runReindex(root);
+test('GET /admin/posts → 301 redirect to /', async (t) => {
+  // The standalone admin posts page is gone — the homepage doubles as
+  // the admin posts list when authed. The legacy URL 301s so bookmarks
+  // and any pre-removal admin-strip clicks still land somewhere useful.
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
 
   const redirect = await app.inject({ method: 'GET', url: '/admin/posts' });
   assert.equal(redirect.statusCode, 301);
   assert.equal(redirect.headers.location, '/');
-
-  // Delete still removes the markdown file + returns 303.
-  const del = await app.inject({ method: 'POST', url: '/admin/posts/wip/delete' });
-  assert.equal(del.statusCode, 303);
-  assert.equal(del.headers.location, '/');
-  assert.equal(fs.existsSync(path.join(root, 'content', 'posts', 'wip.md')), false);
-
-  // Bad slug → 400; unknown slug → 404.
-  const bad = await app.inject({ method: 'POST', url: '/admin/posts/has..dots/delete' });
-  assert.equal(bad.statusCode, 400);
-  const missing = await app.inject({ method: 'POST', url: '/admin/posts/ghost/delete' });
-  assert.equal(missing.statusCode, 404);
 });
 
 // One smoke test per theme: each must render the homepage under its
@@ -209,25 +178,6 @@ for (const theme of ['papermod', 'tufte', 'dracula', 'terminal', 'solarized', 'm
   });
 }
 
-test('GET /admin/posts empty state still 301-redirects', async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
-  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
-    fs.mkdirSync(path.join(root, sub), { recursive: true });
-  }
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const db = open(path.join(root, 'data', 'site.db'));
-  migrate(db);
-  const app = await buildApp({ siteRoot: root, db });
-  t.after(async () => {
-    await app.close();
-    db.close();
-  });
-
-  const res = await app.inject({ method: 'GET', url: '/admin/posts' });
-  assert.equal(res.statusCode, 301);
-  assert.equal(res.headers.location, '/');
-});
-
 test('POST /admin/upload returns 400 when no file part is present', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
@@ -251,46 +201,35 @@ test('POST /admin/upload returns 400 when no file part is present', async (t) =>
   assert.equal(res.statusCode, 400);
 });
 
-test('POST /admin/posts: empty slug + title → server slugifies title; subtitle round-trips', async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
-  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
-    fs.mkdirSync(path.join(root, sub), { recursive: true });
+test('legacy markdown write routes are gone', async (t) => {
+  const root = freshSiteRoot(t);
+  const app = await buildApp({ siteRoot: root });
+  t.after(() => app.close());
+
+  // Every route that wrote content/posts/*.md is retired. With the
+  // legacy admin shell none of them need to exist for the 404 to be
+  // meaningful, so a plain inject is enough.
+  const retired: Array<{ method: 'POST' | 'GET'; url: string }> = [
+    { method: 'POST', url: '/admin/posts' },
+    { method: 'POST', url: '/admin/posts/anything/delete' },
+    { method: 'POST', url: '/admin/posts/anything/status' },
+    { method: 'GET', url: '/admin/post-bundle/anything?manifest=1' }
+  ];
+  for (const route of retired) {
+    const res = await app.inject({ method: route.method, url: route.url });
+    assert.equal(res.statusCode, 404, `${route.method} ${route.url} must be gone: ${res.body}`);
   }
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const db = open(path.join(root, 'data', 'site.db'));
-  migrate(db);
-  const app = await buildApp({ siteRoot: root, db });
-  t.after(async () => {
-    await app.close();
-    db.close();
-  });
 
-  // No slug in the payload — the server should slugify the title.
-  // Subtitle is passed; we expect to see it in the rendered post page.
-  const post = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: {
-      slug: '',
-      title: 'Hello World!',
-      subtitle: 'a friendly subtitle',
-      status: 'published',
-      markdown: 'body\n'
-    }
-  });
-  assert.equal(post.statusCode, 200, post.body);
-  const body = post.json<{ slug: string }>();
-  assert.equal(body.slug, 'hello-world', 'server slugified the title');
+  // The editor URL answers 404 but points the author at the blocks
+  // editor rather than dead-ending them.
+  const editor = await app.inject({ method: 'GET', url: '/admin/editor' });
+  assert.equal(editor.statusCode, 404);
+  assert.match(editor.body, /href="\/admin\/blocks"/);
 
-  // Subtitle landed in the frontmatter and renders on the post page.
-  const page = await app.inject({ method: 'GET', url: '/hello-world' });
-  assert.equal(page.statusCode, 200);
-  assert.match(page.body, /<p class="rkr-post-subtitle">a friendly subtitle</);
-
-  // The on-disk markdown carries the subtitle key (verifies the
-  // serialiser wrote it; future parsers will pick it up).
-  const md = fs.readFileSync(path.join(root, 'content', 'posts', 'hello-world.md'), 'utf8');
-  assert.match(md, /^subtitle: a friendly subtitle$/m);
+  // Preview still reuses /admin/view/:slug (spec decided-6).
+  const preview = await app.inject({ method: 'GET', url: '/admin/view/hello' });
+  assert.equal(preview.statusCode, 200);
+  assert.match(preview.body, /<div id="rkroll-admin-root">/);
 });
 
 test('/admin/static and /static serve identical bytes', async (t) => {
@@ -303,27 +242,24 @@ test('/admin/static and /static serve identical bytes', async (t) => {
   assert.equal(viaAdmin.body, viaPublic.body);
 });
 
-test('/admin/editor references only /admin/static assets', async (t) => {
+test('/admin/view/:slug references only /admin/static assets', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
-  const res = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const res = await app.inject({ method: 'GET', url: '/admin/view/hello' });
   assert.equal(res.statusCode, 200);
   const srcs = [...res.body.matchAll(/(?:src|href)="(\/[^"]+)"/g)].map((m) => m[1] as string);
   const staticRefs = srcs.filter((u) => u.startsWith('/static/'));
   assert.deepEqual(staticRefs, [], `unexpected /static refs: ${staticRefs.join(', ')}`);
 });
 
-test('/admin/view/:slug serves the same shell as /admin/editor', async (t) => {
+test('/admin/view/:slug serves the admin preview shell', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
-  const editor = await app.inject({ method: 'GET', url: '/admin/editor' });
   const view = await app.inject({ method: 'GET', url: '/admin/view/hello' });
   assert.equal(view.statusCode, 200);
-  // Nonces differ per response; compare everything else.
-  const strip = (s: string) => s.replace(/nonce="[^"]*"/g, 'nonce="N"');
-  assert.equal(strip(view.body), strip(editor.body));
+  assert.match(view.body, /<div id="rkroll-admin-root">/);
 });
 
 test('sw-admin.js under /admin/static carries Service-Worker-Allowed', async (t) => {
@@ -338,37 +274,4 @@ test('sw-admin.js under /admin/static carries Service-Worker-Allowed', async (t)
   t.after(() => app.close());
   const res = await app.inject({ method: 'GET', url: '/admin/static/site/sw-admin.js' });
   assert.equal(res.headers['service-worker-allowed'], '/admin/');
-});
-
-test('POST /admin/posts: bare slug still rejected; subtitle is optional', async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));
-  for (const sub of ['sidecars', 'originals', 'content/posts', 'data']) {
-    fs.mkdirSync(path.join(root, sub), { recursive: true });
-  }
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const db = open(path.join(root, 'data', 'site.db'));
-  migrate(db);
-  const app = await buildApp({ siteRoot: root, db });
-  t.after(async () => {
-    await app.close();
-    db.close();
-  });
-
-  // Explicit bad slug → 400. Length cap + kebab-case regex still apply.
-  const bad = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: { slug: 'has..dots', title: 'T', markdown: 'b\n' }
-  });
-  assert.equal(bad.statusCode, 400);
-
-  // No subtitle → frontmatter omits the field (not a stray empty line).
-  const ok = await app.inject({
-    method: 'POST',
-    url: '/admin/posts',
-    payload: { slug: '', title: 'no-sub', status: 'published', markdown: 'body\n' }
-  });
-  assert.equal(ok.statusCode, 200, ok.body);
-  const md = fs.readFileSync(path.join(root, 'content', 'posts', 'no-sub.md'), 'utf8');
-  assert.equal(md.includes('subtitle:'), false);
 });

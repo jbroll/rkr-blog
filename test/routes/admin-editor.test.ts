@@ -62,12 +62,12 @@ function writeBundle(t: TestContext): string {
   return path.join(dir, 'admin');
 }
 
-test('GET /admin/editor returns the SPA shell HTML pointing at /admin/static/admin/main.js', async (t) => {
+test('GET /admin/view/:slug returns the SPA shell HTML pointing at /admin/static/admin/main.js', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const res = await app.inject({ method: 'GET', url: '/admin/view/hello' });
   assert.equal(res.statusCode, 200);
   assert.match(res.headers['content-type'] as string, /text\/html/);
   assert.match(res.body, /<div id="rkroll-admin-root">/);
@@ -107,12 +107,12 @@ test('GET /admin/editor returns the SPA shell HTML pointing at /admin/static/adm
   assert.equal(res.body.includes('esm.sh'), false);
 });
 
-test('GET /admin/editor binds a per-response CSP nonce to the inline <style>', async (t) => {
+test('GET /admin/view/:slug binds a per-response CSP nonce to the inline <style>', async (t) => {
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res1 = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const res1 = await app.inject({ method: 'GET', url: '/admin/view/hello' });
   assert.equal(res1.statusCode, 200);
   const csp1 = res1.headers['content-security-policy'] as string;
 
@@ -134,7 +134,7 @@ test('GET /admin/editor binds a per-response CSP nonce to the inline <style>', a
 
   // Per-RESPONSE, not static: a second request gets a different nonce,
   // and the body's <style> nonce tracks the header.
-  const res2 = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const res2 = await app.inject({ method: 'GET', url: '/admin/view/hello' });
   const csp2 = res2.headers['content-security-policy'] as string;
   const styleSrc2 = csp2.split('; ').find((d) => d.startsWith('style-src '));
   const m2 = /'nonce-([^']+)'/.exec(styleSrc2 as string);
@@ -1099,7 +1099,7 @@ test('POST /commit 400s on malformed JSON in the `ops` field', async (t) => {
   assert.match(res.json<{ error: string }>().error, /valid JSON/);
 });
 
-test('GET /admin/editor CSP has exactly one form-action directive including OneDrive allowance', async (t) => {
+test('GET /admin/view/:slug CSP has exactly one form-action directive including OneDrive allowance', async (t) => {
   // Regression: admin-csp.ts previously emitted form-action TWICE.
   // Browsers apply the LAST occurrence, so the plain `form-action 'self'`
   // silently shadowed and dropped the OneDrive/SharePoint allowance needed
@@ -1111,7 +1111,7 @@ test('GET /admin/editor CSP has exactly one form-action directive including OneD
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
 
-  const res = await app.inject({ method: 'GET', url: '/admin/editor' });
+  const res = await app.inject({ method: 'GET', url: '/admin/view/hello' });
   assert.equal(res.statusCode, 200);
   const csp = res.headers['content-security-policy'] as string;
   const formActionDirectives = csp.split('; ').filter((d) => d.startsWith('form-action '));

@@ -1,4 +1,4 @@
-// Pre-warm derivative renders after /admin/posts saves a post.
+// Pre-warm derivative renders for a post body.
 // Walks the markdown for image refs, reads each sidecar, enqueues
 // one render job per (variant × output). The jobs table dedups by
 // cache_key, so a re-save of an unchanged post is effectively a

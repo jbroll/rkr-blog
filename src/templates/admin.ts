@@ -88,9 +88,7 @@ ${siteHead(data.site, { isAdmin: true })}
        save, and existing posts keep their loaded value. The admin
        doesn't see or edit it; a Copy-link button on the toolbar
        gives them the URL once the post has been saved. Status is
-       likewise internal — it's edited per row on /admin/posts and the
-       save handler preserves the existing status when the editor
-       doesn't include one. -->
+       likewise internal — its frontmatter field is preserved on save. -->
   <input id="rkr-slug" type="hidden"/>
 </div>
 <div id="rkroll-admin-toolbar"></div>

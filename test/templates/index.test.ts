@@ -1,7 +1,7 @@
 // renderIndexPage doubles as the public homepage AND the admin posts
 // list. Anonymous visitors see a plain reverse-chrono list of
 // published titles; authed admins see the full posts table (drafts +
-// per-row status / pin / delete) with the posts-list.js bundle loaded.
+// per-row edit links into the JSON blocks editor).
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -56,7 +56,7 @@ test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
   assert.doesNotMatch(html, /\/admin\/blocks/);
 });
 
-test('renderIndexPage: admin view renders the posts table with status / pin / delete', () => {
+test('renderIndexPage: admin view renders the posts table with blocks-editor links', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     assets,
@@ -87,33 +87,22 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   // each control carries its accessible name via aria-label.
   assert.doesNotMatch(html, /<thead>/);
 
-  // Each post row carries the per-row controls.
+  // Each post row links into the blocks editor for that slug.
   assert.match(html, /<a href="\/hello">Hello<\/a>/);
   assert.match(html, /<a href="\/wip">WIP<\/a>/);
-  assert.match(html, /action="\/admin\/posts\/hello\/status"/);
-  // Status icon buttons: globe = published, lock = draft. Toggle flips to opposite status.
-  assert.match(html, /class="rkr-admin-posts-status-btn is-published"/);
-  assert.match(html, /class="rkr-admin-posts-status-btn is-draft"/);
-  assert.match(html, /aria-label="Published — click to unpublish"/);
-  assert.match(html, /aria-label="Draft — click to publish"/);
-  // Hidden input carries the target (opposite) status for the form submit.
-  assert.match(html, /<input [^>]*name="status"[^>]*value="draft"/);
-  assert.match(html, /<input [^>]*name="status"[^>]*value="published"/);
-  // No select element in the status column.
-  assert.doesNotMatch(html, /<select [^>]*name="status"/);
-  // Pin / delete buttons render the Lucide icons (no text label) —
-  // accessible name lives on aria-label.
-  assert.match(html, /<button [^>]*data-pin-toggle[^>]*disabled><svg [^>]*>/);
-  assert.match(html, /aria-label="Pin Hello for offline editing"/);
-  assert.match(html, /class="rkr-admin-posts-del-btn"[^>]*aria-label="Delete Hello"><svg /);
-  assert.match(html, /action="\/admin\/posts\/wip\/delete"/);
+  assert.match(html, /href="\/admin\/blocks\/edit\/hello"/);
+  assert.match(html, /href="\/admin\/blocks\/edit\/wip"/);
+  assert.match(html, /aria-label="Edit Hello"/);
+  // Markdown write controls are gone.
+  assert.doesNotMatch(html, /action="\/admin\/posts\//);
+  assert.doesNotMatch(html, /rkr-admin-posts-status/);
+  assert.doesNotMatch(html, /data-pin-toggle/);
+  assert.doesNotMatch(html, /\/static\/admin\/posts-list\.js/);
   assert.match(html, />2026-05-01</);
 
-  // The posts-list bundle is loaded so pin buttons read OPFS. Admin FABs (+ + ⚙) replace
-  // the old admin strip; the strip itself is gone.
-  assert.match(html, /<script[^>]*src="\/static\/admin\/posts-list\.js/);
+  // Admin FABs (+ + ⚙) replace the old admin strip; the strip itself is gone.
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');
-  assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New post"/);
+  assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New page"/);
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="Settings"/);
   // Cross-link into the JSON blocks world so the new editor is
   // discoverable from the admin homepage.
@@ -132,9 +121,9 @@ test('renderIndexPage: admin view, empty state', () => {
     posts: []
   });
   assert.match(html, /No posts yet/);
-  assert.match(html, /href="\/admin\/editor"/);
+  assert.match(html, /href="\/admin\/blocks\/new"/);
   // colspan must span every column so the empty row isn't off-kilter.
-  assert.match(html, /colspan="5"/);
+  assert.match(html, /colspan="3"/);
 });
 
 test('renderIndexPage: dates show date-only when one post per day, date+time when collision', () => {

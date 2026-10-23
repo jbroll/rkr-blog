@@ -143,6 +143,99 @@ test('prewarmVariants enqueues a renderVideo job for referenced videos', async (
   assert.equal(payload.originalId, id);
 });
 
+test('prewarmVariants enqueues a render job per variant × output for referenced images', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = 'e'.repeat(64);
+  const dir = path.join(root, 'originals', id.slice(0, 2), id.slice(2, 4));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${id}.webp`), Buffer.alloc(8));
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${id}.json`),
+    JSON.stringify({
+      version: 1,
+      original: id,
+      source: {},
+      ops: [],
+      variants: [
+        { w: 640, h: 480, fit: 'inside' },
+        { w: 320, h: 240, fit: 'inside' }
+      ],
+      outputs: [{ format: 'webp', quality: 80 }]
+    })
+  );
+  const db = open(':memory:');
+  migrate(db);
+  t.after(() => db.close());
+
+  await prewarmVariants(db, root, `::figure{ids="${id}"}`);
+
+  const rows = db
+    .prepare<{ kind: string; payload: string }>('SELECT kind, payload FROM jobs')
+    .all();
+  assert.equal(rows.length, 2, 'one job per variant × output');
+  for (const row of rows) {
+    assert.equal(row.kind, 'render');
+    assert.equal((JSON.parse(row.payload) as { originalId: string }).originalId, id);
+  }
+});
+
+test('prewarmVariants skips unreadable or empty image sidecars', async (t) => {
+  const root = freshSiteRoot(t);
+  const missing = 'a'.repeat(64);
+  const noOutputs = 'b'.repeat(64);
+  const noVariants = 'c'.repeat(64);
+  // listed by listSidecarIds, but reading it yields ENOENT
+  fs.symlinkSync(
+    path.join(root, 'sidecars', 'gone.json'),
+    path.join(root, 'sidecars', `${missing}.json`)
+  );
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${noOutputs}.json`),
+    JSON.stringify({
+      version: 1,
+      original: noOutputs,
+      source: {},
+      ops: [],
+      variants: [{ w: 640, h: 480, fit: 'inside' }],
+      outputs: []
+    })
+  );
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${noVariants}.json`),
+    JSON.stringify({
+      version: 1,
+      original: noVariants,
+      source: {},
+      ops: [],
+      variants: [],
+      outputs: [{ format: 'webp', quality: 80 }]
+    })
+  );
+  const db = open(':memory:');
+  migrate(db);
+  t.after(() => db.close());
+
+  await prewarmVariants(db, root, `::figure{ids="${missing},${noOutputs},${noVariants}"}`);
+
+  const count = db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM jobs').get()?.c;
+  assert.equal(count, 0);
+});
+
+test('prewarmVariants skips referenced images with no sidecar', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = 'f'.repeat(64);
+  const db = open(':memory:');
+  migrate(db);
+  t.after(() => db.close());
+
+  // The id is known to the scan only if a sidecar exists, so no
+  // sidecar means no refs and therefore no jobs.
+  await prewarmVariants(db, root, `::figure{ids="${id}"}`);
+
+  const count = db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM jobs').get()?.c;
+  assert.equal(count, 0);
+});
+
 test('runGc deletes orphaned image originals not referenced by any sidecar', async (t) => {
   const root = freshSiteRoot(t);
   // Create a valid sidecar + original via manual files.
