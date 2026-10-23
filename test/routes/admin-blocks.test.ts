@@ -95,6 +95,23 @@ describe('admin blocks save', () => {
     assert.equal((await app.inject({ method: 'GET', url: '/admin/blocks/nope' })).statusCode, 404);
   });
 
+  it('GET /admin/blocks lists pages with view and edit links', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'saved.json'),
+      JSON.stringify({
+        version: 1,
+        body: [{ type: 'text', markdown: 'Hi' }],
+        fields: { title: 'Saved', slug: 'saved' }
+      })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /\/pages\/saved/);
+    assert.match(res.body, /\/admin\/blocks\/edit\/saved/);
+    assert.match(res.body, /\/admin\/blocks\/new/);
+  });
+
   it('GET /admin/blocks/edit/:slug serves the editor shell', async (t) => {
     const { root, app } = await setup(t);
     fs.writeFileSync(

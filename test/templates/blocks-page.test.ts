@@ -72,4 +72,11 @@ describe('blocks page template', () => {
     assert.match(html, /href="\/admin\/blocks\/new"/);
     assert.match(html, /aria-label="New page"/);
   });
+
+  it('adds per-row edit links when asked', () => {
+    const html = renderBlocksIndex([{ slug: 'a', title: 'Aye' }], {
+      editBase: '/admin/blocks/edit'
+    });
+    assert.match(html, /href="\/admin\/blocks\/edit\/a"/);
+  });
 });

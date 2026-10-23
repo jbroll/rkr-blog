@@ -10,7 +10,7 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
-import { readBlockPage } from '../lib/block-pages.ts';
+import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
 import { parseBlockTree } from '../lib/blocks.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
@@ -18,6 +18,7 @@ import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
+import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
 
@@ -56,6 +57,20 @@ export function registerAdminBlockRoutes(
       return { slug, title: page.title, tree: page.tree };
     }
   );
+
+  fastify.get('/admin/blocks', { ...guard }, async (_req, reply) => {
+    setPublicSecurityHeaders(reply);
+    const assets = serverAssets('/admin/static');
+    return reply.type('text/html; charset=utf-8').send(
+      renderBlocksPage({
+        site: getSite(),
+        assets,
+        title: 'Blocks',
+        bodyHtml: `<h1>Blocks</h1>\n${renderBlocksIndex(listBlockPages(siteRoot), { newPageUrl: '/admin/blocks/new', editBase: '/admin/blocks/edit' })}`,
+        isAdmin: true
+      })
+    );
+  });
 
   fastify.get('/admin/blocks/new', { ...guard }, async (_req, reply) => {
     setPublicSecurityHeaders(reply);

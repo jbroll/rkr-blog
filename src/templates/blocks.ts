@@ -19,13 +19,18 @@ export interface BlocksPageData extends SiteChrome {
 }
 
 /** Index of stored JSON pages: title links in slug order, with an
- * optional "+" link to the new-page form for signed-in admins. */
+ * optional "+" link to the new-page form and per-row Edit links. */
 export function renderBlocksIndex(
   pages: { slug: string; title: string }[],
-  opts: { newPageUrl?: string } = {}
+  opts: { newPageUrl?: string; editBase?: string } = {}
 ): string {
   const items = pages
-    .map((p) => `<li><a href="/pages/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></li>`)
+    .map((p) => {
+      const edit = opts.editBase
+        ? ` <a href="${escapeAttr(opts.editBase)}/${escapeAttr(p.slug)}">Edit</a>`
+        : '';
+      return `<li><a href="/pages/${escapeAttr(p.slug)}">${escapeText(p.title)}</a>${edit}</li>`;
+    })
     .join('\n');
   const actions = opts.newPageUrl
     ? `<p><a class="rkr-fab rkr-fab--slot-1" href="${escapeAttr(opts.newPageUrl)}" aria-label="New page" title="New page">+</a></p>\n`

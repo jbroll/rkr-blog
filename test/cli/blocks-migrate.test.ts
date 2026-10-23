@@ -4,7 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
-import blocksMigrateCmd, { runBlocksMigrate } from '../../src/cli/blocks-migrate.ts';
+import blocksMigrateCmd, {
+  runBlocksMigrate,
+  runBlocksMigrateAll
+} from '../../src/cli/blocks-migrate.ts';
 
 function withSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-blocks-migrate-'));
@@ -56,5 +59,15 @@ describe('blocks-migrate', () => {
     await blocksMigrateCmd(['--post', 't', '--out', out]);
     const parsed = JSON.parse(fs.readFileSync(out, 'utf8')) as { version: number };
     assert.equal(parsed.version, 1);
+  });
+
+  it('converts every post with --all, mirroring markdown basenames', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, '2026-01-15-t.md', POST);
+    writePost(root, 'u.md', POST.replace('slug: t', 'slug: u').replace('title: T', 'title: U'));
+    const written = runBlocksMigrateAll(root);
+    assert.equal(written.length, 2);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', '2026-01-15-t.json')));
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'u.json')));
   });
 });
