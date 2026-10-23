@@ -3,8 +3,8 @@
 // Archive schema (v1):
 //   meta          — version, exported_at, generator
 //   files         — all non-derivable on-disk content as BLOBs
-//                   (content/posts/*.md, sidecars/*.json,
-//                    originals/**.<ext>, config/site.json)
+//                   (content/posts/*.md, content/blocks/*.json,
+//                    sidecars/*.json, originals/**.<ext>, config/site.json)
 //   comments      — with post_slug + export_id instead of FK ints
 //   users         — email, role, display_name (no id — reassigned)
 //   allowed_emails — email, role, invited_at
@@ -104,6 +104,14 @@ export function exportArchive(siteRoot: string, outPath: string): ExportStats {
     if (fs.existsSync(postsDir)) {
       for (const f of fs.readdirSync(postsDir)) {
         if (f.endsWith('.md')) addFile(`content/posts/${f}`, path.join(postsDir, f));
+      }
+    }
+
+    // content/blocks/*.json — JSON page sources (all posts after the cutover)
+    const blocksDir = path.join(siteRoot, 'content', 'blocks');
+    if (fs.existsSync(blocksDir)) {
+      for (const f of fs.readdirSync(blocksDir)) {
+        if (f.endsWith('.json')) addFile(`content/blocks/${f}`, path.join(blocksDir, f));
       }
     }
 
@@ -255,7 +263,7 @@ export function importArchive(
 
   // Fix 2: pre-validate all paths before writing any files
   const ALLOWED =
-    /^(content\/posts\/[^/]+\.md|sidecars\/[^/]+\.json|originals\/[0-9a-f]{2}\/[0-9a-f]{2}\/.+|config\/site\.json)$/;
+    /^(content\/posts\/[^/]+\.md|content\/blocks\/[^/]+\.json|sidecars\/[^/]+\.json|originals\/[0-9a-f]{2}\/[0-9a-f]{2}\/.+|config\/site\.json)$/;
   const rootResolved = path.resolve(siteRoot);
   const allFileRows = arc
     .prepare<{ path: string; data: Uint8Array }>('SELECT path, data FROM files ORDER BY path')
@@ -303,7 +311,7 @@ export function importArchive(
     written++;
   }
 
-  // --- rebuild posts/tags/fts index from restored markdown ---
+  // --- rebuild posts/tags/fts index from restored sources ---
   try {
     runReindex(siteRoot);
   } catch (err) {

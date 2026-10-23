@@ -189,6 +189,57 @@ test('export then import round-trip restores all content', async (t) => {
   void replyId; // used above via comments check
 });
 
+test('export includes JSON block pages and import restores them', (t) => {
+  const src = freshSiteRoot(t);
+  const dst = freshSiteRoot(t);
+  const arcPath = path.join(os.tmpdir(), `rkr-arc-blocks-${Date.now()}.sqlite`);
+  t.after(() => fs.rmSync(arcPath, { force: true }));
+
+  fs.mkdirSync(path.join(src, 'content', 'blocks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(src, 'content', 'blocks', 'hello.json'),
+    JSON.stringify({
+      version: 1,
+      fields: {
+        title: 'Hello Blocks',
+        slug: 'hello',
+        status: 'published',
+        date: '2026-01-15T12:00:00Z'
+      },
+      body: [{ type: 'text', markdown: 'block body' }]
+    })
+  );
+
+  const stats = exportArchive(src, arcPath);
+  assert.equal(stats.files, 1, 'only the block page is exported');
+
+  const arc = open(arcPath);
+  try {
+    const row = arc
+      .prepare<{ path: string }>('SELECT path FROM files WHERE path = ?')
+      .get('content/blocks/hello.json');
+    assert.ok(row, 'archive contains the JSON block page');
+  } finally {
+    arc.close();
+  }
+
+  importArchive(dst, arcPath);
+  assert.ok(
+    fs.existsSync(path.join(dst, 'content', 'blocks', 'hello.json')),
+    'block page restored to dst'
+  );
+  const db = open(path.join(dst, 'data', 'site.db'));
+  try {
+    const post = db
+      .prepare<{ title: string; path: string }>('SELECT title, path FROM posts WHERE slug = ?')
+      .get('hello');
+    assert.equal(post?.title, 'Hello Blocks');
+    assert.equal(post?.path, 'content/blocks/hello.json');
+  } finally {
+    db.close();
+  }
+});
+
 // ---- merge behaviour -------------------------------------------------------
 
 test('import merge skips existing files and comments', async (t) => {

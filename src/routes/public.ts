@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { readBlockPage } from '../lib/block-pages.ts';
+import { extractBlockTeaser } from '../lib/block-teaser.ts';
 import { collectBlockFigureIds, renderBlockTree } from '../lib/blocks-render.ts';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
@@ -97,6 +98,12 @@ async function extractFirstParagraph(
   if (!para) return null;
   const trimmed = truncateParagraph(para as Paragraph, maxWords);
   return renderPostHtml({ type: 'root', children: [trimmed] }, ctx);
+}
+
+/** True when an index row points at a JSON block page rather than a
+ * markdown source (JSON-only pages, or posts archived after the cutover). */
+function isBlocksPagePath(relPath: string): boolean {
+  return path.posix.dirname(relPath) === 'content/blocks';
 }
 
 export default async function publicRoutes(
@@ -208,34 +215,48 @@ export default async function publicRoutes(
       }
 
       // Teaser: anonymous view only, behind the postTeaser toggle.
-      // Read the current top post, splice out its hero figure + first
-      // paragraph (same renderer the _site-banner.md block above uses),
-      // and drop that post from the list so it is not duplicated.
-      // path already includes content/posts/ (reindex.ts), so join
-      // directly onto siteRoot — same as the GET /:slug handler.
+      // Read the current top post and drop it from the list so it is not
+      // duplicated. Archived/JSON-only rows render the hero figure and
+      // lede from their block tree; unarchived rows keep reading the
+      // markdown source (path already includes content/posts/, so join
+      // directly onto siteRoot — same as the GET /:slug handler).
       let teaser: IndexTeaser | undefined;
       let listRows = rows;
       const top = rows[0];
       if (!isAdmin && site.postTeaser && top) {
         try {
-          const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
-          const { ast } = parsePost(rawTop);
-          const ctx = {
-            images: await buildImageMap(siteRoot, teaserNodes(ast), { log: req.log }),
-            videos: await buildVideoMap(siteRoot),
-            widgets
-          };
-          const bannerHtml = await extractPostBanner(ast, ctx);
-          const excerptHtml = bannerHtml
-            ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
-            : null;
-          if (bannerHtml && excerptHtml) {
+          let parts: { bannerHtml: string; excerptHtml: string } | null = null;
+          if (isBlocksPagePath(top.path)) {
+            const twin = readBlockPage(siteRoot, top.slug);
+            if (twin) {
+              parts = await extractBlockTeaser(
+                siteRoot,
+                twin.tree,
+                widgets,
+                site.teaserWords ?? 0,
+                req.log
+              );
+            }
+          } else {
+            const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
+            const { ast } = parsePost(rawTop);
+            const ctx = {
+              images: await buildImageMap(siteRoot, teaserNodes(ast), { log: req.log }),
+              videos: await buildVideoMap(siteRoot),
+              widgets
+            };
+            const bannerHtml = await extractPostBanner(ast, ctx);
+            const excerptHtml = bannerHtml
+              ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
+              : null;
+            if (bannerHtml && excerptHtml) parts = { bannerHtml, excerptHtml };
+          }
+          if (parts) {
             teaser = {
               slug: top.slug,
               title: top.title,
               ...(top.published_at ? { date: top.published_at } : {}),
-              bannerHtml,
-              excerptHtml
+              ...parts
             };
             listRows = rows.slice(1);
           }

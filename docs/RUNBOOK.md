@@ -473,6 +473,13 @@ Slugs, permalinks, and comment threads are keyed by slug, so they
 survive the archive; `reindex` re-points each row at its JSON file.
 Rollback: move the files back into `content/posts/` and reindex.
 
+The SQLite backup commands cover both source trees: `site-admin export`
+packs `content/blocks/*.json` alongside `content/posts/*.md` (and
+sidecars, originals, config, comments, users, invites), and
+`site-admin import` restores both. Post-cutover the block pages are
+what make the posts readable, so do not prune `content/blocks/` from a
+backup.
+
 ### 6. Check image orientations
 
 `walk-site.sh` only HEADs each image for a 2xx — a photo rendered

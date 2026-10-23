@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
+import { runBlocksArchive } from '../../src/cli/blocks-migrate.ts';
 import { open } from '../../src/lib/db.ts';
 import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
@@ -759,6 +760,128 @@ test('GET /: a broken image LATER in the top post still leaves the teaser intact
   assert.match(res.body, /This is the lede paragraph\./);
   // The broken image is never referenced by the index.
   assert.doesNotMatch(res.body, new RegExp(brokenId));
+});
+
+test('GET /: postTeaser reads hero + lede from the JSON twin after archive', async (t) => {
+  const { root, db } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'top.md',
+    { slug: 'top-post', title: 'Top Post', status: 'published', date: '2026-05-15T10:00:00Z' },
+    `::figure{ids="${id}" justify=bleed}\n\nMarkdown lede paragraph.`
+  );
+  writePost(
+    root,
+    'second.md',
+    {
+      slug: 'second-post',
+      title: 'Second Post',
+      status: 'published',
+      date: '2026-05-14T10:00:00Z'
+    },
+    'Second body.'
+  );
+  // Twins for both posts: the archive refuses untwinned sources.
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'top.json'),
+    JSON.stringify({
+      version: 1,
+      fields: {
+        title: 'Top Post',
+        slug: 'top-post',
+        status: 'published',
+        date: '2026-05-15T10:00:00Z'
+      },
+      body: [
+        {
+          type: 'flow',
+          blocks: [
+            { type: 'figure', slots: { ids: id, justify: 'bleed' } },
+            { type: 'text', markdown: 'JSON lede paragraph.' },
+            { type: 'text', markdown: 'More JSON body.' }
+          ]
+        }
+      ]
+    })
+  );
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'second.json'),
+    JSON.stringify({
+      version: 1,
+      fields: {
+        title: 'Second Post',
+        slug: 'second-post',
+        status: 'published',
+        date: '2026-05-14T10:00:00Z'
+      },
+      body: [{ type: 'text', markdown: 'Second body.' }]
+    })
+  );
+  runReindex(root);
+  runBlocksArchive(root);
+  runReindex(root);
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true }
+  });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /class="rkr-teaser"/);
+  assert.match(res.body, /rkr-justify-bleed/, 'hero figure comes from the JSON twin');
+  assert.match(res.body, /JSON lede paragraph\./);
+  assert.doesNotMatch(res.body, /Markdown lede paragraph\./, 'markdown body is not read');
+  // Featured post link appears in the teaser but NOT as a .post-list row.
+  const listStart = res.body.indexOf('<ul class="post-list">');
+  const listEnd = res.body.indexOf('</ul>', listStart);
+  const list = res.body.slice(listStart, listEnd);
+  assert.doesNotMatch(list, /\/top-post"/);
+  assert.match(list, /\/second-post"/);
+});
+
+test('GET /: postTeaser on but JSON twin has a figure and no lede → no teaser', async (t) => {
+  const { root, db } = await setup(t);
+  const id = await ingestOne(root);
+  writePost(
+    root,
+    'top.md',
+    { slug: 'top-post', title: 'Top Post', status: 'published', date: '2026-05-15T10:00:00Z' },
+    `::figure{ids="${id}"}`
+  );
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'top.json'),
+    JSON.stringify({
+      version: 1,
+      fields: {
+        title: 'Top Post',
+        slug: 'top-post',
+        status: 'published',
+        date: '2026-05-15T10:00:00Z'
+      },
+      body: [{ type: 'figure', slots: { ids: id } }]
+    })
+  );
+  runReindex(root);
+  runBlocksArchive(root);
+  runReindex(root);
+
+  const app = await buildApp({
+    siteRoot: root,
+    db,
+    startWorker: false,
+    site: { title: 'Teaser Site', postTeaser: true }
+  });
+  t.after(() => app.close());
+
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(res.body, /class="rkr-teaser"/);
+  assert.match(res.body, /\/top-post"/, 'full list still shows the post');
 });
 
 test('GET /about renders _about.md without comments; 404 when absent', async (t) => {
