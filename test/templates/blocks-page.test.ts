@@ -14,6 +14,35 @@ const fakeCtx = {
 void fakeCtx;
 
 describe('blocks page template', () => {
+  it('shows the edit pencil only for admins on stored pages', () => {
+    const admin = renderBlocksPage({
+      site: { title: 'rkroll' },
+      assets: { theme: 'default', hash: 'abc', base: '/static' },
+      title: 'Hello',
+      slug: 'hello',
+      bodyHtml: '<p>Hi</p>\n',
+      isAdmin: true
+    });
+    assert.match(admin, /\/admin\/blocks\/edit\/hello/);
+    const anon = renderBlocksPage({
+      site: { title: 'rkroll' },
+      assets: { theme: 'default', hash: 'abc', base: '/static' },
+      title: 'Hello',
+      slug: 'hello',
+      bodyHtml: '<p>Hi</p>\n',
+      isAdmin: false
+    });
+    assert.doesNotMatch(anon, /admin\/blocks\/edit/);
+    const demo = renderBlocksPage({
+      site: { title: 'rkroll' },
+      assets: { theme: 'default', hash: 'abc', base: '/static' },
+      title: 'hero',
+      bodyHtml: '<p>Hi</p>\n',
+      isAdmin: true
+    });
+    assert.doesNotMatch(demo, /admin\/blocks\/edit/);
+  });
+
   it('wraps body HTML in site chrome with an escaped title', () => {
     const html = renderBlocksPage({
       site: { title: 'rkroll' },

@@ -166,6 +166,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
         site,
         assets: serverAssets(),
         title: rendered.title,
+        slug,
         bodyHtml: rendered.bodyHtml,
         isAdmin: !!req.user
       })
