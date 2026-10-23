@@ -1,7 +1,8 @@
 // Pure post-index read/write/transform layer. The markdown files under
-// content/posts/ are the source of truth; the `posts` table is just an
-// index for fast `GET /` and `GET /:slug` queries. `runReindex` rebuilds
-// that index; the `read*` helpers query it for the delivery layer.
+// content/posts/ and the JSON block trees under content/blocks/ are the
+// sources of truth; the `posts` table is just an index for fast `GET /`
+// and `GET /:slug` queries. `runReindex` rebuilds that index; the
+// `read*` helpers query it for the delivery layer.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -172,9 +173,10 @@ function doReindex(
 
     // JSON twins: content/blocks/*.json matched to posts by fields.slug.
     // A twin overrides its markdown sibling's indexed fields (title,
-    // status, tags, FTS body) while the row keeps the markdown path and
-    // id, so comment threads survive the cutover. JSON-only pages get
-    // their own rows pointing at content/blocks/.
+    // status, tags, FTS body) while the row keeps the markdown sibling's
+    // id, so comment threads survive the cutover. Once the markdown file
+    // has been archived the row also adopts the JSON path (see below).
+    // JSON-only pages get their own rows pointing at content/blocks/.
     for (const filename of onDiskBlocks) {
       const fullPath = path.join(blocksDir, filename);
       let raw: string;
@@ -227,16 +229,28 @@ function doReindex(
       const tags = Array.isArray(fields.tags) ? (fields.tags as string[]) : [];
 
       // Match by slug only: a twin shares its row (and comment thread)
-      // with the markdown sibling, never by path.
+      // with the markdown sibling, never by path. While the markdown
+      // sibling is still on disk the row keeps its markdown path (the
+      // index teaser reads it); once it has been archived the row adopts
+      // the JSON path so the orphan check keeps the row — and therefore
+      // its comments — alive.
+      const relPath = path.posix.join('content', 'blocks', filename);
       const existing = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
+      const mdStillOnDisk = slugToFile.has(slug);
       if (existing) {
-        db.prepare(
-          `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?
-           WHERE id = ?`
-        ).run(slug, fields.title as string, status, updatedAt, publishedAt, existing.id);
+        if (mdStillOnDisk) {
+          db.prepare(
+            `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?
+             WHERE id = ?`
+          ).run(slug, fields.title as string, status, updatedAt, publishedAt, existing.id);
+        } else {
+          db.prepare(
+            `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?, path = ?
+             WHERE id = ?`
+          ).run(slug, fields.title as string, status, updatedAt, publishedAt, relPath, existing.id);
+        }
         updated++;
       } else {
-        const relPath = path.posix.join('content', 'blocks', filename);
         db.prepare(
           `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path)
            VALUES (?, ?, ?, ?, ?, ?, ?)`

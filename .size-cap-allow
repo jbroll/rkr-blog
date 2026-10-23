@@ -3,3 +3,7 @@ src/routes/integrations-onedrive.ts
 # same shape as the gdrive/onedrive integrations (shared OAuth-callback
 # extraction would bring all three under the cap; until then, allowed)
 src/routes/integrations-gphotos.ts
+
+# grandfathered — 525 lines before the JSON cutover, 539 after; split the
+# reindex read/write helpers out before it grows further
+src/lib/post-index.ts

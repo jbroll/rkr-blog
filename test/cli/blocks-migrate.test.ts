@@ -5,9 +5,12 @@ import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
 import blocksMigrateCmd, {
+  runBlocksArchive,
   runBlocksMigrate,
   runBlocksMigrateAll
 } from '../../src/cli/blocks-migrate.ts';
+import { open } from '../../src/lib/db.ts';
+import { readIndexedPostBySlug, runReindex } from '../../src/lib/post-index.ts';
 
 function withSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-blocks-migrate-'));
@@ -24,6 +27,30 @@ function withSiteRoot(t: TestContext): string {
 
 function writePost(root: string, filename: string, body: string): void {
   fs.writeFileSync(path.join(root, 'content', 'posts', filename), body);
+}
+
+function writeTwin(root: string, filename: string, slug: string, title = 'T'): void {
+  const blocksDir = path.join(root, 'content', 'blocks');
+  fs.mkdirSync(blocksDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(blocksDir, filename),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'text', markdown: 'json body' }],
+      fields: { title, slug, status: 'published', date: '2026-01-15T12:00:00Z' }
+    })
+  );
+}
+
+function commentCount(root: string, slug: string): number {
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    const row = db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM comments').get();
+    assert.ok(readIndexedPostBySlug(db, slug), `post ${slug} must stay indexed`);
+    return row?.c ?? 0;
+  } finally {
+    db.close();
+  }
 }
 
 const POST = `---
@@ -69,5 +96,150 @@ describe('blocks-migrate', () => {
     assert.equal(written.length, 2);
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', '2026-01-15-t.json')));
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'u.json')));
+  });
+
+  it('archive moves markdown out of the read path and reindex keeps the slug', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 't.json', 't');
+
+    // Pre-cutover index: the post is indexed and has a comment thread.
+    runReindex(root);
+    const db = open(path.join(root, 'data', 'site.db'));
+    const post = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get('t');
+    assert.ok(post);
+    db.prepare(
+      `INSERT INTO comments
+         (post_id, parent_id, wp_comment_id, author_name, author_email,
+          body, status, source, created_at)
+       VALUES (?,NULL,NULL,?,?,?,?,?,?)`
+    ).run(
+      post.id,
+      'Alice',
+      'alice@example.com',
+      'Still here?',
+      'published',
+      'web',
+      new Date().toISOString()
+    );
+    db.close();
+
+    const moved = runBlocksArchive(root);
+    assert.deepEqual(
+      moved.map((m) => m.slug),
+      ['t']
+    );
+    assert.equal(fs.existsSync(path.join(root, 'content', 'posts', 't.md')), false);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts-legacy', 't.md')));
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 't.json')), 'twin stays in place');
+
+    runReindex(root);
+    assert.equal(commentCount(root, 't'), 1, 'comment thread survives the archive');
+
+    const db2 = open(path.join(root, 'data', 'site.db'));
+    try {
+      const row = readIndexedPostBySlug(db2, 't');
+      assert.match(row?.path ?? '', /^content\/blocks\//, 'row now points at the JSON source');
+    } finally {
+      db2.close();
+    }
+  });
+
+  it('archive leaves _-prefixed system files live in content/posts', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writePost(
+      root,
+      '_about.md',
+      '---\ntitle: About\nslug: _about\nstatus: published\n---\n\nAbout body.\n'
+    );
+    writePost(
+      root,
+      '_site-banner.md',
+      '---\ntitle: Banner\nslug: _site-banner\nstatus: published\n---\n\nBanner body.\n'
+    );
+    writeTwin(root, 't.json', 't');
+
+    const moved = runBlocksArchive(root);
+    assert.equal(moved.length, 1);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', '_about.md')));
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', '_site-banner.md')));
+    assert.equal(fs.existsSync(path.join(root, 'content', 'posts-legacy', '_about.md')), false);
+    assert.equal(
+      fs.existsSync(path.join(root, 'content', 'posts-legacy', '_site-banner.md')),
+      false
+    );
+  });
+
+  it('archive refuses untwinned markdown unless --include-untwinned', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 't.json', 't');
+    writePost(root, 'loose.md', POST.replace('slug: t', 'slug: loose'));
+
+    assert.throws(() => runBlocksArchive(root), /no JSON twin.*loose/);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 'loose.md')), 'nothing moved');
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 't.md')), 'nothing moved');
+
+    const moved = runBlocksArchive(root, { includeUntwinned: true });
+    assert.deepEqual(
+      moved.map((m) => m.slug),
+      ['loose', 't']
+    );
+    assert.equal(fs.existsSync(path.join(root, 'content', 'posts', 'loose.md')), false);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts-legacy', 'loose.md')));
+  });
+
+  it('default export archives with --archive', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 't.json', 't');
+
+    await blocksMigrateCmd(['--archive']);
+    assert.equal(fs.existsSync(path.join(root, 'content', 'posts', 't.md')), false);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts-legacy', 't.md')));
+  });
+
+  it('archive refuses to overwrite an existing legacy file', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 't.json', 't');
+    runBlocksArchive(root);
+
+    // A new markdown source with the same name must not clobber the archive.
+    writePost(root, 't.md', POST);
+    assert.throws(() => runBlocksArchive(root), /already archived: t\.md/);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 't.md')), 'new source stays put');
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts-legacy', 't.md')));
+  });
+
+  it('archive ignores corrupt JSON files when matching twins', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 't.json', 't');
+    fs.writeFileSync(path.join(root, 'content', 'blocks', 'corrupt.json'), '{not json');
+
+    const moved = runBlocksArchive(root);
+    assert.equal(moved.length, 1);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'corrupt.json')));
+  });
+
+  it('default export converts every post with --all', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    await blocksMigrateCmd(['--all']);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 't.json')));
+  });
+
+  it('--all skips a post that cannot be converted and writes the rest', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writePost(root, 'bad.md', 'no frontmatter here');
+    const written = runBlocksMigrateAll(root);
+    assert.deepEqual(
+      written.map((w) => w.slug),
+      ['t']
+    );
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 'bad.json')), false);
   });
 });

@@ -447,6 +447,32 @@ through `/admin/posts` carry no `source_kind` — so read the `--dry-run`
 output before applying. (For the same reason, `fix-wp-dates`, which does
 gate on `source_kind: wordpress`, is a no-op on pushed posts.)
 
+### 5b. Archive markdown sources (JSON cutover)
+
+Once the post is served from its JSON twin, move the markdown source out
+of the read path. On the host, against the live content tree:
+
+```bash
+site-admin blocks-migrate --all        # write/refresh a JSON twin per post
+site-admin blocks-migrate --archive    # move content/posts/*.md → content/posts-legacy/
+site-admin reindex                     # refresh the SQLite index
+```
+
+`--archive` moves files, never copies or deletes them, and refuses the
+whole run (nothing moves) when a post has no JSON twin. Run
+`blocks-migrate --all` first, or pass `--include-untwinned` to archive
+untwinned posts anyway — they will drop out of the index. It also
+refuses to overwrite a name already present in `content/posts-legacy/`.
+Note that `--include-untwinned` moves the markdown *and* leaves the post
+unlisted, so only use it for posts you are deliberately retiring.
+
+`_`-prefixed system files (`_about.md`, `_site-banner.md`) stay in
+`content/posts/`: `/about` and the index banner read them directly and
+have no JSON fallback. The legacy directory is not read by the server.
+Slugs, permalinks, and comment threads are keyed by slug, so they
+survive the archive; `reindex` re-points each row at its JSON file.
+Rollback: move the files back into `content/posts/` and reindex.
+
 ### 6. Check image orientations
 
 `walk-site.sh` only HEADs each image for a 2xx — a photo rendered
