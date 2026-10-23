@@ -104,7 +104,7 @@ Some editor flows can't be driven through the UI alone:
 We expose `window.__rkrEditor` only when the URL is `/admin/view/:slug?e2e=1`:
 
 ```ts
-// src/admin/main.ts
+// src/admin/startup.ts
 if (new URLSearchParams(location.search).get('e2e') === '1') {
   (window as unknown as { __rkrEditor?: Editor }).__rkrEditor = editor;
 }
@@ -182,20 +182,20 @@ Always go through the same login helper:
 
 ```ts
 async function login(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/admin/login');
+  await page.goto('/login');
   await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
   await Promise.all([
     page.waitForURL((url) => new URL(url).pathname === '/'),
     page.getByRole('button', { name: /Sign in with token/ }).click()
   ]);
-  await expect(page.locator('#rkroll-admin-root')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'New page' })).toBeVisible();
 }
 ```
 
 Two non-obvious things:
 
 - **`Promise.all([waitForURL, click])`**: the click triggers navigation. Wrapping both in `Promise.all` lets Playwright register the navigation listener BEFORE the click fires, avoiding a race where the navigation completes before we start waiting for it.
-- **The visibility check at the end** is the post-load assertion that proves we landed on the SPA, not on the login page with an error toast.
+- **The visibility check at the end** proves the session landed on the authenticated public index, not the login page: a successful login redirects to `/` (`postLoginPath`), which renders `indexAdminFabs()`, so the "New page" link only exists for an authed visitor. A rejected token leaves you on `/login`, where the link never appears.
 
 `ADMIN_TOKEN` is a shared constant — see existing specs.
 
@@ -210,7 +210,7 @@ import { expect, test } from './coverage-fixtures.ts';
 const PNG_1X1_PURPLE = 'iVBORw0KGgo...';   // unique to this spec
 
 test('my new flow does X', async ({ page }) => {
-  await login(page);   // import or paste the helper
+  await login(page);   // paste the helper from §6
   // ...
 });
 ```
