@@ -71,6 +71,9 @@ export function renderIndexPage(data: IndexPageData): string {
   const v = bundleVersion(a);
   const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
   const teaserHtml = !data.isAdmin && data.teaser ? renderTeaser(data.teaser) : '';
+  const blocksLink = data.isAdmin
+    ? `<p class="rkr-admin-blocks-link"><a href="/admin/blocks">Blocks pages →</a> <span>JSON pages in the new editor</span></p>\n`
+    : '';
   const isAsc = data.sort === 'asc';
   const activeTags = data.activeTags ?? [];
   // Build query suffix for pager — preserves all active tags + sort together.
@@ -113,7 +116,7 @@ ${siteChrome}<main id="main" tabindex="-1">
 <div class="rkr-index-layout rkr-index-layout--has-rail">
 <div class="rkr-index-posts">
 <h1 class="rkr-index-heading">${escapeText(data.site.title)}</h1>
-${teaserHtml}${body}
+${teaserHtml}${blocksLink}${body}
 ${pager}
 </div>
 ${tagRail}

@@ -53,6 +53,7 @@ test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
   assert.doesNotMatch(html, /rkr-admin-posts-status/);
   assert.doesNotMatch(html, /data-pin-toggle/);
   assert.doesNotMatch(html, /\/static\/admin\/posts-list\.js/);
+  assert.doesNotMatch(html, /\/admin\/blocks/);
 });
 
 test('renderIndexPage: admin view renders the posts table with status / pin / delete', () => {
@@ -114,6 +115,9 @@ test('renderIndexPage: admin view renders the posts table with status / pin / de
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be gone');
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="New post"/);
   assert.match(html, /class="rkr-fab[^"]*"[^>]*aria-label="Settings"/);
+  // Cross-link into the JSON blocks world so the new editor is
+  // discoverable from the admin homepage.
+  assert.match(html, /<a href="\/admin\/blocks">Blocks pages →<\/a>/);
   // Header Login/Logout swap shows Logout (authed).
   assert.match(html, /<form [^>]*action="\/admin\/logout"[^>]*>/);
 });
