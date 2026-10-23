@@ -228,3 +228,26 @@ git commit -m "feat: archive markdown sources after JSON cutover"
 - [ ] **Step 1: Diff `main...exp/reusable-blocks` in full.**
 - [ ] **Step 2: Verify every spec requirement in `docs/superpowers/specs/2026-10-22-reusable-blocks-design.md` maps to a shipped task.**
 - [ ] **Step 3: File findings as follow-ups; block merge on Must-fix items only.**
+
+## Task 5 outcome (2026-10-23, staging copy of /tmp/opencode/rkr-blocks-bulk)
+
+Method: throwaway script driving the real app (`buildApp` + `inject`, no
+network) against a fresh tar copy at `/home/john/cutover-verify` (/tmp/tmpfs
+too small for a second copy). 15/15 checks green.
+
+| Check | Result |
+|---|---|
+| Pre-cutover published rows | 66 (65 markdown + 1 JSON-only `stage-note`) |
+| `blocks-migrate --all` | 65 twins written |
+| `blocks-migrate --archive` | 65 moved to `content/posts-legacy/`; only `_` system files remain |
+| Post-cutover indexed slugs | 66, identical set to pre-cutover |
+| `/` and `/pages` | list all 66 slugs |
+| `/:slug` vs `/pages/:slug` | all 66 resolve 200 with byte-identical post bodies (article chrome excluded: comments/header live only on `/:slug` by design) |
+| Comment continuity | published comment added pre-cutover still renders post-cutover |
+| Retired routes | `GET /admin/editor`, `POST /admin/posts`, `GET /admin/post-bundle/x?manifest=1` all 404; editor 404 links to `/admin/blocks` |
+
+Notes: corpus slugs are quoted YAML (`slug: "…"`, WordPress importer
+style) — exposed a `listPosts` bug that kept the quotes and made the
+archive refuse every twin; fixed in `01cf9be` (unquote + regression test).
+`/:slug` vs `/pages/:slug` differ in chrome by design (scripts, article
+wrapper, comments); bodies are identical.
