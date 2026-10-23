@@ -91,7 +91,10 @@ export function listPosts(siteRoot: string): PostFile[] {
     let body = raw;
     if (m) {
       const sm = SLUG_RE.exec(m[1] as string);
-      if (sm) slug = sm[1];
+      // The WordPress importer writes quoted YAML scalars
+      // (slug: "example-post-3"). Strip one pair of matching quotes so
+      // the slug matches the parsed frontmatter and the JSON twin.
+      if (sm) slug = (sm[1] as string).replace(/^(['"])(.*)\1$/, '$2');
       body = m[2] as string;
     }
     if (!slug) {

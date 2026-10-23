@@ -90,6 +90,17 @@ test('listPosts: with frontmatter slug, slug wins over filename', (t) => {
   assert.equal(posts[0]?.slug, 'explicit-slug');
 });
 
+test('listPosts: quoted frontmatter slug is unquoted (WordPress importer style)', (t) => {
+  const root = freshSiteRoot(t);
+  fs.writeFileSync(
+    path.join(root, 'content', 'posts', '2020-09-19-example-post-3.md'),
+    `---\ntitle: "On The Way"\nslug: "example-post-3"\nstatus: published\n---\n\nbody\n`
+  );
+  const posts = listPosts(root);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0]?.slug, 'example-post-3');
+});
+
 test('listPosts: without frontmatter, slug derives from filename minus date prefix', (t) => {
   const root = freshSiteRoot(t);
   fs.writeFileSync(
