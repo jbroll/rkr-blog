@@ -1,5 +1,6 @@
 // Pure permute helpers for figure image reorder. DOM wiring
-// (wireFigureReorder) is exercised by test/e2e/figure-reorder.spec.ts.
+// (wireFigureReorder) belonged to the retired markdown editor and no
+// longer has an e2e entry point.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

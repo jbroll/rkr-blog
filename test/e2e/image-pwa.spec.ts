@@ -1,6 +1,6 @@
 // Smoke test for the standalone image PWA served from apps/image-pwa/dist:
 //   load → upload a fixture → rotate → crop → download
-// The blog's own editor is covered by editor-flow.spec.ts; this only
+// The blog's blocks editor has its own coverage; this only
 // asserts the standalone app boots and its four core ops round-trip.
 
 import { expect, test } from './coverage-fixtures.ts';

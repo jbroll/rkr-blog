@@ -1,10 +1,18 @@
-// Pre-warm derivative renders for a post body.
-// Walks the markdown for image refs, reads each sidecar, enqueues
-// one render job per (variant × output). The jobs table dedups by
-// cache_key, so a re-save of an unchanged post is effectively a
-// no-op. Worker concurrency = 1 + the live-render gauge in jobs.ts
-// keep this from contending with live /img requests.
+// Pre-warm derivative renders for a saved blocks page.
+//
+// Collects media references from figure/video leaves (their `slots.ids`)
+// and from figure/video directives embedded in text leaves' markdown,
+// reads each sidecar, and enqueues one render job per
+// (variant × output). The jobs table dedups by cache_key, so a re-save
+// of an unchanged page is effectively a no-op. Worker concurrency = 1 +
+// the live-render gauge in jobs.ts keep this from contending with live
+// /img requests.
+//
+// Media referenced only from a macro definition is not pre-warmed: the
+// saved tree holds the macro instance, not its expanded leaves, and the
+// scan is deliberately a best-effort warm-up rather than a render.
 
+import type { BlockNode, BlockTree, ContainerNode } from '../lib/blocks.ts';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { enqueue } from '../lib/jobs.ts';
@@ -19,9 +27,32 @@ import { read as sidecarRead } from '../lib/sidecar.ts';
 import { videoCachePaths } from '../lib/video-render.ts';
 import { readVideoSidecar } from '../lib/video-sidecar.ts';
 
-export async function prewarmVariants(db: Db, siteRoot: string, markdown: string): Promise<void> {
+/** Flatten every string that may carry a media id into one scan text:
+ * slot ids from figure/video leaves plus markdown from text leaves. */
+function collectMediaRefs(tree: BlockTree): string {
+  const parts: string[] = [];
+  const walk = (node: BlockNode): void => {
+    if (node.type === 'text') {
+      const markdown =
+        node.markdown ?? (typeof node.slots?.markdown === 'string' ? node.slots.markdown : '');
+      if (markdown) parts.push(markdown);
+    }
+    if ((node.type === 'figure' || node.type === 'video') && typeof node.slots?.ids === 'string') {
+      parts.push(node.slots.ids);
+    }
+    if (node.type === 'macro') return;
+    const kids = (node as ContainerNode).children ?? (node as ContainerNode).blocks ?? [];
+    for (const kid of kids) walk(kid);
+  };
+  for (const node of tree.body) walk(node);
+  return parts.join('\n');
+}
+
+export async function prewarmBlockTree(db: Db, siteRoot: string, tree: BlockTree): Promise<void> {
+  const refs = collectMediaRefs(tree);
+
   const knownIds = new Set(listSidecarIds(siteRoot));
-  const refIds = scanPostForImageIds(markdown, knownIds);
+  const refIds = scanPostForImageIds(refs, knownIds);
   for (const id of refIds) {
     const sc = await sidecarRead(siteRoot, id);
     if (!sc) continue;
@@ -51,7 +82,7 @@ export async function prewarmVariants(db: Db, siteRoot: string, markdown: string
   }
 
   const knownVideoIds = new Set(listVideoSidecarIds(siteRoot));
-  const videoRefIds = scanPostForVideoIds(markdown, knownVideoIds);
+  const videoRefIds = scanPostForVideoIds(refs, knownVideoIds);
   for (const id of videoRefIds) {
     const sc = await readVideoSidecar(siteRoot, id);
     if (!sc) continue;

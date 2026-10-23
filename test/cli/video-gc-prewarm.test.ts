@@ -13,7 +13,7 @@ import {
   type VideoSidecar,
   writeVideoSidecar
 } from '../../src/lib/video-sidecar.ts';
-import { prewarmVariants } from '../../src/routes/admin-prewarm.ts';
+import { prewarmBlockTree } from '../../src/routes/admin-prewarm.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-video-gc-'));
@@ -123,7 +123,7 @@ test('runGc sweeps stale .tmp under cache/video and sidecars/videos and original
   assert.equal(fs.existsSync(path.join(origVideoTmp, 'ingest-deadbeef.bin')), false);
 });
 
-test('prewarmVariants enqueues a renderVideo job for referenced videos', async (t) => {
+test('prewarmBlockTree enqueues a renderVideo job for referenced videos', async (t) => {
   const root = freshSiteRoot(t);
   const id = 'c'.repeat(64);
   await writeVideoFixture(root, id);
@@ -131,8 +131,10 @@ test('prewarmVariants enqueues a renderVideo job for referenced videos', async (
   migrate(db);
   t.after(() => db.close());
 
-  const markdown = `::video{id=${id}}`;
-  await prewarmVariants(db, root, markdown);
+  await prewarmBlockTree(db, root, {
+    version: 1,
+    body: [{ type: 'video', slots: { ids: id } }]
+  });
 
   const row = db
     .prepare<{ kind: string; payload: string }>('SELECT kind, payload FROM jobs LIMIT 1')
@@ -143,7 +145,7 @@ test('prewarmVariants enqueues a renderVideo job for referenced videos', async (
   assert.equal(payload.originalId, id);
 });
 
-test('prewarmVariants enqueues a render job per variant × output for referenced images', async (t) => {
+test('prewarmBlockTree enqueues a render job per variant × output for referenced images', async (t) => {
   const root = freshSiteRoot(t);
   const id = 'e'.repeat(64);
   const dir = path.join(root, 'originals', id.slice(0, 2), id.slice(2, 4));
@@ -167,7 +169,10 @@ test('prewarmVariants enqueues a render job per variant × output for referenced
   migrate(db);
   t.after(() => db.close());
 
-  await prewarmVariants(db, root, `::figure{ids="${id}"}`);
+  await prewarmBlockTree(db, root, {
+    version: 1,
+    body: [{ type: 'figure', slots: { ids: id } }]
+  });
 
   const rows = db
     .prepare<{ kind: string; payload: string }>('SELECT kind, payload FROM jobs')
@@ -179,7 +184,40 @@ test('prewarmVariants enqueues a render job per variant × output for referenced
   }
 });
 
-test('prewarmVariants skips unreadable or empty image sidecars', async (t) => {
+test('prewarmBlockTree scans figure directives embedded in text leaves', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = 'd'.repeat(64);
+  const dir = path.join(root, 'originals', id.slice(0, 2), id.slice(2, 4));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${id}.webp`), Buffer.alloc(8));
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${id}.json`),
+    JSON.stringify({
+      version: 1,
+      original: id,
+      source: {},
+      ops: [],
+      variants: [{ w: 640, h: 480, fit: 'inside' }],
+      outputs: [{ format: 'webp', quality: 80 }]
+    })
+  );
+  const db = open(':memory:');
+  migrate(db);
+  t.after(() => db.close());
+
+  await prewarmBlockTree(db, root, {
+    version: 1,
+    body: [{ type: 'text', markdown: `::figure{ids="${id}"}` }]
+  });
+
+  const row = db
+    .prepare<{ kind: string; payload: string }>('SELECT kind, payload FROM jobs LIMIT 1')
+    .get();
+  assert.ok(row, 'job enqueued');
+  assert.equal(row.kind, 'render');
+});
+
+test('prewarmBlockTree skips unreadable or empty image sidecars', async (t) => {
   const root = freshSiteRoot(t);
   const missing = 'a'.repeat(64);
   const noOutputs = 'b'.repeat(64);
@@ -215,13 +253,16 @@ test('prewarmVariants skips unreadable or empty image sidecars', async (t) => {
   migrate(db);
   t.after(() => db.close());
 
-  await prewarmVariants(db, root, `::figure{ids="${missing},${noOutputs},${noVariants}"}`);
+  await prewarmBlockTree(db, root, {
+    version: 1,
+    body: [{ type: 'figure', slots: { ids: `${missing},${noOutputs},${noVariants}` } }]
+  });
 
   const count = db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM jobs').get()?.c;
   assert.equal(count, 0);
 });
 
-test('prewarmVariants skips referenced images with no sidecar', async (t) => {
+test('prewarmBlockTree skips referenced images with no sidecar', async (t) => {
   const root = freshSiteRoot(t);
   const id = 'f'.repeat(64);
   const db = open(':memory:');
@@ -230,7 +271,10 @@ test('prewarmVariants skips referenced images with no sidecar', async (t) => {
 
   // The id is known to the scan only if a sidecar exists, so no
   // sidecar means no refs and therefore no jobs.
-  await prewarmVariants(db, root, `::figure{ids="${id}"}`);
+  await prewarmBlockTree(db, root, {
+    version: 1,
+    body: [{ type: 'figure', slots: { ids: id } }]
+  });
 
   const count = db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM jobs').get()?.c;
   assert.equal(count, 0);

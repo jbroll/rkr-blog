@@ -2,9 +2,9 @@
 // Tiptap's default attribute parser coerces numeric-looking values to
 // numbers, which breaks a caption of "2024" or an all-digit id prefix
 // on paste. Pure (no DOM): each attribute's parseHTML is fed an element
-// stub. The video node's equivalent is covered in video-upload.spec.ts;
-// importing it here would pull it into the unit coverage universe and
-// reset its ratchet denominator.
+// stub. The video node's equivalent has no standalone parse test;
+// importing the editor node here would pull it into the unit coverage
+// universe and reset its ratchet denominator.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

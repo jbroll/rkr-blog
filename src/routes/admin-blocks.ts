@@ -13,12 +13,15 @@ import { requireUser } from '../lib/auth-middleware.ts';
 import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
 import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
 import type { SiteConfig } from '../lib/config.ts';
+import type { Db } from '../lib/db.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
+import { runReindex } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
 import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
+import { prewarmBlockTree } from './admin-prewarm.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
 
@@ -27,6 +30,9 @@ export interface AdminBlockRoutesOpts {
   getSite: () => SiteConfig;
   /** When true, saving requires a signed-in admin. */
   requireAuth: boolean;
+  /** Job queue connection for pre-warming block media. Optional so
+   * read-only editor mounts (no DB) still work. */
+  db?: Db;
 }
 
 export function registerAdminBlockRoutes(
@@ -147,6 +153,25 @@ export function registerAdminBlockRoutes(
       const inserted = !fs.existsSync(dest);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
+
+      // Public / and /:slug read the DB index, not the JSON files, so a
+      // save must reindex before the page is reachable (mirrors the
+      // retired markdown save handler). wp-push also reindexes after
+      // its POST; runReindex is idempotent, so the extra call is
+      // harmless.
+      runReindex(siteRoot);
+
+      // Warm the derivative queue for any media the saved tree
+      // references. Best-effort: a pre-warm failure must not fail the
+      // save itself.
+      if (opts.db) {
+        try {
+          await prewarmBlockTree(opts.db, siteRoot, tree);
+        } catch (err) {
+          req.log.warn({ err, slug }, 'pre-warm enqueue failed');
+        }
+      }
+
       return { slug, inserted };
     }
   );

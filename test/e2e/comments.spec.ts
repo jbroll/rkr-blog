@@ -8,6 +8,7 @@
 //   C. Honeypot comment → silent 303, text never appears on post page
 
 import { expect, test } from './coverage-fixtures.ts';
+import { seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -21,15 +22,12 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 }
 
 async function seedPost(page: import('@playwright/test').Page, slug: string): Promise<void> {
-  const res = await page.request.post('/admin/posts', {
-    data: {
-      slug,
-      title: 'Comment test post',
-      status: 'published',
-      markdown: 'A post for testing comments.\n'
-    }
+  await seedBlockPage(page, {
+    slug,
+    title: 'Comment test post',
+    status: 'published',
+    markdown: 'A post for testing comments.\n'
   });
-  expect(res.status()).toBe(200);
 }
 
 test('comments: submit → pending (not visible), approve via admin → visible on post', async ({

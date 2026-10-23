@@ -10,6 +10,7 @@
 import sharp from 'sharp';
 
 import { expect, test } from './coverage-fixtures.ts';
+import { figureBlock, seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -24,12 +25,14 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 
 async function seedPost(
   page: import('@playwright/test').Page,
-  body: { title: string; markdown: string; slug: string }
+  body: { title: string; slug: string; figure: Record<string, unknown> }
 ): Promise<void> {
-  const res = await page.request.post('/admin/posts', {
-    data: { slug: body.slug, title: body.title, status: 'published', markdown: body.markdown }
+  await seedBlockPage(page, {
+    slug: body.slug,
+    title: body.title,
+    status: 'published',
+    body: [body.figure]
   });
-  expect(res.status()).toBe(200);
 }
 
 async function uploadJpeg(page: import('@playwright/test').Page, seed: number): Promise<string> {
@@ -96,7 +99,7 @@ test('site: carousel prev/next/dot/keyboard nav updates the active dot', async (
   await seedPost(page, {
     title: 'carousel test',
     slug,
-    markdown: `::figure{ids=${idsAttr} matrix="1x1"}\n`
+    figure: figureBlock(idsAttr, { matrix: '1x1' })
   });
 
   await page.goto(`/${slug}`);
@@ -143,7 +146,7 @@ test('site: figure cell opens the PhotoSwipe lightbox', async ({ page }) => {
   await seedPost(page, {
     title: 'lightbox test',
     slug,
-    markdown: `::figure{ids=${idsAttr} caption="A two-up figure"}\n`
+    figure: figureBlock(idsAttr, { caption: 'A two-up figure' })
   });
 
   await page.goto(`/${slug}`);
@@ -182,7 +185,7 @@ test('site: carousel autoplay advances + pause button stops it', async ({ page }
   await seedPost(page, {
     title: 'autoplay',
     slug,
-    markdown: `::figure{ids=${idsAttr} matrix="1x1" timer=1}\n`
+    figure: figureBlock(idsAttr, { matrix: '1x1', timer: '1' })
   });
   await page.goto(`/${slug}`);
   const carousel = page.locator('.rkr-carousel').first();
@@ -212,7 +215,7 @@ test('site: single-image figure renders without carousel chrome', async ({ page 
   await seedPost(page, {
     title: 'one image',
     slug,
-    markdown: `::figure{ids=${id.slice(0, 8)}}\n`
+    figure: figureBlock(id.slice(0, 8))
   });
   await page.goto(`/${slug}`);
   await expect(page.locator('figure.rkr-figure').first()).toBeVisible();

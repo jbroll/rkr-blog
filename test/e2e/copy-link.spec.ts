@@ -4,6 +4,7 @@
 // (the e2e coverage ratchet keys on this file).
 
 import { expect, test } from './coverage-fixtures.ts';
+import { seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -28,10 +29,12 @@ test('post page: copy-link button writes the URL to the clipboard + flashes copi
   await login(page);
 
   const slug = `e2e-copy-link-${Date.now()}`;
-  const res = await page.request.post('/admin/posts', {
-    data: { slug, title: 'Hello copy link', status: 'published', markdown: 'body\n' }
+  await seedBlockPage(page, {
+    slug,
+    title: 'Hello copy link',
+    status: 'published',
+    markdown: 'body\n'
   });
-  expect(res.status()).toBe(200);
 
   await page.goto(`/${slug}`);
   const btn = page.locator('.rkr-post-copylink');

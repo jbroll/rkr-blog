@@ -46,8 +46,9 @@ export interface AdminSettingsPageData extends SiteChrome {
    * options. */
   themes: string[];
   /** Optional flash message after a successful save / a validation
-   * failure. Rendered above the form. */
-  flash?: { kind: 'ok' | 'error'; text: string };
+   * failure. Rendered above the form. `ok` flashes are client-side
+   * toasts (not rendered inline); `info` notices are. */
+  flash?: { kind: 'ok' | 'error' | 'info'; text: string };
   /** Full git commit sha of the running build. Surfaced at the bottom
    * of the page so the operator can confirm which deploy is live
    * (matches /health's gitHash field). 'unknown' when neither a
@@ -77,7 +78,7 @@ export interface AdminSettingsPageData extends SiteChrome {
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
   const a = data.assets;
-  const flash = data.flash?.kind === 'error' ? renderFlash(data.flash) : '';
+  const flash = data.flash && data.flash.kind !== 'ok' ? renderFlash(data.flash) : '';
   const saveBtn = `<button type="submit" class="rkr-admin-settings-submit" aria-label="Save settings" title="Save settings">${icon('save', 18)}</button>`;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -263,8 +264,11 @@ ${renderIntegrationRow({
 </section>`;
 }
 
-function renderFlash(flash: { kind: 'ok' | 'error'; text: string }): string {
-  return `<p class="rkr-admin-settings-flash is-${flash.kind}" role="status">${escapeText(flash.text)}</p>`;
+function renderFlash(flash: { kind: 'ok' | 'error' | 'info'; text: string }): string {
+  // `info` is a server-side notice (e.g. a system page that is still
+  // markdown-only); style it like the success banner.
+  const cls = flash.kind === 'error' ? 'error' : 'ok';
+  return `<p class="rkr-admin-settings-flash is-${cls}" role="status">${escapeText(flash.text)}</p>`;
 }
 
 /** Short-form display (first 12 chars) for the bottom-of-page chip;

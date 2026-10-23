@@ -5,12 +5,13 @@
 //   2. Tag pills appear after saving a published post with tags.
 //   3. Clicking a tag pill filters the list.
 //
-// Uses POST /admin/posts directly (skips the TipTap editor) to keep
+// Uses POST /admin/blocks directly (skips the blocks UI) to keep
 // setup fast, but exercises the full server path: save → reindex → render.
 
 import type { Page } from '@playwright/test';
 
 import { expect, test } from './coverage-fixtures.ts';
+import { seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -37,15 +38,13 @@ test('tag rail: appears after saving a published post with tags', async ({ page 
   await loginAndGetPage(page);
 
   // Save a published post with two tags via the API (session cookie sent automatically).
-  const res = await page.request.post('/admin/posts', {
-    data: {
-      title: 'Tag Rail Test Post',
-      markdown: 'Hello world.',
-      status: 'published',
-      tags: ['mountains', 'hiking']
-    }
+  await seedBlockPage(page, {
+    slug: `e2e-tag-rail-${Date.now()}`,
+    title: 'Tag Rail Test Post',
+    markdown: 'Hello world.',
+    status: 'published',
+    tags: ['mountains', 'hiking']
   });
-  expect(res.ok()).toBeTruthy();
 
   await page.goto('/');
   await expect(page.locator('.rkr-tag-rail')).toBeVisible();
@@ -57,11 +56,18 @@ test('tag rail: clicking a pill filters the post list', async ({ page }) => {
   await loginAndGetPage(page);
 
   // Two posts: one tagged 'rivers', one untagged.
-  await page.request.post('/admin/posts', {
-    data: { title: 'Rivers Post', markdown: 'Water.', status: 'published', tags: ['rivers'] }
+  await seedBlockPage(page, {
+    slug: `e2e-rivers-${Date.now()}`,
+    title: 'Rivers Post',
+    markdown: 'Water.',
+    status: 'published',
+    tags: ['rivers']
   });
-  await page.request.post('/admin/posts', {
-    data: { title: 'Untagged Post', markdown: 'Dry.', status: 'published' }
+  await seedBlockPage(page, {
+    slug: `e2e-untagged-${Date.now()}`,
+    title: 'Untagged Post',
+    markdown: 'Dry.',
+    status: 'published'
   });
 
   await page.goto('/');

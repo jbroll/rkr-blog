@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { expect, test } from './coverage-fixtures.ts';
+import { seedBlockPage, videoBlock } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -27,12 +28,14 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
 
 async function seedPost(
   page: import('@playwright/test').Page,
-  body: { title: string; markdown: string; slug: string }
+  body: { title: string; slug: string; video: Record<string, unknown> }
 ): Promise<void> {
-  const res = await page.request.post('/admin/posts', {
-    data: { slug: body.slug, title: body.title, status: 'published', markdown: body.markdown }
+  await seedBlockPage(page, {
+    slug: body.slug,
+    title: body.title,
+    status: 'published',
+    body: [body.video]
   });
-  expect(res.status()).toBe(200);
 }
 
 /** Generate a tiny 2s 160x120 h264/aac mp4 via ffmpeg. The mp4 muxer
@@ -95,7 +98,7 @@ test('site: public video derivative serves full + Range/206 + poster; bad ids 40
   await seedPost(page, {
     title: 'video post',
     slug,
-    markdown: `::video{ids="${upload.id}"}\n`
+    video: videoBlock(upload.id)
   });
 
   // ---- the rendered post carries the widget ---------------------------

@@ -313,7 +313,8 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     await app.register(registerAdminBlockRoutes, {
       siteRoot,
       getSite: () => opts.site ?? siteConfig(),
-      requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
+      requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate),
+      ...(opts.db ? { db: opts.db } : {})
     });
 
     if (opts.startWorker !== false) {

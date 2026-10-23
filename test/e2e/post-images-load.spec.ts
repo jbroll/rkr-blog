@@ -13,6 +13,7 @@
 import sharp from 'sharp';
 
 import { expect, test } from './coverage-fixtures.ts';
+import { figureBlock, seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 const N_IMAGES = 6;
@@ -75,16 +76,12 @@ test('site: multi-image post served immediately after save — every <img> loads
   // a single-image figure. Pre-warm-on-save enqueues every
   // (variant × output) combo into the worker queue.
   const slug = `e2e-multi-${Date.now()}`;
-  const refs = ids.map((id, i) => `::figure{ids=${id.slice(0, 8)} alts="img-${i}"}`).join('\n\n');
-  const save = await page.request.post('/admin/posts', {
-    data: {
-      slug,
-      title: 'multi-image post',
-      status: 'published',
-      markdown: `${refs}\n`
-    }
+  await seedBlockPage(page, {
+    slug,
+    title: 'multi-image post',
+    status: 'published',
+    body: ids.map((id, i) => figureBlock(id.slice(0, 8), { alts: `img-${i}` }))
   });
-  expect(save.status()).toBe(200);
 
   // Capture every /img response so we can assert the eventual
   // status of each. Browser fires multiple requests per <img> as

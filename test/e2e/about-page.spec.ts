@@ -2,8 +2,9 @@
 //   1. Header nav: Home link omitted on the home page (it links to
 //      itself), present on non-home pages; About / Login always shown
 //   2. /about 404s before the _about post is seeded
-//   3. settings → "Create About" → editor opens on _about slug
-//   4. Filling the title and saving creates _about.md → /about renders
+//   3. settings → "Create About" seeds _about.md and returns to settings
+//      with the system-page notice (system pages stay markdown-only)
+//   4. /about renders the seeded _about page
 
 import { test as coverageTest, expect } from './coverage-fixtures.ts';
 
@@ -36,16 +37,16 @@ test('header nav: Home omitted on /, present off-home; About/Login always; /abou
   await expect(offHomeNav.locator('a[href="/login"]')).toBeVisible();
 });
 
-test('settings → Create About → editor opens on _about; /about then renders', async ({ page }) => {
+test('settings → Create About seeds _about and returns to settings with a notice; /about then renders', async ({
+  page
+}) => {
   await login(page);
   await page.goto('/admin/settings');
   await page.locator('a[href="/admin/about/edit"]').click();
-  await expect(page).toHaveURL(/\/admin\/editor\?slug=_about/);
-  await page.locator('#rkr-title').fill('About');
-  await page.locator('#rkroll-admin-toolbar button[data-cmd="save"]').click();
-  await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved \//, {
-    timeout: 10_000
-  });
+  await expect(page).toHaveURL(/\/admin\/settings\?flash=system-pages/);
+  await expect(page.locator('.rkr-admin-settings-flash')).toContainText('still markdown-backed');
+  await expect(page.locator('a[href="/admin/about/edit"]')).toContainText('Edit About');
+
   await page.goto('/about');
   await expect(page.locator('main')).toContainText('About');
   await expect(page.locator('.rkr-comment-form')).toHaveCount(0);

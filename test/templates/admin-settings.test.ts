@@ -100,6 +100,21 @@ test('renderAdminSettingsPage: error flash renders inline; ok flash does not', (
     flash: { kind: 'error', text: 'title too long' }
   });
   assert.match(err, /class="rkr-admin-settings-flash is-error"[^>]*>title too long/);
+
+  const info = renderAdminSettingsPage({
+    site: { title: 'rkroll' },
+    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
+    persisted: {},
+    themes: ['default'],
+    gdriveConnected: false,
+    onedriveConnected: false,
+    gphotosConnected: false,
+    gitHash: 'unknown',
+    hasBanner: false,
+    hasAbout: false,
+    flash: { kind: 'info', text: 'still markdown-backed' }
+  });
+  assert.match(info, /class="rkr-admin-settings-flash is-ok"[^>]*>still markdown-backed/);
 });
 
 test('renderAdminSettingsPage: save button is in the heading row with a disk icon', () => {

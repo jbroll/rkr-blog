@@ -262,8 +262,10 @@ export function registerAdminSettingsRoutes(
     }
   );
 
-  // GET /admin/banner/edit — create _site-banner.md if absent, then open it
-  // in the blocks editor. Hides the _site-banner slug from the settings UI.
+  // GET /admin/banner/edit — create _site-banner.md if absent, then
+  // return to settings with a notice. _site-banner stays markdown-only
+  // until system pages migrate (the blocks endpoints reject leading
+  // underscores), so redirecting into the blocks editor would 404.
   fastify.get('/admin/banner/edit', { ...guard }, async (_req, reply) => {
     const bannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
     const exists = fs.existsSync(bannerPath);
@@ -277,19 +279,20 @@ export function registerAdminSettingsRoutes(
         `---\nslug: _site-banner\ntitle: Site Banner\nstatus: published\n---\n${body}`
       );
     }
-    return reply.redirect('/admin/blocks/edit/_site-banner', 302);
+    return reply.redirect('/admin/settings?flash=system-pages', 302);
   });
 
   // GET /admin/about/edit — create _about.md from a stub if absent,
-  // then open it in the blocks editor. Never overwrites existing
-  // content (idempotent seed).
+  // then return to settings with a notice. Same markdown-only system
+  // page constraint as the banner. Never overwrites existing content
+  // (idempotent seed).
   fastify.get('/admin/about/edit', { ...guard }, async (_req, reply) => {
     const aboutPath = path.join(siteRoot, 'content', 'posts', '_about.md');
     if (!fs.existsSync(aboutPath)) {
       fs.mkdirSync(path.dirname(aboutPath), { recursive: true });
       writeFileAtomicSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\n');
     }
-    return reply.redirect('/admin/blocks/edit/_about', 302);
+    return reply.redirect('/admin/settings?flash=system-pages', 302);
   });
 
   // POST /admin/settings/banner — set the site-wide banner image by ID.
@@ -349,7 +352,7 @@ function buildIngestResize(parts: {
 function decodeFlash(query: {
   flash?: string;
   err?: string;
-}): { kind: 'ok' | 'error'; text: string } | undefined {
+}): { kind: 'ok' | 'error' | 'info'; text: string } | undefined {
   if (typeof query.err === 'string' && query.err) {
     return { kind: 'error', text: query.err };
   }
@@ -358,6 +361,12 @@ function decodeFlash(query: {
   }
   if (query.flash === 'reindexed') {
     return { kind: 'ok', text: 'Search index rebuilt.' };
+  }
+  if (query.flash === 'system-pages') {
+    return {
+      kind: 'info',
+      text: 'Banner and About pages are still markdown-backed and are not yet editable as JSON blocks.'
+    };
   }
   return undefined;
 }

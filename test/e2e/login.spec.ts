@@ -24,8 +24,8 @@ test('token-login establishes a session and lands on the public index with admin
     page.waitForURL((url) => new URL(url).pathname === '/'),
     page.getByRole('button', { name: /Sign in with token/ }).click()
   ]);
-  // Admin chrome surfaces the entry points to the editor.
-  await expect(page.getByRole('link', { name: 'New post' })).toBeVisible();
+  // Admin chrome surfaces the entry point to the blocks editor.
+  await expect(page.getByRole('link', { name: 'New page' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
 });
 
@@ -37,7 +37,7 @@ test('token-login establishes a session and lands on the public index with admin
 // login-from-anon flow.
 test('login: anon visit followed by login shows admin chrome without reload', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('link', { name: 'New post' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'New page' })).toHaveCount(0);
 
   await page.goto('/login');
   await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
@@ -45,7 +45,7 @@ test('login: anon visit followed by login shows admin chrome without reload', as
     page.waitForURL((url) => new URL(url).pathname === '/'),
     page.getByRole('button', { name: /Sign in with token/ }).click()
   ]);
-  await expect(page.getByRole('link', { name: 'New post' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'New page' })).toBeVisible();
 });
 
 test('logout: sw-unregister strips ?_rkr param so URL bar stays clean', async ({ page }) => {
@@ -63,7 +63,7 @@ test('logout: sw-unregister strips ?_rkr param so URL bar stays clean', async ({
   // poll via waitForFunction instead.
   await page.waitForFunction(() => !location.search.includes('_rkr'));
   expect(page.url()).not.toContain('_rkr');
-  await expect(page.getByRole('link', { name: 'New post' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'New page' })).toHaveCount(0);
 });
 
 test('wrong token does not establish a session', async ({ page }) => {

@@ -10,6 +10,7 @@
 import sharp from 'sharp';
 
 import { expect, test } from './coverage-fixtures.ts';
+import { figureBlock, seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -40,15 +41,12 @@ test('site: <img> retries with ?rkr_retry=1 after a 202', async ({ page, context
   const { id } = (await upload.json()) as { id: string };
 
   const slug = `e2e-retry-${Date.now()}`;
-  const save = await page.request.post('/admin/posts', {
-    data: {
-      slug,
-      title: 'retry test',
-      status: 'published',
-      markdown: `::figure{ids=${id.slice(0, 8)} alts="r"}\n`
-    }
+  await seedBlockPage(page, {
+    slug,
+    title: 'retry test',
+    status: 'published',
+    body: [figureBlock(id.slice(0, 8), { alts: 'r' })]
   });
-  expect(save.status()).toBe(200);
 
   // Route-intercept: first /img request returns 202 with no body
   // (img-retry sees `error` event), second + onwards pass through.

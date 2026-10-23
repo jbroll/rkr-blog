@@ -31,7 +31,7 @@ async function setup(t: TestContext) {
     await app.close();
     events.removeAllListeners('enqueued');
   });
-  return { root, app };
+  return { root, app, db };
 }
 
 describe('admin blocks save', () => {
@@ -47,6 +47,76 @@ describe('admin blocks save', () => {
       fs.readFileSync(path.join(root, 'content', 'blocks', 'saved.json'), 'utf8')
     ) as { fields: { slug: string } };
     assert.equal(saved.fields.slug, 'saved');
+  });
+
+  it('POST /admin/blocks/:slug reindexes so the page is visible on / and /:slug', async (t) => {
+    const { root, app } = await setup(t);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/fresh-page',
+      payload: {
+        tree: {
+          version: 1,
+          body: [{ type: 'text', markdown: 'Fresh body.' }],
+          fields: { title: 'Fresh page', slug: 'fresh-page', status: 'published' }
+        }
+      }
+    });
+    assert.equal(res.statusCode, 200);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'fresh-page.json')));
+
+    const home = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(home.statusCode, 200);
+    assert.match(home.body, /Fresh page/);
+
+    const page = await app.inject({ method: 'GET', url: '/fresh-page' });
+    assert.equal(page.statusCode, 200);
+    assert.match(page.body, /Fresh body/);
+  });
+
+  it('POST /admin/blocks/:slug prewarms image variants referenced by the tree', async (t) => {
+    const { root, app, db } = await setup(t);
+    const id = 'e'.repeat(64);
+    const originalDir = path.join(root, 'originals', id.slice(0, 2), id.slice(2, 4));
+    fs.mkdirSync(originalDir, { recursive: true });
+    fs.writeFileSync(path.join(originalDir, `${id}.webp`), Buffer.alloc(8));
+    fs.mkdirSync(path.join(root, 'sidecars'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'sidecars', `${id}.json`),
+      JSON.stringify({
+        version: 1,
+        original: id,
+        source: {},
+        ops: [],
+        variants: [
+          { w: 640, h: 480, fit: 'inside' },
+          { w: 320, h: 240, fit: 'inside' }
+        ],
+        outputs: [{ format: 'webp', quality: 80 }]
+      })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/with-image',
+      payload: {
+        tree: {
+          version: 1,
+          body: [{ type: 'figure', slots: { ids: id } }],
+          fields: { title: 'With image', slug: 'with-image' }
+        }
+      }
+    });
+    assert.equal(res.statusCode, 200);
+
+    const rows = db
+      .prepare<{ kind: string; payload: string }>('SELECT kind, payload FROM jobs')
+      .all();
+    assert.equal(rows.length, 2, 'one job per variant × output');
+    for (const row of rows) {
+      assert.equal(row.kind, 'render');
+      assert.equal((JSON.parse(row.payload) as { originalId: string }).originalId, id);
+    }
   });
 
   it('GET /admin/blocks/macros lists the palette entries', async (t) => {

@@ -13,7 +13,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import fastifyStatic from '@fastify/static';
-import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
@@ -50,32 +49,6 @@ const app = await buildApp({
   // a test with bad logic can't spam infinitely) without flaking.
   auth: { secureCookies: false, tokenLoginRateMax: 100 }
 });
-// E2E-only test hook: bump a post's mtime forward by a given offset
-// to simulate a competing-device write. Drives the savePost-conflict
-// e2e (phase 1l). Lives in server-runner.ts so it never reaches
-// production buildApp; defense in depth — slug regex matches the
-// /admin/posts handler so the param can't escape the posts dir.
-const E2E_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
-app.post<{ Params: { slug: string }; Body: { offsetMs?: number } }>(
-  '/admin/test/bump-mtime/:slug',
-  async (
-    request: FastifyRequest<{ Params: { slug: string }; Body: { offsetMs?: number } }>,
-    reply: FastifyReply
-  ) => {
-    const slug = request.params.slug;
-    if (!E2E_SLUG_RE.test(slug) || slug.length > 100) {
-      return reply.code(400).send({ error: 'invalid slug' });
-    }
-    const offsetMs = typeof request.body?.offsetMs === 'number' ? request.body.offsetMs : 5_000;
-    const filePath = path.join(root, 'content', 'posts', `${slug}.md`);
-    if (!fs.existsSync(filePath)) {
-      return reply.code(404).send({ error: 'not found' });
-    }
-    const future = new Date(Date.now() + offsetMs);
-    fs.utimesSync(filePath, future, future);
-    return { mtime: future.toISOString() };
-  }
-);
 
 // Static mount for the standalone image PWA, gated like production's
 // ENABLE_TEST_ROUTES routes (src/server.ts) even though this runner
