@@ -163,6 +163,34 @@ async function renderNode(
   }
 }
 
+/** Raw figure `ids` strings in a tree, following macro references one
+ * level deep per name (cycle-guarded). Callers feed these to the
+ * image-map prepass, which splits comma lists itself. */
+export function collectBlockFigureIds(
+  tree: BlockTree,
+  getMacroTree?: (name: string) => BlockNode | undefined
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const walk = (node: BlockNode): void => {
+    if (node.type === 'figure' && typeof node.slots?.ids === 'string' && node.slots.ids) {
+      out.push(node.slots.ids);
+      return;
+    }
+    if (node.type === 'macro') {
+      if (!getMacroTree || seen.has(node.macro)) return;
+      seen.add(node.macro);
+      const def = getMacroTree(node.macro);
+      if (def) walk(def);
+      return;
+    }
+    const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
+    for (const k of n.children ?? n.blocks ?? []) walk(k);
+  };
+  for (const n of tree.body) walk(n);
+  return out;
+}
+
 /** Render a whole page tree. Unknown macros and cycles become HTML
  * comments so authoring errors are visible without breaking the page. */
 export async function renderBlockTree(

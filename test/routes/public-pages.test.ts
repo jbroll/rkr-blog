@@ -15,7 +15,14 @@ import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-pages-'));
-  for (const sub of ['sidecars', 'originals', 'cache/img', 'content/posts', 'data']) {
+  for (const sub of [
+    'sidecars',
+    'originals',
+    'cache/img',
+    'content/posts',
+    'content/blocks',
+    'data'
+  ]) {
     fs.mkdirSync(path.join(root, sub), { recursive: true });
   }
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -162,6 +169,60 @@ test('GET /:slug 404s for an unknown slug with the themed not-found page', async
   const res = await app.inject({ method: 'GET', url: '/no-such-post' });
   assert.equal(res.statusCode, 404);
   assert.match(res.body, /<main[^>]*class="rkr-notfound"/);
+});
+
+test('GET /:slug renders the JSON twin when one exists', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(
+    root,
+    'twin.md',
+    { slug: 'twin', title: 'Markdown title', status: 'published', date: '2026-05-06T14:00:00Z' },
+    'markdown body'
+  );
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'twin.json'),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'json body here' }] }],
+      fields: { title: 'JSON title', slug: 'twin', status: 'published' }
+    })
+  );
+  runReindex(root);
+  const res = await app.inject({ method: 'GET', url: '/twin' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /json body here/);
+  assert.match(res.body, /JSON title/);
+  assert.doesNotMatch(res.body, /markdown body/);
+});
+
+test('GET /:slug falls back to markdown without a twin', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(
+    root,
+    'plain.md',
+    { slug: 'plain', title: 'Plain', status: 'published', date: '2026-05-06T14:00:00Z' },
+    'only markdown here'
+  );
+  runReindex(root);
+  const res = await app.inject({ method: 'GET', url: '/plain' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /only markdown here/);
+});
+
+test('GET / lists JSON-only pages in the index', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'solo.json'),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'text', markdown: 'solo page' }],
+      fields: { title: 'Solo page', slug: 'solo', status: 'published' }
+    })
+  );
+  runReindex(root);
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Solo page/);
 });
 
 test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking headers', async (t) => {

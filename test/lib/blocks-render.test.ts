@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { BlockTree } from '../../src/lib/blocks.ts';
-import { type RenderMacroLib, renderBlockTree } from '../../src/lib/blocks-render.ts';
+import {
+  collectBlockFigureIds,
+  type RenderMacroLib,
+  renderBlockTree
+} from '../../src/lib/blocks-render.ts';
 import type { ImageMap } from '../../src/lib/image-map.ts';
 import type { VideoMapView } from '../../src/lib/widgets.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
@@ -70,5 +74,30 @@ describe('blocks-render', () => {
     };
     const html = await renderBlockTree(tree, fakeCtx, emptyLib);
     assert.match(html, /<a[^>]*href="\/join"[^>]*>Join<\/a>/);
+  });
+
+  it('collects figure ids including inside macros', () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'figure', slots: { ids: 'aa11, bb22' } },
+        { type: 'macro', macro: 'wall' }
+      ]
+    };
+    assert.deepEqual(collectBlockFigureIds(tree), ['aa11, bb22']);
+    assert.deepEqual(
+      collectBlockFigureIds(tree, (n) =>
+        n === 'wall' ? { type: 'figure', slots: { ids: 'cc33' } } : undefined
+      ),
+      ['aa11, bb22', 'cc33']
+    );
+    // Cycles terminate.
+    assert.deepEqual(
+      collectBlockFigureIds({ version: 1, body: [{ type: 'macro', macro: 'loop' }] }, () => ({
+        type: 'macro',
+        macro: 'loop'
+      })),
+      []
+    );
   });
 });

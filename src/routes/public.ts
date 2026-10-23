@@ -11,11 +11,14 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
+import { readBlockPage } from '../lib/block-pages.ts';
+import { collectBlockFigureIds, renderBlockTree } from '../lib/blocks-render.ts';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
+import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
@@ -331,29 +334,72 @@ export default async function publicRoutes(
       // visitors keep the published-only filter.
       if (!row || (row.status !== 'published' && !req.user)) return send404(req, reply);
 
-      const fullPath = path.join(siteRoot, row.path);
-      const raw = await fs.promises.readFile(fullPath, 'utf8');
-      const parsed = parsePost(raw);
-      const ctx = {
-        images: await buildImageMap(siteRoot, parsed.ast, { log: req.log }),
+      // JSON-first: a stored twin renders the page body; the markdown
+      // file (when paired) still supplies nothing at render time — the
+      // index already carries its title, date, status, and tags.
+      const twin = readBlockPage(siteRoot, row.slug);
+      const widgetsCtx = {
+        images: new Map(),
         videos: await buildVideoMap(siteRoot),
         widgets
       };
-      const bannerHtml = await extractPostBanner(parsed.ast, ctx);
-      const bodyHtml = await renderPostHtml(parsed.ast, ctx);
+      let title: string;
+      let date: string | undefined;
+      let subtitle: string | undefined;
+      let bannerHtml: string | null = null;
+      let bodyHtml: string;
+      if (twin) {
+        const lib = loadMacroLibrary(path.join(siteRoot, 'macros'));
+        const getMacroTree = (name: string) => lib.get(name)?.tree;
+        const synthetic = collectBlockFigureIds(twin.tree, getMacroTree).map((ids) => ({
+          type: 'leafDirective',
+          name: 'figure',
+          attributes: { ids },
+          children: []
+        }));
+        const ctx = {
+          images: await buildImageMap(siteRoot, synthetic as unknown as DirectiveNode[], {
+            log: req.log
+          }),
+          videos: widgetsCtx.videos,
+          widgets
+        };
+        bodyHtml = await renderBlockTree(twin.tree, ctx, {
+          get: (n: string) => {
+            const d = lib.get(n);
+            return d ? { defaults: d.defaults, tree: d.tree } : undefined;
+          }
+        });
+        title = twin.title;
+        date = row.published_at ?? undefined;
+      } else {
+        const fullPath = path.join(siteRoot, row.path);
+        const raw = await fs.promises.readFile(fullPath, 'utf8');
+        const parsed = parsePost(raw);
+        const ctx = {
+          images: await buildImageMap(siteRoot, parsed.ast, { log: req.log }),
+          videos: widgetsCtx.videos,
+          widgets
+        };
+        bannerHtml = await extractPostBanner(parsed.ast, ctx);
+        bodyHtml = await renderPostHtml(parsed.ast, ctx);
+        title = parsed.frontmatter.title;
+        date = parsed.frontmatter.date;
+        if (typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()) {
+          subtitle = parsed.frontmatter.subtitle;
+        }
+      }
 
-      const postId = getPostIdBySlug(db, parsed.frontmatter.slug);
+      const postId = getPostIdBySlug(db, row.slug);
       const comments = postId === null ? [] : listPublishedThread(db, postId);
 
       const html = renderPostPage({
         site,
         assets: serverAssets(),
-        title: parsed.frontmatter.title,
-        ...(typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()
-          ? { subtitle: parsed.frontmatter.subtitle }
-          : {}),
-        slug: parsed.frontmatter.slug,
-        ...(parsed.frontmatter.date ? { date: parsed.frontmatter.date } : {}),
+        title,
+        ...(subtitle ? { subtitle } : {}),
+        slug: row.slug,
+        ...(date ? { date } : {}),
         bodyHtml,
         ...(bannerHtml ? { bannerHtml } : {}),
         ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
