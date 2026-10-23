@@ -248,11 +248,6 @@ ${siteHead(data.site, { isAdmin: true })}
   </div>
 </dialog>
 <div id="rkroll-admin-root">
-  <aside id="rkr-blocks-palette-root" aria-label="Reusable blocks"></aside>
-  <div id="rkr-preview-toggle" role="group" aria-label="Preview width">
-    <button type="button" data-preview-width="1200" aria-pressed="true">Desktop</button>
-    <button type="button" data-preview-width="390" aria-pressed="false">Phone</button>
-  </div>
   <article id="rkroll-admin-article"></article>
   <button type="button" id="rkr-sync-badge" aria-label="Sync status (click for storage panel)">
     <span class="rkr-sync-dot" aria-hidden="true"></span>
