@@ -73,7 +73,7 @@ SITE_ROOT=$HOME/site PORT=3000 npm start
 curl http://127.0.0.1:3000/health      # → {"ok":true}
 ```
 
-Browse the editor at `http://127.0.0.1:3000/admin/editor`.
+Browse the blocks editor at `http://127.0.0.1:3000/admin/blocks`.
 
 ### First-time login
 

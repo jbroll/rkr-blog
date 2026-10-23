@@ -42,7 +42,7 @@ else in the suite runs without them.
 
 ## 1. Upstream fundamentals (per Playwright docs)
 
-- **Selector preference order**: role-based (`getByRole('button', { name: /Save/ })`), then test ids and user-facing attributes (`getByLabel('Admin token')`), then ids (`page.locator('#rkr-figure-attrs')`). Avoid XPath / CSS class selectors — the DOM changes, those break.
+- **Selector preference order**: role-based (`getByRole('button', { name: /Save/ })`), then test ids and user-facing attributes (`getByLabel('Admin token')`), then ids (`page.locator('#rkr-figure-attrs-figure')`). Avoid XPath / CSS class selectors — the DOM changes, those break.
 - **Web-first assertions**: use `await expect(locator).toX(...)` with timeouts, not `expect(await locator.isVisible()).toBe(true)`. The former auto-retries; the latter is one-shot and flaky.
 - **Test isolation**: every test gets a fresh `page` (and fresh cookies / storage). No state-via-side-channel between tests beyond what's on disk in `SITE_ROOT`.
 - **Debugging**: `--trace on` in `playwright.config.ts` (already set to `on-first-retry`); `npx playwright show-trace` opens the recorded run.
@@ -60,9 +60,9 @@ The above is generic Playwright wisdom and it all applies. Specifics below are w
 | Buttons with visible text | `page.getByRole('button', { name: /Sign in with token/ })` | `login.spec.ts:24` |
 | Stable DOM hooks the templates own | `page.locator('.rkr-tag-rail')` | `tag-rail.spec.ts:31` |
 | Elements scoped inside a rendered widget | `carousel.locator('.rkr-carousel-dot')` | `public-figures.spec.ts:114` |
-| Status line as a DOM signal | `await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, { timeout: 10_000 });` | many places |
+| Server-rendered notice | `page.locator('.rkr-admin-settings-flash')` | `about-page.spec.ts:47` |
 
-The status-line pattern is **load-bearing**. The admin SPA writes "uploaded …", "rotate …", "saved edits …" via `setStatus()` after async ops complete. Most editor flows have no other DOM signal that tells you the canvas pipeline + bake-upload + sidecar-write all succeeded. **When you add a new editor op, add a `setStatus(...)` line for it** so e2e has something to wait on.
+Prefer a server-rendered notice or a widget's own DOM state over sleeps: e2e needs a deterministic signal that async work completed.
 
 ---
 
@@ -101,7 +101,7 @@ Some editor flows can't be driven through the UI alone:
 - **Multi-image figure construction**: `Gallery` button uses a transient `<input type="file" multiple>` Playwright can't target by selector.
 - **Programmatic node manipulation**: deleting a figure at a known position, calling `chain().updateAttributes(...)`, etc.
 
-We expose `window.__rkrEditor` only when the URL is `/admin/editor?e2e=1`:
+We expose `window.__rkrEditor` only when the URL is `/admin/view/:slug?e2e=1`:
 
 ```ts
 // src/admin/main.ts
@@ -113,7 +113,7 @@ if (new URLSearchParams(location.search).get('e2e') === '1') {
 Specs use it via `page.evaluate`:
 
 ```ts
-await page.goto('/admin/editor?e2e=1');
+await page.goto('/admin/view/my-post?e2e=1');
 // ...two single-image figures inserted via the file input above ...
 await page.evaluate(({ a, b }) => {
   const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
@@ -185,7 +185,7 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/admin/login');
   await page.getByLabel('Admin token').fill(ADMIN_TOKEN);
   await Promise.all([
-    page.waitForURL('**/admin/editor'),
+    page.waitForURL((url) => new URL(url).pathname === '/'),
     page.getByRole('button', { name: /Sign in with token/ }).click()
   ]);
   await expect(page.locator('#rkroll-admin-root')).toBeVisible();
@@ -220,7 +220,7 @@ Things to wire on day one:
 1. Import `test` + `expect` from `./coverage-fixtures.ts` (not `@playwright/test`). Without this the spec runs but contributes nothing to coverage.
 2. Generate a unique PNG. Reuse one of the existing colors only if your spec doesn't save edits to the sidecar (so it can tolerate prior state).
 3. Pick a slug pattern: `e2e-<name>-${Date.now()}`.
-4. If the flow needs editor manipulation Playwright can't reach, navigate to `/admin/editor?e2e=1` and use `window.__rkrEditor`.
+4. If the flow needs editor manipulation Playwright can't reach, navigate to `/admin/view/:slug?e2e=1` and use `window.__rkrEditor`.
 
 ---
 
@@ -347,7 +347,7 @@ is still testable in Node with fakes: the service worker entry
 | Test fails with a 429 from `/admin/auth/token-login` | Multiple test runs in 5 min hit the rate limit | `CI=1 npm run test:e2e` for a fresh server, or wait |
 | Test fails with "post already exists" on save | Slug literal reused | `${Date.now()}` suffix |
 | Image-edit panel snapshots show unexpected ops | Shared sidecar from a prior test using the same PNG bytes | Generate a unique PNG color |
-| `window.__rkrEditor` is undefined | Loaded `/admin/editor` without `?e2e=1` | Add the query string |
+| `window.__rkrEditor` is undefined | Loaded `/admin/view/:slug` without `?e2e=1` | Add the query string |
 | Coverage report shows lots of node_modules | `entryFilter` / `sourceFilter` too loose | Tighten in `coverage-config.ts` |
 | Commit POST returns 409 | Stale `X-Rkr-Sidecar-Base` — another write landed since the edit started | Re-fetch `GET /admin/sidecar/:id/meta`, echo its `updatedAt`, retry |
 | Selector for a button or input doesn't exist | Bundle wasn't rebuilt after a template/SPA change | `npm run build:admin && npm run build:site` |
