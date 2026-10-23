@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Root } from 'mdast';
-
+import { type BlockNode, type BlockTree, parseBlockTree } from './blocks.ts';
 import { type PostFrontmatter, parsePost } from './content.ts';
 import { type Db, open } from './db.ts';
 import { migrate } from './migrate.ts';
@@ -52,12 +52,16 @@ function doReindex(
 ): { inserted: number; updated: number; removed: number } {
   const postsDir = path.join(siteRoot, 'content', 'posts');
   if (!fs.existsSync(postsDir)) fs.mkdirSync(postsDir, { recursive: true });
+  const blocksDir = path.join(siteRoot, 'content', 'blocks');
+  if (!fs.existsSync(blocksDir)) fs.mkdirSync(blocksDir, { recursive: true });
 
   // Collect ALL filenames on disk first, independent of parseability.
   // This is the ground truth for "file exists" — used in the orphan step
   // to ensure a parse failure never triggers a cascade delete of comments.
   const onDiskFiles = new Set(listMarkdown(postsDir));
+  const onDiskBlocks = new Set(listJson(blocksDir));
   const slugToFile = new Map<string, string>(); // duplicate-slug detection
+  const slugToBlockFile = new Map<string, string>();
 
   let inserted = 0;
   let updated = 0;
@@ -165,6 +169,95 @@ function doReindex(
         Array.isArray(frontmatter.tags) ? (frontmatter.tags as string[]) : []
       );
     }
+
+    // JSON twins: content/blocks/*.json matched to posts by fields.slug.
+    // A twin overrides its markdown sibling's indexed fields (title,
+    // status, tags, FTS body) while the row keeps the markdown path and
+    // id, so comment threads survive the cutover. JSON-only pages get
+    // their own rows pointing at content/blocks/.
+    for (const filename of onDiskBlocks) {
+      const fullPath = path.join(blocksDir, filename);
+      let raw: string;
+      try {
+        raw = fs.readFileSync(fullPath, 'utf8');
+      } catch {
+        continue;
+      }
+      let tree: BlockTree;
+      let fields: Record<string, unknown>;
+      try {
+        const parsed = JSON.parse(raw) as { version?: unknown; body?: unknown; fields?: unknown };
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          !parsed.fields ||
+          typeof parsed.fields !== 'object'
+        ) {
+          throw new Error('blocks page needs object fields');
+        }
+        tree = parseBlockTree({ version: 1, body: parsed.body });
+        fields = parsed.fields as Record<string, unknown>;
+        if (typeof fields.slug !== 'string' || !fields.slug || typeof fields.title !== 'string') {
+          throw new Error('blocks page needs string fields.slug and fields.title');
+        }
+      } catch (err) {
+        // biome-ignore lint/suspicious/noConsole: surface unparseable twins to reindex output
+        console.error(
+          `reindex: JSON parse failed for ${filename} — retaining any existing DB row and comments: ${(err as Error).message}`
+        );
+        continue;
+      }
+      const slug = fields.slug as string;
+      if (slug.startsWith('_')) continue;
+      // Twins share their slug with the markdown sibling by design;
+      // only a second JSON file claiming the same slug is a duplicate.
+      if (slugToBlockFile.has(slug)) {
+        // biome-ignore lint/suspicious/noConsole: surface duplicate slugs to reindex output
+        console.error(`reindex: duplicate slug "${slug}" in blocks/${filename} — skipping`);
+        continue;
+      }
+      slugToBlockFile.set(slug, filename);
+
+      const stat = fs.statSync(fullPath);
+      const created = new Date(stat.birthtimeMs || stat.mtimeMs).toISOString();
+      const updatedAt = new Date(stat.mtimeMs).toISOString();
+      const status: 'draft' | 'published' = fields.status === 'draft' ? 'draft' : 'published';
+      const publishedAt =
+        status === 'published' ? (typeof fields.date === 'string' ? fields.date : updatedAt) : null;
+      const tags = Array.isArray(fields.tags) ? (fields.tags as string[]) : [];
+
+      // Match by slug only: a twin shares its row (and comment thread)
+      // with the markdown sibling, never by path.
+      const existing = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
+      if (existing) {
+        db.prepare(
+          `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?
+           WHERE id = ?`
+        ).run(slug, fields.title as string, status, updatedAt, publishedAt, existing.id);
+        updated++;
+      } else {
+        const relPath = path.posix.join('content', 'blocks', filename);
+        db.prepare(
+          `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).run(slug, fields.title as string, status, created, updatedAt, publishedAt, relPath);
+        insertedSlugs.add(slug);
+        inserted++;
+      }
+
+      db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(slug);
+      db.prepare('INSERT INTO posts_fts (slug, title, tags, body) VALUES (?, ?, ?, ?)').run(
+        slug,
+        fields.title as string,
+        tags.join(' '),
+        extractBlockPlainText(tree)
+      );
+
+      const postId =
+        existing?.id ??
+        (db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug)?.id as number);
+      syncPostTags(db, postId, tags);
+    }
   });
   upsert();
 
@@ -178,11 +271,9 @@ function doReindex(
     const allAfterUpsert = db
       .prepare<{ id: number; slug: string; path: string }>('SELECT id, slug, path FROM posts')
       .all();
-    const orphansBeforeDelete = allAfterUpsert.filter((row) => {
-      if (row.slug.startsWith('_')) return false;
-      const filename = path.basename(row.path);
-      return !onDiskFiles.has(filename);
-    });
+    const orphansBeforeDelete = allAfterUpsert.filter((row) =>
+      isOrphanRow(row, onDiskFiles, onDiskBlocks)
+    );
     // Build map of newly inserted rows (those whose slug was not in before snapshot).
     const newlyInserted = allAfterUpsert.filter((r) => insertedSlugs.has(r.slug));
     for (const orphan of orphansBeforeDelete) {
@@ -246,13 +337,7 @@ function doReindex(
     const all = db
       .prepare<{ id: number; slug: string; path: string }>('SELECT id, slug, path FROM posts')
       .all();
-    const orphans = all.filter((row) => {
-      if (row.slug.startsWith('_')) return false;
-      // Derive the filename from the stored path (e.g. "content/posts/foo.md" → "foo.md").
-      const filename = path.basename(row.path);
-      // Only an orphan if the file is truly gone from disk.
-      return !onDiskFiles.has(filename);
-    });
+    const orphans = all.filter((row) => isOrphanRow(row, onDiskFiles, onDiskBlocks));
     for (const o of orphans) {
       db.prepare('DELETE FROM posts WHERE id = ?').run(o.id);
       db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(o.slug);
@@ -286,10 +371,54 @@ function syncPostTags(db: Db, postId: number, rawTags: string[]): void {
 }
 
 function listMarkdown(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
     .filter((f) => f.endsWith('.md'))
     .sort();
+}
+
+/** JSON page files backing the blocks editor. Missing dir (pre-blocks
+ * site roots) indexes as empty rather than throwing. */
+function listJson(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .sort();
+}
+
+/** Plain-text bag for FTS: every text leaf's markdown plus button and
+ * marquee labels, in document order. */
+function extractBlockPlainText(tree: BlockTree): string {
+  const parts: string[] = [];
+  const walk = (node: BlockNode): void => {
+    if (node.type === 'text' && node.markdown) parts.push(node.markdown);
+    if (node.type === 'button' && typeof node.slots?.label === 'string')
+      parts.push(node.slots.label);
+    if (node.type === 'marquee' && typeof node.slots?.text === 'string')
+      parts.push(node.slots.text);
+    if (node.type === 'macro') return;
+    const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
+    for (const k of n.children ?? n.blocks ?? []) walk(k);
+  };
+  for (const n of tree.body) walk(n);
+  return parts.join('\n');
+}
+
+/** Orphan test that knows both content dirs. Rows pointing into
+ * content/blocks/ are checked against the JSON listing; everything
+ * else keeps the historical basename-against-markdown rule. */
+function isOrphanRow(
+  row: { slug: string; path: string },
+  mdFiles: Set<string>,
+  blocksFiles: Set<string>
+): boolean {
+  if (row.slug.startsWith('_')) return false;
+  if (path.posix.dirname(row.path) === 'content/blocks') {
+    return !blocksFiles.has(path.basename(row.path));
+  }
+  return !mdFiles.has(path.basename(row.path));
 }
 
 export function readIndexedPosts(
