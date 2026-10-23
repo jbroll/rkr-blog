@@ -48,7 +48,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Test coverage
 
-- **Flaky: `editor: per-cell selection drives the image-edit panel for multi-image figures`** — `editor-flow.spec.ts:718` timed out waiting for the rotate status once and passed on retry. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
 - **Flaky: `about-page.spec.ts:46`** — timed out once during this branch's e2e runs. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
 - **Playwright: perspective-rectify + Google OAuth callback** —
   _revisit when:_ fixture infra grows, or a UI bug ships uncaught.

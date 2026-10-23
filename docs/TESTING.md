@@ -30,14 +30,13 @@ Run:
 ```bash
 npm run test:e2e            # full suite; ~2 min; produces coverage/e2e/
 npm run test:e2e -- --headed   # see what's happening in chromium
-npm run test:e2e -- editor-flow.spec.ts -g "rotate"   # one test
+npm run test:e2e -- tag-rail.spec.ts -g "no pills"   # one test
 ```
 
-The video specs (`video-upload.spec.ts`, `public-videos.spec.ts`) generate
-their mp4 fixtures with ffmpeg at test time — **ffmpeg + ffprobe must be
-installed** or those specs fail at fixture generation (see
-developer-quickstart.md §1). Everything else in the suite runs without
-them.
+The video spec (`public-videos.spec.ts`) generates its mp4 fixture with
+ffmpeg at test time — **ffmpeg + ffprobe must be installed** or the spec
+fails at fixture generation (see developer-quickstart.md §1). Everything
+else in the suite runs without them.
 
 ---
 
@@ -59,8 +58,8 @@ The above is generic Playwright wisdom and it all applies. Specifics below are w
 |---|---|---|
 | Form inputs with labels | `page.getByLabel('Admin token')` | `login.spec.ts:14` |
 | Buttons with visible text | `page.getByRole('button', { name: /Sign in with token/ })` | `login.spec.ts:24` |
-| Stable DOM ids the SPA owns | `page.locator('#rkr-image-edit')` | `editor-flow.spec.ts` throughout |
-| Selection within a multi-thumb figure | `page.locator('img[data-cell-index="1"]')` | `editor-flow.spec.ts:248` |
+| Stable DOM hooks the templates own | `page.locator('.rkr-tag-rail')` | `tag-rail.spec.ts:31` |
+| Elements scoped inside a rendered widget | `carousel.locator('.rkr-carousel-dot')` | `public-figures.spec.ts:114` |
 | Status line as a DOM signal | `await expect(page.locator('#rkroll-admin-status')).toContainText(/^saved edits /, { timeout: 10_000 });` | many places |
 
 The status-line pattern is **load-bearing**. The admin SPA writes "uploaded …", "rotate …", "saved edits …" via `setStatus()` after async ops complete. Most editor flows have no other DOM signal that tells you the canvas pipeline + bake-upload + sidecar-write all succeeded. **When you add a new editor op, add a `setStatus(...)` line for it** so e2e has something to wait on.

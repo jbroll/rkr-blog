@@ -231,9 +231,8 @@ export function registerAdminSettingsRoutes(
 
   // POST /admin/reindex — rebuild the posts table + search FTS index
   // from content/posts + content/blocks. Admin-guarded and idempotent;
-  // it is also the post-save step for remote pushes, since the blocks
-  // save route does not reindex on its own. Covers the one-time FTS
-  // population without shell access.
+  // remote pushes still call it explicitly after their blocks save, and
+  // it covers one-time FTS population without shell access.
   fastify.post('/admin/reindex', { ...guard }, async (_req, reply) => {
     runReindex(siteRoot);
     return reply.redirect('/admin/settings?flash=reindexed', 303);

@@ -778,9 +778,10 @@ step N's signal is green.
 - [x] `status-badge.ts` bottom-right indicator.
 - [x] Save-waits-for-uploads guard: `extractFigureIds` blocks
       `savePost` until referenced uploads drain.
-- [x] e2e: `test/e2e/offline-resilience.spec.ts` covers multi-op
-      queue, retry-with-backoff, intermittent drain recovery,
-      persistent-5xx halt, save-waits-for-uploads.
+- [x] Unit: `test/admin/sync-drain-race.test.ts` covers the drain
+      re-check race; `test/routes/admin-outbox-idempotency.test.ts`
+      covers replayed `(device,seq)` idempotency. The old editor-level
+      multi-op e2e was retired with the markdown editor.
 
 ### Step 15 — Pin existing posts + eviction
 
