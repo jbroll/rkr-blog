@@ -56,18 +56,21 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
     (r) => r.url().includes('/admin/blocks/') && r.request().method() === 'POST'
   );
 
-  // Drag the Image primitive below the text leaf.
+  // Drag the Image primitive below the text leaf. The drop inserts a
+  // placeholder in place (no reload) so the dropped item stays visible
+  // and edit mode is preserved.
   const box = await para.boundingBox();
   expect(box).not.toBeNull();
   const paletteImage = page.locator('.rkr-blocks-palette-item', { hasText: 'Image' });
   await paletteImage.dragTo(para, {
     targetPosition: { x: box!.width / 2, y: box!.height - 5 }
   });
-  // Insert saves, then the page reloads so the DOM stays the server render.
   await page.waitForResponse(
     (r) => r.url().includes('/admin/blocks/') && r.request().method() === 'POST'
   );
-  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  // No reload: edit mode stays active and the dropped figure placeholder
+  // is visible without re-entering edit.
+  await expect(page.locator('.rkr-unified-empty')).toBeVisible();
   const figureConfig = page.getByRole('button', { name: 'Configure figure' });
   await expect(figureConfig).toBeVisible();
 
