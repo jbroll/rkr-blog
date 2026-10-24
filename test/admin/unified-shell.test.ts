@@ -423,7 +423,7 @@ describe('unified shell figure dialog', () => {
     assert.equal(configs.length, 1);
     assert.equal(configs[0]?.getAttribute('aria-label'), 'Configure figure');
     configs[0]?.click();
-    const dialog = f.root.querySelector('.rkr-figure-dialog');
+    const dialog = f.root.querySelector('.rkr-cell-dialog');
     assert.ok(dialog, 'dialog opens on config click');
     const inputs = dialog.querySelectorAll('input');
     assert.equal(inputs.length, 3, 'ids, alts, captions inputs');

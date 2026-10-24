@@ -6,6 +6,8 @@
 // page) the mount point is simply empty.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
+import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { headIcons, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface BlocksEditPageData extends SiteChrome {
@@ -42,9 +44,6 @@ const UNIFIED_CSS = `
 .rkr-blocks-palette-right{position:sticky;top:1rem;align-self:start;max-height:calc(100vh - 2rem);overflow:auto;border-left:1px solid var(--rkr-rule);padding-left:1rem}
 .rkr-unified-shell[data-mode="view"] .rkr-blocks-palette-right{display:none}
 .rkr-unified-shell[data-mode="edit"] [data-rkr-path]:hover{outline:1px dashed var(--rkr-rule);outline-offset:4px}
-.rkr-figure-dialog{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:1000}
-.rkr-figure-dialog > *{background:var(--rkr-bg);color:var(--rkr-text);padding:1rem;border-radius:.5rem;max-width:32rem;width:90%;max-height:80vh;overflow:auto;border:1px solid var(--rkr-rule)}
-.rkr-figure-dialog-errors{color:var(--rkr-danger,crimson)}
 .rkr-macro-dialog{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:1000}
 .rkr-macro-dialog > *{background:var(--rkr-bg);color:var(--rkr-text);padding:1rem;border-radius:.5rem;max-width:32rem;width:90%;max-height:80vh;overflow:auto;border:1px solid var(--rkr-rule)}
 .rkr-unified-node-tools{display:flex;justify-content:flex-end;opacity:1;gap:.25rem}
@@ -69,6 +68,8 @@ export function renderBlocksEditPage(data: BlocksEditPageData): string {
 <title>Edit ${escapeText(data.slug)} — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+<style>${ADMIN_CSS_CORE}</style>
+<style>${ADMIN_CSS_DIALOGS}</style>
 <style>${UNIFIED_CSS}</style>
 </head>
 <body>

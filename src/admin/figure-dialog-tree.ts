@@ -83,6 +83,8 @@ interface DialogControl {
   textContent: string | null;
   value?: string;
   className?: string;
+  id?: string;
+  type?: string;
   setAttribute?(name: string, value: string): void;
   append?(...nodes: unknown[]): void;
   addEventListener?(type: string, listener: () => void): void;
@@ -111,9 +113,25 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   let errors: string[] = [];
 
   const shell = doc.createElement('div');
-  shell.className = 'rkr-figure-dialog';
+  shell.className = 'rkr-cell-dialog';
   shell.setAttribute('role', 'dialog');
-  shell.setAttribute('aria-label', 'Figure settings');
+  shell.setAttribute('aria-label', 'Image');
+
+  const head = doc.createElement('div');
+  head.className = 'rkr-cell-dialog-head';
+  const title = doc.createElement('h2');
+  title.id = 'rkr-figure-dialog-title';
+  title.textContent = 'Image';
+  const closeBtn = doc.createElement('button');
+  closeBtn.className = 'rkr-cell-dialog-close';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.textContent = '\u2715';
+  head.append(title, closeBtn);
+  shell.append(head);
+
+  const body = doc.createElement('div');
+  body.className = 'rkr-cell-dialog-body';
+  body.setAttribute('data-scope', 'figure');
 
   const inputs = new Map<string, DialogControl>();
   for (const name of FIELDS) {
@@ -130,7 +148,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
     });
     inputs.set(name, input);
     label.append(input);
-    shell.append(label);
+    body.append(label);
   }
   // Image selector: thumbnails for each image in the figure.
   // Clicking one sets it as the active image for the edit pipeline.
@@ -146,7 +164,12 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
       thumb.type = 'button';
       thumb.className = 'rkr-figure-image-thumb';
       thumb.setAttribute('data-id', id);
-      thumb.textContent = id.slice(0, 8);
+      const img = doc.createElement('img');
+      img.setAttribute('src', `/admin/preview/${id}`);
+      img.setAttribute('alt', '');
+      img.setAttribute('width', '48');
+      img.setAttribute('height', '48');
+      thumb.append(img);
       thumb.addEventListener('click', () => {
         const setter = (window as unknown as Record<string, (id: string | null) => void>)
           .__rkrSetActiveImage;
@@ -164,7 +187,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
       });
       selector.append(thumb);
     }
-    shell.append(selector);
+    body.append(selector);
   }
   // Image-edit section (hidden until an image is selected).
   // The elements are global (in the template), so we just show them.
@@ -172,7 +195,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
     typeof document !== 'undefined' ? document.getElementById('rkr-image-edit') : null;
   if (editSection) {
     editSection.hidden = true;
-    shell.append(editSection);
+    body.append(editSection);
   }
   const preview =
     typeof document !== 'undefined'
@@ -180,14 +203,15 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
       : null;
   if (preview) {
     preview.hidden = true;
-    shell.append(preview);
+    body.append(preview);
   }
 
+  shell.append(body);
   root.append(shell);
 
   const errorList = doc.createElement('p');
   errorList.className = 'rkr-figure-dialog-errors';
-  shell.append(errorList);
+  body.append(errorList);
 
   const footer = doc.createElement('div');
   footer.className = 'rkr-figure-dialog-foot';
@@ -196,7 +220,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   const cancelBtn = doc.createElement('button');
   cancelBtn.textContent = 'Cancel';
   footer.append(saveBtn, cancelBtn);
-  shell.append(footer);
+  body.append(footer);
 
   // Backdrop click + Escape close without committing.
   shell.addEventListener?.('click', ((ev: unknown) => {
@@ -218,6 +242,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
     // ignore
   }
 
+  closeBtn.addEventListener('click', () => close());
   const close = (): void => {
     root.removeChild?.(shell);
   };
