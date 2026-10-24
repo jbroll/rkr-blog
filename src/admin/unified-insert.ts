@@ -157,17 +157,24 @@ export function mountPaletteInsert(env: InsertEnv): void {
 
   body.addEventListener('dragover', (ev: Event) => {
     ev.preventDefault();
-    clearDropMarks();
     if (!dragName && !dropName(ev)) return;
     const card = dropCard(ev);
     if (!card) {
+      clearDropMarks();
       body.setAttribute('data-drop', 'inside');
       return;
     }
     const rect = card.getBoundingClientRect();
     const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
-    if (!resolveDrop(env.getTree(), dropPath(card), pos)) return;
-    card.setAttribute('data-drop', pos);
+    if (!resolveDrop(env.getTree(), dropPath(card), pos)) {
+      clearDropMarks();
+      return;
+    }
+    // Only re-mark when the target/position changes to avoid flicker.
+    if (card.getAttribute('data-drop') !== pos) {
+      clearDropMarks();
+      card.setAttribute('data-drop', pos);
+    }
   });
 
   body.addEventListener('dragleave', (ev: Event) => {
