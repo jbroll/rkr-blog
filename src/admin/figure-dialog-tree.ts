@@ -108,6 +108,7 @@ export interface DialogRoot {
 /** Open the figure config dialog. Returns a driver the shell (and
  * tests) use instead of touching inputs directly. */
 export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): FigureDialog {
+  console.log('[figure-dialog] openFigureDialog called, root=', root);
   const doc = root.ownerDocument;
   const values: FigureFieldValues = { ...opts.initial };
   let errors: string[] = [];
@@ -190,22 +191,10 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
     }
     body.append(selector);
   }
-  // Image-edit section (hidden until an image is selected).
-  // The elements are global (in the template), so we just show them.
-  const editSection =
-    typeof document !== 'undefined' ? document.getElementById('rkr-image-edit') : null;
-  if (editSection) {
-    editSection.hidden = true;
-    body.append(editSection);
-  }
-  const preview =
-    typeof document !== 'undefined'
-      ? (document.getElementById('rkr-cell-preview') as HTMLImageElement | null)
-      : null;
-  if (preview) {
-    preview.hidden = true;
-    body.append(preview);
-  }
+  // The image-edit elements live in the page template (global). Don't
+  // move them into the dialog — the image-edit panel finds them via
+  // document.getElementById. The dialog only needs to make them visible
+  // when an image is selected (handled by the thumbnail click handler).
 
   shell.append(body);
   root.append(shell);

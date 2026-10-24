@@ -376,6 +376,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const macroDefaults = new Map(deps.macros.map((m) => [m.name, m.defaults ?? {}]));
 
   const openFigureConfig = (path: Path): void => {
+    console.log('[unified] openFigureConfig', path, 'node=', getAtPath(tree, path)?.type);
     const node = getAtPath(tree, path);
     if (!node || node.type !== 'figure') return;
     select(path);
