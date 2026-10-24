@@ -62,8 +62,9 @@ export interface InsertEnv {
   macros: PaletteMacro[];
   getTree(): BlockTree;
   getSelected(): Path | null;
-  /** Shell applies the tree, marks editing, and saves (with reload). */
-  commitInsert(next: BlockTree): void;
+  /** Shell applies the tree, plants a placeholder DOM node at `path`,
+   * marks editing, and saves in the background (no reload). */
+  commitInsert(next: BlockTree, path: Path, node: BlockNode): void;
   /** Surface a refusal (depth nudge) without changing state. */
   showNudge(text: string): void;
 }
@@ -105,7 +106,8 @@ export function mountPaletteInsert(env: InsertEnv): void {
     const node: BlockNode = name.startsWith('primitive:')
       ? primitiveNode(name)
       : { type: 'macro', macro: name };
-    env.commitInsert(insertAtPath(env.getTree(), at, index, node));
+    const next = insertAtPath(env.getTree(), at, index, node);
+    env.commitInsert(next, [...at, index], node);
   };
 
   mountBlocksPalette(dock, macros, (name) => {
@@ -121,6 +123,8 @@ export function mountPaletteInsert(env: InsertEnv): void {
   let dragName: string | null = null;
   const clearDropMarks = (): void => {
     for (const marked of body.querySelectorAll('[data-drop]')) marked.removeAttribute('data-drop');
+    body.removeAttribute('data-drop');
+    lastMarked = null;
   };
 
   for (const btn of dock.querySelectorAll('.rkr-blocks-palette-item') as unknown as HTMLElement[]) {
@@ -160,12 +164,16 @@ export function mountPaletteInsert(env: InsertEnv): void {
       .filter((s) => s !== '')
       .map(Number);
 
+  let lastMarked: Element | null = null;
   body.addEventListener('dragover', (ev: Event) => {
     ev.preventDefault();
     if (!dragName && !dropName(ev)) return;
     const card = dropCard(ev);
     if (!card) {
-      clearDropMarks();
+      if (lastMarked) {
+        lastMarked.removeAttribute('data-drop');
+        lastMarked = null;
+      }
       body.setAttribute('data-drop', 'inside');
       return;
     }
@@ -173,14 +181,15 @@ export function mountPaletteInsert(env: InsertEnv): void {
     const rect = card.getBoundingClientRect();
     const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
     if (!resolveDrop(env.getTree(), dropPath(card), pos)) {
-      clearDropMarks();
+      if (lastMarked) {
+        lastMarked.removeAttribute('data-drop');
+        lastMarked = null;
+      }
       return;
     }
-    // Only re-mark when the target/position changes to avoid flicker.
-    if (card.getAttribute('data-drop') !== pos) {
-      clearDropMarks();
-      card.setAttribute('data-drop', pos);
-    }
+    if (lastMarked && lastMarked !== card) lastMarked.removeAttribute('data-drop');
+    if (card.getAttribute('data-drop') !== pos) card.setAttribute('data-drop', pos);
+    lastMarked = card;
   });
 
   body.addEventListener('dragleave', (ev: Event) => {
