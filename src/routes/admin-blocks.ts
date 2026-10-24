@@ -184,9 +184,30 @@ export function registerAdminBlockRoutes(
         const raw = (body as { tree: unknown }).tree;
         if (!raw || typeof raw !== 'object') throw new Error('missing tree');
         const rec = raw as { version?: unknown; body?: unknown; fields?: unknown };
+        const blocksDir = path.join(siteRoot, 'content', 'blocks');
+        let existingFields: Record<string, unknown> | undefined;
+        try {
+          for (const file of fs.readdirSync(blocksDir)) {
+            if (!file.endsWith('.json')) continue;
+            const parsed = JSON.parse(fs.readFileSync(path.join(blocksDir, file), 'utf8')) as {
+              fields?: unknown;
+            };
+            if (
+              parsed?.fields &&
+              typeof parsed.fields === 'object' &&
+              (parsed.fields as Record<string, unknown>).slug === slug
+            ) {
+              existingFields = parsed.fields as Record<string, unknown>;
+              break;
+            }
+          }
+        } catch {
+          // fall through; existingFields stays undefined
+        }
         tree = {
           ...parseBlockTree({ version: 1, body: rec.body }),
           fields: {
+            ...(existingFields ?? {}),
             ...((rec.fields ?? {}) as Record<string, unknown>),
             slug
           }

@@ -614,6 +614,43 @@ describe('unified shell palette drop', () => {
   });
 });
 
+describe('unified shell empty nodes', () => {
+  it('marker with no elements gets a selectable placeholder', () => {
+    const doc = new FakeDocument();
+    const root = doc.createElement('div');
+    root.id = 'rkr-blocks-edit-root';
+    const shellEl = doc.createElement('div');
+    shellEl.id = 'rkr-unified-shell';
+    const toolbar = doc.createElement('div');
+    toolbar.id = 'rkr-unified-toolbar';
+    const layout = doc.createElement('div');
+    const body = doc.createElement('div');
+    body.id = 'rkr-blocks-page-body';
+    const markerNode = doc.createComment('rkr:path=0');
+    const gap = doc.createComment(' figure: no ids resolved ');
+    body.append(markerNode, gap);
+    const dock = doc.createElement('aside');
+    dock.id = 'rkr-unified-dock';
+    layout.append(body, dock);
+    shellEl.append(toolbar, layout);
+    root.append(shellEl);
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'figure', slots: { ids: '' } }]
+    };
+    const shell = mountUnifiedShell(root as unknown as Element, {
+      tree,
+      macros: [],
+      onSave: async () => {}
+    });
+    const holder = body.querySelector('.rkr-unified-empty');
+    assert.ok(holder, 'placeholder element planted for the empty figure');
+    assert.equal(holder?.getAttribute('data-rkr-path'), '0');
+    holder?.click();
+    assert.deepEqual(shell.selectedPath, [0]);
+  });
+});
+
 describe('unified shell macro dialog', () => {
   const tick = async (n = 10): Promise<void> => {
     for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));

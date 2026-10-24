@@ -126,18 +126,24 @@ function hydrate(tree: BlockTree, body: Element): HydratedUnit[] {
   collectMarkers(body).forEach((marker, i) => {
     const markerPath = parseMarker(marker.nodeValue);
     if (!markerPath) return;
-    const elements = elementsAfter(marker);
-    if (elements.length === 0) return;
     const zipped = ordered[i];
-    if (zipped && samePath(zipped.path, markerPath)) {
-      units.push({ path: zipped.path, node: zipped.node, elements });
-      return;
+    const node =
+      zipped && samePath(zipped.path, markerPath) ? zipped.node : getAtPath(tree, markerPath);
+    if (!node) return;
+    let elements = elementsAfter(marker);
+    if (elements.length === 0) {
+      // The node rendered no elements (an unresolvable figure, an
+      // unknown macro): plant a selectable placeholder so it stays
+      // editable instead of becoming an invisible gap. The marker still
+      // delimits the unit, so a re-render zips identically.
+      const doc = body.ownerDocument;
+      const holder = doc.createElement('div');
+      holder.className = 'rkr-unified-empty';
+      holder.textContent = `Empty ${node.type === 'macro' ? `macro ${node.macro}` : node.type} — configure to add content`;
+      marker.parentNode?.insertBefore(holder, marker.nextSibling);
+      elements = [holder];
     }
-    // Markers and the embedded tree disagree (stale tree or hand-edited
-    // DOM). The server marker still describes what is on screen, so use
-    // it rather than pairing a click with the wrong node.
-    const node = getAtPath(tree, markerPath);
-    if (node) units.push({ path: markerPath, node, elements });
+    units.push({ path: markerPath, node, elements });
   });
   return units;
 }
