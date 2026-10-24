@@ -92,6 +92,38 @@ ${data.bodyHtml ?? ''}</div>
 </div>
 </main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
+<!-- Image-edit pipeline elements (used by the figure dialog). -->
+<div id="rkr-image-edit-host" hidden>
+  <div id="rkr-image-edit">
+    <span></span>
+    <span class="rkr-image-actions">
+      <button type="button" id="rkr-image-crop-btn">Crop…</button>
+      <button type="button" id="rkr-image-rotate-l-btn" aria-label="Rotate 90 degrees counter-clockwise" title="Rotate 90° counter-clockwise">↺</button>
+      <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
+      <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
+      <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
+      <button type="button" id="rkr-image-perspective-btn" aria-label="Perspective rectify" title="Straighten a tilted region (de-skew)">⌐</button>
+      <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
+      <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
+      <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
+      <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>Save</button>
+    </span>
+    <label for="rkr-image-resample">Max width (px)</label>
+    <span class="rkr-image-actions">
+      <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
+      <button type="button" id="rkr-image-resample-btn">Apply</button>
+    </span>
+    <label for="rkr-image-tilt-input">Tilt (°)</label>
+    <span class="rkr-image-actions">
+      <input id="rkr-image-tilt-slider" type="range" min="-45" max="45" step="0.1" value="0" style="width:8em"/>
+      <input id="rkr-image-tilt-input" type="number" min="-45" max="45" step="0.1" value="0" style="width:4em"/>
+      <button type="button" id="rkr-image-tilt-btn">Apply</button>
+    </span>
+    <span id="rkr-image-edits-label">Edits</span>
+    <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
+    <img id="rkr-cell-preview" class="rkr-cell-preview" alt="" hidden/>
+  </div>
+</div>
 <script type="module" src="${data.bundleUrl}"></script>
 </body>
 </html>

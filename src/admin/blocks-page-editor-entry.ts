@@ -7,6 +7,8 @@
 
 import type { BlockTree } from '../lib/blocks.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
+import { wireImageEditPanel } from './image-edit-panel.ts';
+import { initOpfsForUnifiedEditor } from './opfs-init-unified.ts';
 import { mountUnifiedShell } from './unified-shell.ts';
 
 const root = document.getElementById('rkr-blocks-edit-root');
@@ -41,6 +43,76 @@ if (root && slug && tree) {
       if (!res.ok) throw new Error(`load macros ${res.status}`);
       const macros = (await res.json()) as PaletteMacro[];
       mountUnifiedShell(root, { tree, macros, onSave: save });
+
+      // Initialize OPFS for image editing.
+      const opfsReady = await initOpfsForUnifiedEditor();
+
+      // Wire the image-edit panel with a mock editor whose view.dom
+      // contains an img.rkr-image[data-id] for the active image.
+      // The panel uses editor only for refreshImagePreview, which
+      // updates img.rkr-image[data-id] src. We provide a container.
+      const imageEditContainer = document.createElement('div');
+      imageEditContainer.id = 'rkr-image-edit-container';
+      root.append(imageEditContainer);
+
+      let activeImageIdValue: string | null = null;
+      const mockEditor = {
+        view: { dom: imageEditContainer },
+        isActive: () => true,
+        getAttributes: () => ({}),
+        chain: () => ({
+          focus: () => ({
+            command: () => ({ run: () => true }),
+            updateAttributes: () => ({ run: () => true })
+          })
+        })
+      } as unknown as import('@tiptap/core').Editor;
+
+      if (opfsReady) {
+        const panel = wireImageEditPanel({
+          editor: mockEditor,
+          section: document.getElementById('rkr-image-edit') as HTMLDivElement,
+          buttons: {
+            crop: document.getElementById('rkr-image-crop-btn') as HTMLButtonElement,
+            rotateL: document.getElementById('rkr-image-rotate-l-btn') as HTMLButtonElement,
+            rotateR: document.getElementById('rkr-image-rotate-r-btn') as HTMLButtonElement,
+            flipH: document.getElementById('rkr-image-flip-h-btn') as HTMLButtonElement,
+            flipV: document.getElementById('rkr-image-flip-v-btn') as HTMLButtonElement,
+            perspective: document.getElementById('rkr-image-perspective-btn') as HTMLButtonElement,
+            undo: document.getElementById('rkr-image-undo-btn') as HTMLButtonElement,
+            redo: document.getElementById('rkr-image-redo-btn') as HTMLButtonElement,
+            reset: document.getElementById('rkr-image-reset-btn') as HTMLButtonElement,
+            save: document.getElementById('rkr-image-save-btn') as HTMLButtonElement,
+            resample: document.getElementById('rkr-image-resample-btn') as HTMLButtonElement,
+            tilt: document.getElementById('rkr-image-tilt-btn') as HTMLButtonElement
+          },
+          resampleInput: document.getElementById('rkr-image-resample') as HTMLInputElement,
+          tiltSlider: document.getElementById('rkr-image-tilt-slider') as HTMLInputElement,
+          tiltInput: document.getElementById('rkr-image-tilt-input') as HTMLInputElement,
+          editsList: document.getElementById('rkr-image-edits') as HTMLOListElement,
+          activeImageId: () => activeImageIdValue
+        });
+        (window as unknown as Record<string, unknown>).__rkrImageEditPanel = panel;
+      }
+
+      // Expose for the figure dialog to set the active image.
+      (window as unknown as Record<string, unknown>).__rkrSetActiveImage = (id: string | null) => {
+        activeImageIdValue = id;
+        // Update the mock editor's view.dom with an img for this id.
+        imageEditContainer.innerHTML = '';
+        if (id) {
+          const img = document.createElement('img');
+          img.className = 'rkr-image';
+          img.setAttribute('data-id', id);
+          img.src = `/admin/preview/${id}`;
+          imageEditContainer.append(img);
+          const preview = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
+          if (preview) {
+            preview.src = `/admin/preview/${id}`;
+            preview.hidden = false;
+          }
+        }
+      };
     } catch (err: unknown) {
       root.innerHTML = `<p role="alert">Editor failed to load: ${err instanceof Error ? err.message : String(err)}</p>`;
     }

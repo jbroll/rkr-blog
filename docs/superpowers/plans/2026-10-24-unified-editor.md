@@ -358,3 +358,30 @@ Expected: PASS, 0 references to removed code
 git add -A
 git commit -m "feat: retire tree-view UI after unified editor cutover"
 ```
+
+## Follow-up: figure image editing (2026-10-24)
+
+The unified figure dialog currently edits ids/alts/captions/justify as text.
+The legacy cell dialog also exposed the full image-edit pipeline (crop,
+rotate, flip, perspective, resample, undo/redo, save, reset, tilt) plus
+a live preview. Restoring it requires:
+
+1. Embedding the image-edit DOM elements (rkr-image-edit section,
+   rkr-cell-preview, rkr-image-edits, all buttons/inputs) in the unified
+   editor template or dialog.
+2. Initializing OPFS (ensureSchema + drainers) in the unified editor
+   entry, without the TipTap editor that startOfflineInfrastructure
+   expects.
+3. A mock TipTap editor whose view.dom contains
+   `img.rkr-image[data-id=...]` elements, so refreshImagePreview's
+   setEditorImageSrc updates the right preview.
+4. Tracking the active image id from the figure dialog's image selector.
+5. Wiring wireImageEditPanel with the mock editor + the DOM elements.
+6. On save, committing ops to the sidecar (saveImageEdits).
+
+The mock editor only needs view.dom for refreshImagePreview; the panel
+does not call isActive/getAttributes/chain directly. activeImageId is a
+separate function. The edits list + buttons are standard DOM.
+
+Plan staging: template + OPFS init first (verifiable), then the mock
+editor + panel wiring (verifiable via e2e), then image selector UX.

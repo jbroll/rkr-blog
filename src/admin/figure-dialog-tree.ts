@@ -132,9 +132,63 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
     label.append(input);
     shell.append(label);
   }
+  // Image selector: thumbnails for each image in the figure.
+  // Clicking one sets it as the active image for the edit pipeline.
+  const ids = values.ids
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (ids.length > 0) {
+    const selector = doc.createElement('div');
+    selector.className = 'rkr-figure-image-selector';
+    for (const id of ids) {
+      const thumb = doc.createElement('button');
+      thumb.type = 'button';
+      thumb.className = 'rkr-figure-image-thumb';
+      thumb.setAttribute('data-id', id);
+      thumb.textContent = id.slice(0, 8);
+      thumb.addEventListener('click', () => {
+        const setter = (window as unknown as Record<string, (id: string | null) => void>)
+          .__rkrSetActiveImage;
+        if (setter) setter(id);
+        // Show the image-edit section.
+        const section = document.getElementById('rkr-image-edit');
+        if (section) section.hidden = false;
+        const panel = (
+          window as unknown as Record<
+            string,
+            { activateForId: (id: string, fn: () => boolean) => void } | undefined
+          >
+        ).__rkrImageEditPanel;
+        if (panel) panel.activateForId(id, () => true);
+      });
+      selector.append(thumb);
+    }
+    shell.append(selector);
+  }
+  // Image-edit section (hidden until an image is selected).
+  // The elements are global (in the template), so we just show them.
+  const editSection =
+    typeof document !== 'undefined' ? document.getElementById('rkr-image-edit') : null;
+  if (editSection) {
+    editSection.hidden = true;
+    shell.append(editSection);
+  }
+  const preview =
+    typeof document !== 'undefined'
+      ? (document.getElementById('rkr-cell-preview') as HTMLImageElement | null)
+      : null;
+  if (preview) {
+    preview.hidden = true;
+    shell.append(preview);
+  }
+
+  root.append(shell);
+
   const errorList = doc.createElement('p');
   errorList.className = 'rkr-figure-dialog-errors';
   shell.append(errorList);
+
   const footer = doc.createElement('div');
   footer.className = 'rkr-figure-dialog-foot';
   const saveBtn = doc.createElement('button');
@@ -143,7 +197,6 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   cancelBtn.textContent = 'Cancel';
   footer.append(saveBtn, cancelBtn);
   shell.append(footer);
-  root.append(shell);
 
   // Backdrop click + Escape close without committing.
   shell.addEventListener?.('click', ((ev: unknown) => {
@@ -152,10 +205,18 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   const onKey = (ev: unknown): void => {
     if ((ev as { key?: string }).key === 'Escape') {
       close();
-      if (typeof document !== 'undefined') document.removeEventListener('keydown', onKey);
+      try {
+        document.removeEventListener('keydown', onKey);
+      } catch {
+        // document may be unavailable in test environments
+      }
     }
   };
-  if (typeof document !== 'undefined') document.addEventListener('keydown', onKey);
+  try {
+    if (typeof document !== 'undefined') document.addEventListener('keydown', onKey);
+  } catch {
+    // ignore
+  }
 
   const close = (): void => {
     root.removeChild?.(shell);
