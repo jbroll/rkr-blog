@@ -114,6 +114,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
 
   const shell = doc.createElement('div');
   shell.className = 'rkr-cell-dialog';
+  shell.id = 'rkr-cell-dialog';
   shell.setAttribute('role', 'dialog');
   shell.setAttribute('aria-label', 'Image');
 

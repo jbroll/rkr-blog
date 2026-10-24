@@ -434,6 +434,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       button.setAttribute('data-config-path', unit.path.join(','));
       button.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        console.log('[unified] config click', unit.node.type, unit.path);
         if (unit.node.type === 'figure') openFigureConfig(unit.path);
         else if (unit.node.type === 'macro') openMacroConfig(unit.path);
         else select(unit.path);
