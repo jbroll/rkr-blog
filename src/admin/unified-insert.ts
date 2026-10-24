@@ -164,6 +164,7 @@ export function mountPaletteInsert(env: InsertEnv): void {
       body.setAttribute('data-drop', 'inside');
       return;
     }
+    body.removeAttribute('data-drop');
     const rect = card.getBoundingClientRect();
     const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
     if (!resolveDrop(env.getTree(), dropPath(card), pos)) {

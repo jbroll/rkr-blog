@@ -279,9 +279,10 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     const node = getAtPath(tree, path);
     if (!node || node.type !== 'figure') return;
     select(path);
+    console.log('[unified] openFigureConfig', path);
     openFigureDialog(root, {
       initial: readFigureFields(node),
-      onCommit: (slots) => commitFigureSlots(path, slots),
+      onCommit: (slots) => { console.log('[unified] figure commit', slots); commitFigureSlots(path, slots); },
       onCancel: () => {}
     });
   };
