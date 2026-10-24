@@ -17,7 +17,8 @@
 
 import type { BlockNode, BlockTree } from '../lib/blocks.ts';
 import { mountBlocksPalette, type PaletteMacro, primitiveNode } from './blocks-editor.ts';
-import { getAtPath, insertAtPath, type Path } from './blocks-page-editor.ts';
+import { getAtPath, insertAtPath, type Path, setSlotAtPath } from './blocks-page-editor.ts';
+import { domToMarkdown } from './dom-markdown.ts';
 
 type Mode = 'view' | 'edit';
 
@@ -143,6 +144,16 @@ function mustFind(scope: Element, selector: string): Element {
   return el;
 }
 
+/** Current markdown source of a text leaf (mirrors the renderer rule). */
+function textSource(node: BlockNode): string | null {
+  if (node.type !== 'text') return null;
+  const markdown = node.markdown ?? (node as { slots?: { markdown?: unknown } }).slots?.markdown;
+  return typeof markdown === 'string' ? markdown : '';
+}
+
+/** Save states surfaced on the shell for tests and the indicator. */
+type SaveState = 'clean' | 'editing' | 'saving' | 'unsaved';
+
 function nodeLabel(node: BlockNode): string {
   return node.type === 'macro' ? `macro ${node.macro}` : node.type;
 }
@@ -165,7 +176,105 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     selected = [...path];
   };
 
+  // Indexed after hydration below (units must exist first).
+  let unitByPath = new Map<string, HydratedUnit>();
+
+  let saveState: SaveState = 'clean';
+  let inFlight: Promise<void> | null = null;
+  let queued: BlockTree | null = null;
+
+  const indicator = doc.createElement('span');
+  indicator.className = 'rkr-unified-save-state';
+  toolbar.append(indicator);
+  const saveBtn = doc.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'rkr-unified-save';
+  saveBtn.textContent = 'Save page';
+  toolbar.append(saveBtn);
+
+  const setState = (next: SaveState): void => {
+    saveState = next;
+    shellEl.setAttribute('data-save-state', next);
+    indicator.textContent =
+      next === 'clean' ? 'Saved' : next === 'editing' ? 'Editing…' : next === 'saving' ? 'Saving…' : 'Unsaved changes';
+  };
+  setState('clean');
+
+  const runSave = async (snapshot: BlockTree): Promise<void> => {
+    setState('saving');
+    inFlight = deps
+      .onSave(snapshot)
+      .then(() => {
+        if (queued && queued !== snapshot) {
+          const next = queued;
+          queued = null;
+          void runSave(next);
+          return;
+        }
+        queued = null;
+        inFlight = null;
+        setState('clean');
+      })
+      .catch(() => {
+        // Offline or server error: keep the tree, mark unsaved, retry
+        // on the next blur, Save click, or browser online event.
+        // Reload-before-reconnect loses the edit; durable offline
+        // queueing is tracked follow-up work, not silent behavior.
+        inFlight = null;
+        setState('unsaved');
+      });
+    await inFlight;
+  };
+
+  /** Persist `next`, coalescing with an in-flight save: the queued
+   * tree always wins because immutable updates compose. */
+  const requestSave = (next: BlockTree): void => {
+    tree = next;
+    if (inFlight) {
+      queued = next;
+      setState('editing');
+      return;
+    }
+    void runSave(next);
+  };
+
+  const retry = (): void => {
+    if (saveState === 'clean') return;
+    if (inFlight) return;
+    void runSave(tree);
+  };
+  saveBtn.addEventListener('click', retry);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', retry);
+  }
+
+  // Blur on edited text serializes the leaf back to the markdown DSL.
+  // focusout bubbles, so one delegated listener covers every leaf.
+  body.addEventListener('focusout', (ev: Event) => {
+    const target = (ev as unknown as { target: Element | null }).target;
+    const card = target?.closest?.('[data-rkr-path]');
+    if (!card) return;
+    const key = String((card as Element).getAttribute('data-rkr-path'));
+    const unit = unitByPath.get(key);
+    if (!unit) return;
+    const before = textSource(unit.node);
+    if (before === null) return;
+    const after = domToMarkdown(unit.elements);
+    if (after === before) return;
+    select(unit.path);
+    const next = setSlotAtPath(tree, unit.path, 'markdown', after);
+    setState('editing');
+    requestSave(next);
+  });
+
+  body.addEventListener('input', () => {
+    if (saveState === 'clean') setState('editing');
+  });
+
+  // Now that hydration produced the live units, index them for blur lookup.
   const units = hydrate(tree, body);
+  // Now that hydration produced the live units, index them for blur lookup.
+  unitByPath = new Map(units.map((u) => [u.path.join(','), u]));
   for (const unit of units) {
     for (const el of unit.elements) {
       el.setAttribute('data-rkr-path', unit.path.join(','));
@@ -182,10 +291,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     const node: BlockNode = name.startsWith('primitive:')
       ? primitiveNode(name)
       : { type: 'macro', macro: name };
-    tree = insertAtPath(tree, [], tree.body.length, node);
-    void deps.onSave(tree).catch(() => {
-      shellEl.setAttribute('data-save-state', 'unsaved');
-    });
+    setState('editing');
+    requestSave(insertAtPath(tree, [], tree.body.length, node));
   });
 
   const clearTools = (): void => {

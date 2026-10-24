@@ -16,309 +16,14 @@ import { PRIMITIVE_MACROS } from '../../src/admin/blocks-editor.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
 import type { BlockTree } from '../../src/lib/blocks.ts';
 
-type Listener = (ev: FakeEvent) => void;
-
-class FakeEvent {
-  readonly type: string;
-  readonly bubbles: boolean;
-  target: FakeNode | null = null;
-  currentTarget: FakeNode | null = null;
-  defaultPrevented = false;
-  stopped = false;
-
-  constructor(type: string, init: { bubbles?: boolean } = {}) {
-    this.type = type;
-    this.bubbles = init.bubbles ?? true;
-  }
-
-  preventDefault(): void {
-    this.defaultPrevented = true;
-  }
-
-  stopPropagation(): void {
-    this.stopped = true;
-  }
-}
-
-class FakeNode {
-  readonly nodeType: number;
-  nodeValue: string | null = null;
-  parentNode: FakeNode | null = null;
-  childNodes: FakeNode[] = [];
-  private readonly listeners = new Map<string, Set<Listener>>();
-
-  constructor(nodeType: number) {
-    this.nodeType = nodeType;
-  }
-
-  get firstChild(): FakeNode | null {
-    return this.childNodes[0] ?? null;
-  }
-
-  get nextSibling(): FakeNode | null {
-    if (!this.parentNode) return null;
-    const i = this.parentNode.childNodes.indexOf(this);
-    return this.parentNode.childNodes[i + 1] ?? null;
-  }
-
-  get textContent(): string {
-    if (this.nodeType === 3 || this.nodeType === 8) return this.nodeValue ?? '';
-    return this.childNodes.map((c) => c.textContent).join('');
-  }
-
-  set textContent(value: string) {
-    for (const child of this.childNodes) child.parentNode = null;
-    this.childNodes = [];
-    if (value !== '') {
-      const text = new FakeNode(3);
-      text.nodeValue = value;
-      this.append(text);
-    }
-  }
-
-  append(...nodes: FakeNode[]): void {
-    for (const node of nodes) {
-      node.parentNode?.removeChild(node);
-      node.parentNode = this;
-      this.childNodes.push(node);
-    }
-  }
-
-  prepend(...nodes: FakeNode[]): void {
-    nodes.forEach((node, i) => {
-      node.parentNode?.removeChild(node);
-      node.parentNode = this;
-      this.childNodes.splice(i, 0, node);
-    });
-  }
-
-  insertBefore(node: FakeNode, ref: FakeNode | null): void {
-    const at = ref ? this.childNodes.indexOf(ref) : this.childNodes.length;
-    node.parentNode?.removeChild(node);
-    node.parentNode = this;
-    this.childNodes.splice(at < 0 ? this.childNodes.length : at, 0, node);
-  }
-
-  removeChild(node: FakeNode): void {
-    const at = this.childNodes.indexOf(node);
-    if (at >= 0) this.childNodes.splice(at, 1);
-    node.parentNode = null;
-  }
-
-  remove(): void {
-    this.parentNode?.removeChild(this);
-  }
-
-  addEventListener(type: string, listener: Listener): void {
-    let set = this.listeners.get(type);
-    if (!set) {
-      set = new Set();
-      this.listeners.set(type, set);
-    }
-    set.add(listener);
-  }
-
-  removeEventListener(type: string, listener: Listener): void {
-    this.listeners.get(type)?.delete(listener);
-  }
-
-  dispatchEvent(ev: FakeEvent): boolean {
-    ev.target ??= this;
-    let node: FakeNode | null = this;
-    while (node) {
-      ev.currentTarget = node;
-      for (const listener of [...(node.listeners.get(ev.type) ?? [])]) listener(ev);
-      if (!ev.bubbles || ev.stopped) break;
-      node = node.parentNode;
-    }
-    return !ev.defaultPrevented;
-  }
-
-  querySelectorAll(_selector: string): FakeElement[] {
-    return [];
-  }
-
-  querySelector(_selector: string): FakeElement | null {
-    return null;
-  }
-}
-
-function kebab(name: string): string {
-  return name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
-}
-
-function matches(el: FakeElement, selector: string): boolean {
-  if (selector.startsWith('#')) return el.id === selector.slice(1);
-  if (selector.startsWith('.')) return el.classList.contains(selector.slice(1));
-  if (selector.startsWith('[') && selector.endsWith(']')) {
-    const body = selector.slice(1, -1);
-    const eq = body.indexOf('=');
-    if (eq < 0) return el.hasAttribute(body);
-    const value = body
-      .slice(eq + 1)
-      .replace(/^["']|["']$/g, '')
-      .trim();
-    return el.getAttribute(body.slice(0, eq)) === value;
-  }
-  return el.tagName === selector.toUpperCase();
-}
-
-class FakeElement extends FakeNode {
-  readonly tagName: string;
-  readonly ownerDocument: FakeDocument;
-  readonly attributes = new Map<string, string>();
-  readonly classList: {
-    add(...names: string[]): void;
-    remove(...names: string[]): void;
-    contains(name: string): boolean;
-    toggle(name: string, force?: boolean): boolean;
-  };
-  readonly dataset: Record<string, string>;
-  type = '';
-
-  constructor(tag: string, doc: FakeDocument) {
-    super(1);
-    this.tagName = tag.toUpperCase();
-    this.ownerDocument = doc;
-    this.classList = {
-      add: (...names: string[]) => {
-        for (const n of names) this.attributes.set('class', this.classNames(n, true).join(' '));
-      },
-      remove: (...names: string[]) => {
-        for (const n of names) this.attributes.set('class', this.classNames(n, false).join(' '));
-      },
-      contains: (name: string) => this.classNames().includes(name),
-      toggle: (name: string, force?: boolean) => {
-        const on = force ?? !this.classNames().includes(name);
-        this.attributes.set('class', this.classNames(name, on).join(' '));
-        return on;
-      }
-    };
-    this.dataset = new Proxy({} as Record<string, string>, {
-      get: (_target, prop) => this.attributes.get(`data-${kebab(String(prop))}`),
-      set: (_target, prop, value) => {
-        this.attributes.set(`data-${kebab(String(prop))}`, String(value));
-        return true;
-      },
-      deleteProperty: (_target, prop) => {
-        this.attributes.delete(`data-${kebab(String(prop))}`);
-        return true;
-      },
-      has: (_target, prop) => this.attributes.has(`data-${kebab(String(prop))}`)
-    });
-  }
-
-  private classNames(change?: string, on = true): string[] {
-    const current = (this.attributes.get('class') ?? '').split(/\s+/).filter(Boolean);
-    if (!change) return current;
-    const without = current.filter((c) => c !== change);
-    return on ? [...without, change] : without;
-  }
-
-  get id(): string {
-    return this.attributes.get('id') ?? '';
-  }
-
-  set id(value: string) {
-    this.attributes.set('id', value);
-  }
-
-  get className(): string {
-    return this.attributes.get('class') ?? '';
-  }
-
-  set className(value: string) {
-    this.attributes.set('class', value);
-  }
-
-  get hidden(): boolean {
-    return this.attributes.has('hidden');
-  }
-
-  set hidden(value: boolean) {
-    if (value) this.attributes.set('hidden', '');
-    else this.attributes.delete('hidden');
-  }
-
-  get children(): FakeElement[] {
-    return this.childNodes.filter((n): n is FakeElement => n instanceof FakeElement);
-  }
-
-  setAttribute(name: string, value: string): void {
-    this.attributes.set(name, value);
-  }
-
-  getAttribute(name: string): string | null {
-    return this.attributes.get(name) ?? null;
-  }
-
-  hasAttribute(name: string): boolean {
-    return this.attributes.has(name);
-  }
-
-  removeAttribute(name: string): void {
-    this.attributes.delete(name);
-  }
-
-  after(node: FakeNode): void {
-    if (!this.parentNode) return;
-    this.parentNode.insertBefore(node, this.nextSibling);
-  }
-
-  click(): void {
-    this.dispatchEvent(new FakeEvent('click'));
-  }
-
-  focus(): void {
-    this.dispatchEvent(new FakeEvent('focus'));
-  }
-
-  override querySelectorAll(selector: string): FakeElement[] {
-    const out: FakeElement[] = [];
-    const walk = (node: FakeNode): void => {
-      for (const child of node.childNodes) {
-        if (child instanceof FakeElement) {
-          if (matches(child, selector)) out.push(child);
-          walk(child);
-        }
-      }
-    };
-    walk(this);
-    return out;
-  }
-
-  override querySelector(selector: string): FakeElement | null {
-    return this.querySelectorAll(selector)[0] ?? null;
-  }
-}
-
-class FakeDocument {
-  createElement(tag: string): FakeElement {
-    return new FakeElement(tag, this);
-  }
-
-  createComment(value: string): FakeNode {
-    const node = new FakeNode(8);
-    node.nodeValue = value;
-    return node;
-  }
-
-  createTextNode(value: string): FakeNode {
-    const node = new FakeNode(3);
-    node.nodeValue = value;
-    return node;
-  }
-}
-
-function marker(doc: FakeDocument, path: string): FakeNode {
-  return doc.createComment(`rkr:path=${path}`);
-}
-
-function para(doc: FakeDocument, value: string): FakeElement {
-  const p = doc.createElement('p');
-  p.textContent = value;
-  return p;
-}
+import {
+  FakeDocument,
+  FakeEvent,
+  type FakeElement,
+  type FakeNode,
+  marker,
+  para,
+} from './fake-dom.ts';
 
 interface Fixture {
   doc: FakeDocument;
@@ -563,8 +268,7 @@ describe('unified editor shell', () => {
     assert.equal(f.root.querySelectorAll('.rkr-unified-config').length, 0);
   });
 
-  it('palette click appends a node and saves the whole tree', async () => {
-    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Hello' }] };
+  it('palette click appends a node and saves the whole tree', async () => {    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Hello' }] };
     const saved: BlockTree[] = [];
     const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Hello')]);
     mount(f, tree, async (next) => {
@@ -587,6 +291,98 @@ describe('unified editor shell', () => {
       ['text'],
       'the mounted tree is never mutated in place'
     );
+  });
+});
+
+describe('unified shell saving', () => {
+  const tick = async (n = 10): Promise<void> => {
+    for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));
+  };
+
+  function textOnly(): { f: Fixture; p: FakeElement; tree: BlockTree } {
+    let p!: FakeElement;
+    const f = fixture((doc) => {
+      p = para(doc, 'Hello');
+      return [marker(doc, '0'), p];
+    });
+    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Hello' }] };
+    return { f, p, tree };
+  }
+
+  it('blur saves edited text and marks clean', async () => {
+    const { f, p, tree } = textOnly();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    p.textContent = 'Hello edited';
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.equal(saved.length, 1);
+    assert.equal((saved[0]?.body[0] as { markdown?: string }).markdown, 'Hello edited');
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('blur during in-flight save: second save wins, ends clean', async () => {
+    const { f, p, tree } = textOnly();
+    const snapshots: BlockTree[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const shell = mount(f, tree, async (t) => {
+      snapshots.push(t);
+      await gate;
+    });
+    shell.setMode('edit');
+    p.textContent = 'First edit';
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick(2);
+    p.textContent = 'Second edit';
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick(2);
+    release();
+    await tick(20);
+    assert.equal(snapshots.length, 2);
+    assert.equal((snapshots[0]?.body[0] as { markdown?: string }).markdown, 'First edit');
+    assert.equal((snapshots[1]?.body[0] as { markdown?: string }).markdown, 'Second edit');
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('failed save marks unsaved and retries on Save click', async () => {
+    const { f, p, tree } = textOnly();
+    const saved: BlockTree[] = [];
+    let fail = true;
+    const shell = mount(f, tree, async (t) => {
+      if (fail) throw new Error('offline');
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    p.textContent = 'Offline edit';
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.equal(saved.length, 0);
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    fail = false;
+    f.toolbar.querySelector('.rkr-unified-save')?.click();
+    await tick();
+    assert.equal(saved.length, 1);
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('Save button is a no-op when clean', async () => {
+    const { f, tree } = textOnly();
+    let calls = 0;
+    mount(f, tree, async () => {
+      calls++;
+    });
+    await tick();
+    const saveBtn = f.toolbar.querySelector('.rkr-unified-save');
+    assert.ok(saveBtn, 'Save button exists in the toolbar');
+    saveBtn.click();
+    await tick();
+    assert.equal(calls, 0);
   });
 });
 
