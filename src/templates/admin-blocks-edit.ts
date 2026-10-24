@@ -42,8 +42,11 @@ const UNIFIED_CSS = `
 .rkr-blocks-palette-right{position:sticky;top:1rem;align-self:start;max-height:calc(100vh - 2rem);overflow:auto;border-left:1px solid var(--rkr-rule);padding-left:1rem}
 .rkr-unified-shell[data-mode="view"] .rkr-blocks-palette-right{display:none}
 .rkr-unified-shell[data-mode="edit"] [data-rkr-path]:hover{outline:1px dashed var(--rkr-rule);outline-offset:4px}
-.rkr-unified-node-tools{display:flex;justify-content:flex-end;opacity:0}
-[data-rkr-path]:hover + .rkr-unified-node-tools,[data-rkr-path]:focus-within + .rkr-unified-node-tools,.rkr-unified-node-tools:focus-within{opacity:1}
+.rkr-unified-node-tools{display:flex;justify-content:flex-end;opacity:1}
+[data-rkr-path]{position:relative}
+[data-drop="before"]{box-shadow:inset 0 3px 0 0 var(--rkr-link)}
+[data-drop="after"]{box-shadow:inset 0 -3px 0 0 var(--rkr-link)}
+[data-drop="inside"]{outline:2px dashed var(--rkr-link);outline-offset:2px}
 .rkr-unified-config{border:1px solid var(--rkr-rule);background:var(--rkr-bg);color:inherit;border-radius:999px;padding:.15rem .6rem;font:inherit;font-size:.8rem;cursor:pointer}
 @media (max-width:720px){.rkr-unified-shell[data-mode="edit"] .rkr-unified-layout{grid-template-columns:minmax(0,1fr)}}
 `;

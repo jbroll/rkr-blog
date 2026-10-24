@@ -160,25 +160,38 @@ export function mountPaletteInsert(env: InsertEnv): void {
     clearDropMarks();
     if (!dragName && !dropName(ev)) return;
     const card = dropCard(ev);
-    if (!card) return;
+    if (!card) {
+      body.setAttribute('data-drop', 'inside');
+      return;
+    }
     const rect = card.getBoundingClientRect();
     const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
     if (!resolveDrop(env.getTree(), dropPath(card), pos)) return;
     card.setAttribute('data-drop', pos);
   });
 
-  body.addEventListener('dragleave', () => clearDropMarks());
+  body.addEventListener('dragleave', (ev: Event) => {
+    const related = (ev as unknown as { relatedTarget: Node | null }).relatedTarget;
+    if (!related || !body.contains(related)) clearDropMarks();
+    body.removeAttribute('data-drop');
+  });
 
   body.addEventListener('drop', (ev: Event) => {
     ev.preventDefault();
     const name = dropName(ev);
     const card = dropCard(ev);
     clearDropMarks();
+    body.removeAttribute('data-drop');
     dragName = null;
-    if (!card || !name) return;
-    const rect = card.getBoundingClientRect();
-    const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
-    const resolved = resolveDrop(env.getTree(), dropPath(card), pos);
+    if (!name) return;
+    let resolved: { parentPath: Path; index: number } | null = null;
+    if (card) {
+      const rect = card.getBoundingClientRect();
+      const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
+      resolved = resolveDrop(env.getTree(), dropPath(card), pos);
+    } else {
+      resolved = { parentPath: [], index: env.getTree().body.length };
+    }
     if (!resolved) return;
     insertNode(name, resolved.parentPath, resolved.index);
   });
