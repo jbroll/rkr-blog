@@ -67,7 +67,9 @@ async function post(args: string[]): Promise<void> {
   const baseUrl = positional(args, 0);
   const idOrSlug = positional(args, 1);
   if (!baseUrl || !idOrSlug) {
-    throw new Error('usage: site-admin import-wp post <base-url> <id-or-slug> [--force] [--as-blocks]');
+    throw new Error(
+      'usage: site-admin import-wp post <base-url> <id-or-slug> [--force] [--as-blocks]'
+    );
   }
   const force = args.includes('--force');
   const asBlocks = args.includes('--as-blocks');

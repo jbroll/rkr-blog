@@ -63,14 +63,23 @@ describe('import-wp post --as-blocks', () => {
       dump.dbPath,
       '--uploads',
       dump.uploadsRoot,
-      '--as-blocks',
+      '--as-blocks'
     ]);
     const md = fs.readdirSync(path.join(root, 'content', 'posts'));
-    assert.ok(md.some((f) => f.endsWith('-hello.md')), `posts: ${md.join(',')}`);
+    assert.ok(
+      md.some((f) => f.endsWith('-hello.md')),
+      `posts: ${md.join(',')}`
+    );
     const jsonFiles = fs.readdirSync(path.join(root, 'content', 'blocks'));
-    assert.ok(jsonFiles.some((f) => f.endsWith('-hello.json')), `blocks: ${jsonFiles.join(',')}`);
+    assert.ok(
+      jsonFiles.some((f) => f.endsWith('-hello.json')),
+      `blocks: ${jsonFiles.join(',')}`
+    );
     const tree = JSON.parse(
-      fs.readFileSync(path.join(root, 'content', 'blocks', jsonFiles.find((f) => f.endsWith('.json')) as string), 'utf8')
+      fs.readFileSync(
+        path.join(root, 'content', 'blocks', jsonFiles.find((f) => f.endsWith('.json')) as string),
+        'utf8'
+      )
     ) as { version: number; fields: { slug: string }; body: { type: string }[] };
     assert.equal(tree.version, 1);
     assert.equal(tree.fields.slug, 'hello');
