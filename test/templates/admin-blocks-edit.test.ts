@@ -27,6 +27,19 @@ describe('blocks edit page template', () => {
     assert.match(html, /Edit hello/);
   });
 
+  it('ships View/Edit toggles and a hidden right palette dock', () => {
+    const html = renderBlocksEditPage(base);
+    assert.match(html, /id="rkr-unified-shell"[^>]*data-mode="view"/);
+    assert.match(html, /id="rkr-unified-toolbar"/);
+    assert.match(html, /data-mode="view"[^>]*aria-pressed="true"/);
+    assert.match(html, /data-mode="edit"[^>]*aria-pressed="false"/);
+    assert.match(html, /id="rkr-unified-dock"[^>]*hidden/);
+    assert.match(html, /class="rkr-blocks-palette-right"/);
+    // Mode CSS: the dock only appears in edit mode.
+    assert.match(html, /\.rkr-unified-shell\[data-mode="view"\] \.rkr-blocks-palette-right/);
+    assert.match(html, /\.rkr-unified-shell\[data-mode="edit"\]/);
+  });
+
   it('escapes tree JSON so a markdown slot cannot close the script element', () => {
     const tree = {
       version: 1,

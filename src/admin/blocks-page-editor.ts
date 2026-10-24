@@ -170,7 +170,8 @@ export function renderCard(node: BlockNode, path: Path): string {
   return `<div class="rkr-block-card" data-path="${esc(path.join(','))}"><div class="rkr-block-card-head">${esc(labelFor(node))}<span>${esc(summaryFor(node))}</span></div>${inner}</div>`;
 }
 
-export interface PageEditorOpts {
+/** @internal Retained only until the tree-view UI is retired (Task 7). */
+interface PageEditorOpts {
   loadPage: () => Promise<{ title: string; tree: BlockTree }>;
   loadMacros: () => Promise<PaletteMacro[]>;
   savePage: (tree: BlockTree) => Promise<void>;
@@ -181,6 +182,9 @@ export interface PageEditorOpts {
  * fields, phone preview, save. Double-click (or Enter) on a palette
  * item inserts at the focused slot; drag onto drop targets lands in
  * follow-up work — the tree ops above already support it. */
+/** @public Retained only until the tree-view UI is retired (Task 7):
+ * the unified shell replaced this mount in the blocks edit page, and
+ * nothing imports it any more. The pure tree ops below stay. */
 export async function mountBlocksPageEditor(root: Element, opts: PageEditorOpts): Promise<void> {
   const doc = root.ownerDocument;
   const { tree } = await opts.loadPage();
