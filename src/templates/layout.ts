@@ -73,6 +73,8 @@ export interface HeadOpts {
   isAdmin?: boolean;
   /** Omit the "Home" nav link (the index page links to itself). */
   hideHomeLink?: boolean;
+  /** Deployed commit hash to display in the header. Omitted → no badge. */
+  buildHash?: string;
 }
 
 /** No-JS site search form for the header nav (post-listing pages).
@@ -84,6 +86,9 @@ export function renderSearchForm(q = ''): string {
 export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string {
   const tagline = site.tagline
     ? `<span class="rkr-site-tagline">${escapeText(site.tagline)}</span>`
+    : '';
+  const versionSpan = opts.buildHash
+    ? `<span class="rkr-site-head-version" title="Deployed commit">${escapeText(opts.buildHash)}</span>`
     : '';
   const auth = opts.isAdmin
     ? `<form method="post" action="/admin/logout" class="rkr-site-head-auth-form">
@@ -97,6 +102,7 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
       <p class="rkr-site-title"><a href="/">${escapeText(site.title)}</a></p>
       ${tagline}
     </div>
+    ${versionSpan}
     <nav class="rkr-site-head-nav" aria-label="Site">
       ${opts.hideHomeLink ? '' : '<a class="rkr-site-head-auth-btn" href="/">Home</a>'}
       <a class="rkr-site-head-auth-btn" href="/about">About</a>

@@ -19,6 +19,7 @@ import {
   siteHead,
   stylesheetLinks
 } from './layout.ts';
+import { buildMetaTag } from './version-tag.ts';
 
 interface IndexEntry {
   slug: string;
@@ -91,7 +92,11 @@ export function renderIndexPage(data: IndexPageData): string {
       : '';
   const sortToggle = renderSortToggle(isAsc, activeTags, data.isAdmin);
   const tagRail = renderTagRail(data.tagCounts, activeTags, `${sortToggle}${renderSearchForm()}`);
-  const head = siteHead(data.site, { isAdmin: data.isAdmin, hideHomeLink: true });
+  const head = siteHead(data.site, {
+    isAdmin: data.isAdmin,
+    hideHomeLink: true,
+    buildHash: a.hash
+  });
   const banner = data.bannerHtml ?? '';
   const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   return `<!DOCTYPE html>
@@ -102,8 +107,11 @@ export function renderIndexPage(data: IndexPageData): string {
 <title>${escapeText(data.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+${buildMetaTag(a.hash)}
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
 </head>
 <body>
 ${siteChrome}<main id="main" tabindex="-1">

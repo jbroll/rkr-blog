@@ -11,6 +11,7 @@ import {
   siteHead,
   stylesheetLinks
 } from './layout.ts';
+import { buildMetaTag } from './version-tag.ts';
 
 export interface NotFoundPageData extends SiteChrome {
   /** Authed visitors still see the admin footer affordances (Logout). */
@@ -28,11 +29,14 @@ export function renderNotFoundPage(data: NotFoundPageData): string {
 <title>Not found — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+${buildMetaTag(a.hash)}
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin })}
+${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash })}
 <main id="main" tabindex="-1" class="rkr-notfound">
 <h1>Page not found</h1>
 <p>The page you’re looking for isn’t here.</p>

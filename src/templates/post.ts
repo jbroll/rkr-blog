@@ -13,6 +13,7 @@ import {
   siteHead,
   stylesheetLinks
 } from './layout.ts';
+import { buildMetaTag } from './version-tag.ts';
 
 export interface PostPageData extends SiteChrome {
   title: string;
@@ -79,7 +80,7 @@ export function renderPostPage(post: PostPageData): string {
   const showComments = post.showComments !== false;
   const a = post.assets;
   const v = bundleVersion(a);
-  const head = siteHead(post.site, { isAdmin: post.isAdmin });
+  const head = siteHead(post.site, { isAdmin: post.isAdmin, buildHash: a.hash });
   const banner = post.bannerHtml ?? '';
   const siteChrome = post.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   const scriptTags =
@@ -91,7 +92,9 @@ export function renderPostPage(post: PostPageData): string {
 <script type="module" src="${a.base}/site/lightbox.js${v}" defer></script>
 <script type="module" src="${a.base}/site/carousel.js${v}" defer></script>
 <script type="module" src="${a.base}/site/copy-link.js${v}" defer></script>
-<script type="module" src="${a.base}/site/comment-form.js${v}" defer></script>`;
+<script type="module" src="${a.base}/site/comment-form.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,6 +103,7 @@ export function renderPostPage(post: PostPageData): string {
 <title>${escapeText(post.title)} — ${escapeText(post.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+${buildMetaTag(a.hash)}
 <link rel="stylesheet" href="${a.base}/site/lightbox.css${v}"/>
 <meta name="theme-color" content="#1a4f7f"/>
 ${scriptTags}

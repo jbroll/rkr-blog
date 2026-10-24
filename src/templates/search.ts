@@ -12,6 +12,7 @@ import {
   siteHead,
   stylesheetLinks
 } from './layout.ts';
+import { buildMetaTag } from './version-tag.ts';
 
 export interface SearchHit {
   slug: string;
@@ -30,7 +31,7 @@ export interface SearchPageData extends SiteChrome {
 export function renderSearchPage(data: SearchPageData): string {
   const a = data.assets;
   const v = bundleVersion(a);
-  const head = siteHead(data.site, { isAdmin: data.isAdmin });
+  const head = siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash });
   const trimmed = data.q.trim();
 
   let bodyHtml: string;
@@ -58,8 +59,11 @@ export function renderSearchPage(data: SearchPageData): string {
 <title>Search — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+${buildMetaTag(a.hash)}
 <meta name="theme-color" content="#1a4f7f"/>
 <script type="module" src="${a.base}/site/sw-unregister.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
 </head>
 <body>
 ${head}<main id="main" tabindex="-1">

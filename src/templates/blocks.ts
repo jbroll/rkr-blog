@@ -8,6 +8,7 @@ import {
   siteHead,
   stylesheetLinks
 } from './layout.ts';
+import { buildMetaTag } from './version-tag.ts';
 
 export interface BlocksPageData extends SiteChrome {
   title: string;
@@ -59,14 +60,17 @@ export function renderBlocksPage(data: BlocksPageData): string {
 <title>${escapeText(data.title)} — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+${buildMetaTag(a.hash)}
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin })}
+${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash })}
 <main id="main" tabindex="-1">
 ${data.bodyHtml}</main>
 ${data.isAdmin && data.slug ? blocksAdminFab(data.slug) : ''}
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
 <script type="module" src="${a.base}/site/carousel.js${bundleVersion(a)}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${bundleVersion(a)}" defer></script>
+<script type="module" src="${a.base}/site/version-check.js${bundleVersion(a)}" defer></script>
 </body>
 </html>
 `;
