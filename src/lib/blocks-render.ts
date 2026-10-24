@@ -63,11 +63,11 @@ function strSlots(slots: Slots | undefined): Record<string, string> {
 
 const EMBED_ALLOW = ['youtube.com', 'youtu.be', 'vimeo.com', 'docs.google.com', 'maps.google.com'];
 
-/** Optional render decorations. `mark` returns an invisible prefix
- * (the editor uses an HTML comment carrying the node's tree path) that
- * is prepended to every non-empty node so the browser can zip the DOM
- * back to tree paths. Absent `mark`, output is byte-identical to the
- * public render. */
+/** Optional render decorations, shared by `renderNode` and
+ * `renderBlockTree`. `mark` returns an invisible prefix (the editor uses
+ * an HTML comment carrying the node's tree path) that is prepended to
+ * every non-empty node so the browser can zip the DOM back to tree
+ * paths. Absent `mark`, output is byte-identical to the public render. */
 interface RenderNodeOpts {
   mark?: (path: number[]) => string;
 }
@@ -234,7 +234,7 @@ export async function renderBlockTree(
   tree: BlockTree,
   ctx: RenderCtx,
   lib: RenderMacroLib,
-  opts?: { mark?: (path: number[]) => string }
+  opts?: RenderNodeOpts
 ): Promise<string> {
   const out = await Promise.all(tree.body.map((n, i) => renderNode(n, ctx, lib, [], [i], opts)));
   return out.join('');

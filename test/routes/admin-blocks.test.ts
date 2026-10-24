@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { describe, it, type TestContext } from 'node:test';
+import sharp from 'sharp';
 
 import { open } from '../../src/lib/db.ts';
 import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { ingestStream } from '../../src/lib/originals.ts';
 import { buildApp } from '../../src/server.ts';
 
 const TREE = {
@@ -14,6 +17,36 @@ const TREE = {
   body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Saved.' }] }],
   fields: { title: 'Saved page', slug: 'saved' }
 };
+
+/** Ingest one real image so the figure widget's image map resolves it. */
+async function ingestImage(root: string): Promise<string> {
+  const jpeg = await sharp({
+    create: { width: 320, height: 240, channels: 3, background: { r: 30, g: 60, b: 200 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  const { id } = await ingestStream({
+    stream: Readable.from([jpeg]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'pic.jpg' }
+  });
+  return id;
+}
+
+/** Publish a block page through the real save route (writes the file and
+ * reindexes), so `GET /:slug` serves it as the visitor-facing twin. */
+async function publishPage(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  slug: string,
+  body: unknown[]
+): Promise<void> {
+  const res = await app.inject({
+    method: 'POST',
+    url: `/admin/blocks/${slug}`,
+    payload: { tree: { version: 1, body, fields: { title: slug, slug, status: 'published' } } }
+  });
+  assert.equal(res.statusCode, 200);
+}
 
 async function setup(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-admin-blocks-'));
@@ -248,6 +281,53 @@ describe('admin blocks save', () => {
       tree.body.map((n) => n.type),
       ['text', 'section', 'macro']
     );
+  });
+
+  it('GET /admin/blocks/edit/:slug resolves page figures like the public route', async (t) => {
+    const { root, app } = await setup(t);
+    const id = await ingestImage(root);
+    await publishPage(app, 'photo', [{ type: 'figure', slots: { ids: id } }]);
+
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/photo' });
+    assert.equal(edit.statusCode, 200);
+    assert.match(edit.body, /<picture>/);
+    assert.match(edit.body, /rkr-figure-cell/);
+    assert.doesNotMatch(edit.body, /figure: no ids resolved/);
+
+    // Parity with the visitor-facing page for the same tree: the edit
+    // page uses identical resolved image sources.
+    const pub = await app.inject({ method: 'GET', url: '/photo' });
+    assert.equal(pub.statusCode, 200);
+    assert.match(pub.body, /<picture>/);
+    const srcsets = [...pub.body.matchAll(/srcset="([^"]+)"/g)].map((m) => m[1] as string);
+    assert.ok(srcsets.length > 0, 'public page resolves image variants');
+    for (const srcset of srcsets) assert.ok(edit.body.includes(srcset), `edit body has ${srcset}`);
+  });
+
+  it('GET /admin/blocks/edit/:slug resolves figures inside macro expansions', async (t) => {
+    const { root, app } = await setup(t);
+    const id = await ingestImage(root);
+    fs.writeFileSync(
+      path.join(root, 'macros', 'photo.json'),
+      JSON.stringify({
+        defaults: {},
+        tree: { type: 'section', children: [{ type: 'figure', slots: { ids: id } }] }
+      })
+    );
+    await publishPage(app, 'macro-photo', [{ type: 'macro', macro: 'photo' }]);
+
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/macro-photo' });
+    assert.equal(edit.statusCode, 200);
+    assert.match(edit.body, /<picture>/);
+    assert.doesNotMatch(edit.body, /figure: no ids resolved/);
+    // The macro instance stays one editable unit.
+    assert.match(edit.body, /<!--rkr:path=0-->/);
+
+    // Visitors already see the photo; the edit page must match.
+    const pub = await app.inject({ method: 'GET', url: '/macro-photo' });
+    assert.equal(pub.statusCode, 200);
+    assert.match(pub.body, /<picture>/);
+    assert.doesNotMatch(pub.body, /figure: no ids resolved/);
   });
 
   it('GET /admin/blocks/new renders the new-page form', async (t) => {

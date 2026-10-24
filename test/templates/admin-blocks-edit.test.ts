@@ -3,18 +3,43 @@ import { describe, it } from 'node:test';
 
 import { renderBlocksEditPage } from '../../src/templates/admin-blocks-edit.ts';
 
+const base = {
+  site: { title: 'rkroll' },
+  assets: { theme: 'default', hash: 'abc', base: '/admin/static' },
+  slug: 'hello',
+  bundleUrl: '/admin/static/admin/blocks-page-editor-entry.js?v=abc',
+  isAdmin: true
+};
+
+/** The embedded tree script's raw text (between the tags). */
+function treeScript(html: string): string {
+  const match = html.match(/<script type="application\/json" id="rkr-tree">([\s\S]*?)<\/script>/);
+  assert.ok(match, 'template emits #rkr-tree');
+  return match[1] as string;
+}
+
 describe('blocks edit page template', () => {
   it('mounts the editor root with the page slug', () => {
-    const html = renderBlocksEditPage({
-      site: { title: 'rkroll' },
-      assets: { theme: 'default', hash: 'abc', base: '/admin/static' },
-      slug: 'hello',
-      bundleUrl: '/admin/static/admin/blocks-page-editor-entry.js?v=abc',
-      isAdmin: true
-    });
+    const html = renderBlocksEditPage(base);
     assert.match(html, /rkr-blocks-edit-root/);
     assert.match(html, /data-slug="hello"/);
     assert.match(html, /blocks-page-editor-entry/);
     assert.match(html, /Edit hello/);
+  });
+
+  it('escapes tree JSON so a markdown slot cannot close the script element', () => {
+    const tree = {
+      version: 1,
+      body: [{ type: 'text', markdown: 'before </script><!-- after' }]
+    };
+    const html = renderBlocksEditPage({ ...base, treeJson: JSON.stringify(tree) });
+    const raw = treeScript(html);
+
+    // `<` is escaped in the raw script text, so neither `</script>` nor
+    // `<!--` can appear there and the JSON parses back unchanged.
+    assert.doesNotMatch(raw, /</);
+    assert.match(raw, /\\u003c\/script>/);
+    assert.match(raw, /\\u003c!--/);
+    assert.deepEqual(JSON.parse(raw), tree);
   });
 });
