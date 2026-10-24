@@ -279,10 +279,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     const node = getAtPath(tree, path);
     if (!node || node.type !== 'figure') return;
     select(path);
-    console.log('[unified] openFigureConfig', path);
     openFigureDialog(root, {
       initial: readFigureFields(node),
-      onCommit: (slots) => { console.log('[unified] figure commit', slots); commitFigureSlots(path, slots); },
+      onCommit: (slots) => commitFigureSlots(path, slots),
       onCancel: () => {}
     });
   };
@@ -376,6 +375,18 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   }
 
   setMode('view');
+
+  // Preserve edit mode across the reload that follows a structural save
+  // (insert, figure/macro dialog commit): the flag is set by reloadPage()
+  // and cleared here so a manual reload lands in view mode.
+  try {
+    if (sessionStorage.getItem('rkr-edit-mode') === '1') {
+      sessionStorage.removeItem('rkr-edit-mode');
+      setMode('edit');
+    }
+  } catch {
+    // sessionStorage may be unavailable; ignore.
+  }
 
   return {
     setMode,

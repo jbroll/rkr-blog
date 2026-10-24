@@ -28,10 +28,15 @@ import {
 
 /** Reload so the DOM stays the server render: structural inserts have
  * no live markup until the save round-trips. Text blurs skip this. */
-export function reloadPage(): void {
+export const reloadPage = (): void => {
+  try {
+    sessionStorage.setItem('rkr-edit-mode', '1');
+  } catch {
+    // sessionStorage may be unavailable (private mode); ignore.
+  }
   const loc = (globalThis as { location?: { reload(): void } }).location;
   loc?.reload();
-}
+};
 
 const PAGE_CONTAINERS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
 

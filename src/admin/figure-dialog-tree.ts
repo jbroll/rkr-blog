@@ -145,6 +145,18 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   shell.append(footer);
   root.append(shell);
 
+  // Backdrop click + Escape close without committing.
+  shell.addEventListener?.('click', ((ev: unknown) => {
+    if ((ev as { target?: unknown }).target === shell) close();
+  }) as () => void);
+  const onKey = (ev: unknown): void => {
+    if ((ev as { key?: string }).key === 'Escape') {
+      close();
+      if (typeof document !== 'undefined') document.removeEventListener('keydown', onKey);
+    }
+  };
+  if (typeof document !== 'undefined') document.addEventListener('keydown', onKey);
+
   const close = (): void => {
     root.removeChild?.(shell);
   };
@@ -166,7 +178,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
       const result = validateFigureFields(values);
       if (!result.ok) {
         errors = result.errors;
-        errorList.textContent = result.errors.join(' ');
+        if (errorList) errorList.textContent = result.errors.join(' ');
         return false;
       }
       errors = [];
