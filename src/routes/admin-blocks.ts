@@ -11,19 +11,56 @@ import type { FastifyInstance } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
 import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
-import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
+import { type BlockNode, type BlockTree, parseBlockTree } from '../lib/blocks.ts';
+import { renderBlockTree } from '../lib/blocks-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
+import { buildImageMap } from '../lib/image-map-fs.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { runReindex } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { buildVideoMap } from '../lib/video-map-fs.ts';
+import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
 import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
+import figureWidget from '../widgets/figure.ts';
+import videoWidget from '../widgets/video.ts';
 import { prewarmBlockTree } from './admin-prewarm.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
+
+/** Invisible marker prepended to each rendered node on the edit page.
+ * Form is pinned (`<!--rkr:path=i,j-->`, no spaces) so the client can
+ * parse it with a single regex. */
+const pathMarker = (path: number[]): string => `<!--rkr:path=${path.join(',')}-->`;
+
+/** Figure directives eligible for the image-map prepass. Mirrors the
+ * `/pages/:slug` render (see routes/blocks.ts): macro internals are not
+ * walked here. */
+function figureDirectives(tree: BlockTree): DirectiveNode[] {
+  const out: DirectiveNode[] = [];
+  const walk = (node: BlockNode): void => {
+    if (node.type === 'figure') {
+      out.push({
+        type: 'leafDirective',
+        name: 'figure',
+        attributes: { ids: String((node.slots?.ids ?? '') as string) },
+        children: []
+      });
+      return;
+    }
+    if (node.type === 'macro') return;
+    const kids: BlockNode[] =
+      (node as { children?: BlockNode[] }).children ??
+      (node as { blocks?: BlockNode[] }).blocks ??
+      [];
+    for (const k of kids) walk(k);
+  };
+  for (const n of tree.body) walk(n);
+  return out;
+}
 
 export interface AdminBlockRoutesOpts {
   siteRoot: string;
@@ -41,6 +78,9 @@ export function registerAdminBlockRoutes(
 ): void {
   const { siteRoot, getSite } = opts;
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
+  const widgets = new WidgetRegistry();
+  widgets.register(figureWidget);
+  widgets.register(videoWidget);
 
   fastify.get('/admin/blocks/macros', { ...guard }, async (_req, _reply) => {
     const lib = loadMacroLibrary(`${siteRoot}/macros`);
@@ -109,9 +149,27 @@ export function registerAdminBlockRoutes(
     { ...guard },
     async (req, reply) => {
       const { slug } = req.params;
-      if (!/^[a-z0-9-]+$/.test(slug) || !readBlockPage(siteRoot, slug)) {
-        return reply.code(404).send({ error: 'not found' });
-      }
+      const page = VALID_SLUG.test(slug) ? readBlockPage(siteRoot, slug) : null;
+      if (!page) return reply.code(404).send({ error: 'not found' });
+
+      // Render the same body the public page shows (/pages/:slug
+      // pipeline: macro library, image/video maps, widget dispatch),
+      // plus invisible path markers for in-place editing, and embed the
+      // canonical tree for client hydration.
+      const lib = loadMacroLibrary(path.join(siteRoot, 'macros'));
+      const macroLib = {
+        get: (name: string) => {
+          const def = lib.get(name);
+          return def ? { defaults: def.defaults, tree: def.tree } : undefined;
+        }
+      };
+      const ctx = {
+        images: await buildImageMap(siteRoot, figureDirectives(page.tree), { log: req.log }),
+        videos: await buildVideoMap(siteRoot),
+        widgets
+      };
+      const bodyHtml = await renderBlockTree(page.tree, ctx, macroLib, { mark: pathMarker });
+
       setPublicSecurityHeaders(reply);
       const assets = serverAssets('/admin/static');
       return reply.type('text/html; charset=utf-8').send(
@@ -120,7 +178,9 @@ export function registerAdminBlockRoutes(
           assets,
           slug,
           bundleUrl: `/admin/static/admin/blocks-page-editor-entry.js?v=${assets.hash}`,
-          isAdmin: true
+          isAdmin: true,
+          bodyHtml,
+          treeJson: JSON.stringify(page.tree)
         })
       );
     }

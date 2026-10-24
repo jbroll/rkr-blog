@@ -63,12 +63,44 @@ function strSlots(slots: Slots | undefined): Record<string, string> {
 
 const EMBED_ALLOW = ['youtube.com', 'youtu.be', 'vimeo.com', 'docs.google.com', 'maps.google.com'];
 
+/** Optional render decorations. `mark` returns an invisible prefix
+ * (the editor uses an HTML comment carrying the node's tree path) that
+ * is prepended to every non-empty node so the browser can zip the DOM
+ * back to tree paths. Absent `mark`, output is byte-identical to the
+ * public render. */
+interface RenderNodeOpts {
+  mark?: (path: number[]) => string;
+}
+
+/** Render one node, then (when marking) prepend its path marker.
+ * Nodes that render nothing — e.g. a text leaf with empty markdown —
+ * emit no marker, so markers and the client's source-tree flattening
+ * (same skip rule) stay aligned. */
 async function renderNode(
   node: BlockNode,
   ctx: RenderCtx,
   lib: RenderMacroLib,
-  stack: string[]
+  stack: string[],
+  path: number[],
+  opts?: RenderNodeOpts
 ): Promise<string> {
+  const html = await renderNodeHtml(node, ctx, lib, stack, path, opts);
+  if (!html || !opts?.mark) return html;
+  return `${opts.mark(path)}${html}`;
+}
+
+async function renderNodeHtml(
+  node: BlockNode,
+  ctx: RenderCtx,
+  lib: RenderMacroLib,
+  stack: string[],
+  path: number[],
+  opts?: RenderNodeOpts
+): Promise<string> {
+  // Render a container's children with their index appended to the path.
+  const renderKids = (kids: BlockNode[]): Promise<string[]> =>
+    Promise.all(kids.map((k, i) => renderNode(k, ctx, lib, stack, [...path, i], opts)));
+
   switch (node.type) {
     case 'section': {
       const slots = node.slots ?? {};
@@ -77,21 +109,21 @@ async function renderNode(
         : 'light';
       const edge = textOf(slots.edge, 'straight');
       const kids = node.children ?? [];
-      const inner = (await Promise.all(kids.map((k) => renderNode(k, ctx, lib, stack)))).join('');
+      const inner = (await renderKids(kids)).join('');
       const wave =
         edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
       return `<section class="rkr-section rkr-theme-${escapeAttr(theme)}">\n<div class="rkr-section-inner">\n${inner}</div>${wave}\n</section>\n`;
     }
     case 'row': {
       const kids = node.children ?? [];
-      const inner = (await Promise.all(kids.map((k) => renderNode(k, ctx, lib, stack)))).join('');
+      const inner = (await renderKids(kids)).join('');
       return `<div class="rkr-row">\n${inner}</div>\n`;
     }
     case 'col':
     case 'flow': {
       const cls = node.type === 'col' ? 'rkr-col' : 'rkr-flow';
       const kids = node.children ?? node.blocks ?? [];
-      const inner = (await Promise.all(kids.map((k) => renderNode(k, ctx, lib, stack)))).join('');
+      const inner = (await renderKids(kids)).join('');
       return `<div class="${cls}">\n${inner}</div>\n`;
     }
     case 'text': {
@@ -155,7 +187,9 @@ async function renderNode(
         def.tree.type === 'macro'
           ? { ...def.tree, slots: merged.slots }
           : ({ ...(def.tree as object), slots: merged.slots } as BlockNode);
-      return renderNode(tree, ctx, lib, [...stack, node.macro]);
+      // The instance is one editable unit: mark the instance path once,
+      // render the expansion internals unmarked.
+      return renderNodeHtml(tree, ctx, lib, [...stack, node.macro], path);
     }
     default: {
       throw new Error(`renderBlockTree: unknown block type ${(node as { type: unknown }).type}`);
@@ -192,12 +226,16 @@ export function collectBlockFigureIds(
 }
 
 /** Render a whole page tree. Unknown macros and cycles become HTML
- * comments so authoring errors are visible without breaking the page. */
+ * comments so authoring errors are visible without breaking the page.
+ * Passing `opts.mark` prefixes each rendered node with the marker it
+ * returns (used by the unified editor to address nodes); without it the
+ * output is the public page, byte-for-byte. */
 export async function renderBlockTree(
   tree: BlockTree,
   ctx: RenderCtx,
-  lib: RenderMacroLib
+  lib: RenderMacroLib,
+  opts?: { mark?: (path: number[]) => string }
 ): Promise<string> {
-  const out = await Promise.all(tree.body.map((n) => renderNode(n, ctx, lib, [])));
+  const out = await Promise.all(tree.body.map((n, i) => renderNode(n, ctx, lib, [], [i], opts)));
   return out.join('');
 }

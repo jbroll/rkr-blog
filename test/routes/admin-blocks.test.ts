@@ -202,6 +202,54 @@ describe('admin blocks save', () => {
     );
   });
 
+  it('GET /admin/blocks/edit/:slug renders the page body with path markers and the tree', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'macros', 'hero.json'),
+      JSON.stringify({ defaults: {}, tree: { type: 'text', markdown: 'Hero body' } })
+    );
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'saved.json'),
+      JSON.stringify({
+        version: 1,
+        body: [
+          { type: 'text', markdown: 'Edit me' },
+          { type: 'section', children: [{ type: 'text', markdown: 'Inner' }] },
+          { type: 'macro', macro: 'hero' }
+        ],
+        fields: { title: 'Saved', slug: 'saved' }
+      })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/edit/saved' });
+    assert.equal(res.statusCode, 200);
+
+    // The saved tree renders as the public page body (markdown,
+    // containers, and macro expansion through the site macro library).
+    assert.match(res.body, /<p>Edit me<\/p>/);
+    assert.match(res.body, /<p>Inner<\/p>/);
+    assert.match(res.body, /<p>Hero body<\/p>/);
+
+    // One invisible path marker per rendered node, in document order.
+    // The macro instance is one unit: its expansion is unmarked.
+    const order = [...res.body.matchAll(/<!--rkr:path=([0-9,]+)-->/g)].map((m) => m[1]);
+    assert.deepEqual(order, ['0', '1', '1,0', '2']);
+
+    // The canonical tree is embedded for client hydration.
+    const embed = res.body.match(
+      /<script type="application\/json" id="rkr-tree">([\s\S]*?)<\/script>/
+    );
+    assert.ok(embed, 'edit page embeds #rkr-tree');
+    const tree = JSON.parse(embed[1] as string) as {
+      version: number;
+      body: { type: string }[];
+    };
+    assert.equal(tree.version, 1);
+    assert.deepEqual(
+      tree.body.map((n) => n.type),
+      ['text', 'section', 'macro']
+    );
+  });
+
   it('GET /admin/blocks/new renders the new-page form', async (t) => {
     const { app } = await setup(t);
     const res = await app.inject({ method: 'GET', url: '/admin/blocks/new' });

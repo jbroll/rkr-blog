@@ -18,6 +18,15 @@ const fakeCtx = {
   widgets: new WidgetRegistry()
 };
 
+/** Marker comments in document order; each is the node's tree path. */
+function markerPaths(html: string): number[][] {
+  return [...html.matchAll(/<!--rkr:path=([0-9,]+)-->/g)].map((m) =>
+    (m[1] as string).split(',').map(Number)
+  );
+}
+
+const mark = (p: number[]): string => `<!--rkr:path=${p.join(',')}-->`;
+
 const sectionWithHello: BlockTree = {
   version: 1,
   body: [
@@ -74,6 +83,87 @@ describe('blocks-render', () => {
     };
     const html = await renderBlockTree(tree, fakeCtx, emptyLib);
     assert.match(html, /<a[^>]*href="\/join"[^>]*>Join<\/a>/);
+  });
+
+  it('markers zip with source order, public output unchanged without mark', async () => {
+    // Two top-level leaves then a section wrapping two leaves (a
+    // section>… nesting: each child appends its index to the parent path).
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'One' },
+        { type: 'text', markdown: 'Two' },
+        {
+          type: 'section',
+          children: [
+            { type: 'text', markdown: 'Three' },
+            { type: 'text', markdown: 'Four' }
+          ]
+        }
+      ]
+    };
+    const plain = await renderBlockTree(tree, fakeCtx, emptyLib);
+    // Today's public output, byte-for-byte.
+    assert.equal(
+      plain,
+      '<p>One</p>\n<p>Two</p>\n<section class="rkr-section rkr-theme-light">\n<div class="rkr-section-inner">\n<p>Three</p>\n<p>Four</p>\n</div>\n</section>\n'
+    );
+
+    const marked = await renderBlockTree(tree, fakeCtx, emptyLib, { mark });
+    // Markers are invisible HTML comments: removing them restores the
+    // exact public output.
+    assert.equal(marked.replace(/<!--rkr:path=[0-9,]+-->/g, ''), plain);
+    // Document order === source order; the section itself is a node
+    // ([2]) as well as its children ([2,0], [2,1]) so the client zip
+    // matches the source-tree flattening.
+    assert.deepEqual(markerPaths(marked), [[0], [1], [2], [2, 0], [2, 1]]);
+  });
+
+  it('macro instance emits one marker (internals unmarked)', async () => {
+    const macroLib: RenderMacroLib = {
+      get: (name: string) =>
+        name === 'hero'
+          ? {
+              defaults: {},
+              tree: {
+                type: 'section',
+                children: [
+                  {
+                    type: 'row',
+                    children: [{ type: 'col', children: [{ type: 'text', markdown: 'Hero' }] }]
+                  }
+                ]
+              }
+            }
+          : undefined
+    };
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'macro', macro: 'hero' },
+        { type: 'text', markdown: 'After' }
+      ]
+    };
+    const plain = await renderBlockTree(tree, fakeCtx, macroLib);
+    const marked = await renderBlockTree(tree, fakeCtx, macroLib, { mark });
+    assert.equal(marked.replace(/<!--rkr:path=[0-9,]+-->/g, ''), plain);
+    assert.deepEqual(markerPaths(marked), [[0], [1]]);
+    assert.match(marked, /Hero/);
+  });
+
+  it('empty text emits no marker', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: '' },
+        { type: 'text', markdown: 'Hi' },
+        { type: 'button', slots: { label: 'Go', href: '/go' } }
+      ]
+    };
+    const plain = await renderBlockTree(tree, fakeCtx, emptyLib);
+    const marked = await renderBlockTree(tree, fakeCtx, emptyLib, { mark });
+    assert.equal(marked.replace(/<!--rkr:path=[0-9,]+-->/g, ''), plain);
+    assert.deepEqual(markerPaths(marked), [[1], [2]]);
   });
 
   it('collects figure ids including inside macros', () => {
