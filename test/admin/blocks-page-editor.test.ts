@@ -9,9 +9,10 @@ import {
   removeAtPath,
   renderCard,
   resolveDrop,
-  setSlotAtPath
+  setSlotAtPath,
+  updateSlotsAtPath
 } from '../../src/admin/blocks-page-editor.ts';
-import type { BlockTree } from '../../src/lib/blocks.ts';
+import type { BlockTree, Slots } from '../../src/lib/blocks.ts';
 
 const TREE: BlockTree = {
   version: 1,
@@ -27,6 +28,20 @@ const TREE: BlockTree = {
 };
 
 describe('blocks page editor ops', () => {
+  it('updates slots with merge and delete semantics', () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'macro', macro: 'hero', slots: { heading: 'Old', sub: 'Keep' } }]
+    };
+    const next = updateSlotsAtPath(tree, [0], (slots) => {
+      const out: Slots = { ...slots, heading: 'New' };
+      delete out.sub;
+      return out;
+    });
+    assert.deepEqual((next.body[0] as { slots: unknown }).slots, { heading: 'New' });
+    assert.deepEqual((tree.body[0] as { slots: unknown }).slots, { heading: 'Old', sub: 'Keep' });
+  });
+
   it('reads nodes by path', () => {
     assert.equal(getAtPath(TREE, [])?.type, undefined);
     assert.equal(getAtPath(TREE, [0])?.type, 'section');

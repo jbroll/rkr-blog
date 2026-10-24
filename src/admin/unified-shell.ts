@@ -15,10 +15,14 @@
 //
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
-import type { BlockNode, BlockTree } from '../lib/blocks.ts';
-import { mountBlocksPalette, type PaletteMacro, primitiveNode } from './blocks-editor.ts';
-import { getAtPath, insertAtPath, type Path, setSlotAtPath } from './blocks-page-editor.ts';
+import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
+import type { PaletteMacro } from './blocks-editor.ts';
+import { getAtPath, type Path, setSlotAtPath, updateSlotsAtPath } from './blocks-page-editor.ts';
 import { domToMarkdown } from './dom-markdown.ts';
+import { openFigureDialog, readFigureFields } from './figure-dialog-tree.ts';
+import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
+import { mountPaletteInsert, reloadPage } from './unified-insert.ts';
+import { createSavePipeline } from './unified-save.ts';
 
 type Mode = 'view' | 'edit';
 
@@ -151,16 +155,13 @@ function textSource(node: BlockNode): string | null {
   return typeof markdown === 'string' ? markdown : '';
 }
 
-/** Save states surfaced on the shell for tests and the indicator. */
-type SaveState = 'clean' | 'editing' | 'saving' | 'unsaved';
-
 function nodeLabel(node: BlockNode): string {
   return node.type === 'macro' ? `macro ${node.macro}` : node.type;
 }
 
-/** Mount the unified editor over the server-rendered page in `root`.
- * The page is armed for click-selection immediately; View mode (the
- * default) hides the palette and keeps every node inert. */
+/** Page-level depth gate, derived from the macro rule: containers may
+ * not land at depth 3 or deeper — save the inner part as its own macro
+ * instead. Leaves and macro instances are always allowed. */
 export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): UnifiedShell {
   const doc = root.ownerDocument;
   const shellEl = mustFind(root, '#rkr-unified-shell');
@@ -179,74 +180,18 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   // Indexed after hydration below (units must exist first).
   let unitByPath = new Map<string, HydratedUnit>();
 
-  let saveState: SaveState = 'clean';
-  let inFlight: Promise<void> | null = null;
-  let queued: BlockTree | null = null;
+  const save = createSavePipeline({
+    onSave: deps.onSave,
+    getTree: () => tree,
+    shellEl,
+    toolbar
+  });
 
-  const indicator = doc.createElement('span');
-  indicator.className = 'rkr-unified-save-state';
-  toolbar.append(indicator);
-  const saveBtn = doc.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = 'rkr-unified-save';
-  saveBtn.textContent = 'Save page';
-  toolbar.append(saveBtn);
-
-  const setState = (next: SaveState): void => {
-    saveState = next;
-    shellEl.setAttribute('data-save-state', next);
-    indicator.textContent =
-      next === 'clean' ? 'Saved' : next === 'editing' ? 'Editing…' : next === 'saving' ? 'Saving…' : 'Unsaved changes';
-  };
-  setState('clean');
-
-  const runSave = async (snapshot: BlockTree): Promise<void> => {
-    setState('saving');
-    inFlight = deps
-      .onSave(snapshot)
-      .then(() => {
-        if (queued && queued !== snapshot) {
-          const next = queued;
-          queued = null;
-          void runSave(next);
-          return;
-        }
-        queued = null;
-        inFlight = null;
-        setState('clean');
-      })
-      .catch(() => {
-        // Offline or server error: keep the tree, mark unsaved, retry
-        // on the next blur, Save click, or browser online event.
-        // Reload-before-reconnect loses the edit; durable offline
-        // queueing is tracked follow-up work, not silent behavior.
-        inFlight = null;
-        setState('unsaved');
-      });
-    await inFlight;
-  };
-
-  /** Persist `next`, coalescing with an in-flight save: the queued
-   * tree always wins because immutable updates compose. */
-  const requestSave = (next: BlockTree): void => {
+  /** Persist `next` as the shell's tree through the pipeline. */
+  const saveTree = (next: BlockTree): Promise<void> => {
     tree = next;
-    if (inFlight) {
-      queued = next;
-      setState('editing');
-      return;
-    }
-    void runSave(next);
+    return save.requestSave(next);
   };
-
-  const retry = (): void => {
-    if (saveState === 'clean') return;
-    if (inFlight) return;
-    void runSave(tree);
-  };
-  saveBtn.addEventListener('click', retry);
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', retry);
-  }
 
   // Blur on edited text serializes the leaf back to the markdown DSL.
   // focusout bubbles, so one delegated listener covers every leaf.
@@ -263,12 +208,12 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     if (after === before) return;
     select(unit.path);
     const next = setSlotAtPath(tree, unit.path, 'markdown', after);
-    setState('editing');
-    requestSave(next);
+    save.markEditing();
+    void saveTree(next);
   });
 
   body.addEventListener('input', () => {
-    if (saveState === 'clean') setState('editing');
+    save.markEditing();
   });
 
   // Now that hydration produced the live units, index them for blur lookup.
@@ -285,15 +230,84 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     }
   }
 
-  // Palette mounts once; modes only hide/show the dock. Insert appends
-  // to the page body (drop targeting lands with the drag task).
-  mountBlocksPalette(dock, deps.macros, (name) => {
-    const node: BlockNode = name.startsWith('primitive:')
-      ? primitiveNode(name)
-      : { type: 'macro', macro: name };
-    setState('editing');
-    requestSave(insertAtPath(tree, [], tree.body.length, node));
+  // Palette mounts once; modes only hide/show the dock. Placement lives
+  // in unified-insert; the shell applies the tree, saves, and reloads so
+  // the DOM stays the server render (Task 7 owns live refresh).
+  mountPaletteInsert({
+    dock,
+    body,
+    macros: deps.macros,
+    getTree: () => tree,
+    getSelected: () => selected,
+    commitInsert: (next) => {
+      tree = next;
+      save.markEditing();
+      void save.requestSave(next).then(
+        () => reloadPage(),
+        () => {}
+      );
+    },
+    showNudge: (text) => {
+      save.notice(text);
+    }
   });
+
+  /** Commit dialog slots for the figure at `path`: apply every key,
+   * then save the whole tree exactly once. Other slot keys pass
+   * through untouched. */
+  const commitFigureSlots = (path: Path, slots: Slots): void => {
+    let next = tree;
+    for (const [key, value] of Object.entries(slots)) {
+      if (typeof value === 'string') next = setSlotAtPath(next, path, key, value);
+    }
+    save.markEditing();
+    void saveTree(next).then(
+      () => reloadPage(),
+      () => {}
+    );
+  };
+
+  const macroDefaults = new Map(deps.macros.map((m) => [m.name, m.defaults ?? {}]));
+
+  const openFigureConfig = (path: Path): void => {
+    const node = getAtPath(tree, path);
+    if (!node || node.type !== 'figure') return;
+    select(path);
+    openFigureDialog(root, {
+      initial: readFigureFields(node),
+      onCommit: (slots) => commitFigureSlots(path, slots),
+      onCancel: () => {}
+    });
+  };
+
+  /** Merge touched macro fields over the instance slots (empty clears
+   * back to the default), then save once and reload so the DOM stays
+   * the server render. Untouched overrides are never dropped. */
+  const openMacroConfig = (path: Path): void => {
+    const node = getAtPath(tree, path);
+    if (!node || node.type !== 'macro') return;
+    select(path);
+    const defs = macroDefaults.get(node.macro) ?? {};
+    openMacroDialog(root, {
+      fields: readMacroFields(node, defs),
+      onCommit: (touched) => {
+        const next = updateSlotsAtPath(tree, path, (slots) => {
+          const merged = { ...slots };
+          for (const [key, value] of Object.entries(touched)) {
+            if (typeof value !== 'string' || value === '') delete merged[key];
+            else merged[key] = value;
+          }
+          return merged;
+        });
+        save.markEditing();
+        void saveTree(next).then(
+          () => reloadPage(),
+          () => {}
+        );
+      },
+      onCancel: () => {}
+    });
+  };
 
   const clearTools = (): void => {
     for (const holder of tools.splice(0)) holder.remove();
@@ -314,7 +328,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       button.setAttribute('data-config-path', unit.path.join(','));
       button.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        select(unit.path);
+        if (unit.node.type === 'figure') openFigureConfig(unit.path);
+        else if (unit.node.type === 'macro') openMacroConfig(unit.path);
+        else select(unit.path);
       });
       holder.append(button);
       // Sibling, not child: a figure's caption/gallery markup stays

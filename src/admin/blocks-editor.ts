@@ -36,6 +36,9 @@ export function isValidMacroName(name: string): boolean {
 export interface PaletteMacro {
   name: string;
   label: string;
+  /** Macro defaults for field editors; absent when the library entry
+   * carries none (primitives) or the list predates them. */
+  defaults?: Slots;
 }
 
 /** Built-in primitives, always present even with an empty macro

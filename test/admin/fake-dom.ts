@@ -6,8 +6,6 @@
 
 export type Listener = (ev: FakeEvent) => void;
 
-export type Listener = (ev: FakeEvent) => void;
-
 export class FakeEvent {
   readonly type: string;
   readonly bubbles: boolean;

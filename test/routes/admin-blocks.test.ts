@@ -160,8 +160,26 @@ describe('admin blocks save', () => {
     );
     const res = await app.inject({ method: 'GET', url: '/admin/blocks/macros' });
     assert.equal(res.statusCode, 200);
-    const list = JSON.parse(res.body) as { name: string; label: string }[];
+    const list = JSON.parse(res.body) as {
+      name: string;
+      label: string;
+      defaults?: Record<string, unknown>;
+    }[];
     assert.ok(list.some((m) => m.name === 'hero' && typeof m.label === 'string'));
+  });
+
+  it('GET /admin/blocks/macros includes macro defaults for field editors', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'macros', 'hero.json'),
+      JSON.stringify({
+        defaults: { heading: 'Fresh food' },
+        tree: { type: 'text', markdown: 'Hi' }
+      })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/macros' });
+    const list = JSON.parse(res.body) as { name: string; defaults?: Record<string, unknown> }[];
+    assert.deepEqual(list.find((m) => m.name === 'hero')?.defaults, { heading: 'Fresh food' });
   });
 
   it('rejects invalid trees and bad slugs', async (t) => {

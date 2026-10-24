@@ -63,7 +63,8 @@ export function registerAdminBlockRoutes(
       label: name
         .split('-')
         .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-        .join(' ')
+        .join(' '),
+      defaults: lib.get(name)?.defaults ?? {}
     }));
   });
 

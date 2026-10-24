@@ -57,7 +57,10 @@ function listItems(list: Element, indent: string): string[] {
     let inline = '';
     for (const grand of [...(li.childNodes as unknown as ChildNode[])]) {
       const g = grand as unknown as Element;
-      if (g.nodeType === 1 && (g.tagName.toLowerCase() === 'ul' || g.tagName.toLowerCase() === 'ol')) {
+      if (
+        g.nodeType === 1 &&
+        (g.tagName.toLowerCase() === 'ul' || g.tagName.toLowerCase() === 'ol')
+      ) {
         if (inline.trim() !== '') parts.push(`${indent}${bullet}${inline.trim()}`);
         inline = '';
         parts.push(...listItems(g, `${indent}  `));
@@ -65,7 +68,8 @@ function listItems(list: Element, indent: string): string[] {
         inline += inlineNode(g as unknown as Element & Text);
       }
     }
-    if (inline.trim() !== '' || parts.length === 0) parts.unshift(`${indent}${bullet}${inline.trim()}`);
+    if (inline.trim() !== '' || parts.length === 0)
+      parts.unshift(`${indent}${bullet}${inline.trim()}`);
     out.push(...parts);
   }
   return out;

@@ -74,6 +74,27 @@ export function setSlotAtPath(tree: BlockTree, path: Path, key: string, value: s
   );
 }
 
+/** Copy of the tree with `update` applied to the slots at `path`.
+ * Unlike setSlotAtPath (single key, always present), the updater owns
+ * the whole slots object: it may merge, and it may delete keys to
+ * un-set an override so the macro default flows through again. */
+export function updateSlotsAtPath(
+  tree: BlockTree,
+  path: Path,
+  update: (slots: Slots) => Slots
+): BlockTree {
+  const node = getAtPath(tree, path);
+  if (!node) {
+    throw new Error('blocks editor: path not found');
+  }
+  return updateList(tree, path.slice(0, -1), (list) =>
+    list.map((n, i) => {
+      if (i !== (path[path.length - 1] as number)) return n;
+      return { ...n, slots: update({ ...((n as { slots?: Slots }).slots ?? {}) }) };
+    })
+  );
+}
+
 /** Copy of the tree with `node` inserted into the parent at `index`. */
 export function insertAtPath(
   tree: BlockTree,
