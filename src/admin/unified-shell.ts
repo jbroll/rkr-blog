@@ -245,13 +245,113 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     macros: deps.macros,
     getTree: () => tree,
     getSelected: () => selected,
-    commitInsert: (next) => {
+    commitInsert: (next, path, node) => {
       tree = next;
+      // Plant a placeholder in the DOM so the dropped node is visible
+      // immediately, without waiting for a server round-trip + reload.
+      // The placeholder carries the node's path so clicks/config buttons
+      // work; the indicator reflects the in-flight save.
+      const doc = body.ownerDocument;
+      const placeholder = doc.createElement('div');
+      placeholder.setAttribute('data-rkr-path', path.join(','));
+      placeholder.className = 'rkr-unified-placeholder';
+      if (node.type === 'text') {
+        placeholder.setAttribute('contenteditable', 'true');
+        placeholder.textContent = node.markdown ?? '';
+      } else if (node.type === 'figure') {
+        placeholder.className = 'rkr-unified-empty';
+        placeholder.textContent = 'Empty figure — configure to add content';
+      } else if (node.type === 'macro') {
+        placeholder.textContent = `Macro: ${node.macro}`;
+      } else if (node.type === 'button') {
+        placeholder.textContent = String(node.slots?.label ?? 'Button');
+      } else {
+        placeholder.textContent = node.type;
+      }
+      // Find the parent element and insertion point.
+      const parentEl =
+        path.length <= 1
+          ? body
+          : body.querySelector(`[data-rkr-path="${path.slice(0, -1).join(',')}"]`);
+      if (parentEl) {
+        const idx = (path[path.length - 1] as number) ?? 0;
+        const siblings = [...parentEl.children].filter(
+          (c) => c.getAttribute('data-rkr-path')?.split(',').length === path.length
+        );
+        if (siblings.length > 0 && idx < siblings.length) {
+          const ref = siblings[idx];
+          if (ref) parentEl.insertBefore(placeholder, ref);
+          else parentEl.append(placeholder);
+        } else if (siblings.length > 0) {
+          const last = siblings[siblings.length - 1];
+          if (last) last.after(placeholder);
+          else parentEl.append(placeholder);
+        } else {
+          parentEl.append(placeholder);
+        }
+      } else {
+        body.append(placeholder);
+      }
+      // Hydrate the placeholder: click selection + config button.
+      placeholder.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        selected = [...path];
+      });
+      if (['figure', 'macro', 'button'].includes(node.type)) {
+        const holder = doc.createElement('div');
+        holder.className = 'rkr-unified-node-tools';
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rkr-unified-config';
+        btn.textContent = 'Configure';
+        btn.setAttribute(
+          'aria-label',
+          `Configure ${node.type === 'macro' ? `macro ${node.macro}` : node.type}`
+        );
+        btn.setAttribute('data-config-path', path.join(','));
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          selected = [...path];
+          if (node.type === 'figure') {
+            const n = getAtPath(tree, path);
+            if (n && n.type === 'figure') {
+              openFigureDialog(root, {
+                initial: readFigureFields(n),
+                onCommit: (slots) => commitFigureSlots(path, slots),
+                onCancel: () => {}
+              });
+            }
+          } else if (node.type === 'macro') {
+            const n = getAtPath(tree, path);
+            if (n && n.type === 'macro') {
+              const defs = macroDefaults.get(n.macro) ?? {};
+              openMacroDialog(root, {
+                fields: readMacroFields(n, defs),
+                onCommit: (touched) => {
+                  const next = updateSlotsAtPath(tree, path, (slots) => {
+                    const merged = { ...slots };
+                    for (const [key, value] of Object.entries(touched)) {
+                      if (typeof value !== 'string' || value === '') delete merged[key];
+                      else merged[key] = value;
+                    }
+                    return merged;
+                  });
+                  save.markEditing();
+                  void saveTree(next).then(
+                    () => reloadPage(),
+                    () => {}
+                  );
+                },
+                onCancel: () => {}
+              });
+            }
+          }
+        });
+        holder.append(btn);
+        placeholder.after(holder);
+      }
       save.markEditing();
-      void save.requestSave(next).then(
-        () => reloadPage(),
-        () => {}
-      );
+      void save.requestSave(next);
     },
     showNudge: (text) => {
       save.notice(text);
