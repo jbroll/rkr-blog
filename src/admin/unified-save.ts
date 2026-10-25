@@ -21,7 +21,8 @@ export interface SavePipeline {
   /** Mark local edits without saving (input events, queued coalescing). */
   markEditing(): void;
   /** Mark unsaved with `text` in the indicator (the change never reached
-   * a save, e.g. its re-render failed). Save and online still retry. */
+   * a save, e.g. its re-render failed). Stays until the next
+   * requestSave; Save and online still retry. */
   fail(text: string): void;
   /** Persist `next`, coalescing with an in-flight save: the queued
    * tree always wins because immutable updates compose. Resolves when
@@ -48,6 +49,9 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   let saveState: SaveState = 'clean';
   let inFlight: Promise<void> | null = null;
   let queued: BlockTree | null = null;
+  // Set by fail(); holds the state at unsaved until the next requestSave,
+  // so an older save resolving can't report "Saved" over it.
+  let failure: string | null = null;
 
   const indicator = doc.createElement('span');
   indicator.className = 'rkr-unified-save-state';
@@ -59,16 +63,17 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   toolbar.append(saveBtn);
 
   const setState = (next: SaveState): void => {
-    saveState = next;
-    shellEl.setAttribute('data-save-state', next);
+    saveState = failure === null ? next : 'unsaved';
+    shellEl.setAttribute('data-save-state', saveState);
     indicator.textContent =
-      next === 'clean'
+      failure ??
+      (saveState === 'clean'
         ? 'Saved'
-        : next === 'editing'
+        : saveState === 'editing'
           ? 'Editing…'
-          : next === 'saving'
+          : saveState === 'saving'
             ? 'Saving…'
-            : 'Unsaved changes';
+            : 'Unsaved changes');
   };
   setState('clean');
 
@@ -117,10 +122,11 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
       if (saveState === 'clean') setState('editing');
     },
     fail: (text: string) => {
+      failure = text;
       setState('unsaved');
-      indicator.textContent = text;
     },
     requestSave: (next: BlockTree): Promise<void> => {
+      failure = null;
       if (inFlight) {
         queued = next;
         setState('editing');

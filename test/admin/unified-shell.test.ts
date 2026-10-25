@@ -929,6 +929,119 @@ describe('unified shell live re-render', () => {
     );
   });
 
+  it('a render failure stays unsaved when an earlier save resolves', async () => {
+    const { f, tree } = hello();
+    const saved: BlockTree[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let gated = true;
+    let fail = true;
+    const shell = mount(
+      f,
+      tree,
+      async (t) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        saved.push(t);
+      },
+      undefined,
+      async (t) => {
+        if (fail) throw new Error('render 503');
+        return markedRender(t);
+      }
+    );
+    shell.setMode('edit');
+    const p = f.body.querySelector('p');
+    assert.ok(p);
+    p.textContent = 'Hello edited';
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick(2);
+    paletteButton(f, 'Text').click();
+    await tick();
+    release();
+    await tick();
+
+    assert.equal(saved.length, 1, 'the earlier blur save landed');
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    assert.match(
+      f.toolbar.querySelector('.rkr-unified-save-state')?.textContent ?? '',
+      /Couldn't refresh/
+    );
+
+    fail = false;
+    f.toolbar.querySelector('.rkr-unified-save')?.click();
+    await tick();
+    assert.equal(f.body.querySelectorAll('[data-rkr-blank]').length, 1, 'retry re-renders');
+    assert.equal(f.body.getAttribute('inert'), null, 'the body is unlocked');
+    assert.deepEqual(
+      saved.at(-1)?.body.map((n) => n.type),
+      ['text', 'text']
+    );
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('typing into a new blank block clears its blank marking', async () => {
+    const { f, tree } = hello();
+    const shell = mount(f, tree);
+    shell.setMode('edit');
+    paletteButton(f, 'Text').click();
+    await tick();
+    const blank = f.body.querySelector('[data-rkr-blank]');
+    assert.ok(blank);
+    blank.textContent = 'New words';
+    blank.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    shell.setMode('view');
+    assert.equal(blank.hasAttribute('data-rkr-blank'), false);
+    assert.equal(blank.classList.contains('rkr-unified-blank'), false);
+  });
+
+  it('a palette click during a pending render targets the new selection', async () => {
+    const f = fixture((doc) => [
+      marker(doc, '0'),
+      para(doc, 'A'),
+      marker(doc, '1'),
+      para(doc, 'B')
+    ]);
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'A' },
+        { type: 'text', markdown: 'B' }
+      ]
+    };
+    const saved: BlockTree[] = [];
+    const gates: (() => void)[] = [];
+    const shell = mount(
+      f,
+      tree,
+      async (t) => {
+        saved.push(t);
+      },
+      undefined,
+      (t) =>
+        new Promise<string>((resolve) => {
+          gates.push(() => resolve(markedRender(t)));
+        })
+    );
+    shell.setMode('edit');
+    f.body.querySelectorAll('p')[1]?.click();
+    paletteButton(f, 'Section').click();
+    await tick(2);
+    assert.deepEqual(shell.selectedPath, [2], 'selection follows the pending insert');
+    paletteButton(f, 'Text').click();
+    await tick(2);
+    for (const open of gates) open();
+    await tick();
+    const section = saved.at(-1)?.body[2] as { type: string; children?: BlockNode[] };
+    assert.equal(section.type, 'section');
+    assert.equal(section.children?.length, 1, 'the second insert lands inside the new section');
+  });
+
   it('view mode clears config tools for inserted nodes', async () => {
     const { f, tree } = hello();
     const shell = mount(f, tree);

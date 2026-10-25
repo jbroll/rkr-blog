@@ -2,7 +2,7 @@
 // The edit route embeds the canonical tree (#rkr-tree) and renders the
 // public body with `rkr:path` markers, so this module only mounts the
 // unified shell: no page fetch, no client-side renderer, no iframe
-// preview. Structural edits re-render through POST /admin/blocks/render.
+// preview. Structural edits re-render through POST /admin/blocks/_render.
 // Same-origin fetch carries the admin session cookie, so no token
 // handling is needed here; scripted clients use /admin/blocks/:slug.
 
@@ -39,7 +39,7 @@ if (root && slug && tree) {
   };
 
   const render = async (next: BlockTree): Promise<string> => {
-    const res = await fetch('/admin/blocks/render', {
+    const res = await fetch('/admin/blocks/_render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tree: next })

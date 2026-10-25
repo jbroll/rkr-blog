@@ -136,8 +136,9 @@ export function registerAdminBlockRoutes(
   );
 
   // Re-render for the editor after a structural change. Never writes;
-  // the save route persists.
-  fastify.post<{ Body: unknown }>('/admin/blocks/render', { ...guard }, async (req, reply) => {
+  // the save route persists. The `_` keeps it off VALID_SLUG, so no
+  // page slug can collide with it.
+  fastify.post<{ Body: unknown }>('/admin/blocks/_render', { ...guard }, async (req, reply) => {
     let tree: BlockTree;
     try {
       tree = parseBlockTree((req.body as { tree?: unknown } | null)?.tree);

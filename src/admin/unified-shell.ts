@@ -31,7 +31,7 @@ export interface UnifiedShellDeps {
   macros: PaletteMacro[];
   /** Persist the whole tree (`POST /admin/blocks/:slug`). */
   onSave(tree: BlockTree): Promise<void>;
-  /** Marked edit-page body for `tree` (`POST /admin/blocks/render`). */
+  /** Marked edit-page body for `tree` (`POST /admin/blocks/_render`). */
   render(tree: BlockTree): Promise<string>;
 }
 
@@ -128,6 +128,13 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     const after = domToMarkdown(unit.elements);
     if (after === before) return;
     select(unit.path);
+    if (after) {
+      // View mode hides blank placeholders; this one has content now.
+      for (const el of unit.elements) {
+        el.removeAttribute('data-rkr-blank');
+        el.classList.remove('rkr-unified-blank');
+      }
+    }
     tree = setSlotAtPath(tree, unit.path, 'markdown', after);
     shown = tree;
     save.markEditing();
@@ -242,7 +249,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     body.innerHTML = html;
     shown = rendered;
     reindex();
-    if (opts.select) select(opts.select);
     if (selected && !getAtPath(tree, selected)) selected = null;
     body.removeAttribute('inert');
     setMode(mode);
@@ -260,6 +266,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const applyLatest = async (next: BlockTree, opts: ApplyOpts): Promise<void> => {
     const mine = ++generation;
     tree = next;
+    // Set now, not at swap: a palette click before the render lands
+    // must target the new tree.
+    if (opts.select) select(opts.select);
     save.markEditing();
     body.setAttribute('inert', '');
     let html: string;
