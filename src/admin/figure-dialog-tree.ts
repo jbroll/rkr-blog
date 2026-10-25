@@ -95,7 +95,13 @@ export interface FigureDialog {
 interface FigureDialogOpts {
   initial: FigureFieldValues;
   onCommit(slots: Slots): void;
-  onCancel(): void;
+  /** Called once for every cancelled close (✕, scrim, Escape, Cancel);
+   * never for a successful Save-commit. */
+  onCancel?(): void;
+  /** Resolver for the stashed `#rkr-image-edit` section and its host.
+   * Defaults to the guarded global `document.getElementById`; tests
+   * inject a map-backed resolver because the fake document has none. */
+  getById?(id: string): HTMLElement | null;
 }
 
 /** Minimal control surface the dialog needs. Real DOM elements and the
@@ -131,7 +137,7 @@ export interface DialogRoot {
 
 /** Global-document lookup guarded for the fake-DOM unit tests (Node has
  * no `document`). */
-function byId(id: string): HTMLElement | null {
+function defaultGetById(id: string): HTMLElement | null {
   try {
     return typeof document === 'undefined' ? null : document.getElementById(id);
   } catch {
@@ -143,6 +149,7 @@ function byId(id: string): HTMLElement | null {
  * tests) use instead of touching inputs directly. */
 export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): FigureDialog {
   const doc = root.ownerDocument;
+  const getById = opts.getById ?? defaultGetById;
   const values: FigureFieldValues = { ...opts.initial };
   let errors: string[] = [];
   let closed = false;
@@ -250,7 +257,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
         if (setter) setter(id);
         // The section is now inside the dialog body; unhide it and let
         // the wired panel fetch state + paint the blob preview.
-        const section = byId('rkr-image-edit');
+        const section = getById('rkr-image-edit');
         if (section) section.hidden = false;
         const panel = (
           window as unknown as Record<
@@ -269,7 +276,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   // Move the image-edit pipeline in before the error/footer nodes so
   // #rkr-cell-preview and the op buttons render inside the dialog.
   // Element identity is preserved: wireImageEditPanel holds this node.
-  const section = byId('rkr-image-edit');
+  const section = getById('rkr-image-edit');
   if (section) {
     section.hidden = true;
     body.append(section);
@@ -302,23 +309,25 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
 
   /** Tear the dialog down: detach the key listener, stash the
    * image-edit section back in its hidden host, then remove the shell
-   * and scrim. Idempotent so every close path (✕, Cancel, scrim,
-   * commit, Escape) is safe. */
-  const close = (): void => {
+   * and scrim. `cancelled` runs `onCancel` exactly once (✕, Cancel,
+   * scrim, Escape) and never for a Save-commit. Idempotent so a second
+   * close is a no-op. */
+  const close = (cancelled: boolean): void => {
     if (closed) return;
     closed = true;
     detachKey();
     if (section) {
       section.hidden = true;
-      const host = byId('rkr-image-edit-host');
+      const host = getById('rkr-image-edit-host');
       if (host) host.append(section);
     }
     root.removeChild?.(shell);
     root.removeChild?.(scrim);
+    if (cancelled) opts.onCancel?.();
   };
 
   const onKey = (ev: Event): void => {
-    if ((ev as KeyboardEvent).key === 'Escape') close();
+    if ((ev as KeyboardEvent).key === 'Escape') close(true);
   };
   let keyAttached = false;
   const detachKey = (): void => {
@@ -339,8 +348,8 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
     // ignore
   }
 
-  closeBtn.addEventListener('click', () => close());
-  scrim.addEventListener('click', () => close());
+  closeBtn.addEventListener('click', () => close(true));
+  scrim.addEventListener('click', () => close(true));
   saveBtn.addEventListener('click', () => {
     driver.commit();
   });
@@ -363,12 +372,11 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
       }
       errors = [];
       opts.onCommit(result.slots);
-      close();
+      close(false);
       return true;
     },
     close() {
-      opts.onCancel();
-      close();
+      close(true);
     },
     errors() {
       return [...errors];

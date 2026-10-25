@@ -17,6 +17,39 @@ const FIGURE: BlockNode = {
   slots: { ids: 'aa'.repeat(32), alts: 'old alt', captions: 'old cap', justify: 'left' }
 };
 
+/** Fake page with the image-edit section stashed inside its hidden host,
+ * plus the map-backed resolver the dialog uses instead of a global
+ * document. Node has no `document`, and the fake document has no
+ * getElementById, so Esc cannot be exercised here — the e2e spec covers
+ * the browser keydown path. */
+function imageEditFixture() {
+  const doc = new FakeDocument();
+  const root = doc.createElement('div');
+  const host = doc.createElement('div');
+  host.id = 'rkr-image-edit-host';
+  host.hidden = true;
+  const section = doc.createElement('div');
+  section.id = 'rkr-image-edit';
+  host.append(section);
+  root.append(host);
+  const elements = new Map<string, ReturnType<FakeDocument['createElement']>>([
+    ['rkr-image-edit-host', host],
+    ['rkr-image-edit', section]
+  ]);
+  const getById = (id: string): HTMLElement | null =>
+    (elements.get(id) ?? null) as unknown as HTMLElement | null;
+  return { doc, root, host, section, getById };
+}
+
+function openWithFixture(fixture: ReturnType<typeof imageEditFixture>, onCancel = () => {}) {
+  return openFigureDialog(fixture.root, {
+    initial: readFigureFields(FIGURE),
+    onCommit: () => {},
+    onCancel,
+    getById: fixture.getById
+  });
+}
+
 describe('figure dialog fields', () => {
   it('reads current slots into fields', () => {
     assert.deepEqual(readFigureFields(FIGURE), {
@@ -95,6 +128,8 @@ describe('figure dialog fields', () => {
     const selected = options.filter((o) => o.hasAttribute('selected'));
     assert.equal(selected.length, 1, 'exactly one option selected');
     assert.equal(selected[0]?.getAttribute('value'), 'left');
+    const selectValue = (select as unknown as { value?: string }).value;
+    assert.equal(selectValue, 'left', 'select value reflects the current slot');
   });
 
   it('dialog commit with bad ids reports errors and commits nothing', () => {
@@ -112,5 +147,87 @@ describe('figure dialog fields', () => {
     dialog.commit();
     assert.equal(commits, 0);
     assert.ok(dialog.errors().length > 0);
+  });
+});
+
+describe('figure dialog image-edit hosting and close paths', () => {
+  it('open moves the same section node into the dialog body and hides it', () => {
+    const f = imageEditFixture();
+    openWithFixture(f);
+    const dialog = f.root.querySelector('.rkr-figure-dialog');
+    assert.ok(dialog);
+    const body = dialog.querySelector('.rkr-cell-dialog-body');
+    assert.ok(body);
+    assert.equal(f.section.parentNode, body, 'same section node, not a clone');
+    assert.equal(f.section.hidden, true);
+    assert.equal(f.host.children.length, 0, 'host is emptied while open');
+  });
+
+  it('✕ restores the section to the host and cancels once', () => {
+    const f = imageEditFixture();
+    let cancels = 0;
+    openWithFixture(f, () => {
+      cancels++;
+    });
+    const dialog = f.root.querySelector('.rkr-figure-dialog');
+    assert.ok(dialog);
+    const closeBtn = dialog.querySelector('.rkr-cell-dialog-close');
+    assert.ok(closeBtn);
+    closeBtn.click();
+    assert.equal(f.section.parentNode, f.host);
+    assert.equal(f.section.hidden, true);
+    assert.equal(cancels, 1);
+  });
+
+  it('scrim click restores the section to the host and cancels once', () => {
+    const f = imageEditFixture();
+    let cancels = 0;
+    openWithFixture(f, () => {
+      cancels++;
+    });
+    const scrim = f.root.querySelector('.rkr-figure-scrim');
+    assert.ok(scrim);
+    scrim.click();
+    assert.equal(f.section.parentNode, f.host);
+    assert.equal(f.section.hidden, true);
+    assert.equal(cancels, 1);
+  });
+
+  it('save commit restores the section without cancelling', () => {
+    const f = imageEditFixture();
+    let cancels = 0;
+    let commits = 0;
+    openFigureDialog(f.root, {
+      initial: readFigureFields(FIGURE),
+      onCommit: () => {
+        commits++;
+      },
+      onCancel: () => {
+        cancels++;
+      },
+      getById: f.getById
+    });
+    const dialog = f.root.querySelector('.rkr-figure-dialog');
+    assert.ok(dialog);
+    const saveBtn = dialog.querySelector('.rkr-figure-dialog-save');
+    assert.ok(saveBtn);
+    saveBtn.click();
+    assert.equal(commits, 1);
+    assert.equal(cancels, 0, 'save is not a cancel');
+    assert.equal(f.section.parentNode, f.host);
+    assert.equal(f.section.hidden, true);
+  });
+
+  it('double close is safe and cancels only once', () => {
+    const f = imageEditFixture();
+    let cancels = 0;
+    const driver = openWithFixture(f, () => {
+      cancels++;
+    });
+    driver.close();
+    driver.close();
+    assert.equal(cancels, 1);
+    assert.equal(f.section.parentNode, f.host);
+    assert.equal(f.section.hidden, true);
   });
 });

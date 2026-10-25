@@ -1,8 +1,9 @@
-// Public-page security headers, shared by the public route plugins
-// (src/routes/public.ts, src/routes/public-img.ts) and the global
-// not-found / error handlers in src/server.ts. Kept in one place so
-// the CSP and the header set can't drift between the happy path and
-// the error/404 chokepoint.
+// Security headers for public pages and the admin block editor. Both
+// share the same header set; only img-src differs: public pages keep
+// the tighter `'self' data:`, while the editor adds `blob:` for its
+// canvas previews. Kept in one place so the CSP and the header set
+// can't drift between the public happy path, the editor, and the
+// global not-found / error handlers in src/server.ts.
 //
 // CSP is intentionally tight: posts don't need third-party scripts,
 // images, or styles. The site-wide JS (lightbox + carousel) is

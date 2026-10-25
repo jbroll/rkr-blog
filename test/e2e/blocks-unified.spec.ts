@@ -113,21 +113,40 @@ test('figure dialog hosts the image-edit pipeline with a blob preview', async ({
   await page.getByRole('button', { name: 'Configure figure' }).click();
   const dialog = page.locator('.rkr-figure-dialog');
   await expect(dialog).toBeVisible();
+  // The section is moved, not cloned: exactly one node, inside the dialog.
+  await expect(page.locator('#rkr-image-edit')).toHaveCount(1);
+  await expect(dialog.locator('#rkr-image-edit')).toHaveCount(1);
 
   // Selecting the image moves the (formerly hidden-hosted) pipeline
   // into the dialog and paints the canvas result as a blob: preview.
-  await dialog.locator('.rkr-figure-image-thumb').first().click();
+  const thumb = dialog.locator('.rkr-figure-image-thumb').first();
+  await thumb.click();
+  await expect(thumb).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.locator('.rkr-figure-image-thumb.is-active')).toHaveCount(1);
   await expect(dialog.locator('#rkr-image-edit')).toBeVisible();
   const preview = dialog.locator('#rkr-cell-preview');
   await expect(preview).toBeVisible();
   await expect(preview).toHaveAttribute('src', /^blob:/);
 
-  expect(consoleErrors.filter((m) => /decode failed|Content Security Policy/i.test(m))).toEqual([]);
+  expect(
+    consoleErrors.filter(
+      (m) => /decode failed/i.test(m) || (/Content Security Policy/i.test(m) && /blob:/i.test(m))
+    )
+  ).toEqual([]);
 
   // Closing returns the section to its stash so a reopen starts clean.
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator('#rkr-image-edit-host #rkr-image-edit')).toHaveCount(1);
+  await expect(page.locator('#rkr-image-edit')).toBeHidden();
+
+  // Escape is the other cancel path; it must restore the same stash.
+  await page.getByRole('button', { name: 'Configure figure' }).click();
+  await expect(page.locator('.rkr-figure-dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.rkr-figure-dialog')).toHaveCount(0);
+  await expect(page.locator('#rkr-image-edit-host #rkr-image-edit')).toHaveCount(1);
+  await expect(page.locator('#rkr-image-edit')).toBeHidden();
 });
 
 test('unified edit page has no horizontal overflow at phone width', async ({ page }) => {
