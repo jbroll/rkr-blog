@@ -30,11 +30,13 @@ function escapeLineStarts(value: string): string {
   return value
     .split('\n')
     .map((line) =>
-      line.replace(
-        /^(\s*)(?:([#+-])(?=\s|$)|(>)|(\d+)([.)])(?=\s|$))/,
-        (_all, space: string, bullet?: string, quote?: string, num?: string, delim?: string) =>
-          num ? `${space}${num}\\${delim}` : `${space}\\${bullet ?? quote}`
-      )
+      line
+        .replace(/^(\s*)(?=-+\s*$|=+\s*$|~{3})/, '$1\\')
+        .replace(
+          /^(\s*)(?:([#+-])(?=\s|$)|(>)|(\d+)([.)])(?=\s|$))/,
+          (_all, space: string, bullet?: string, quote?: string, num?: string, delim?: string) =>
+            num ? `${space}${num}\\${delim}` : `${space}\\${bullet ?? quote}`
+        )
     )
     .join('\n');
 }

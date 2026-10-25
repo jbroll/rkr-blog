@@ -13,8 +13,16 @@ interface Harness {
   body: FakeElement;
   bar: () => FakeElement;
   applied: { tree: BlockTree; select?: Path }[];
-  state: { tree: BlockTree; selected: Path | null; editing: boolean; configured: Path[] };
-  actions: { refresh(): void };
+  state: {
+    tree: BlockTree;
+    selected: Path | null;
+    editing: boolean;
+    configured: Path[];
+    onFlush?: () => void;
+  };
+  log: string[];
+  layout: FakeElement;
+  actions: { refresh(): void; dispose(): void };
   press(key: string, mods?: Record<string, boolean>, target?: FakeElement): FakeEvent;
   click(action: string): void;
 }
@@ -28,11 +36,15 @@ function harness(tree: BlockTree, selected: Path | null, paths: string[]): Harne
   for (const [i, p] of body.querySelectorAll('p').entries()) {
     p.setAttribute('data-rkr-path', paths[i] as string);
   }
-  const state = { tree, selected, editing: true, configured: [] as Path[] };
+  const state: Harness['state'] = { tree, selected, editing: true, configured: [] };
+  const log: string[] = [];
   const applied: Harness['applied'] = [];
   const actions = mountBlockActions({
     body: body as unknown as Element,
-    getTree: () => state.tree,
+    getTree: () => {
+      log.push('getTree');
+      return state.tree;
+    },
     getSelected: () => state.selected,
     select: (path) => {
       state.selected = path;
@@ -44,6 +56,11 @@ function harness(tree: BlockTree, selected: Path | null, paths: string[]): Harne
     configure: (path) => {
       state.configured.push(path);
     },
+    canConfigure: (node) => node.type === 'figure' || node.type === 'macro',
+    flushText: () => {
+      log.push('flush');
+      state.onFlush?.();
+    },
     isEditing: () => state.editing
   });
   actions.refresh();
@@ -54,6 +71,8 @@ function harness(tree: BlockTree, selected: Path | null, paths: string[]): Harne
     bar,
     applied,
     state,
+    log,
+    layout,
     actions,
     press(key, mods = {}, target = body) {
       const ev = Object.assign(new FakeEvent('keydown'), { key, ...mods });
@@ -214,5 +233,81 @@ describe('block actions keyboard', () => {
     h.state.editing = false;
     h.press('Delete');
     assert.equal(h.applied.length, 0);
+  });
+});
+
+describe('block actions flush and guards', () => {
+  const ABC: BlockTree = { version: 1, body: [text('A'), text('B'), text('C')] };
+  const MACRO: BlockTree = { version: 1, body: [text('A'), { type: 'macro', macro: 'hero' }] };
+
+  const cases: [string, (h: Harness) => void, BlockTree, Path][] = [
+    ['Move down button', (h) => h.click('move-down'), ABC, [0]],
+    ['Duplicate button', (h) => h.click('duplicate'), ABC, [0]],
+    ['Delete button', (h) => h.click('delete'), ABC, [0]],
+    ['Configure button', (h) => h.click('configure'), MACRO, [1]],
+    ['Alt+ArrowDown', (h) => h.press('ArrowDown', { altKey: true }), ABC, [0]],
+    ['Mod+D', (h) => h.press('d', { ctrlKey: true }), ABC, [0]],
+    ['Delete key', (h) => h.press('Delete'), ABC, [0]],
+    ['Enter key', (h) => h.press('Enter'), MACRO, [1]]
+  ];
+
+  for (const [name, run, tree, selected] of cases) {
+    it(`${name} flushes text before reading the tree`, () => {
+      const h = harness(
+        tree,
+        selected,
+        tree.body.map((_, i) => String(i))
+      );
+      h.log.length = 0;
+      run(h);
+      const flush = h.log.indexOf('flush');
+      assert.ok(flush >= 0, 'flushText ran');
+      assert.ok(flush < h.log.indexOf('getTree'), 'flushText ran before getTree');
+    });
+  }
+
+  it('dragstart flushes text', () => {
+    const h = harness(ABC, [0], ['0', '1', '2']);
+    h.log.length = 0;
+    h.bar().querySelector('[data-action="drag"]')?.dispatchEvent(new FakeEvent('dragstart'));
+    assert.deepEqual(h.log, ['flush']);
+  });
+
+  it('the applied tree reflects what the flush committed', () => {
+    const h = harness(ABC, [0], ['0', '1', '2']);
+    h.state.onFlush = () => {
+      h.state.tree = { version: 1, body: [text('A typed'), text('B'), text('C')] };
+    };
+    h.click('duplicate');
+    assert.deepEqual(md(h.applied[0]?.tree as BlockTree), ['A typed', 'A typed', 'B', 'C']);
+  });
+
+  it('ignores block keys with focus inside an editor dialog', () => {
+    const h = harness(ABC, [1], ['0', '1', '2']);
+    const dialog = h.doc.createElement('div');
+    dialog.setAttribute('data-rkr-dialog', '');
+    const save = h.doc.createElement('button');
+    dialog.append(save);
+    h.layout.append(dialog);
+    for (const key of ['Delete', 'Backspace', 'Escape', 'Enter']) h.press(key, {}, save);
+    assert.equal(h.applied.length, 0);
+    assert.deepEqual(h.state.selected, [1]);
+    assert.deepEqual(h.state.configured, []);
+  });
+
+  it('Enter does nothing when the node cannot be configured', () => {
+    const tree: BlockTree = { version: 1, body: [{ type: 'button', slots: { label: 'Go' } }] };
+    const h = harness(tree, [0], ['0']);
+    assert.ok(h.bar().querySelector('[data-action="configure"]')?.hidden);
+    h.press('Enter');
+    assert.deepEqual(h.state.configured, []);
+  });
+
+  it('dispose removes the key listener and the toolbar', () => {
+    const h = harness(ABC, [0], ['0', '1', '2']);
+    assert.equal(h.doc.listenerCount('keydown'), 1);
+    h.actions.dispose();
+    assert.equal(h.doc.listenerCount('keydown'), 0);
+    assert.equal(h.layout.querySelector('.rkr-block-toolbar'), null);
   });
 });

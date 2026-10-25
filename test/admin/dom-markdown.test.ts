@@ -79,6 +79,47 @@ describe('domToMarkdown', () => {
     );
   });
 
+  it('escaped output renders back to the source text', async () => {
+    const sources = [
+      '2*3*4',
+      '[x](y)',
+      '# not a heading',
+      '- not a list',
+      '+ not a list',
+      '1. not a list',
+      '1) not a list',
+      '> not a quote',
+      'use `code`',
+      'back\\slash',
+      '_under_',
+      'AT&amp;T &lt;b&gt;',
+      'a <b>tag</b> here',
+      '~~~',
+      '---',
+      '===',
+      'a\n---',
+      'a\n===',
+      '***',
+      '___',
+      '- - -',
+      "Hello, world. It's (mostly) fine - really."
+    ];
+    for (const source of sources) {
+      const md = domToMarkdown([el(doc, 'p', {}, t(source))] as unknown as Element[]);
+      const html = await render(md);
+      const text = html
+        .replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .trim();
+      assert.equal(text, source, `${JSON.stringify(source)} -> ${JSON.stringify(md)}`);
+      assert.match(html, /^<p>/, `${JSON.stringify(source)} stays a paragraph`);
+    }
+  });
+
   it('escapes only where markdown would change meaning', () => {
     const cases: [string, string][] = [
       ['2*3*4', '2\\*3\\*4'],

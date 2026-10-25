@@ -156,6 +156,7 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
 
   const shell = doc.createElement('div');
   shell.className = 'rkr-cell-dialog rkr-figure-dialog';
+  shell.setAttribute('data-rkr-dialog', '');
   shell.id = 'rkr-figure-config-dialog';
   shell.setAttribute('role', 'dialog');
   shell.setAttribute('aria-modal', 'true');

@@ -47,9 +47,8 @@ export interface UnifiedShell {
   applyTree(next: BlockTree, opts?: ApplyOpts): Promise<void>;
 }
 
-/** Leaves whose extra parameters open a config dialog (figures,
- * macros). Text edits in place instead; containers need no dialog. */
-const CONFIG_TYPES: ReadonlySet<string> = new Set(['figure', 'macro', 'button']);
+/** Types `configure` opens a dialog for. */
+const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'macro']);
 
 const RENDER_FAILED = "Couldn't refresh the page. Select Save page to retry.";
 
@@ -64,10 +63,6 @@ function textSource(node: BlockNode | null): string | null {
   if (node?.type !== 'text') return null;
   const markdown = node.markdown ?? (node as { slots?: { markdown?: unknown } }).slots?.markdown;
   return typeof markdown === 'string' ? markdown : '';
-}
-
-function nodeLabel(node: BlockNode): string {
-  return node.type === 'macro' ? `macro ${node.macro}` : node.type;
 }
 
 /** Merge touched macro fields over the instance slots; an empty value
@@ -97,7 +92,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   let selected: Path | null = null;
   let units: HydratedUnit[] = [];
   let unitOf = new Map<Element, HydratedUnit>();
-  const tools: Element[] = [];
   let generation = 0;
   let latest: Promise<void> = Promise.resolve();
 
@@ -201,36 +195,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     else if (type === 'macro') openMacroConfig(path);
   };
 
-  const clearTools = (): void => {
-    for (const holder of tools.splice(0)) holder.remove();
-  };
-
-  const addTools = (): void => {
-    for (const unit of units) {
-      if (!CONFIG_TYPES.has(unit.node.type)) continue;
-      const anchor = unit.elements[unit.elements.length - 1];
-      if (!anchor?.parentNode) continue;
-      const holder = doc.createElement('div');
-      holder.className = 'rkr-unified-node-tools';
-      const button = doc.createElement('button');
-      button.type = 'button';
-      button.className = 'rkr-unified-config';
-      button.textContent = 'Configure';
-      button.setAttribute('aria-label', `Configure ${nodeLabel(unit.node)}`);
-      button.setAttribute('data-config-path', unit.path.join(','));
-      button.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        select(unit.path);
-        configure(unit.path);
-      });
-      holder.append(button);
-      // Sibling, not child: a figure's caption/gallery markup stays
-      // exactly what the public page renders.
-      anchor.after(holder);
-      tools.push(holder);
-    }
-  };
-
   const setMode = (next: Mode): void => {
     mode = next;
     shellEl.setAttribute('data-mode', next);
@@ -249,13 +213,10 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
         else el.removeAttribute('contenteditable');
       }
     }
-    clearTools();
-    if (next === 'edit') addTools();
     actions?.refresh();
   };
 
   const swap = (html: string, rendered: BlockTree, opts: ApplyOpts): void => {
-    clearTools();
     body.innerHTML = html;
     shown = rendered;
     reindex();
@@ -329,6 +290,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     select,
     applyTree,
     configure,
+    canConfigure: (node) => CONFIGURABLE.has(node.type),
     flushText,
     isEditing: () => mode === 'edit',
     drag: { start: (path) => insert.beginMove(path), end: () => insert.endMove() }

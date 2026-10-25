@@ -20,6 +20,8 @@ export interface BlockActionsEnv {
   select(path: Path | null): void;
   applyTree(next: BlockTree, opts?: { select?: Path }): Promise<void>;
   configure(path: Path): void;
+  /** Whether `configure` can open something for this node. */
+  canConfigure(node: BlockNode): boolean;
   /** Commit the focused text block before an action reads the tree. */
   flushText?(): void;
   /** Toolbar and shortcuts only act in edit mode. Defaults to true. */
@@ -28,7 +30,6 @@ export interface BlockActionsEnv {
   drag?: { start(path: Path): void; end(): void };
 }
 
-const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'button', 'macro']);
 const TYPE_LABELS: Record<string, string> = {
   text: 'Text',
   figure: 'Image',
@@ -83,7 +84,7 @@ function pathOf(el: Element | null | undefined): Path | null {
 
 const TOOLBAR_HEIGHT = 34;
 
-export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
+export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; dispose(): void } {
   const { body } = env;
   const doc = body.ownerDocument;
   const host = (body.parentNode ?? body) as Element;
@@ -143,11 +144,11 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
       void env.applyTree(next, target ? { select: target } : undefined);
     });
 
-  const configure = (): void => {
-    const path = env.getSelected();
-    const node = path ? getAtPath(env.getTree(), path) : null;
-    if (path && node && CONFIGURABLE.has(node.type)) env.configure(path);
-  };
+  const configure = (): void =>
+    act((tree, path) => {
+      const node = getAtPath(tree, path);
+      if (node && env.canConfigure(node)) env.configure(path);
+    });
 
   const button = (action: string, aria: string, text: string, onClick: () => void) => {
     const el = doc.createElement('button');
@@ -202,6 +203,17 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
     else el.removeAttribute('disabled');
   };
 
+  const position = (): void => {
+    const path = env.getSelected();
+    const first = path ? body.querySelector(`[data-rkr-path="${pathKey(path)}"]`) : null;
+    const rect = first?.getBoundingClientRect?.();
+    if (!rect) return;
+    const width = (bar as HTMLElement).offsetWidth || 0;
+    const viewport = doc.defaultView?.innerWidth ?? Number.POSITIVE_INFINITY;
+    const left = Math.max(4, Math.min(rect.left, viewport - width - 4));
+    bar.setAttribute('style', `top:${Math.max(4, rect.top - TOOLBAR_HEIGHT)}px;left:${left}px`);
+  };
+
   const refresh = (): void => {
     for (const el of body.querySelectorAll('[data-rkr-selected]')) {
       el.removeAttribute('data-rkr-selected');
@@ -220,13 +232,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
     const size = listAt(tree, path.slice(0, -1))?.length ?? 0;
     setDisabled(up, idx === 0);
     setDisabled(down, idx >= size - 1);
-    config.hidden = !CONFIGURABLE.has(node.type);
+    config.hidden = !env.canConfigure(node);
     bar.hidden = false;
-    const rect = els[0]?.getBoundingClientRect?.();
-    if (rect) {
-      const top = Math.max(4, rect.top - TOOLBAR_HEIGHT);
-      bar.setAttribute('style', `top:${top}px;left:${Math.max(4, rect.left)}px`);
-    }
+    position();
   };
 
   const neighbour = (delta: -1 | 1): void => {
@@ -245,6 +253,7 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
     const ev = raw as KeyboardEvent;
     if (ev.defaultPrevented || !editing()) return;
     const target = ev.target as Element | null;
+    if (target?.closest?.('[data-rkr-dialog]')) return;
     if (target?.closest?.('[contenteditable="true"]')) {
       if (ev.key !== 'Escape') return;
       const path = pathOf(target);
@@ -277,8 +286,16 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
   doc.addEventListener('keydown', onKeydown);
 
   const view = doc.defaultView;
-  view?.addEventListener('scroll', refresh, true);
-  view?.addEventListener('resize', refresh);
+  view?.addEventListener('scroll', position, true);
+  view?.addEventListener('resize', position);
 
-  return { refresh };
+  return {
+    refresh,
+    dispose: () => {
+      doc.removeEventListener('keydown', onKeydown);
+      view?.removeEventListener('scroll', position, true);
+      view?.removeEventListener('resize', position);
+      bar.remove();
+    }
+  };
 }

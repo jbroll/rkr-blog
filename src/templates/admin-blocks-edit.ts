@@ -53,7 +53,7 @@ const UNIFIED_CSS = `
 .rkr-unified-shell[data-mode="edit"] .rkr-col[data-rkr-path]::before{content:"Column"}
 .rkr-unified-shell[data-mode="edit"] .rkr-flow[data-rkr-path]::before{content:"Flow"}
 .rkr-unified-shell[data-mode="edit"] [data-rkr-path][data-rkr-selected]{outline:2px solid var(--rkr-edit-accent, var(--rkr-link));outline-offset:4px}
-.rkr-block-toolbar{position:fixed;z-index:50;display:flex;align-items:center;gap:.25rem;padding:.2rem .35rem;font-size:.8rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.4rem;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.rkr-block-toolbar{position:fixed;flex-wrap:wrap;max-width:calc(100vw - 8px);z-index:50;display:flex;align-items:center;gap:.25rem;padding:.2rem .35rem;font-size:.8rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.4rem;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .rkr-block-toolbar[hidden]{display:none}
 .rkr-block-type{font-weight:600;padding:0 .35rem}
 .rkr-block-action{border:1px solid var(--rkr-rule);background:var(--rkr-bg);color:inherit;border-radius:999px;padding:.1rem .55rem;font:inherit;cursor:pointer}
@@ -62,12 +62,10 @@ const UNIFIED_CSS = `
 .rkr-block-drag{cursor:grab}
 .rkr-macro-dialog{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:1000}
 .rkr-macro-dialog > *{background:var(--rkr-bg);color:var(--rkr-text);padding:1rem;border-radius:.5rem;max-width:32rem;width:90%;max-height:80vh;overflow:auto;border:1px solid var(--rkr-rule)}
-.rkr-unified-node-tools{display:flex;justify-content:flex-end;opacity:1;gap:.25rem}
 [data-rkr-path]{position:relative}
 [data-drop="before"]{box-shadow:inset 0 3px 0 0 var(--rkr-link)}
 [data-drop="after"]{box-shadow:inset 0 -3px 0 0 var(--rkr-link)}
 [data-drop="inside"]{outline:2px dashed var(--rkr-link);outline-offset:2px}
-.rkr-unified-config{border:1px solid var(--rkr-rule);background:var(--rkr-bg);color:inherit;border-radius:999px;padding:.15rem .6rem;font:inherit;font-size:.8rem;cursor:pointer}
 #rkroll-admin-status.is-error{color:var(--rkr-danger,#c0392b)}
 .rkr-figure-scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999}
 .rkr-figure-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;width:min(44rem,calc(100vw - 2rem));max-height:85vh;overflow:auto;padding:1rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.5rem;box-shadow:0 18px 48px rgba(0,0,0,.35)}

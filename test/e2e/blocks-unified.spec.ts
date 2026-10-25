@@ -73,7 +73,7 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
   });
   await dropped;
   await expect(page.locator('.rkr-unified-empty')).toBeVisible();
-  const figureConfig = page.getByRole('button', { name: 'Configure figure' });
+  const figureConfig = page.getByRole('button', { name: 'Configure', exact: true });
   await expect(figureConfig).toBeVisible();
 
   // Figure dialog: real image id + caption, then save.
@@ -178,7 +178,8 @@ test('figure dialog hosts the image-edit pipeline with a blob preview', async ({
 
   await page.goto(`/admin/blocks/edit/${slug}`);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
-  await page.getByRole('button', { name: 'Configure figure' }).click();
+  await page.locator('#rkr-blocks-page-body figure').first().click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
   const dialog = page.locator('.rkr-figure-dialog');
   await expect(dialog).toBeVisible();
   // The section is moved, not cloned: exactly one node, inside the dialog.
@@ -209,7 +210,7 @@ test('figure dialog hosts the image-edit pipeline with a blob preview', async ({
   await expect(page.locator('#rkr-image-edit')).toBeHidden();
 
   // Escape is the other cancel path; it must restore the same stash.
-  await page.getByRole('button', { name: 'Configure figure' }).click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
   await expect(page.locator('.rkr-figure-dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.rkr-figure-dialog')).toHaveCount(0);

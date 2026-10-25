@@ -263,22 +263,15 @@ describe('unified editor shell', () => {
       'text leaves become editable in place'
     );
 
-    const configs = f.root.querySelectorAll('.rkr-unified-config');
-    assert.deepEqual(
-      configs.map((btn) => btn.getAttribute('data-config-path')),
-      ['1,0', '1,1', '1,2'],
-      'figures, buttons, and macro instances get config buttons'
-    );
-    assert.equal(configs[0]?.getAttribute('aria-label'), 'Configure figure');
-    assert.equal(configs[2]?.getAttribute('aria-label'), 'Configure macro hero');
-
-    // Config buttons are siblings of the live node, so a figure's own
-    // markup (caption, gallery) is never mutated.
-    const figure = f.body.querySelector('figure');
-    assert.equal((figure?.nextSibling as FakeElement | null)?.className, 'rkr-unified-node-tools');
-
-    configs[0]?.click();
+    assert.equal(f.root.querySelectorAll('.rkr-unified-config').length, 0, 'no per-block pills');
+    const configure = () => f.root.querySelector('[data-action="configure"]');
+    f.body.querySelector('figure')?.click();
     assert.deepEqual(shell.selectedPath, [1, 0]);
+    assert.equal(configure()?.hidden, false, 'figures can be configured from the toolbar');
+    f.body.querySelector('a')?.click();
+    assert.equal(configure()?.hidden, true, 'buttons have nothing to configure yet');
+    f.body.querySelectorAll('section')[1]?.click();
+    assert.equal(configure()?.hidden, false, 'macro instances can be configured');
   });
 
   it('flipping back to view removes editing affordances', () => {
@@ -473,10 +466,8 @@ describe('unified shell figure dialog', () => {
       saved.push(t);
     });
     shell.setMode('edit');
-    const configs = f.root.querySelectorAll('.rkr-unified-config');
-    assert.equal(configs.length, 1);
-    assert.equal(configs[0]?.getAttribute('aria-label'), 'Configure figure');
-    configs[0]?.click();
+    f.body.querySelector('figure')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
     const dialog = f.root.querySelector('.rkr-cell-dialog');
     assert.ok(dialog, 'dialog opens on config click');
     const inputs = dialog.querySelectorAll('input');
@@ -786,10 +777,8 @@ describe('unified shell macro dialog', () => {
       macros
     );
     shell.setMode('edit');
-    const configs = f.root.querySelectorAll('.rkr-unified-config');
-    assert.equal(configs.length, 1);
-    assert.equal(configs[0]?.getAttribute('aria-label'), 'Configure macro hero');
-    configs[0]?.click();
+    f.body.querySelectorAll('[data-rkr-path]')[0]?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
     const dialog = f.root.querySelector('.rkr-macro-dialog');
     assert.ok(dialog, 'dialog opens on macro config click');
     const heading = dialog
@@ -832,7 +821,8 @@ describe('unified shell macro dialog', () => {
       macros
     );
     shell.setMode('edit');
-    f.root.querySelector('.rkr-unified-config')?.click();
+    f.body.querySelector('[data-rkr-path]')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
     const dialog = f.root.querySelector('.rkr-macro-dialog');
     assert.ok(dialog);
     const sub = dialog.querySelectorAll('input').find((i) => i.getAttribute('name') === 'sub');
@@ -1112,20 +1102,17 @@ describe('unified shell live re-render', () => {
     assert.equal(section.children?.length, 1, 'the second insert lands inside the new section');
   });
 
-  it('view mode clears config tools for inserted nodes', async () => {
+  it('the toolbar follows an inserted node and hides in view mode', async () => {
     const { f, tree } = hello();
     const shell = mount(f, tree);
     shell.setMode('edit');
     paletteButton(f, 'Image').click();
     await tick();
-    const configs = f.root.querySelectorAll('.rkr-unified-config');
-    assert.deepEqual(
-      configs.map((c) => c.getAttribute('data-config-path')),
-      ['1']
-    );
+    const bar = f.root.querySelector('.rkr-block-toolbar');
+    assert.equal(bar?.hidden, false);
+    assert.equal(f.root.querySelector('[data-action="configure"]')?.hidden, false);
     shell.setMode('view');
-    assert.equal(f.root.querySelectorAll('.rkr-unified-config').length, 0);
-    assert.equal(f.root.querySelectorAll('.rkr-unified-node-tools').length, 0);
+    assert.equal(bar?.hidden, true);
   });
 
   it('dialog commit re-renders in place without reloading', async (t) => {
@@ -1165,7 +1152,8 @@ describe('unified shell live re-render', () => {
       }
     );
     shell.setMode('edit');
-    f.root.querySelector('.rkr-unified-config')?.click();
+    f.body.querySelector('[data-rkr-path="1"]')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
     const heading = f.root
       .querySelector('.rkr-macro-dialog')
       ?.querySelectorAll('input')
@@ -1182,9 +1170,9 @@ describe('unified shell live re-render', () => {
     assert.equal(renders.length, 1);
     assert.deepEqual((renders[0]?.body[1] as { slots?: unknown }).slots, { heading: 'New band' });
     assert.equal(
-      f.root.querySelectorAll('.rkr-unified-config').length,
-      1,
-      'edit mode is re-applied after the swap'
+      f.root.querySelector('[data-action="configure"]')?.hidden,
+      false,
+      'edit mode and selection are re-applied after the swap'
     );
   });
 });

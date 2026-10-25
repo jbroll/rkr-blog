@@ -361,6 +361,14 @@ export class FakeDocument {
     set.add(listener);
   }
 
+  removeEventListener(type: string, listener: Listener): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  listenerCount(type: string): number {
+    return this.listeners.get(type)?.size ?? 0;
+  }
+
   /** Runs document listeners after the target's own bubbling pass. */
   dispatchEvent(ev: FakeEvent): void {
     for (const listener of [...(this.listeners.get(ev.type) ?? [])]) listener(ev);

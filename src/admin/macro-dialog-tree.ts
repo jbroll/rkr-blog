@@ -85,6 +85,7 @@ export function openMacroDialog(root: MacroDialogRoot, opts: MacroDialogOpts): M
 
   const shell = doc.createElement('div');
   shell.className = 'rkr-macro-dialog';
+  shell.setAttribute?.('data-rkr-dialog', '');
   shell.setAttribute?.('role', 'dialog');
   shell.setAttribute?.('aria-label', 'Macro settings');
 
