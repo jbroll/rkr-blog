@@ -121,7 +121,7 @@ test('edit after insert writes the right block', async ({ page }) => {
   const original = page.locator('#rkr-blocks-page-body p[data-rkr-path="1"]');
   await expect(original).toHaveText('Welcome aboard.');
   await original.click();
-  await original.fill('Welcome aboard, edited');
+  await original.fill('Welcome aboard, edited.');
   const edited = saveResponse(page, slug);
   await page.keyboard.press('Tab');
   await edited;
@@ -131,7 +131,7 @@ test('edit after insert writes the right block', async ({ page }) => {
   const { tree } = (await res.json()) as { tree: { body: { type: string; markdown?: string }[] } };
   expect(tree.body).toEqual([
     { type: 'text', markdown: '' },
-    { type: 'text', markdown: 'Welcome aboard, edited' }
+    { type: 'text', markdown: 'Welcome aboard, edited.' }
   ]);
   const text = (await page.locator('#rkr-blocks-page-body').textContent()) ?? '';
   expect(text.match(/Welcome/g)?.length).toBe(1);

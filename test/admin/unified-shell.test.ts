@@ -367,6 +367,25 @@ describe('unified shell saving', () => {
     assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
   });
 
+  it('focus then blur on untouched punctuated text does not save', async () => {
+    const source = "Hello, world. It's (mostly) fine - really.";
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, source)]);
+    const saved: BlockTree[] = [];
+    const shell = mount(
+      f,
+      { version: 1, body: [{ type: 'text', markdown: source }] },
+      async (t) => {
+        saved.push(t);
+      }
+    );
+    shell.setMode('edit');
+    const p = f.body.querySelector('p') as FakeElement;
+    p.focus();
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.equal(saved.length, 0);
+  });
+
   it('blur during in-flight save: second save wins, ends clean', async () => {
     const { f, p, tree } = textOnly();
     const snapshots: BlockTree[] = [];

@@ -21,6 +21,7 @@
     "src/admin/canvas-loaders.ts": 82.69,
     "src/admin/cell-delete.ts": 100,
     "src/admin/dialog-focus.ts": 100,
+    "src/admin/dom-markdown.ts": 89.13,
     "src/admin/dom.ts": 100,
     "src/admin/draft.ts": 65.97,
     "src/admin/drag-drop.ts": 79.49,

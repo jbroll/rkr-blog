@@ -13,9 +13,30 @@
 
 import { safeLinkUrl } from '../lib/safe-url.ts';
 
-/** Escape markdown metacharacters so foreign markup degrades to text. */
+/** Escape only what markdown would reinterpret inside a line: inline
+ * markers, an intraword-safe underscore, and entity or tag openers.
+ * Line-start syntax is handled by `escapeLineStarts`. */
 function escapeText(value: string): string {
-  return value.replace(/([\\`*_{}[\]()#+\-.!<>])/g, '\\$1');
+  return value
+    .replace(/([\\`*[\]])/g, '\\$1')
+    .replace(/(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])/g, '\\_')
+    .replace(/<(?=[A-Za-z/!?])/g, '\\<')
+    .replace(/&(?=#?\w+;)/g, '\\&');
+}
+
+/** Escape block syntax (headings, bullets, quotes, ordered lists) that
+ * plain text would trigger at the start of a line. */
+function escapeLineStarts(value: string): string {
+  return value
+    .split('\n')
+    .map((line) =>
+      line.replace(
+        /^(\s*)(?:([#+-])(?=\s|$)|(>)|(\d+)([.)])(?=\s|$))/,
+        (_all, space: string, bullet?: string, quote?: string, num?: string, delim?: string) =>
+          num ? `${space}${num}\\${delim}` : `${space}\\${bullet ?? quote}`
+      )
+    )
+    .join('\n');
 }
 
 function inlineChildren(el: Element): string {
@@ -61,7 +82,8 @@ function listItems(list: Element, indent: string): string[] {
         g.nodeType === 1 &&
         (g.tagName.toLowerCase() === 'ul' || g.tagName.toLowerCase() === 'ol')
       ) {
-        if (inline.trim() !== '') parts.push(`${indent}${bullet}${inline.trim()}`);
+        if (inline.trim() !== '')
+          parts.push(`${indent}${bullet}${escapeLineStarts(inline.trim())}`);
         inline = '';
         parts.push(...listItems(g, `${indent}  `));
       } else {
@@ -69,7 +91,7 @@ function listItems(list: Element, indent: string): string[] {
       }
     }
     if (inline.trim() !== '' || parts.length === 0)
-      parts.unshift(`${indent}${bullet}${inline.trim()}`);
+      parts.unshift(`${indent}${bullet}${escapeLineStarts(inline.trim())}`);
     out.push(...parts);
   }
   return out;
@@ -77,7 +99,7 @@ function listItems(list: Element, indent: string): string[] {
 
 function blockToMarkdown(el: Element): string[] {
   const tag = el.tagName.toLowerCase();
-  if (tag === 'p' || tag === 'div') return [inlineChildren(el).trim()];
+  if (tag === 'p' || tag === 'div') return [escapeLineStarts(inlineChildren(el).trim())];
   if (/^h[1-6]$/.test(tag)) {
     return [`${'#'.repeat(Number(tag[1]))} ${inlineChildren(el).trim()}`];
   }
@@ -91,9 +113,9 @@ function blockToMarkdown(el: Element): string[] {
     const body = (code?.textContent ?? el.textContent ?? '').replace(/\n$/, '');
     return [`\`\`\`\n${body}\n\`\`\``];
   }
-  if (tag === 'blockquote') return [escapeText((el.textContent ?? '').trim())];
+  if (tag === 'blockquote') return [escapeLineStarts(escapeText((el.textContent ?? '').trim()))];
   // Foreign block: keep the words as an escaped paragraph.
-  return [escapeText((el.textContent ?? '').trim())];
+  return [escapeLineStarts(escapeText((el.textContent ?? '').trim()))];
 }
 
 /** Serialize rendered text-leaf elements back to the markdown DSL.
@@ -103,7 +125,7 @@ export function domToMarkdown(elements: readonly Element[]): string {
   const blocks: string[] = [];
   for (const el of elements) {
     if (el.nodeType === 3) {
-      const text = escapeText((el.nodeValue ?? '').trim());
+      const text = escapeLineStarts(escapeText((el.nodeValue ?? '').trim()));
       if (text !== '') blocks.push(text);
       continue;
     }

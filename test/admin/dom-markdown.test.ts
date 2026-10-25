@@ -68,6 +68,35 @@ describe('domToMarkdown', () => {
     );
   });
 
+  it('keeps ordinary prose punctuation unescaped', () => {
+    const source = "Hello, world. It's (mostly) fine - really.";
+    const p = el(doc, 'p', {}, t(source));
+    assert.equal(domToMarkdown([p] as unknown as Element[]), source);
+    const snake = el(doc, 'p', {}, t('a snake_case name, v1.2 and 3 > 2'));
+    assert.equal(
+      domToMarkdown([snake] as unknown as Element[]),
+      'a snake_case name, v1.2 and 3 > 2'
+    );
+  });
+
+  it('escapes only where markdown would change meaning', () => {
+    const cases: [string, string][] = [
+      ['2*3*4', '2\\*3\\*4'],
+      ['[x](y)', '\\[x\\](y)'],
+      ['# not a heading', '\\# not a heading'],
+      ['- not a list', '\\- not a list'],
+      ['1. not a list', '1\\. not a list'],
+      ['> not a quote', '\\> not a quote'],
+      ['use `code`', 'use \\`code\\`'],
+      ['back\\slash', 'back\\\\slash'],
+      ['_under_', '\\_under\\_']
+    ];
+    for (const [text, expected] of cases) {
+      const p = el(doc, 'p', {}, t(text));
+      assert.equal(domToMarkdown([p] as unknown as Element[]), expected, text);
+    }
+  });
+
   it('mirrors renderPostHtml shapes for the same markdown', async () => {
     // Pins the fixture assumption: if the renderer changes shape,
     // this fails and the fixtures above must be revisited.
