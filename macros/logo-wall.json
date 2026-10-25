@@ -1,4 +1,5 @@
 {
+  "description": "A row of sponsor logos",
   "defaults": { "title": "Our sponsors" },
   "fieldSchema": {
     "title": { "label": "Wall title", "type": "text" }

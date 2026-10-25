@@ -1,4 +1,5 @@
 {
+  "description": "A headline band with text and a button",
   "defaults": {
     "heading": "Fresh food, owned by neighbors",
     "text": "Join the co-op building a community grocery.",

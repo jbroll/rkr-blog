@@ -15,7 +15,7 @@ import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
 import { renderEditBody } from '../lib/blocks-edit-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
-import { loadMacroLibrary } from '../lib/macro-library.ts';
+import { loadMacroLibrary, ROOT_MACROS } from '../lib/macro-library.ts';
 import { runReindex } from '../lib/post-index.ts';
 import {
   setAdminEditorSecurityHeaders,
@@ -48,14 +48,23 @@ export function registerAdminBlockRoutes(
 
   fastify.get('/admin/blocks/macros', { ...guard }, async (_req, _reply) => {
     const lib = loadMacroLibrary(`${siteRoot}/macros`);
-    return [...lib.keys()].sort().map((name) => ({
-      name,
-      label: name
-        .split('-')
-        .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-        .join(' '),
-      defaults: lib.get(name)?.defaults ?? {}
-    }));
+    return [...lib.keys()]
+      .filter((name) => !ROOT_MACROS.has(name))
+      .sort()
+      .map((name) => {
+        const macro = lib.get(name);
+        return {
+          name,
+          label: name
+            .split('-')
+            .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+            .join(' '),
+          group: 'Sections',
+          description: macro?.description ?? 'Ready-made section',
+          defaults: macro?.defaults ?? {},
+          fieldSchema: macro?.fieldSchema ?? {}
+        };
+      });
   });
 
   fastify.get<{ Params: { slug: string } }>(
@@ -128,6 +137,7 @@ export function registerAdminBlockRoutes(
           slug,
           bundleUrl: `/admin/static/admin/blocks-page-editor-entry.js?v=${assets.hash}`,
           isAdmin: true,
+          title: page.title,
           bodyHtml,
           treeJson: JSON.stringify(page.tree)
         })

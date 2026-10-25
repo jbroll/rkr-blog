@@ -15,6 +15,7 @@
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
 import { getAtPath, type Path, setSlotAtPath, updateSlotsAtPath } from './blocks-page-editor.ts';
+import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
 import { domToMarkdown } from './dom-markdown.ts';
 import { openFigureDialog, readFigureFields } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
@@ -48,9 +49,9 @@ export interface UnifiedShell {
 }
 
 /** Types `configure` opens a dialog for. */
-const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'macro']);
+const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'macro', 'button']);
 
-const RENDER_FAILED = "Couldn't refresh the page. Select Save page to retry.";
+const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
 
 function mustFind(scope: Element, selector: string): Element {
   const el = scope.querySelector(selector);
@@ -149,6 +150,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   });
 
   body.addEventListener('click', (ev: Event) => {
+    // Selecting a button block must not follow its link.
+    if (mode === 'edit' && (ev.target as Element | null)?.closest?.('a')) ev.preventDefault();
     const unit = unitAt(ev.target);
     if (unit) select(unit.path);
   });
@@ -164,6 +167,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     openFigureDialog(root, {
       initial: readFigureFields(node),
       onCommit: (slots) => {
+        flushText();
         let next = tree;
         for (const [key, value] of Object.entries(slots)) {
           if (typeof value === 'string') next = setSlotAtPath(next, path, key, value);
@@ -174,14 +178,30 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     });
   };
 
-  const macroDefaults = new Map(deps.macros.map((m) => [m.name, m.defaults ?? {}]));
+  const macroInfo = new Map(deps.macros.map((m) => [m.name, m]));
+
+  const openButtonConfig = (path: Path): void => {
+    const node = getAtPath(tree, path);
+    if (node?.type !== 'button') return;
+    openButtonDialog(root, {
+      initial: readButtonFields(node),
+      onCommit: (slots) => {
+        flushText();
+        const next = updateSlotsAtPath(tree, path, (current) => ({ ...current, ...slots }));
+        void applyTree(next, { select: path });
+      }
+    });
+  };
 
   const openMacroConfig = (path: Path): void => {
     const node = getAtPath(tree, path);
     if (node?.type !== 'macro') return;
+    const info = macroInfo.get(node.macro);
     openMacroDialog(root, {
-      fields: readMacroFields(node, macroDefaults.get(node.macro) ?? {}),
+      title: `Edit ${info?.label ?? node.macro}`,
+      fields: readMacroFields(node, info?.defaults ?? {}, info?.fieldSchema),
       onCommit: (touched) => {
+        flushText();
         const next = updateSlotsAtPath(tree, path, (slots) => mergeMacroFields(slots, touched));
         void applyTree(next, { select: path });
       },
@@ -193,6 +213,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     const type = getAtPath(tree, path)?.type;
     if (type === 'figure') openFigureConfig(path);
     else if (type === 'macro') openMacroConfig(path);
+    else if (type === 'button') openButtonConfig(path);
   };
 
   const setMode = (next: Mode): void => {
@@ -206,6 +227,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       button.classList.toggle('is-active', active);
     }
     dock.hidden = next === 'view';
+    if (next === 'edit') doc.documentElement.setAttribute('data-rkr-editing', '');
+    else doc.documentElement.removeAttribute('data-rkr-editing');
     for (const unit of units) {
       if (unit.node.type !== 'text') continue;
       for (const el of unit.elements) {
@@ -304,6 +327,22 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   }
 
   setMode('view');
+
+  doc.addEventListener('keydown', (raw: Event) => {
+    const ev = raw as KeyboardEvent;
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+    if ((ev.target as Element | null)?.closest?.('[data-rkr-dialog]')) return;
+    const key = ev.key.toLowerCase();
+    if (key === 'e') {
+      ev.preventDefault();
+      flushText();
+      setMode(mode === 'edit' ? 'view' : 'edit');
+    } else if (key === 's') {
+      ev.preventDefault();
+      flushText();
+      save.saveNow();
+    }
+  });
 
   return {
     setMode,

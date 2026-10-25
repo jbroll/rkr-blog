@@ -269,7 +269,7 @@ describe('unified editor shell', () => {
     assert.deepEqual(shell.selectedPath, [1, 0]);
     assert.equal(configure()?.hidden, false, 'figures can be configured from the toolbar');
     f.body.querySelector('a')?.click();
-    assert.equal(configure()?.hidden, true, 'buttons have nothing to configure yet');
+    assert.equal(configure()?.hidden, false, 'buttons can be configured');
     f.body.querySelectorAll('section')[1]?.click();
     assert.equal(configure()?.hidden, false, 'macro instances can be configured');
   });
@@ -547,7 +547,9 @@ describe('unified shell palette drop', () => {
     const target = f.body.querySelectorAll('p')[0];
     assert.ok(target);
     rectOf(target, 0, 90);
-    const btn = f.dock.querySelectorAll('button').find((b) => b.textContent === 'Image');
+    const btn = f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Image');
     assert.ok(btn, 'palette has the Image primitive');
     btn.dispatchEvent(
       Object.assign(new FakeEvent('dragstart'), {
@@ -699,7 +701,9 @@ describe('unified shell palette drop', () => {
     });
     shell.setMode('edit');
     f.body.querySelector('section')?.click();
-    const btn = f.dock.querySelectorAll('button').find((b) => b.textContent === 'Text');
+    const btn = f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Text');
     assert.ok(btn);
     btn?.click();
     await tick();
@@ -779,7 +783,7 @@ describe('unified shell macro dialog', () => {
     shell.setMode('edit');
     f.body.querySelectorAll('[data-rkr-path]')[0]?.click();
     f.root.querySelector('[data-action="configure"]')?.click();
-    const dialog = f.root.querySelector('.rkr-macro-dialog');
+    const dialog = f.root.querySelector('[data-rkr-dialog]');
     assert.ok(dialog, 'dialog opens on macro config click');
     const heading = dialog
       .querySelectorAll('input')
@@ -787,7 +791,7 @@ describe('unified shell macro dialog', () => {
     assert.ok(heading, 'heading field exists');
     (heading as unknown as { value: string }).value = 'New band';
     heading.dispatchEvent(new FakeEvent('input', { bubbles: true }));
-    const saveBtn = f.root.querySelectorAll('button').find((b) => b.textContent === 'Save macro');
+    const saveBtn = f.root.querySelector('.rkr-dialog-primary');
     assert.ok(saveBtn, 'dialog has a save button');
     saveBtn?.click();
     await tick();
@@ -823,19 +827,114 @@ describe('unified shell macro dialog', () => {
     shell.setMode('edit');
     f.body.querySelector('[data-rkr-path]')?.click();
     f.root.querySelector('[data-action="configure"]')?.click();
-    const dialog = f.root.querySelector('.rkr-macro-dialog');
+    const dialog = f.root.querySelector('[data-rkr-dialog]');
     assert.ok(dialog);
     const sub = dialog.querySelectorAll('input').find((i) => i.getAttribute('name') === 'sub');
     assert.ok(sub);
     (sub as unknown as { value: string }).value = '';
     sub.dispatchEvent(new FakeEvent('input', { bubbles: true }));
-    f.root
-      .querySelectorAll('button')
-      .find((b) => b.textContent === 'Save macro')
-      ?.click();
+    f.root.querySelector('.rkr-dialog-primary')?.click();
     await tick();
     assert.equal(saved.length, 1);
     assert.deepEqual((saved[0]?.body[0] as { slots?: unknown }).slots, { heading: 'Old' });
+  });
+});
+
+describe('unified shell button dialog and shortcuts', () => {
+  const tick = async (n = 10): Promise<void> => {
+    for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));
+  };
+  const buttonFixture = () =>
+    fixture((doc) => {
+      const a = doc.createElement('a');
+      a.className = 'rkr-btn is-primary';
+      a.textContent = 'Join';
+      return [marker(doc, '0'), a];
+    });
+  const BUTTON_TREE: BlockTree = {
+    version: 1,
+    body: [{ type: 'button', slots: { label: 'Join', href: '/join', variant: 'primary' } }]
+  };
+
+  it('button config commits label, link and style through one save', async () => {
+    const f = buttonFixture();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, BUTTON_TREE, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    f.body.querySelector('a')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
+    const field = (name: string) =>
+      f.root.querySelector('[data-rkr-dialog]')?.querySelector(`[name="${name}"]`);
+    const label = field('label');
+    assert.ok(label, 'dialog has a label field');
+    (label as unknown as { value: string }).value = 'Sign up';
+    label.dispatchEvent(new FakeEvent('input', { bubbles: true }));
+    const style = field('variant');
+    (style as unknown as { value: string }).value = 'secondary';
+    style?.dispatchEvent(new FakeEvent('change', { bubbles: true }));
+    f.root.querySelector('.rkr-dialog-primary')?.click();
+    await tick(3);
+    assert.equal(saved.length, 1);
+    assert.deepEqual((saved[0]?.body[0] as { slots?: unknown }).slots, {
+      label: 'Sign up',
+      href: '/join',
+      variant: 'secondary'
+    });
+  });
+
+  it('button config with an empty link stays open and saves nothing', async () => {
+    const f = buttonFixture();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, BUTTON_TREE, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    f.body.querySelector('a')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
+    const href = f.root.querySelector('[data-rkr-dialog]')?.querySelector('[name="href"]');
+    assert.ok(href);
+    (href as unknown as { value: string }).value = '';
+    href.dispatchEvent(new FakeEvent('input', { bubbles: true }));
+    f.root.querySelector('.rkr-dialog-primary')?.click();
+    await tick(3);
+    assert.equal(saved.length, 0);
+    assert.ok(f.root.querySelector('[data-rkr-dialog]'), 'dialog still open');
+  });
+
+  const modKey = (key: string) =>
+    Object.assign(new FakeEvent('keydown'), { key, ctrlKey: true, target: null });
+
+  it('Mod+E toggles the mode and marks the page as editing', () => {
+    const f = buttonFixture();
+    mount(f, BUTTON_TREE);
+    assert.equal(f.shellEl.getAttribute('data-mode'), 'view');
+    f.doc.dispatchEvent(modKey('e'));
+    assert.equal(f.shellEl.getAttribute('data-mode'), 'edit');
+    assert.ok(f.doc.documentElement.hasAttribute('data-rkr-editing'));
+    f.doc.dispatchEvent(modKey('e'));
+    assert.equal(f.shellEl.getAttribute('data-mode'), 'view');
+    assert.equal(f.doc.documentElement.hasAttribute('data-rkr-editing'), false);
+  });
+
+  it('Mod+S retries an unsaved page', async () => {
+    const f = buttonFixture();
+    let fail = true;
+    const saved: BlockTree[] = [];
+    const shell = mount(f, BUTTON_TREE, async (t) => {
+      if (fail) throw new Error('offline');
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    await shell.applyTree({ ...BUTTON_TREE });
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    fail = false;
+    const ev = modKey('s');
+    f.doc.dispatchEvent(ev);
+    await tick(3);
+    assert.equal(ev.defaultPrevented, true);
+    assert.equal(saved.length, 1);
   });
 });
 
@@ -850,7 +949,9 @@ describe('unified shell live re-render', () => {
   });
 
   const paletteButton = (f: Fixture, label: string): FakeElement => {
-    const btn = f.dock.querySelectorAll('button').find((b) => b.textContent === label);
+    const btn = f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === label);
     assert.ok(btn, `palette has ${label}`);
     return btn;
   };
@@ -1155,16 +1256,13 @@ describe('unified shell live re-render', () => {
     f.body.querySelector('[data-rkr-path="1"]')?.click();
     f.root.querySelector('[data-action="configure"]')?.click();
     const heading = f.root
-      .querySelector('.rkr-macro-dialog')
+      .querySelector('[data-rkr-dialog]')
       ?.querySelectorAll('input')
       .find((i) => i.getAttribute('name') === 'heading');
     assert.ok(heading);
     (heading as unknown as { value: string }).value = 'New band';
     heading.dispatchEvent(new FakeEvent('input', { bubbles: true }));
-    f.root
-      .querySelectorAll('button')
-      .find((b) => b.textContent === 'Save macro')
-      ?.click();
+    f.root.querySelector('.rkr-dialog-primary')?.click();
     await tick();
     assert.equal(reloads, 0);
     assert.equal(renders.length, 1);

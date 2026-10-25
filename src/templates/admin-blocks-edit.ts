@@ -6,12 +6,15 @@
 // page) the mount point is simply empty.
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import { EDITOR_CSS } from './admin-editor-styles.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
 import { headIcons, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
 
 export interface BlocksEditPageData extends SiteChrome {
   slug: string;
+  /** Page title shown in the toolbar; falls back to the slug. */
+  title?: string;
   /** Full versioned URL of the editor bundle (admin static scope). */
   bundleUrl: string;
   isAdmin?: boolean;
@@ -30,61 +33,6 @@ function scriptSafeJson(json: string): string {
   return json.replace(/</g, '\\u003c');
 }
 
-/** Shell-only stylesheet (the edit page's CSP allows inline styles).
- * View mode must show the public page: the palette dock is hidden and
- * the page body is never wrapped or restyled. In edit mode the dock
- * slides in on the right and config buttons appear on hover/focus. */
-const UNIFIED_CSS = `
-.rkr-unified-toolbar{display:flex;align-items:center;gap:.5rem;margin:0 0 1rem;font:inherit}
-.rkr-unified-modes{display:inline-flex;border:1px solid var(--rkr-rule);border-radius:999px;overflow:hidden}
-.rkr-unified-mode{border:0;background:transparent;color:inherit;padding:.35rem .9rem;font:inherit;cursor:pointer}
-.rkr-unified-mode[aria-pressed="true"]{background:var(--rkr-link);color:var(--rkr-bg)}
-.rkr-unified-layout{display:grid;gap:1.5rem;grid-template-columns:minmax(0,1fr)}
-.rkr-unified-shell[data-mode="edit"] .rkr-unified-layout{grid-template-columns:minmax(0,1fr) 16rem}
-.rkr-blocks-palette-right{position:sticky;top:1rem;align-self:start;max-height:calc(100vh - 2rem);overflow:auto;border-left:1px solid var(--rkr-rule);padding-left:1rem}
-.rkr-unified-shell[data-mode="view"] .rkr-blocks-palette-right{display:none}
-.rkr-unified-shell[data-mode="edit"] [data-rkr-path]:hover{outline:1px dashed var(--rkr-rule);outline-offset:4px}
-.rkr-unified-shell[data-mode="view"] :is(.rkr-unified-blank,.rkr-unified-empty){display:none}
-.rkr-unified-shell[data-mode="edit"] .rkr-unified-blank{min-height:1.5em;outline:1px dashed var(--rkr-rule);outline-offset:4px}
-.rkr-unified-shell[data-mode="edit"] .rkr-unified-blank:empty::before{content:"Type here";color:var(--rkr-muted)}
-.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]{min-height:2.5rem;outline:1px dashed var(--rkr-rule);outline-offset:-1px}
-.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]::before{position:absolute;top:0;left:0;z-index:1;padding:0 .35rem;font-size:.7rem;line-height:1.4;color:var(--rkr-muted);background:var(--rkr-bg);pointer-events:none}
-.rkr-unified-shell[data-mode="edit"] .rkr-row[data-rkr-path]::before{content:"Row"}
-.rkr-unified-shell[data-mode="edit"] .rkr-col[data-rkr-path]::before{content:"Column"}
-.rkr-unified-shell[data-mode="edit"] .rkr-flow[data-rkr-path]::before{content:"Flow"}
-.rkr-unified-shell[data-mode="edit"] [data-rkr-path][data-rkr-selected]{outline:2px solid var(--rkr-edit-accent, var(--rkr-link));outline-offset:4px}
-.rkr-block-toolbar{position:fixed;flex-wrap:wrap;max-width:calc(100vw - 8px);z-index:50;display:flex;align-items:center;gap:.25rem;padding:.2rem .35rem;font-size:.8rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.4rem;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.rkr-block-toolbar[hidden]{display:none}
-.rkr-block-type{font-weight:600;padding:0 .35rem}
-.rkr-block-action{border:1px solid var(--rkr-rule);background:var(--rkr-bg);color:inherit;border-radius:999px;padding:.1rem .55rem;font:inherit;cursor:pointer}
-.rkr-block-action[hidden]{display:none}
-.rkr-block-action:disabled{opacity:.4;cursor:default}
-.rkr-block-drag{cursor:grab}
-.rkr-macro-dialog{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:1000}
-.rkr-macro-dialog > *{background:var(--rkr-bg);color:var(--rkr-text);padding:1rem;border-radius:.5rem;max-width:32rem;width:90%;max-height:80vh;overflow:auto;border:1px solid var(--rkr-rule)}
-[data-rkr-path]{position:relative}
-[data-drop="before"]{box-shadow:inset 0 3px 0 0 var(--rkr-link)}
-[data-drop="after"]{box-shadow:inset 0 -3px 0 0 var(--rkr-link)}
-[data-drop="inside"]{outline:2px dashed var(--rkr-link);outline-offset:2px}
-#rkroll-admin-status.is-error{color:var(--rkr-danger,#c0392b)}
-.rkr-figure-scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999}
-.rkr-figure-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;width:min(44rem,calc(100vw - 2rem));max-height:85vh;overflow:auto;padding:1rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.5rem;box-shadow:0 18px 48px rgba(0,0,0,.35)}
-.rkr-figure-dialog .rkr-cell-dialog-body{grid-template-columns:1fr;gap:.75rem;padding:0;margin-top:.75rem}
-.rkr-figure-dialog .rkr-cell-dialog-head{padding:0 0 .5rem}
-.rkr-figure-dialog .rkr-figure-field{display:grid;gap:.25rem}
-.rkr-figure-dialog .rkr-figure-field label{font-size:.85rem;color:var(--rkr-muted)}
-.rkr-figure-dialog .rkr-figure-field :is(input,select){width:100%;box-sizing:border-box;padding:.35rem;font:inherit}
-.rkr-figure-dialog .rkr-figure-image-selector{display:flex;flex-wrap:wrap;gap:.5rem}
-.rkr-figure-dialog .rkr-figure-image-thumb{width:64px;height:64px;padding:0;overflow:hidden;border:2px solid var(--rkr-rule);border-radius:.35rem;background:var(--rkr-bg);cursor:pointer}
-.rkr-figure-dialog .rkr-figure-image-thumb img{display:block;width:100%;height:100%;object-fit:cover}
-.rkr-figure-dialog .rkr-figure-image-thumb.is-active{border-color:var(--rkr-link);outline:2px solid var(--rkr-link);outline-offset:1px}
-.rkr-figure-dialog .rkr-cell-dialog-body #rkr-image-edit:not([hidden]){display:grid;gap:.5rem;grid-column:1/-1}
-.rkr-figure-dialog .rkr-figure-dialog-foot{display:flex;justify-content:flex-end;gap:.5rem}
-.rkr-figure-dialog .rkr-figure-dialog-errors{margin:0;color:var(--rkr-danger,#c0392b)}
-.rkr-figure-dialog .rkr-figure-dialog-errors:empty{display:none}
-@media (max-width:720px){.rkr-unified-shell[data-mode="edit"] .rkr-unified-layout{grid-template-columns:minmax(0,1fr)}}
-`;
-
 export function renderBlocksEditPage(data: BlocksEditPageData): string {
   const a = data.assets;
   const treeScript = data.treeJson
@@ -100,20 +48,22 @@ ${stylesheetLinks(a)}
 ${headIcons(a)}
 <style>${ADMIN_CSS_CORE}</style>
 <style>${ADMIN_CSS_DIALOGS}</style>
-<style>${UNIFIED_CSS}</style>
+<style>${EDITOR_CSS}</style>
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
 <main id="main" tabindex="-1">
-<h1>Edit ${escapeText(data.slug)}</h1>
 <div id="rkroll-admin-status" role="status" aria-live="polite"></div>
 <div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}">${treeScript}
 <div id="rkr-unified-shell" class="rkr-unified-shell is-view" data-mode="view">
 <div id="rkr-unified-toolbar" class="rkr-unified-toolbar">
+<span class="rkr-unified-title">${escapeText(data.title || data.slug)}</span>
 <div class="rkr-unified-modes" role="group" aria-label="Editor mode">
 <button type="button" class="rkr-unified-mode" data-mode="view" aria-pressed="true">View</button>
 <button type="button" class="rkr-unified-mode" data-mode="edit" aria-pressed="false">Edit</button>
 </div>
+<span class="rkr-unified-save-state" aria-live="polite">Saved</span>
+<button type="button" class="rkr-unified-save rkr-edit-btn is-primary" disabled>Save</button>
 </div>
 <div class="rkr-unified-layout">
 <div id="rkr-blocks-page-body" class="rkr-blocks-page-body">

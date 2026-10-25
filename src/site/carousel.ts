@@ -99,7 +99,11 @@ function setupCarousel(root: HTMLElement): CarouselState | null {
 
     function start(): void {
       if (playing || timer !== null) return;
-      timer = setInterval(() => scrollToIndex(state.current + 1), autoplaySeconds * 1000);
+      timer = setInterval(() => {
+        // The editor sets this while editing or while a dialog is open.
+        if (document.documentElement.hasAttribute('data-rkr-editing')) return;
+        scrollToIndex(state.current + 1);
+      }, autoplaySeconds * 1000);
       playing = true;
       playBtn?.setAttribute('aria-label', 'Pause slideshow');
       playBtn?.setAttribute('aria-pressed', 'true');

@@ -350,6 +350,7 @@ function serialize(node: FakeNode): string {
 
 export class FakeDocument {
   activeElement: FakeElement | null = null;
+  readonly documentElement: FakeElement = new FakeElement('html', this);
   private readonly listeners = new Map<string, Set<Listener>>();
 
   addEventListener(type: string, listener: Listener): void {

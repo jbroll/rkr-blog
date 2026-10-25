@@ -1,4 +1,5 @@
 {
+  "description": "Three recent posts as cards",
   "defaults": { "title": "Latest", "tag": "recipe", "limit": 3 },
   "fieldSchema": {
     "title": { "label": "Band title", "type": "text" },

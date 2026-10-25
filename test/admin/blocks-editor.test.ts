@@ -13,6 +13,7 @@ import {
   primitiveNode
 } from '../../src/admin/blocks-editor.ts';
 import type { BlockNode } from '../../src/lib/blocks.ts';
+import { FakeDocument, type FakeElement, FakeEvent } from './fake-dom.ts';
 
 const depth3Macro: BlockNode = {
   type: 'section',
@@ -59,110 +60,50 @@ describe('blocks editor', () => {
     assert.equal(isValidMacroName('Bad Name'), false);
   });
 
-  it('mounts palette buttons and handles insert', () => {
-    interface FakeButton {
-      type: string;
-      className: string;
-      textContent: string;
-      dataset: Record<string, string>;
-      click: () => void;
-      dblclick: () => void;
-      keydown: (key: string) => void;
-    }
-    const buttons: FakeButton[] = [];
-    const appended: unknown[] = [];
+  function mount(macros: PaletteMacro[], onInsert: (name: string) => void) {
+    const doc = new FakeDocument();
+    const dock = doc.createElement('aside');
+    mountBlocksPalette(dock as unknown as Element, macros, onInsert);
+    return dock;
+  }
+
+  it('mounts grouped palette rows and handles insert', () => {
     let inserted: string | undefined;
-    const macros: PaletteMacro[] = [{ name: 'hero', label: 'Hero' }];
-    const fakeDocument = {
-      createElement: (_tag: string) => {
-        const listeners: Record<string, (ev?: { key?: string }) => void> = {};
-        const el = {
-          type: '',
-          className: '',
-          textContent: '',
-          dataset: {} as Record<string, string>,
-          setAttribute: (_k: string, _v: string) => {},
-          addEventListener: (ev: string, fn: (ev?: { key?: string }) => void) => {
-            listeners[ev] = fn;
-          },
-          append: (child: unknown) => {
-            buttons.push(child as FakeButton);
-          },
-          click: () => listeners.click?.(),
-          dblclick: () => listeners.dblclick?.(),
-          keydown: (key: string) => listeners.keydown?.({ key })
-        };
-        return el;
-      }
-    };
-    const root = {
-      ownerDocument: fakeDocument,
-      prepend: (el: unknown) => {
-        appended.push(el);
-      }
-    } as unknown as Element;
-    mountBlocksPalette(root, macros, (name) => {
+    const dock = mount([{ name: 'hero', label: 'Hero', description: 'Opening band' }], (name) => {
       inserted = name;
     });
-    assert.equal(appended.length, 1);
-    assert.ok(buttons.length > 1);
-    buttons[buttons.length - 1]?.click();
+    assert.equal(dock.querySelector('.rkr-palette-title')?.textContent, 'Add block');
+    assert.deepEqual(
+      dock.querySelectorAll('.rkr-palette-group-title').map((t) => t.textContent),
+      ['Basics', 'Media', 'Layout', 'Sections']
+    );
+    const items = dock.querySelectorAll('.rkr-blocks-palette-item');
+    assert.equal(items.length, PRIMITIVE_MACROS.length + 1);
+    const hero = items[items.length - 1];
+    assert.equal(hero?.querySelector('.rkr-palette-label')?.textContent, 'Hero');
+    assert.equal(hero?.querySelector('.rkr-palette-desc')?.textContent, 'Opening band');
+    hero?.click();
     assert.equal(inserted, 'hero');
   });
 
   it('shows primitives when no macros are configured', () => {
-    const buttons: { dataset: Record<string, string> }[] = [];
-    const appended: unknown[] = [];
-    const fakeDocument = {
-      createElement: (_tag: string) => ({
-        type: '',
-        className: '',
-        textContent: '',
-        dataset: {},
-        setAttribute: (_k: string, _v: string) => {},
-        addEventListener: (_ev: string, _fn: () => void) => {},
-        append: (child: unknown) => {
-          buttons.push(child as { dataset: Record<string, string> });
-        }
-      })
-    };
-    const root = {
-      ownerDocument: fakeDocument,
-      prepend: (el: unknown) => {
-        appended.push(el);
-      }
-    } as unknown as Element;
-    mountBlocksPalette(root, [], () => {});
-    assert.equal(appended.length, 1);
-    assert.equal(buttons.length, PRIMITIVE_MACROS.length);
+    const dock = mount([], () => {});
+    assert.equal(dock.querySelectorAll('.rkr-blocks-palette-item').length, PRIMITIVE_MACROS.length);
+    assert.deepEqual(
+      dock.querySelectorAll('.rkr-palette-group-title').map((t) => t.textContent),
+      ['Basics', 'Media', 'Layout']
+    );
   });
 
   it('double-click and Enter insert like click', () => {
-    const listeners: Record<string, (ev?: { key?: string }) => void> = {};
-    const fakeDocument = {
-      createElement: (_tag: string) => ({
-        dataset: {},
-        setAttribute: (_k: string, _v: string) => {},
-        addEventListener: (ev: string, fn: (ev?: { key?: string }) => void) => {
-          listeners[ev] = fn;
-        },
-        append: (_child: unknown) => {},
-        click: () => listeners.click?.(),
-        dblclick: () => listeners.dblclick?.(),
-        keydown: (key: string) => listeners.keydown?.({ key })
-      })
-    };
-    const root = {
-      ownerDocument: fakeDocument,
-      prepend: (_el: unknown) => {}
-    } as unknown as Element;
     const inserted: string[] = [];
-    mountBlocksPalette(root, [{ name: 'hero', label: 'Hero' }], (name) => {
+    const dock = mount([{ name: 'hero', label: 'Hero' }], (name) => {
       inserted.push(name);
     });
-    listeners.dblclick?.();
-    listeners.keydown?.({ key: 'Enter' });
-    listeners.keydown?.({ key: ' ' });
+    const hero = dock.querySelectorAll('.rkr-blocks-palette-item').pop() as FakeElement;
+    hero.dispatchEvent(new FakeEvent('dblclick'));
+    hero.dispatchEvent(Object.assign(new FakeEvent('keydown'), { key: 'Enter' }));
+    hero.dispatchEvent(Object.assign(new FakeEvent('keydown'), { key: ' ' }));
     assert.deepEqual(inserted, ['hero', 'hero']);
   });
 

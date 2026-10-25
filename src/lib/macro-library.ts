@@ -18,12 +18,17 @@ export interface FieldSpec {
 }
 
 export interface StoredMacro {
+  /** One line for the editor palette. */
+  description?: string;
   defaults: Slots;
   fieldSchema?: Record<string, FieldSpec>;
   tree: BlockNode;
 }
 
 export type MacroLib = Map<string, StoredMacro>;
+
+/** Macros that carry site-wide settings, not placeable content. */
+export const ROOT_MACROS: ReadonlySet<string> = new Set(['page']);
 
 const KNOWN_TYPES: ReadonlySet<string> = new Set([
   'section',
@@ -97,6 +102,7 @@ export function loadMacroLibrary(dir: string): MacroLib {
     }
     const name = file.slice(0, -'.json'.length);
     lib.set(name, {
+      description: typeof parsed.description === 'string' ? parsed.description : undefined,
       defaults: parsed.defaults as Slots,
       fieldSchema: isRecord(parsed.fieldSchema)
         ? (parsed.fieldSchema as Record<string, FieldSpec>)

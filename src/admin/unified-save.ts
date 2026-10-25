@@ -24,6 +24,8 @@ export interface SavePipeline {
    * a save, e.g. its re-render failed). Stays until the next
    * requestSave; Save and online still retry. */
   fail(text: string): void;
+  /** Save or retry now (the Save button's action); no-op when clean. */
+  saveNow(): void;
   /** Persist `next`, coalescing with an in-flight save: the queued
    * tree always wins because immutable updates compose. Resolves when
    * the save (and any coalesced follow-up) settles. */
@@ -53,14 +55,21 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   // so an older save resolving can't report "Saved" over it.
   let failure: string | null = null;
 
-  const indicator = doc.createElement('span');
+  // The edit template ships both; the fallbacks keep bare toolbars working.
+  const mountPoint = (selector: string, tag: string): HTMLElement => {
+    const found = toolbar.querySelector(selector) as HTMLElement | null;
+    if (found) return found;
+    const created = doc.createElement(tag);
+    toolbar.append(created);
+    return created;
+  };
+  const indicator = mountPoint('.rkr-unified-save-state', 'span');
   indicator.className = 'rkr-unified-save-state';
-  toolbar.append(indicator);
-  const saveBtn = doc.createElement('button');
+  const saveBtn = mountPoint('.rkr-unified-save', 'button') as HTMLButtonElement;
   saveBtn.type = 'button';
-  saveBtn.className = 'rkr-unified-save';
-  saveBtn.textContent = 'Save page';
-  toolbar.append(saveBtn);
+  saveBtn.className = 'rkr-unified-save rkr-edit-btn is-primary';
+
+  const offline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false;
 
   const setState = (next: SaveState): void => {
     saveState = failure === null ? next : 'unsaved';
@@ -70,10 +79,15 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
       (saveState === 'clean'
         ? 'Saved'
         : saveState === 'editing'
-          ? 'Editing…'
+          ? 'Editing'
           : saveState === 'saving'
-            ? 'Saving…'
-            : 'Unsaved changes');
+            ? 'Saving'
+            : offline()
+              ? 'Offline, will sync'
+              : 'Not saved');
+    saveBtn.textContent = saveState === 'unsaved' ? 'Retry' : 'Save';
+    if (saveState === 'clean') saveBtn.setAttribute('disabled', '');
+    else saveBtn.removeAttribute('disabled');
   };
   setState('clean');
 
@@ -115,6 +129,7 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
 
   return {
     state: () => saveState,
+    saveNow: retry,
     notice: (text: string) => {
       indicator.textContent = text;
     },

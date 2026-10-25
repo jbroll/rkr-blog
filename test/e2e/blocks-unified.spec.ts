@@ -66,7 +66,9 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
   // place, so edit mode stays active and the empty figure is visible.
   const box = await para.boundingBox();
   expect(box).not.toBeNull();
-  const paletteImage = page.locator('.rkr-blocks-palette-item', { hasText: 'Image' });
+  const paletteImage = page.locator('.rkr-blocks-palette-item').filter({
+    has: page.getByText('Image', { exact: true })
+  });
   const dropped = saveResponse(page, slug);
   await paletteImage.dragTo(para, {
     targetPosition: { x: box!.width / 2, y: box!.height - 5 }
@@ -99,7 +101,8 @@ async function dragTextAbove(
   const box = await target.boundingBox();
   expect(box).not.toBeNull();
   await page
-    .locator('.rkr-blocks-palette-item', { hasText: 'Text' })
+    .locator('.rkr-blocks-palette-item')
+    .filter({ has: page.getByText('Text', { exact: true }) })
     .dragTo(target, { targetPosition: { x: box!.width / 2, y: 2 } });
 }
 

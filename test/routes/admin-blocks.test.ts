@@ -182,6 +182,53 @@ describe('admin blocks save', () => {
     assert.deepEqual(list.find((m) => m.name === 'hero')?.defaults, { heading: 'Fresh food' });
   });
 
+  it('macros endpoint omits root macros and returns groups', async (t) => {
+    const { root, app } = await setup(t);
+    const tree = { type: 'text', markdown: 'Hi' };
+    fs.writeFileSync(
+      path.join(root, 'macros', 'hero.json'),
+      JSON.stringify({
+        description: 'Big opening band',
+        defaults: { heading: 'Fresh' },
+        fieldSchema: { heading: { label: 'Heading', type: 'text' } },
+        tree
+      })
+    );
+    fs.writeFileSync(
+      path.join(root, 'macros', 'page.json'),
+      JSON.stringify({ defaults: {}, tree })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/macros' });
+    const list = JSON.parse(res.body) as {
+      name: string;
+      group: string;
+      description: string;
+      fieldSchema: Record<string, { label: string }>;
+    }[];
+    assert.equal(
+      list.some((m) => m.name === 'page'),
+      false
+    );
+    const hero = list.find((m) => m.name === 'hero');
+    assert.equal(hero?.group, 'Sections');
+    assert.equal(hero?.description, 'Big opening band');
+    assert.equal(hero?.fieldSchema.heading?.label, 'Heading');
+  });
+
+  it('macros endpoint falls back to a generic description and empty schema', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'macros', 'plain.json'),
+      JSON.stringify({ defaults: {}, tree: { type: 'text', markdown: 'Hi' } })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/macros' });
+    const plain = (
+      JSON.parse(res.body) as { name: string; description: string; fieldSchema: object }[]
+    ).find((m) => m.name === 'plain');
+    assert.ok(plain?.description);
+    assert.deepEqual(plain?.fieldSchema, {});
+  });
+
   it('rejects invalid trees and bad slugs', async (t) => {
     const { app } = await setup(t);
     const bad = await app.inject({

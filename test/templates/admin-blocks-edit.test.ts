@@ -40,6 +40,20 @@ describe('blocks edit page template', () => {
     assert.match(html, /\.rkr-unified-shell\[data-mode="edit"\]/);
   });
 
+  it('edit page toolbar has title, mode switch and save state', () => {
+    const html = renderBlocksEditPage({ ...base, title: 'Hello <World>' });
+    assert.match(html, /class="rkr-unified-title"[^>]*>Hello &lt;World&gt;</);
+    assert.match(html, /role="group" aria-label="Editor mode"/);
+    assert.match(html, /class="rkr-unified-save-state"/);
+    assert.match(html, /class="rkr-unified-save /);
+    assert.doesNotMatch(html, /<h1>Edit /);
+  });
+
+  it('title falls back to the slug', () => {
+    const html = renderBlocksEditPage(base);
+    assert.match(html, /class="rkr-unified-title"[^>]*>hello</);
+  });
+
   it('escapes tree JSON so a markdown slot cannot close the script element', () => {
     const tree = {
       version: 1,
