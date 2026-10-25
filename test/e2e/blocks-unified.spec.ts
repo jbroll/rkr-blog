@@ -370,3 +370,29 @@ test('macro field edit renders', async ({ page }) => {
   await expect(page.locator('main')).toContainText('Probe hero heading');
   await expect(page.locator('main')).not.toContainText('Fresh food, owned by neighbors');
 });
+
+test('publish a new page', async ({ page }) => {
+  await login(page);
+  const name = `Spring Sale ${Date.now()}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  await page.goto('/admin/blocks/new');
+  await page.getByLabel('Title').fill(name);
+  await expect(page.getByLabel('Slug')).toHaveValue(slug);
+  await page.getByRole('button', { name: 'Create and edit' }).click();
+  await page.waitForURL(`**/admin/blocks/edit/${slug}`);
+
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('button', { name: 'Page settings' }).click();
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Page settings' });
+  await dialog.getByLabel('Status').selectOption('published');
+  await expect(dialog.getByLabel('Publish date')).not.toHaveValue('');
+  const saved = saveResponse(page, slug);
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await saved;
+
+  await page.context().clearCookies();
+  const res = await page.goto(`/${slug}`);
+  expect(res?.status()).toBe(200);
+  await page.goto('/');
+  await expect(page.getByRole('link', { name })).toBeVisible();
+});

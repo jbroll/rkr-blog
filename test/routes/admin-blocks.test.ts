@@ -499,3 +499,78 @@ describe('admin blocks save', () => {
     assert.equal(bad.statusCode, 404);
   });
 });
+
+describe('admin blocks page fields', () => {
+  const body = [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Hi.' }] }];
+
+  it('save merges request fields over stored fields', async (t) => {
+    const { root, app } = await setup(t);
+    const file = path.join(root, 'content', 'blocks', 'hello.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, body, fields: { title: 'A', slug: 'hello', tags: ['x'] } })
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/hello',
+      payload: { tree: { version: 1, body, fields: { status: 'published' } } }
+    });
+    assert.equal(res.statusCode, 200);
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(saved.fields, { title: 'A', slug: 'hello', tags: ['x'], status: 'published' });
+  });
+
+  it('save does not read other pages', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(path.join(root, 'content', 'blocks', 'other.json'), '{ not json');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/hello',
+      payload: { tree: { version: 1, body, fields: { title: 'Hello' } } }
+    });
+    assert.equal(res.statusCode, 200);
+    const saved = JSON.parse(
+      fs.readFileSync(path.join(root, 'content', 'blocks', 'hello.json'), 'utf8')
+    );
+    assert.equal(saved.fields.title, 'Hello');
+  });
+
+  it('new page with taken slug re-renders the form with an error', async (t) => {
+    const { app } = await setup(t);
+    const make = () =>
+      app.inject({
+        method: 'POST',
+        url: '/admin/blocks/new',
+        payload: { title: 'Spring Sale', slug: 'spring-sale' }
+      });
+    assert.equal((await make()).statusCode, 303);
+    const again = await make();
+    assert.equal(again.statusCode, 409);
+    assert.match(again.body, /already exists/);
+    assert.match(again.body, /value="Spring Sale"/);
+  });
+
+  it('new page stores the title and starts as a draft', async (t) => {
+    const { root, app } = await setup(t);
+    await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/new',
+      payload: { title: 'Spring Sale', slug: 'spring-sale' }
+    });
+    const saved = JSON.parse(
+      fs.readFileSync(path.join(root, 'content', 'blocks', 'spring-sale.json'), 'utf8')
+    );
+    assert.deepEqual(saved.fields, { title: 'Spring Sale', slug: 'spring-sale', status: 'draft' });
+  });
+
+  it('edit page embeds the stored fields for the settings dialog', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'hello.json'),
+      JSON.stringify({ version: 1, body, fields: { title: 'A', slug: 'hello', tags: ['x'] } })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/edit/hello' });
+    const json = /id="rkr-tree">([^<]*)</.exec(res.body)?.[1] ?? '';
+    assert.deepEqual(JSON.parse(json).fields.tags, ['x']);
+  });
+});

@@ -19,6 +19,7 @@ import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
 import { domToMarkdown } from './dom-markdown.ts';
 import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
+import { openPageSettings, readPageFields } from './page-settings.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
@@ -229,6 +230,32 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     });
   };
 
+  const openSettings = (): void => {
+    flushText();
+    const slug = (root as HTMLElement).dataset?.slug ?? '';
+    openPageSettings(root, {
+      slug,
+      fields: readPageFields(tree.fields, slug),
+      onCommit: (fields) => {
+        const next = {
+          ...tree,
+          fields: { ...tree.fields, ...fields, excerpt: fields.excerpt ?? '' }
+        };
+        const titleEl = toolbar.querySelector('.rkr-unified-title');
+        if (titleEl) titleEl.textContent = fields.title;
+        // The body does not show the fields, so it stays valid for `next`.
+        if (shown !== tree) {
+          void applyTree(next);
+          return;
+        }
+        tree = next;
+        shown = next;
+        save.markEditing();
+        void save.requestSave(next);
+      }
+    });
+  };
+
   const configure = (path: Path): void => {
     const type = getAtPath(tree, path)?.type;
     if (type === 'figure' || type === 'video') openMediaConfig(path);
@@ -350,6 +377,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       if (next === 'view' || next === 'edit') setMode(next);
     });
   }
+
+  toolbar.querySelector('.rkr-unified-settings')?.addEventListener('click', openSettings);
 
   setMode('view');
 

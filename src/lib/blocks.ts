@@ -40,6 +40,8 @@ export type BlockNode = ContainerNode | LeafNode | MacroInstanceNode;
 export interface BlockTree {
   version: 1;
   body: BlockNode[];
+  /** Page settings (title, status, date, tags). Present on trees the editor holds. */
+  fields?: Record<string, unknown>;
 }
 
 export interface MacroDef {

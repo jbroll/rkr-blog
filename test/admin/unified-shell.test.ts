@@ -54,6 +54,14 @@ function fixture(buildBody: (doc: FakeDocument) => FakeNode[]): Fixture {
   const toolbar = doc.createElement('div');
   toolbar.id = 'rkr-unified-toolbar';
   toolbar.className = 'rkr-unified-toolbar';
+  const titleEl = doc.createElement('span');
+  titleEl.className = 'rkr-unified-title';
+  titleEl.textContent = 'Old title';
+  const settingsBtn = doc.createElement('button');
+  settingsBtn.type = 'button';
+  settingsBtn.className = 'rkr-unified-settings';
+  settingsBtn.textContent = 'Page settings';
+  toolbar.append(titleEl, settingsBtn);
   const modes: ('view' | 'edit')[] = ['view', 'edit'];
   for (const mode of modes) {
     const btn = doc.createElement('button');
@@ -1390,3 +1398,52 @@ function anchor(doc: FakeDocument, label: string): FakeElement {
   a.textContent = label;
   return a;
 }
+
+describe('unified shell page settings', () => {
+  const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('commits fields into the tree, saves them and retitles the toolbar without re-rendering', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'text', markdown: 'One' }],
+      fields: { title: 'Old title', slug: 'saved', tags: ['x'] }
+    };
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'One')]);
+    const saved: BlockTree[] = [];
+    let renders = 0;
+    mount(
+      f,
+      tree,
+      async (t) => {
+        saved.push(t);
+      },
+      [],
+      async (t) => {
+        renders++;
+        return markedRender(t);
+      }
+    );
+    f.toolbar.querySelector('.rkr-unified-settings')?.click();
+    const input = f.root
+      .querySelector('[data-rkr-dialog]')
+      ?.querySelectorAll('input')
+      .find((i) => i.getAttribute('name') === 'title');
+    assert.ok(input);
+    (input as unknown as { value: string }).value = 'New title';
+    input.dispatchEvent(new FakeEvent('input', { bubbles: true }));
+    f.root.querySelector('.rkr-dialog-primary')?.click();
+    await tick();
+    await tick();
+    assert.equal(renders, 0);
+    assert.equal(f.toolbar.querySelector('.rkr-unified-title')?.textContent, 'New title');
+    assert.equal(saved.length, 1);
+    assert.deepEqual(saved[0]?.fields, {
+      title: 'New title',
+      slug: 'saved',
+      tags: ['x'],
+      status: 'draft',
+      date: '',
+      excerpt: ''
+    });
+  });
+});

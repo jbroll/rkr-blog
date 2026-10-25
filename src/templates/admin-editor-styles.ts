@@ -41,8 +41,8 @@ const TOOLBAR = `
 .rkr-unified-mode[aria-pressed="true"]{color:var(--rkr-bg);background:var(--rkr-edit-accent)}
 .rkr-unified-save-state{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .65rem;font-size:.8125rem;color:var(--rkr-edit-muted);border:1px solid var(--rkr-edit-border);border-radius:999px}
 .rkr-unified-save-state::before{content:"";flex:none;width:.5rem;height:.5rem;border-radius:50%;background:var(--rkr-edit-dot)}
-.rkr-unified-shell[data-mode="view"] .rkr-unified-save{display:none}
-@media (max-width:600px){.rkr-unified-title{flex-basis:100%}.rkr-unified-save-state{margin-left:auto}}
+.rkr-unified-shell[data-mode="view"] :is(.rkr-unified-save,.rkr-unified-settings){display:none}
+@media (max-width:600px){.rkr-unified-title{flex-basis:100%}.rkr-unified-settings{margin-left:auto}.rkr-unified-settings+.rkr-unified-save-state{margin-left:0}.rkr-unified-save-state{margin-left:auto}}
 `;
 
 const PALETTE = `
@@ -122,6 +122,8 @@ dialog.rkr-dialog,dialog.rkr-dialog.is-wide{width:100vw;max-width:100vw;max-heig
 
 const FIELDS = `
 .rkr-field,.rkr-figure-field{display:grid;gap:.35rem}
+.rkr-field-hint{margin:0;font:400 .8125rem/1.4 var(--rkr-edit-font);color:var(--rkr-edit-muted)}
+.rkr-dialog-fields .rkr-field-hint a{color:inherit}
 .rkr-field label,.rkr-figure-field label{font:600 .8125rem/1.3 var(--rkr-edit-font);color:var(--rkr-text)}
 :is(.rkr-field,.rkr-figure-field) :is(input,select,textarea){box-sizing:border-box;width:100%;min-height:2.25rem;margin:0;padding:.45rem .65rem;font:400 .9375rem/1.4 var(--rkr-edit-font);color:var(--rkr-text);background:var(--rkr-bg);border:1px solid var(--rkr-edit-border);border-radius:var(--rkr-edit-radius);box-shadow:none}
 :is(.rkr-field,.rkr-figure-field) textarea{resize:vertical;line-height:1.5}

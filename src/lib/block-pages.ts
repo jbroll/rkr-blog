@@ -14,6 +14,7 @@ const VALID_SLUG = /^[a-z0-9-]+$/;
 export interface BlockPage {
   title: string;
   tree: BlockTree;
+  fields: Record<string, unknown>;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -80,7 +81,7 @@ export function readBlockPage(siteRoot: string, slug: string): BlockPage | null 
       continue;
     }
     const title = typeof parsed.fields.title === 'string' ? parsed.fields.title : slug;
-    return { title, tree };
+    return { title, tree, fields: parsed.fields };
   }
   return null;
 }

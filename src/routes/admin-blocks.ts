@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
 import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
@@ -28,6 +28,22 @@ import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
 import { prewarmBlockTree } from './admin-prewarm.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
+
+const blockFile = (siteRoot: string, slug: string): string =>
+  path.join(siteRoot, 'content', 'blocks', `${slug}.json`);
+
+/** Fields of the page stored at the slug's own file; {} when absent or unreadable. */
+function readStoredFields(siteRoot: string, slug: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(blockFile(siteRoot, slug), 'utf8')) as {
+      fields?: unknown;
+    };
+    const f = parsed?.fields;
+    return f && typeof f === 'object' && !Array.isArray(f) ? (f as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
 
 export interface AdminBlockRoutesOpts {
   siteRoot: string;
@@ -92,28 +108,50 @@ export function registerAdminBlockRoutes(
     );
   });
 
-  fastify.get('/admin/blocks/new', { ...guard }, async (_req, reply) => {
+  const sendNewForm = (
+    reply: FastifyReply,
+    status: number,
+    form: { title?: string; slug?: string; error?: string }
+  ) => {
     setPublicSecurityHeaders(reply);
-    const assets = serverAssets('/admin/static');
     return reply
+      .code(status)
       .type('text/html; charset=utf-8')
-      .send(renderBlocksNewPage({ site: getSite(), assets, isAdmin: true }));
-  });
+      .send(
+        renderBlocksNewPage({
+          site: getSite(),
+          assets: serverAssets('/admin/static'),
+          isAdmin: true,
+          ...form
+        })
+      );
+  };
 
-  fastify.post<{ Body: { slug?: string } }>(
+  fastify.get('/admin/blocks/new', { ...guard }, async (_req, reply) =>
+    sendNewForm(reply, 200, {})
+  );
+
+  fastify.post<{ Body: { title?: string; slug?: string } }>(
     '/admin/blocks/new',
     { ...guard },
     async (req, reply) => {
-      const slug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : '';
-      if (!/^[a-z0-9-]+$/.test(slug)) return reply.code(404).send({ error: 'not found' });
-      const dest = path.join(siteRoot, 'content', 'blocks', `${slug}.json`);
-      if (!fs.existsSync(dest)) {
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(
-          dest,
-          `${JSON.stringify({ version: 1, body: [], fields: { title: slug, slug, status: 'draft' } }, null, 2)}\n`
-        );
+      const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+      const slug = str(req.body?.slug);
+      const title = str(req.body?.title) || slug;
+      if (!VALID_SLUG.test(slug)) return reply.code(404).send({ error: 'not found' });
+      if (fs.existsSync(blockFile(siteRoot, slug)) || readBlockPage(siteRoot, slug)) {
+        return sendNewForm(reply, 409, {
+          title,
+          slug,
+          error: `A page with the slug "${slug}" already exists. Choose another.`
+        });
       }
+      const dest = blockFile(siteRoot, slug);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(
+        dest,
+        `${JSON.stringify({ version: 1, body: [], fields: { title, slug, status: 'draft' } }, null, 2)}\n`
+      );
       return reply.code(303).header('location', `/admin/blocks/edit/${slug}`).send();
     }
   );
@@ -139,7 +177,7 @@ export function registerAdminBlockRoutes(
           isAdmin: true,
           title: page.title,
           bodyHtml,
-          treeJson: JSON.stringify(page.tree)
+          treeJson: JSON.stringify({ ...page.tree, fields: page.fields })
         })
       );
     }
@@ -171,30 +209,11 @@ export function registerAdminBlockRoutes(
         const raw = (body as { tree: unknown }).tree;
         if (!raw || typeof raw !== 'object') throw new Error('missing tree');
         const rec = raw as { version?: unknown; body?: unknown; fields?: unknown };
-        const blocksDir = path.join(siteRoot, 'content', 'blocks');
-        let existingFields: Record<string, unknown> | undefined;
-        try {
-          for (const file of fs.readdirSync(blocksDir)) {
-            if (!file.endsWith('.json')) continue;
-            const parsed = JSON.parse(fs.readFileSync(path.join(blocksDir, file), 'utf8')) as {
-              fields?: unknown;
-            };
-            if (
-              parsed?.fields &&
-              typeof parsed.fields === 'object' &&
-              (parsed.fields as Record<string, unknown>).slug === slug
-            ) {
-              existingFields = parsed.fields as Record<string, unknown>;
-              break;
-            }
-          }
-        } catch {
-          // fall through; existingFields stays undefined
-        }
+        const existingFields = readStoredFields(siteRoot, slug);
         tree = {
           ...parseBlockTree({ version: 1, body: rec.body }),
           fields: {
-            ...(existingFields ?? {}),
+            ...existingFields,
             ...((rec.fields ?? {}) as Record<string, unknown>),
             slug
           }
@@ -202,7 +221,7 @@ export function registerAdminBlockRoutes(
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
       }
-      const dest = path.join(siteRoot, 'content', 'blocks', `${slug}.json`);
+      const dest = blockFile(siteRoot, slug);
       const inserted = !fs.existsSync(dest);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
