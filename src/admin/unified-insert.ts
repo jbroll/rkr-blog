@@ -10,7 +10,8 @@
 //
 // Browser-safe: no node:* imports.
 
-import type { BlockNode, BlockTree } from '../lib/blocks.ts';
+import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
+import { moveBlock, movedPath } from './block-move.ts';
 import {
   depthLabel,
   MAX_MACRO_DEPTH,
@@ -36,9 +37,15 @@ function dropRefused(name: string, depth: number): boolean {
   return PAGE_CONTAINERS.has(dropKind(name)) && depth >= MAX_MACRO_DEPTH;
 }
 
-/** Thirds of the hovered card: top → before, bottom → after,
- * middle → inside (containers only; resolveDrop decides). */
-function dropPosition(clientY: number, rect: { top: number; height: number }): DropPosition {
+/** Containers split the hovered card in thirds: top → before, bottom →
+ * after, middle → inside. Leaves split at half (before/after) because
+ * "inside" is refused for them and would leave tall cards half dead. */
+export function dropPosition(
+  clientY: number,
+  rect: { top: number; height: number },
+  container: boolean
+): DropPosition {
+  if (!container) return clientY < rect.top + rect.height / 2 ? 'before' : 'after';
   if (clientY < rect.top + rect.height / 3) return 'before';
   if (clientY > rect.top + (rect.height * 2) / 3) return 'after';
   return 'inside';
@@ -67,8 +74,14 @@ function isContainerPath(tree: BlockTree, path: Path): boolean {
   return Array.isArray(kids);
 }
 
+export interface PaletteInsert {
+  /** An existing block is being dragged by its toolbar handle. */
+  beginMove(path: Path): void;
+  endMove(): void;
+}
+
 /** Mount palette click + drag-drop insertion over the live page. */
-export function mountPaletteInsert(env: InsertEnv): void {
+export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
   const { dock, body, macros } = env;
 
   const insertTarget = (): Path => {
@@ -155,10 +168,55 @@ export function mountPaletteInsert(env: InsertEnv): void {
       .filter((s) => s !== '')
       .map(Number);
 
+  let moving: Path | null = null;
   let lastMarked: Element | null = null;
+
+  const dropAt = (
+    ev: Event,
+    card: Element
+  ): { pos: DropPosition; at: ReturnType<typeof resolveDrop> } => {
+    const path = dropPath(card);
+    const pos = dropPosition(
+      (ev as unknown as { clientY?: number }).clientY ?? 0,
+      card.getBoundingClientRect(),
+      isContainerPath(env.getTree(), path)
+    );
+    return { pos, at: resolveDrop(env.getTree(), path, pos) };
+  };
+
+  /** Where a dragged block may land, or null when the move is refused
+   * (into itself, past the container depth limit) or changes nothing. */
+  const moveTarget = (
+    from: Path,
+    at: { parentPath: Path; index: number } | null
+  ): { parentPath: Path; index: number } | null => {
+    const node = getAtPath(env.getTree(), from);
+    if (!at || !node) return null;
+    const landing = [...at.parentPath, at.index];
+    if (from.length < landing.length && from.every((v, i) => landing[i] === v)) return null;
+    if (containerDepth(node) > 0 && at.parentPath.length + containerDepth(node) > MAX_MACRO_DEPTH) {
+      return null;
+    }
+    const target = movedPath(from, at.parentPath, at.index);
+    return target.join(',') === from.join(',') ? null : at;
+  };
+
+  const resolveHover = (
+    ev: Event,
+    card: Element | null,
+    from: Path | null
+  ): { pos: DropPosition; at: { parentPath: Path; index: number } | null } => {
+    if (!card) {
+      const end = { parentPath: [], index: env.getTree().body.length };
+      return { pos: 'inside', at: from ? moveTarget(from, end) : end };
+    }
+    const { pos, at } = dropAt(ev, card);
+    return { pos, at: from ? moveTarget(from, at) : at };
+  };
+
   body.addEventListener('dragover', (ev: Event) => {
     ev.preventDefault();
-    if (!dragName && !dropName(ev)) return;
+    if (!dragName && !moving && !dropName(ev)) return;
     const card = dropCard(ev);
     if (!card) {
       if (lastMarked) {
@@ -169,9 +227,8 @@ export function mountPaletteInsert(env: InsertEnv): void {
       return;
     }
     body.removeAttribute('data-drop');
-    const rect = card.getBoundingClientRect();
-    const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
-    if (!resolveDrop(env.getTree(), dropPath(card), pos)) {
+    const { pos, at } = resolveHover(ev, card, moving);
+    if (!at) {
       if (lastMarked) {
         lastMarked.removeAttribute('data-drop');
         lastMarked = null;
@@ -196,16 +253,26 @@ export function mountPaletteInsert(env: InsertEnv): void {
     clearDropMarks();
     body.removeAttribute('data-drop');
     dragName = null;
-    if (!name) return;
-    let resolved: { parentPath: Path; index: number } | null = null;
-    if (card) {
-      const rect = card.getBoundingClientRect();
-      const pos = dropPosition((ev as unknown as { clientY?: number }).clientY ?? 0, rect);
-      resolved = resolveDrop(env.getTree(), dropPath(card), pos);
-    } else {
-      resolved = { parentPath: [], index: env.getTree().body.length };
+    const from = moving;
+    moving = null;
+    if (!name && !from) return;
+    const { at } = resolveHover(ev, card, from);
+    if (!at) return;
+    if (from) {
+      const next = moveBlock(env.getTree(), from, at.parentPath, at.index);
+      env.commitInsert(next, movedPath(from, at.parentPath, at.index));
+      return;
     }
-    if (!resolved) return;
-    insertNode(name, resolved.parentPath, resolved.index);
+    if (name) insertNode(name, at.parentPath, at.index);
   });
+
+  return {
+    beginMove: (path) => {
+      moving = path;
+    },
+    endMove: () => {
+      moving = null;
+      clearDropMarks();
+    }
+  };
 }

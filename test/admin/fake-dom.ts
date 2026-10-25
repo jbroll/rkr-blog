@@ -349,6 +349,23 @@ function serialize(node: FakeNode): string {
 }
 
 export class FakeDocument {
+  activeElement: FakeElement | null = null;
+  private readonly listeners = new Map<string, Set<Listener>>();
+
+  addEventListener(type: string, listener: Listener): void {
+    let set = this.listeners.get(type);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(type, set);
+    }
+    set.add(listener);
+  }
+
+  /** Runs document listeners after the target's own bubbling pass. */
+  dispatchEvent(ev: FakeEvent): void {
+    for (const listener of [...(this.listeners.get(ev.type) ?? [])]) listener(ev);
+  }
+
   createElement(tag: string): FakeElement {
     return new FakeElement(tag, this);
   }

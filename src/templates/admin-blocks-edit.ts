@@ -47,6 +47,19 @@ const UNIFIED_CSS = `
 .rkr-unified-shell[data-mode="view"] :is(.rkr-unified-blank,.rkr-unified-empty){display:none}
 .rkr-unified-shell[data-mode="edit"] .rkr-unified-blank{min-height:1.5em;outline:1px dashed var(--rkr-rule);outline-offset:4px}
 .rkr-unified-shell[data-mode="edit"] .rkr-unified-blank:empty::before{content:"Type here";color:var(--rkr-muted)}
+.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]{min-height:2.5rem;outline:1px dashed var(--rkr-rule);outline-offset:-1px}
+.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]::before{position:absolute;top:0;left:0;z-index:1;padding:0 .35rem;font-size:.7rem;line-height:1.4;color:var(--rkr-muted);background:var(--rkr-bg);pointer-events:none}
+.rkr-unified-shell[data-mode="edit"] .rkr-row[data-rkr-path]::before{content:"Row"}
+.rkr-unified-shell[data-mode="edit"] .rkr-col[data-rkr-path]::before{content:"Column"}
+.rkr-unified-shell[data-mode="edit"] .rkr-flow[data-rkr-path]::before{content:"Flow"}
+.rkr-unified-shell[data-mode="edit"] [data-rkr-path][data-rkr-selected]{outline:2px solid var(--rkr-edit-accent, var(--rkr-link));outline-offset:4px}
+.rkr-block-toolbar{position:fixed;z-index:50;display:flex;align-items:center;gap:.25rem;padding:.2rem .35rem;font-size:.8rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.4rem;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.rkr-block-toolbar[hidden]{display:none}
+.rkr-block-type{font-weight:600;padding:0 .35rem}
+.rkr-block-action{border:1px solid var(--rkr-rule);background:var(--rkr-bg);color:inherit;border-radius:999px;padding:.1rem .55rem;font:inherit;cursor:pointer}
+.rkr-block-action[hidden]{display:none}
+.rkr-block-action:disabled{opacity:.4;cursor:default}
+.rkr-block-drag{cursor:grab}
 .rkr-macro-dialog{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:1000}
 .rkr-macro-dialog > *{background:var(--rkr-bg);color:var(--rkr-text);padding:1rem;border-radius:.5rem;max-width:32rem;width:90%;max-height:80vh;overflow:auto;border:1px solid var(--rkr-rule)}
 .rkr-unified-node-tools{display:flex;justify-content:flex-end;opacity:1;gap:.25rem}

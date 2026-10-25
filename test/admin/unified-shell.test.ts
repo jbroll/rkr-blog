@@ -584,6 +584,57 @@ describe('unified shell palette drop', () => {
     );
   });
 
+  it('dragging a block by its toolbar handle moves it below the target', async () => {
+    const { f, tree } = twoText();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    const [one, two] = f.body.querySelectorAll('p');
+    assert.ok(one && two);
+    rectOf(two, 100, 40);
+    one.click();
+    const handle = f.root.querySelector('.rkr-block-drag');
+    assert.ok(handle, 'the selected block shows a drag handle');
+    handle.dispatchEvent(new FakeEvent('dragstart'));
+    two.dispatchEvent(Object.assign(new FakeEvent('dragover'), { clientY: 130 }));
+    assert.equal(two.getAttribute('data-drop'), 'after');
+    two.dispatchEvent(Object.assign(new FakeEvent('drop'), { clientY: 130 }));
+    await tick();
+    assert.deepEqual(
+      saved.at(-1)?.body.map((n) => (n as { markdown?: string }).markdown),
+      ['Two', 'One']
+    );
+    assert.deepEqual(shell.selectedPath, [1]);
+  });
+
+  it('a block cannot be dropped into itself', async () => {
+    const f = fixture((doc) => {
+      const row = doc.createElement('div');
+      row.className = 'rkr-row';
+      row.append(marker(doc, '0,0'), para(doc, 'In'));
+      return [marker(doc, '0'), row];
+    });
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'row', children: [{ type: 'text', markdown: 'In' }] }]
+    };
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    const row = f.body.querySelector('.rkr-row');
+    assert.ok(row);
+    rectOf(row, 0, 90);
+    row.click();
+    f.root.querySelector('.rkr-block-drag')?.dispatchEvent(new FakeEvent('dragstart'));
+    row.dispatchEvent(Object.assign(new FakeEvent('drop'), { clientY: 45 }));
+    await tick();
+    assert.equal(saved.length, 0);
+  });
+
   it('container refused at depth 3 with nudge', async () => {
     const doc = new FakeDocument();
     void doc;

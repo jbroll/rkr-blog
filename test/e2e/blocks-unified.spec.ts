@@ -234,3 +234,64 @@ test('unified edit page has no horizontal overflow at phone width', async ({ pag
   );
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+test('delete an empty text block', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-delete-empty-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Delete empty', markdown: 'Keep me.' });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const inserted = saveResponse(page, slug);
+  await dragTextAbove(page, page.locator('#rkr-blocks-page-body p').first());
+  await inserted;
+  const blank = page.locator('#rkr-blocks-page-body [data-rkr-blank]');
+  await expect(blank).toHaveCount(1);
+
+  await page.locator('#rkr-blocks-page-body p[data-rkr-path="1"]').click();
+  await blank.click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('toolbar', { name: 'Block actions' })).toBeVisible();
+
+  const deleted = saveResponse(page, slug);
+  await page.keyboard.press('Delete');
+  await deleted;
+  await expect(blank).toHaveCount(0);
+
+  await page.reload();
+  const res = await page.request.get(`/admin/blocks/${slug}`);
+  const { tree } = (await res.json()) as { tree: { body: { markdown?: string }[] } };
+  expect(tree.body).toEqual([{ type: 'text', markdown: 'Keep me.' }]);
+});
+
+test('drag an existing figure below the row', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-drag-figure-${Date.now()}`;
+  const imageId = await uploadJpeg(page);
+  await seedBlockPage(page, {
+    slug,
+    title: 'Drag figure',
+    body: [
+      figureBlock(imageId),
+      { type: 'row', children: [{ type: 'text', markdown: 'Inside the row.' }] }
+    ]
+  });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.locator('#rkr-blocks-page-body figure').first().click();
+  const handle = page.getByRole('button', { name: 'Drag to move' });
+  await expect(handle).toBeVisible();
+
+  const row = page.locator('#rkr-blocks-page-body .rkr-row');
+  const box = await row.boundingBox();
+  expect(box).not.toBeNull();
+  const moved = saveResponse(page, slug);
+  await handle.dragTo(row, { targetPosition: { x: 4, y: box!.height - 3 } });
+  await moved;
+
+  await page.reload();
+  const res = await page.request.get(`/admin/blocks/${slug}`);
+  const { tree } = (await res.json()) as { tree: { body: { type: string }[] } };
+  expect(tree.body.map((n) => n.type)).toEqual(['row', 'figure']);
+});

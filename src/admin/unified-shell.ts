@@ -18,6 +18,7 @@ import { getAtPath, type Path, setSlotAtPath, updateSlotsAtPath } from './blocks
 import { domToMarkdown } from './dom-markdown.ts';
 import { openFigureDialog, readFigureFields } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
+import { mountBlockActions } from './unified-block-actions.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
 import { createSavePipeline } from './unified-save.ts';
@@ -100,8 +101,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   let generation = 0;
   let latest: Promise<void> = Promise.resolve();
 
-  const select = (path: Path): void => {
-    selected = [...path];
+  let actions: { refresh(): void } | undefined;
+
+  const select = (path: Path | null): void => {
+    selected = path ? [...path] : null;
+    actions?.refresh();
   };
 
   const save = createSavePipeline({
@@ -191,6 +195,12 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     });
   };
 
+  const configure = (path: Path): void => {
+    const type = getAtPath(tree, path)?.type;
+    if (type === 'figure') openFigureConfig(path);
+    else if (type === 'macro') openMacroConfig(path);
+  };
+
   const clearTools = (): void => {
     for (const holder of tools.splice(0)) holder.remove();
   };
@@ -211,8 +221,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       button.addEventListener('click', (ev) => {
         ev.stopPropagation();
         select(unit.path);
-        if (unit.node.type === 'figure') openFigureConfig(unit.path);
-        else if (unit.node.type === 'macro') openMacroConfig(unit.path);
+        configure(unit.path);
       });
       holder.append(button);
       // Sibling, not child: a figure's caption/gallery markup stays
@@ -242,6 +251,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     }
     clearTools();
     if (next === 'edit') addTools();
+    actions?.refresh();
   };
 
   const swap = (html: string, rendered: BlockTree, opts: ApplyOpts): void => {
@@ -291,23 +301,37 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
 
   reindex();
 
-  mountPaletteInsert({
+  // A toolbar or palette button may not take focus (Safari, Firefox on
+  // macOS), so the focused leaf would only blur once the body goes inert.
+  const flushText = (): void => {
+    commitText(doc.activeElement);
+  };
+
+  const insert = mountPaletteInsert({
     dock,
     body,
     macros: deps.macros,
     getTree: () => tree,
     getSelected: () => selected,
-    // A palette button may not take focus (Safari, Firefox on macOS),
-    // so the focused leaf would only blur once the body goes inert.
-    flushText: () => {
-      commitText(doc.activeElement);
-    },
+    flushText,
     commitInsert: (next, path) => {
       void applyTree(next, { select: path });
     },
     showNudge: (text) => {
       save.notice(text);
     }
+  });
+
+  actions = mountBlockActions({
+    body,
+    getTree: () => tree,
+    getSelected: () => selected,
+    select,
+    applyTree,
+    configure,
+    flushText,
+    isEditing: () => mode === 'edit',
+    drag: { start: (path) => insert.beginMove(path), end: () => insert.endMove() }
   });
 
   for (const button of toolbar.querySelectorAll('[data-mode]')) {

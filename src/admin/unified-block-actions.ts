@@ -1,0 +1,284 @@
+// Block selection chrome for the unified editor: the outline on the
+// selected block, its toolbar (move, duplicate, configure, delete, drag
+// handle) and the matching keyboard shortcuts.
+//
+// The shell owns the tree and selection; every action reads the tree
+// after `flushText` (so typing in progress is committed first), builds
+// the next tree with the pure ops in blocks-page-editor.ts, and hands it
+// to `applyTree`, which re-renders and re-hydrates the page.
+//
+// Browser-safe: no node:* imports.
+
+import type { BlockNode, BlockTree } from '../lib/blocks.ts';
+import { moveBlock } from './block-move.ts';
+import { getAtPath, insertAtPath, type Path, removeAtPath } from './blocks-page-editor.ts';
+
+export interface BlockActionsEnv {
+  body: Element;
+  getTree(): BlockTree;
+  getSelected(): Path | null;
+  select(path: Path | null): void;
+  applyTree(next: BlockTree, opts?: { select?: Path }): Promise<void>;
+  configure(path: Path): void;
+  /** Commit the focused text block before an action reads the tree. */
+  flushText?(): void;
+  /** Toolbar and shortcuts only act in edit mode. Defaults to true. */
+  isEditing?(): boolean;
+  /** Drag-handle hooks; the drop itself is handled by the insert module. */
+  drag?: { start(path: Path): void; end(): void };
+}
+
+const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'button', 'macro']);
+const TYPE_LABELS: Record<string, string> = {
+  text: 'Text',
+  figure: 'Image',
+  button: 'Button',
+  row: 'Row',
+  col: 'Column',
+  section: 'Section',
+  flow: 'Flow'
+};
+
+function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function typeLabel(node: BlockNode): string {
+  if (node.type === 'macro') return capitalize(node.macro);
+  return TYPE_LABELS[node.type] ?? capitalize(node.type);
+}
+
+function kidsOf(node: BlockNode): BlockNode[] {
+  if (node.type === 'macro') return [];
+  const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
+  return n.children ?? n.blocks ?? [];
+}
+
+function listAt(tree: BlockTree, parent: Path): BlockNode[] | null {
+  if (parent.length === 0) return tree.body;
+  const node = getAtPath(tree, parent);
+  return node ? kidsOf(node) : null;
+}
+
+/** Every path in render order, parents before their children. */
+function flatten(tree: BlockTree): Path[] {
+  const out: Path[] = [];
+  const walk = (nodes: BlockNode[], base: Path): void => {
+    nodes.forEach((node, i) => {
+      out.push([...base, i]);
+      walk(kidsOf(node), [...base, i]);
+    });
+  };
+  walk(tree.body, []);
+  return out;
+}
+
+const pathKey = (path: Path): string => path.join(',');
+
+function pathOf(el: Element | null | undefined): Path | null {
+  const raw = el?.closest?.('[data-rkr-path]')?.getAttribute('data-rkr-path');
+  if (raw === null || raw === undefined || raw === '') return null;
+  return raw.split(',').map(Number);
+}
+
+const TOOLBAR_HEIGHT = 34;
+
+export function mountBlockActions(env: BlockActionsEnv): { refresh(): void } {
+  const { body } = env;
+  const doc = body.ownerDocument;
+  const host = (body.parentNode ?? body) as Element;
+
+  const bar = doc.createElement('div');
+  bar.className = 'rkr-block-toolbar';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Block actions');
+  bar.hidden = true;
+  const label = doc.createElement('span');
+  label.className = 'rkr-block-type';
+  bar.append(label);
+
+  const isBusy = (): boolean => body.hasAttribute('inert');
+  const editing = (): boolean => env.isEditing?.() ?? true;
+
+  /** Run `fn` with a fresh tree and the selected path, after committing
+   * any text in progress. */
+  const act = (fn: (tree: BlockTree, path: Path) => void): void => {
+    if (isBusy() || !editing()) return;
+    const before = env.getSelected();
+    if (!before) return;
+    env.flushText?.();
+    const tree = env.getTree();
+    if (getAtPath(tree, before)) fn(tree, before);
+  };
+
+  const move = (delta: -1 | 1): void =>
+    act((tree, path) => {
+      const parent = path.slice(0, -1);
+      const to = (path[path.length - 1] as number) + delta;
+      const size = listAt(tree, parent)?.length ?? 0;
+      if (to < 0 || to >= size) return;
+      const next = moveBlock(tree, path, parent, delta < 0 ? to : to + 1);
+      void env.applyTree(next, { select: [...parent, to] });
+    });
+
+  const duplicate = (): void =>
+    act((tree, path) => {
+      const node = getAtPath(tree, path) as BlockNode;
+      const parent = path.slice(0, -1);
+      const at = (path[path.length - 1] as number) + 1;
+      const next = insertAtPath(tree, parent, at, node);
+      void env.applyTree(next, { select: [...parent, at] });
+    });
+
+  const remove = (): void =>
+    act((tree, path) => {
+      const parent = path.slice(0, -1);
+      const idx = path[path.length - 1] as number;
+      const size = listAt(tree, parent)?.length ?? 0;
+      let target: Path | null = null;
+      if (idx < size - 1) target = path;
+      else if (idx > 0) target = [...parent, idx - 1];
+      const next = removeAtPath(tree, path);
+      env.select(target);
+      void env.applyTree(next, target ? { select: target } : undefined);
+    });
+
+  const configure = (): void => {
+    const path = env.getSelected();
+    const node = path ? getAtPath(env.getTree(), path) : null;
+    if (path && node && CONFIGURABLE.has(node.type)) env.configure(path);
+  };
+
+  const button = (action: string, aria: string, text: string, onClick: () => void) => {
+    const el = doc.createElement('button');
+    el.type = 'button';
+    el.className = `rkr-block-action rkr-block-${action}`;
+    el.setAttribute('data-action', action);
+    el.setAttribute('aria-label', aria);
+    el.textContent = text;
+    el.addEventListener('click', (ev: Event) => {
+      ev.stopPropagation();
+      onClick();
+    });
+    bar.append(el);
+    return el;
+  };
+
+  const handle = button('drag', 'Drag to move', 'Drag', () => {});
+  (handle as HTMLElement).draggable = true;
+  handle.addEventListener('dragstart', (ev: Event) => {
+    const path = env.getSelected();
+    if (!path || isBusy()) {
+      ev.preventDefault();
+      return;
+    }
+    env.flushText?.();
+    const dt = (
+      ev as unknown as {
+        dataTransfer?: { setData(t: string, v: string): void; effectAllowed: string };
+      }
+    ).dataTransfer;
+    try {
+      dt?.setData('text/plain', 'rkr-move');
+      if (dt) dt.effectAllowed = 'move';
+    } catch {
+      // Locked-down browsers and test fakes may refuse; the drag state
+      // lives in the insert module.
+    }
+    env.drag?.start(path);
+  });
+  handle.addEventListener('dragend', () => {
+    env.drag?.end();
+  });
+  const up = button('move-up', 'Move up', 'Up', () => move(-1));
+  const down = button('move-down', 'Move down', 'Down', () => move(1));
+  button('duplicate', 'Duplicate', 'Duplicate', duplicate);
+  const config = button('configure', 'Configure', 'Configure', configure);
+  button('delete', 'Delete', 'Delete', remove);
+  host.append(bar);
+
+  const setDisabled = (el: Element, off: boolean): void => {
+    if (off) el.setAttribute('disabled', '');
+    else el.removeAttribute('disabled');
+  };
+
+  const refresh = (): void => {
+    for (const el of body.querySelectorAll('[data-rkr-selected]')) {
+      el.removeAttribute('data-rkr-selected');
+    }
+    const path = env.getSelected();
+    const tree = env.getTree();
+    const node = path ? getAtPath(tree, path) : null;
+    const els = path ? [...body.querySelectorAll(`[data-rkr-path="${pathKey(path)}"]`)] : [];
+    if (!path || !node || !editing() || els.length === 0) {
+      bar.hidden = true;
+      return;
+    }
+    for (const el of els) el.setAttribute('data-rkr-selected', '');
+    label.textContent = typeLabel(node);
+    const idx = path[path.length - 1] as number;
+    const size = listAt(tree, path.slice(0, -1))?.length ?? 0;
+    setDisabled(up, idx === 0);
+    setDisabled(down, idx >= size - 1);
+    config.hidden = !CONFIGURABLE.has(node.type);
+    bar.hidden = false;
+    const rect = els[0]?.getBoundingClientRect?.();
+    if (rect) {
+      const top = Math.max(4, rect.top - TOOLBAR_HEIGHT);
+      bar.setAttribute('style', `top:${top}px;left:${Math.max(4, rect.left)}px`);
+    }
+  };
+
+  const neighbour = (delta: -1 | 1): void => {
+    const path = env.getSelected();
+    if (!path) return;
+    const all = flatten(env.getTree());
+    const at = all.findIndex((p) => pathKey(p) === pathKey(path));
+    const to = all[at + delta];
+    if (at < 0 || !to) return;
+    env.select(to);
+    refresh();
+    body.querySelector(`[data-rkr-path="${pathKey(to)}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  };
+
+  const onKeydown = (raw: Event): void => {
+    const ev = raw as KeyboardEvent;
+    if (ev.defaultPrevented || !editing()) return;
+    const target = ev.target as Element | null;
+    if (target?.closest?.('[contenteditable="true"]')) {
+      if (ev.key !== 'Escape') return;
+      const path = pathOf(target);
+      (target as HTMLElement).blur?.();
+      if (path) env.select(path);
+      refresh();
+      ev.preventDefault();
+      return;
+    }
+    for (const tag of ['input', 'textarea', 'select', 'dialog']) {
+      if (target?.closest?.(tag)) return;
+    }
+    if (isBusy() || !env.getSelected()) return;
+    const mod = ev.ctrlKey || ev.metaKey;
+    const plain = !mod && !ev.altKey && !ev.shiftKey;
+    let handled = true;
+    if (ev.altKey && !mod && ev.key === 'ArrowUp') move(-1);
+    else if (ev.altKey && !mod && ev.key === 'ArrowDown') move(1);
+    else if (mod && !ev.altKey && ev.key.toLowerCase() === 'd') duplicate();
+    else if (plain && (ev.key === 'Delete' || ev.key === 'Backspace')) remove();
+    else if (plain && ev.key === 'Escape') {
+      env.select(null);
+      refresh();
+    } else if (plain && ev.key === 'Enter' && !target?.closest?.('button')) configure();
+    else if (plain && ev.key === 'ArrowUp') neighbour(-1);
+    else if (plain && ev.key === 'ArrowDown') neighbour(1);
+    else handled = false;
+    if (handled) ev.preventDefault();
+  };
+  doc.addEventListener('keydown', onKeydown);
+
+  const view = doc.defaultView;
+  view?.addEventListener('scroll', refresh, true);
+  view?.addEventListener('resize', refresh);
+
+  return { refresh };
+}
