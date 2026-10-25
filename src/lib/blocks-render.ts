@@ -50,12 +50,12 @@ function adjacencyFrom(lib: RenderMacroLib, root: string): Record<string, string
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_-]+)\s*\}\}/g;
 
 /** Replace `{{name}}` in every string of a macro tree with the resolved
- * slot value. Names with no slot stay literal. */
+ * slot value. A name with no string or number value renders empty. */
 function fillPlaceholders<T>(value: T, slots: Slots): T {
   if (typeof value === 'string') {
-    return value.replace(PLACEHOLDER, (whole, name: string) => {
+    return value.replace(PLACEHOLDER, (_whole, name: string) => {
       const v = slots[name];
-      return typeof v === 'string' || typeof v === 'number' ? String(v) : whole;
+      return typeof v === 'string' || typeof v === 'number' ? String(v) : '';
     }) as T;
   }
   if (Array.isArray(value)) return value.map((v) => fillPlaceholders(v, slots)) as T;
@@ -206,10 +206,10 @@ async function renderNodeHtml(
       const overrides = node.slots ?? {};
       const merged = resolveSlots({ defaults: def.defaults }, overrides).slots;
       const filled = fillPlaceholders(def.tree, merged);
-      // Keep the tree's own slots (theme, edge); only explicit overrides win.
+      // Tree slots (theme, edge) plus explicit overrides; defaults feed placeholders only.
       const tree = {
         ...filled,
-        slots: { ...merged, ...(filled.slots ?? {}), ...overrides }
+        slots: { ...(filled.slots ?? {}), ...overrides }
       } as BlockNode;
       // The instance is one editable unit: mark the instance path once,
       // render the expansion internals unmarked.

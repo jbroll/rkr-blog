@@ -271,6 +271,25 @@ describe('blocks-render', () => {
       }
     });
 
+    it('unresolved placeholders render empty', async () => {
+      const odd: RenderMacroLib = {
+        get: (n) =>
+          n === 'odd'
+            ? {
+                defaults: { list: ['a', 'b'] },
+                tree: { type: 'text', markdown: 'A{{missing}}B{{list}}C' }
+              }
+            : undefined
+      };
+      const html = await renderBlockTree(
+        { version: 1, body: [{ type: 'macro', macro: 'odd' }] },
+        fakeCtx,
+        odd
+      );
+      assert.doesNotMatch(html, /\{\{/);
+      assert.match(html, /ABC/);
+    });
+
     it('substitutes placeholders inside curried macros', async () => {
       const curried: RenderMacroLib = {
         get: (n) =>
