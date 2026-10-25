@@ -46,6 +46,34 @@ describe('figure image list encoding', () => {
     assert.deepEqual(listFromFigureSlots(slots), rows);
   });
 
+  it('stores a pipe in a caption as a slash', () => {
+    const slots = figureSlotsFromList([{ id: 'aaaaaa', alt: '', caption: 'left | right' }], {
+      matrix: '',
+      justify: 'center'
+    });
+    assert.equal(slots.captions, 'left / right');
+  });
+
+  it('a trailing backslash in an alt cannot escape the next comma', () => {
+    const rows = [
+      { id: 'aaaaaa', alt: 'path\\', caption: '' },
+      { id: 'bbbbbb', alt: 'B', caption: '' }
+    ];
+    const slots = figureSlotsFromList(rows, { matrix: '', justify: 'center' });
+    assert.deepEqual(
+      listFromFigureSlots(slots).map((r) => r.alt),
+      ['path', 'B']
+    );
+  });
+
+  it('alts and captions keep their position when an id entry is empty', () => {
+    const rows = listFromFigureSlots({ ids: 'aaaaaa,,bbbbbb', alts: 'A,X,B', captions: 'a|x|b' });
+    assert.deepEqual(rows, [
+      { id: 'aaaaaa', alt: 'A', caption: 'a' },
+      { id: 'bbbbbb', alt: 'B', caption: 'b' }
+    ]);
+  });
+
   it('an empty figure reads as no rows', () => {
     assert.deepEqual(listFromFigureSlots({ ids: '' }), []);
     assert.deepEqual(listFromFigureSlots({}), []);
@@ -149,14 +177,40 @@ describe('figure image list rows', () => {
     assert.equal(el.querySelectorAll('.rkr-media-row').length, 2);
   });
 
-  it('edit image reports the row index and setThumb swaps its src', () => {
+  it('edit image reports the row index and refresh re-reads thumbnails', () => {
     const edits: number[] = [];
-    const { el, list } = mount(ROWS, (i) => edits.push(i));
+    const doc = new FakeDocument();
+    let url = 'blob:before';
+    const list = mountImageList(doc as unknown as Document, {
+      rows: ROWS,
+      kind: 'image',
+      thumbUrl: () => url,
+      onChange: () => {},
+      onEdit: (i) => edits.push(i)
+    });
+    const el = list.element as unknown as FakeElement;
     button(el.querySelectorAll('.rkr-media-row')[1] as FakeElement, 'Edit image').click();
     assert.deepEqual(edits, [1]);
-    list.setThumb('bbbbbb', 'blob:after');
+    url = 'blob:after';
+    list.refresh();
     const img = (el.querySelectorAll('.rkr-media-row')[1] as FakeElement).querySelector('img');
     assert.equal(img?.getAttribute('src'), 'blob:after');
+  });
+
+  it('a thumbnail that fails to load re-reads its URL', () => {
+    const doc = new FakeDocument();
+    let url = 'blob:revoked';
+    const list = mountImageList(doc as unknown as Document, {
+      rows: ROWS.slice(0, 1),
+      kind: 'image',
+      thumbUrl: () => url,
+      onChange: () => {}
+    });
+    const img = (list.element as unknown as FakeElement).querySelector('img');
+    assert.ok(img);
+    url = 'blob:current';
+    img.dispatchEvent(new FakeEvent('error'));
+    assert.equal(img.getAttribute('src'), 'blob:current');
   });
 
   it('no input ever holds an id', () => {

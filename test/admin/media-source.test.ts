@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { browserMediaDeps, type MediaSourceDeps, pickMedia } from '../../src/admin/media-source.ts';
+import {
+  browserMediaDeps,
+  type MediaSourceDeps,
+  pickMedia,
+  uploadImageDirect
+} from '../../src/admin/media-source.ts';
 import type { SourceChoice } from '../../src/admin/source-picker.ts';
 import { FakeDocument, type FakeElement, FakeEvent } from './fake-dom.ts';
 
@@ -163,5 +168,20 @@ describe('browserMediaDeps', () => {
     input.click = () => input.dispatchEvent(new FakeEvent('cancel'));
     await browserMediaDeps(doc, true, io).chooseFiles('video');
     assert.equal(input.multiple, false);
+  });
+});
+
+describe('uploadImageDirect', () => {
+  it('posts the file and returns the stored id, or throws on an error status', async () => {
+    const calls: string[] = [];
+    const ok = (async (url: string) => {
+      calls.push(url);
+      return new Response(JSON.stringify({ id: 'abc123' }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const blob = new File(['x'], 'a.png', { type: 'image/png' });
+    assert.equal(await uploadImageDirect(blob, ok), 'abc123');
+    assert.deepEqual(calls, ['/admin/upload']);
+    const bad = (async () => new Response('', { status: 413 })) as unknown as typeof fetch;
+    await assert.rejects(uploadImageDirect(blob, bad), /upload failed \(413\)/);
   });
 });

@@ -40,17 +40,14 @@ const text = (slots: Slots, key: string): string => {
 };
 
 export function listFromFigureSlots(slots: Slots): FigureImageRow[] {
-  const ids = text(slots, 'ids')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s !== '');
   const alts = splitAlts(text(slots, 'alts'));
   const captions = text(slots, 'captions').split('|');
-  return ids.map((id, i) => ({
-    id,
-    alt: alts[i] ?? '',
-    caption: (captions[i] ?? '').trim()
-  }));
+  // Alts and captions are parallel to the raw id list, so pair them by
+  // position before dropping empty id entries.
+  return text(slots, 'ids')
+    .split(',')
+    .map((raw, i) => ({ id: raw.trim(), alt: alts[i] ?? '', caption: (captions[i] ?? '').trim() }))
+    .filter((row) => row.id !== '');
 }
 
 /** Drop trailing empty entries so an untouched figure doesn't grow a
@@ -67,7 +64,8 @@ export function figureSlotsFromList(
 ): Slots {
   return {
     ids: rows.map((r) => r.id).join(','),
-    alts: joinAlts(trimTail(rows.map((r) => r.alt.trim()))),
+    // A trailing backslash would escape the separator after it.
+    alts: joinAlts(trimTail(rows.map((r) => r.alt.trim().replace(/\\+$/, '')))),
     captions: trimTail(rows.map((r) => r.caption.trim().replace(/\|/g, '/'))).join('|'),
     matrix: layout.matrix,
     justify: layout.justify
@@ -115,7 +113,8 @@ export function matrixFromLayout(layout: LayoutChoice): string {
 export interface ImageListOpts {
   rows: FigureImageRow[];
   kind: 'image' | 'video';
-  /** Thumbnail for a row; null shows a placeholder. */
+  /** Thumbnail for a row, read on every render so it is never a stale
+   * (revoked) preview URL; null shows a placeholder. */
   thumbUrl(id: string): string | null;
   onChange(rows: FigureImageRow[]): void;
   /** Present only where the image editor is available. */
@@ -125,7 +124,8 @@ export interface ImageListOpts {
 export interface ImageList {
   readonly element: HTMLElement;
   setRows(rows: FigureImageRow[]): void;
-  setThumb(id: string, url: string): void;
+  /** Re-read every thumbnail URL (after an image edit). */
+  refresh(): void;
 }
 
 let fieldCounter = 0;
@@ -136,7 +136,6 @@ export function mountImageList(doc: Document, opts: ImageListOpts): ImageList {
   const element = doc.createElement('ol');
   element.className = 'rkr-media-list';
   let rows = [...opts.rows];
-  const thumbs = new Map<string, string>();
 
   const change = (next: FigureImageRow[]): void => {
     rows = next;
@@ -173,13 +172,19 @@ export function mountImageList(doc: Document, opts: ImageListOpts): ImageList {
   const thumb = (id: string): HTMLElement => {
     const box = doc.createElement('div');
     box.className = 'rkr-media-thumb';
-    const url = thumbs.get(id) ?? opts.thumbUrl(id);
+    const url = opts.thumbUrl(id);
     if (url) {
       const img = doc.createElement('img');
       img.setAttribute('src', url);
       img.setAttribute('alt', '');
       img.setAttribute('width', '72');
       img.setAttribute('height', '72');
+      // A discard repaint can revoke the URL just after this render;
+      // the getter then holds its replacement.
+      img.addEventListener('error', () => {
+        const next = opts.thumbUrl(id);
+        if (next && next !== img.getAttribute('src')) img.setAttribute('src', next);
+      });
       box.append(img);
     } else {
       box.textContent = opts.kind === 'video' ? 'Video' : 'Image';
@@ -227,9 +232,6 @@ export function mountImageList(doc: Document, opts: ImageListOpts): ImageList {
       rows = [...next];
       render();
     },
-    setThumb(id, url) {
-      thumbs.set(id, url);
-      render();
-    }
+    refresh: render
   };
 }

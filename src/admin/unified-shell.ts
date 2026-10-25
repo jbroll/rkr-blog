@@ -43,6 +43,9 @@ export interface UnifiedShellDeps {
 interface ApplyOpts {
   /** Path (in the new tree) to select once the render lands. */
   select?: Path;
+  /** Re-render without saving: the tree is unchanged but what the page
+   * shows is not (applied image edits). */
+  renderOnly?: boolean;
 }
 
 export interface UnifiedShell {
@@ -185,8 +188,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
         void applyTree(next, { select: path });
       },
       onCancel: (edited) => {
-        // Applied image edits changed the derivatives the page shows.
-        if (edited) void applyTree({ ...tree }, { select: path });
+        if (!edited) return;
+        // Applied image edits changed the derivatives the page shows. A
+        // pending text edit saves itself through flushText.
+        flushText();
+        void applyTree({ ...tree }, { select: path, renderOnly: true });
       }
     });
   };
@@ -277,7 +283,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     // Set now, not at swap: a palette click before the render lands
     // must target the new tree.
     if (opts.select) select(opts.select);
-    save.markEditing();
+    if (!opts.renderOnly) save.markEditing();
     body.setAttribute('inert', '');
     let html: string;
     try {
@@ -289,7 +295,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     if (mine !== generation) return latest;
     if (shown === next) body.removeAttribute('inert');
     else swap(html, next, opts);
-    await save.requestSave(next);
+    if (!opts.renderOnly) await save.requestSave(next);
   };
 
   const applyTree = (next: BlockTree, opts: ApplyOpts = {}): Promise<void> => {

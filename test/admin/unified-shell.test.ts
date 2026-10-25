@@ -490,6 +490,74 @@ describe('unified shell figure dialog', () => {
     assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
   });
 
+  function editedFigure(edit?: (f: Fixture) => void) {
+    const { f, tree } = figureFixture();
+    const saved: BlockTree[] = [];
+    const renders: BlockTree[] = [];
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      onSave: async (t) => {
+        saved.push(t);
+      },
+      render: async (t) => {
+        renders.push(t);
+        return markedRender(t);
+      },
+      media: {
+        pick: async () => [],
+        thumbUrl: () => null,
+        imageEditor: {
+          open: () => {},
+          apply: async () => true,
+          close: () => {},
+          dirty: () => false,
+          previewUrl: () => 'blob:applied'
+        }
+      }
+    });
+    const run = async (): Promise<void> => {
+      const tick = async () => {
+        for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
+      };
+      shell.setMode('edit');
+      f.body.querySelector('figure')?.click();
+      f.root.querySelector('[data-action="configure"]')?.click();
+      const button = (label: string) =>
+        f.root.querySelectorAll('button').find((b) => b.textContent === label);
+      button('Edit image')?.click();
+      button('Apply edits')?.click();
+      await tick();
+      edit?.(f);
+      button('Cancel')?.click();
+      await tick();
+    };
+    return { run, saved, renders };
+  }
+
+  it('cancel after applied image edits re-renders without saving', async () => {
+    const h = editedFigure();
+    await h.run();
+    assert.equal(h.renders.length, 1, 'the page re-renders for the new derivatives');
+    assert.equal(h.saved.length, 0, 'an unchanged tree is not saved');
+  });
+
+  it('cancel after applied image edits commits a focused text edit first', async () => {
+    const h = editedFigure((f) => {
+      const p = f.body.querySelectorAll('p').find((el) => el.textContent === 'Kept');
+      assert.ok(p);
+      p.textContent = 'Kept edited';
+      f.doc.activeElement = p;
+    });
+    await h.run();
+    const last = h.saved.at(-1)?.body[1] as { markdown?: string } | undefined;
+    assert.equal(last?.markdown, 'Kept edited');
+    assert.equal(
+      h.renders.at(-1)?.body[1] && (h.renders.at(-1)?.body[1] as { markdown?: string }).markdown,
+      'Kept edited'
+    );
+  });
+
   it('inserting an image opens the picker and saves the picked ids', async () => {
     const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Kept')]);
     const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Kept' }] };

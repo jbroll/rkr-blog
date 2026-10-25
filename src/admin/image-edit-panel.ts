@@ -73,6 +73,8 @@ export interface ImageEditPanel {
   save(): Promise<boolean>;
   /** Drop the active image's unapplied edits. */
   discard(): void;
+  /** True while the active image has edits that were not applied. */
+  dirty(): boolean;
 }
 
 export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
@@ -87,6 +89,8 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     activeImageId
   } = deps;
   const pipeline = deps.pipeline;
+  // Whether the panel is showing; repaints only touch the preview then.
+  let shown = false;
   // Empty-state hint shown in the cell dialog when no cell is active.
   // openCellDialog can fire with activeCellIndex===null (idx falls back
   // to 0 for caption/alt but the image-edit section stays hidden), so
@@ -109,8 +113,8 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
       del.type = 'button';
       del.className = 'rkr-edits-del';
       del.textContent = '×';
-      del.title = 'Delete this step';
-      del.setAttribute('aria-label', `Delete step ${idx + 1}: ${describeOp(op)}`);
+      del.title = `Delete step ${idx + 1}: ${describeOp(op)}`;
+      del.setAttribute('aria-label', `Delete step ${idx + 1}`);
       del.addEventListener('click', () => {
         localDeleteAt(s, idx);
         refreshAfterEdit(id, s, `deleted step ${idx + 1}`);
@@ -137,7 +141,9 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   async function repaint(id: string, s: LocalEditState): Promise<void> {
     const url = await pipeline.preview(id, s.ops);
     onPreview(id, url);
-    updateDialogPreview(url);
+    // A repaint that lands after deactivate (a discard on close) must
+    // not unhide the stashed preview.
+    if (shown) updateDialogPreview(url);
   }
 
   /** Sync the in-dialog <img> to the latest pipeline output for `id`.
@@ -313,6 +319,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   }
 
   function deactivate(): void {
+    shown = false;
     buttons.reset.hidden = true;
     resampleInput.value = '';
     buttons.undo.disabled = true;
@@ -332,6 +339,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   }
 
   function activateForId(id: string, stillCurrent: () => boolean): void {
+    shown = true;
     if (hint) hint.hidden = true;
     buttons.reset.hidden = true;
     resampleInput.value = '';
@@ -366,5 +374,11 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     );
   }
 
-  return { activateForId, deactivate, save, discard };
+  function dirty(): boolean {
+    const id = activeImageId();
+    const s = id ? pipeline.get(id) : undefined;
+    return s ? isDirty(s) : false;
+  }
+
+  return { activateForId, deactivate, save, discard, dirty };
 }

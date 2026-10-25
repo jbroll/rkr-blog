@@ -299,6 +299,16 @@ describe('admin blocks save', () => {
     const csp = res.headers['content-security-policy'] as string;
     assert.match(csp, /img-src 'self' data: blob:/);
     assert.match(csp, /script-src 'self'/);
+    // Drive, Photos and OneDrive picker thumbnails load from the providers.
+    const img = csp.split('; ').find((d) => d.startsWith('img-src ')) ?? '';
+    for (const host of [
+      'https://*.googleusercontent.com',
+      'https://*.1drv.com',
+      'https://*.onedrive.live.com',
+      'https://*.svc.ms'
+    ]) {
+      assert.ok(img.split(' ').includes(host), `editor img-src allows ${host}`);
+    }
     assert.equal(
       (await app.inject({ method: 'GET', url: '/admin/blocks/edit/nope' })).statusCode,
       404
@@ -313,6 +323,9 @@ describe('admin blocks save', () => {
     const csp = res.headers['content-security-policy'] as string;
     assert.match(csp, /img-src 'self' data:(;|$)/);
     assert.equal(csp.includes('blob:'), false);
+    for (const host of ['googleusercontent', '1drv', 'onedrive', 'svc.ms']) {
+      assert.equal(csp.includes(host), false, `public CSP omits ${host}`);
+    }
   });
 
   it('GET /admin/blocks/edit/:slug renders the page body with path markers and the tree', async (t) => {

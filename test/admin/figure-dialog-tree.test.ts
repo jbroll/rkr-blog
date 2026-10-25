@@ -162,34 +162,63 @@ describe('figure dialog', () => {
 });
 
 describe('figure dialog image editor', () => {
+  /** Mirrors canvas-loaders: every repaint mints a new blob URL for the
+   * id and revokes the previous one. */
   function host() {
     const calls: string[] = [];
+    const revoked = new Set<string>();
+    const urls = new Map<string, string>();
+    let minted = 0;
+    let unapplied = false;
+    const repaint = (id: string): void => {
+      const old = urls.get(id);
+      if (old) revoked.add(old);
+      urls.set(id, `blob:${++minted}`);
+    };
+    let active = '';
     const editor: ImageEditorHost = {
       open: (id, into) => {
+        active = id;
         calls.push(`open:${id === B ? 'B' : id}`);
+        repaint(id);
         const panel = (into as unknown as FakeElement).ownerDocument.createElement('div');
         panel.className = 'fake-editor';
         (into as unknown as FakeElement).append(panel);
       },
       apply: async () => {
         calls.push('apply');
-        return 'blob:rotated';
+        repaint(active);
+        unapplied = false;
+        return true;
       },
       close: (discard) => {
         calls.push(`close:${discard}`);
+        if (discard) repaint(active);
+        unapplied = false;
+      },
+      dirty: () => unapplied,
+      previewUrl: (id) => urls.get(id) ?? null
+    };
+    return {
+      editor,
+      calls,
+      revoked,
+      edit: () => {
+        unapplied = true;
       }
     };
-    return { editor, calls };
   }
+
+  const editButton = (d: Opened, i: number) =>
+    d
+      .rows()
+      [i]?.querySelectorAll('button')
+      .find((b) => b.textContent === 'Edit image');
 
   it('Edit image swaps to the editor with Back to figure and Apply edits', async () => {
     const h = host();
     const d = open('figure', FIGURE, { imageEditor: h.editor });
-    const row = d.rows()[1];
-    row
-      ?.querySelectorAll('button')
-      .find((b) => b.textContent === 'Edit image')
-      ?.click();
+    editButton(d, 1)?.click();
     assert.deepEqual(h.calls, ['open:B']);
     assert.ok(d.root.querySelector('.fake-editor'), 'editor mounted in the dialog body');
     assert.equal(d.rows().length, 0, 'list is swapped out');
@@ -200,24 +229,81 @@ describe('figure dialog image editor', () => {
     await tick();
     assert.deepEqual(h.calls, ['open:B', 'apply', 'close:false']);
     assert.equal(d.rows().length, 2, 'back on the list');
-    assert.equal(d.rows()[1]?.querySelector('img')?.getAttribute('src'), 'blob:rotated');
+    assert.equal(d.rows()[1]?.querySelector('img')?.getAttribute('src'), 'blob:2');
     assert.equal(d.root.querySelector('.rkr-dialog-primary')?.textContent, 'Save figure');
 
     d.find('Cancel')?.click();
     assert.deepEqual(d.cancels, [true], 'applied edits are reported on cancel');
   });
 
-  it('Back to figure discards unapplied edits', () => {
+  it('row thumbnails never point at a revoked preview URL', async () => {
     const h = host();
     const d = open('figure', FIGURE, { imageEditor: h.editor });
+    const thumbs = () => d.rows().map((r) => r.querySelector('img')?.getAttribute('src') ?? '');
+    editButton(d, 1)?.click();
+    h.edit();
+    d.find('Apply edits')?.click();
+    await tick();
+    editButton(d, 1)?.click();
+    d.find('Back to figure')?.click();
+    await tick();
     d.rows()[0]
       ?.querySelectorAll('button')
-      .find((b) => b.textContent === 'Edit image')
+      .find((b) => b.textContent === 'Move down')
       ?.click();
+    assert.ok(h.revoked.size >= 2, 'the fake revoked earlier URLs');
+    for (const src of thumbs()) assert.equal(h.revoked.has(src), false, `${src} is live`);
+    assert.equal(thumbs()[0], h.editor.previewUrl(B));
+  });
+
+  it('Back to figure with no unapplied edits leaves directly', () => {
+    const h = host();
+    const d = open('figure', FIGURE, { imageEditor: h.editor });
+    editButton(d, 0)?.click();
     d.find('Back to figure')?.click();
     assert.deepEqual(h.calls.slice(-1), ['close:true']);
     assert.equal(d.rows().length, 2);
     assert.equal(d.commits.length, 0);
+    assert.equal(d.root.querySelectorAll('[data-rkr-dialog]').length, 1, 'no confirm');
+  });
+
+  it('Back to figure with unapplied edits asks first', async () => {
+    const h = host();
+    const d = open('figure', FIGURE, { imageEditor: h.editor });
+    editButton(d, 0)?.click();
+    h.edit();
+    d.find('Back to figure')?.click();
+    await tick();
+    const confirm = () =>
+      d.root
+        .querySelectorAll('[data-rkr-dialog]')
+        .find((el) => el.textContent?.includes('Discard unapplied edits?'));
+    assert.ok(confirm(), 'confirm dialog opens');
+    assert.equal(d.rows().length, 0, 'still in the editor');
+    d.find('Keep editing')?.click();
+    await tick();
+    assert.equal(confirm(), undefined);
+    assert.ok(d.root.querySelector('.fake-editor'), 'kept editing');
+
+    d.find('Back to figure')?.click();
+    await tick();
+    d.find('Discard')?.click();
+    await tick();
+    assert.deepEqual(h.calls.slice(-1), ['close:true']);
+    assert.equal(d.rows().length, 2, 'back on the list');
+  });
+
+  it('closing the dialog with unapplied edits asks first', async () => {
+    const h = host();
+    const d = open('figure', FIGURE, { imageEditor: h.editor });
+    editButton(d, 0)?.click();
+    h.edit();
+    d.root.querySelector('.rkr-dialog-close')?.click();
+    await tick();
+    assert.deepEqual(d.cancels, [], 'not closed yet');
+    d.find('Discard')?.click();
+    await tick();
+    assert.deepEqual(d.cancels, [false]);
   });
 
   it('rows offer no Edit image without an editor', () => {
@@ -235,6 +321,8 @@ describe('video dialog', () => {
     assert.equal(d.root.querySelectorAll('[role="radio"]').length, 0);
     assert.equal(d.buttons().includes('Edit image'), false);
     assert.equal(d.root.querySelector('.rkr-dialog-primary')?.textContent, 'Save video');
+    const positions = d.root.querySelectorAll('option').map((o) => o.getAttribute('value'));
+    assert.equal(positions.includes('inline'), false, 'the renderer maps inline to center');
     assert.deepEqual(
       d
         .rows()[0]

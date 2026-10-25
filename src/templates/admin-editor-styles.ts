@@ -133,6 +133,7 @@ const FIELDS = `
 const MEDIA_DIALOG = `
 dialog.rkr-dialog.is-wide:has(.rkr-media-dialog,.rkr-image-editor){width:min(46rem,calc(100vw - 2rem));max-height:min(48rem,calc(100vh - 2rem))}
 .rkr-media-dialog{gap:1.25rem}
+.rkr-confirm-text{margin:0}
 .rkr-media-section{display:grid;gap:.6rem;margin:0;padding:0}
 .rkr-dialog .rkr-media-heading{margin:0;padding:0;border:0;font:600 .8125rem/1.3 var(--rkr-edit-font);letter-spacing:normal;text-transform:none;color:var(--rkr-edit-muted)}
 .rkr-media-list{display:grid;gap:.6rem;margin:0;padding:0;list-style:none}

@@ -17,6 +17,8 @@ export interface EditorDialogOpts {
   title: string;
   body: Node;
   primaryLabel: string;
+  /** Defaults to "Cancel". */
+  cancelLabel?: string;
   /** Resolve true to close, false to stay open. */
   onPrimary(): boolean | Promise<boolean>;
   /** Escape, close button, Cancel or backdrop. Not called after a successful primary. */
@@ -36,6 +38,8 @@ interface DialogView {
   /** Runs whenever the view is left: after a successful primary, on
    * cancel, or when the whole dialog closes. */
   onLeave?(cancelled: boolean): void;
+  /** Asked before a cancel or close leaves the view; false stays. */
+  confirmLeave?(): boolean | Promise<boolean>;
 }
 
 export interface EditorDialog {
@@ -99,7 +103,8 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
 
   const foot = doc.createElement('div');
   foot.className = 'rkr-dialog-foot';
-  const cancelBtn = button(doc, 'is-quiet rkr-dialog-cancel', 'Cancel');
+  const baseCancel = opts.cancelLabel ?? 'Cancel';
+  const cancelBtn = button(doc, 'is-quiet rkr-dialog-cancel', baseCancel);
   const primaryBtn = button(doc, 'is-primary rkr-dialog-primary', opts.primaryLabel);
   foot.append(cancelBtn, primaryBtn);
 
@@ -127,7 +132,7 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
     const leaving = view;
     if (!leaving) return;
     view = null;
-    show({ ...opts, cancelLabel: 'Cancel' });
+    show({ ...opts, cancelLabel: baseCancel });
     leaving.onLeave?.(cancelled);
   };
 
@@ -168,10 +173,28 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
     else finish(false);
   };
 
-  const cancel = (): void => {
+  /** Run `leave` unless the active view's leave check says no. A plain
+   * boolean answer acts synchronously. */
+  const guardLeave = (leave: () => void): void => {
     if (busy) return;
-    if (view) popView(true);
-    else finish(true);
+    const asking = view;
+    const answer = asking?.confirmLeave ? asking.confirmLeave() : true;
+    if (answer === true) {
+      leave();
+      return;
+    }
+    if (answer === false) return;
+    void answer.then((ok) => {
+      // A stale answer (the view changed meanwhile) counts as no.
+      if (ok && view === asking && !closed) leave();
+    });
+  };
+
+  const cancel = (): void => {
+    guardLeave(() => {
+      if (view) popView(true);
+      else finish(true);
+    });
   };
 
   const handle: EditorDialog = {
@@ -197,9 +220,7 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
     }
   };
 
-  closeBtn.addEventListener('click', () => {
-    if (!busy) finish(true);
-  });
+  closeBtn.addEventListener('click', () => guardLeave(() => finish(true)));
   cancelBtn.addEventListener('click', cancel);
   primaryBtn.addEventListener('click', () => {
     void submit();

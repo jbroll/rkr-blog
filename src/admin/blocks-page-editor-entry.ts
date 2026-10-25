@@ -10,10 +10,16 @@ import 'cropperjs/dist/cropper.css';
 
 import type { BlockTree } from '../lib/blocks.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
+import { getPreviewUrl } from './canvas-loaders.ts';
 import type { ImageEditorHost, MediaDialogDeps } from './figure-dialog-tree.ts';
 import { imageEditPipeline } from './image-edit.ts';
 import { type ImageEditPanel, wireImageEditPanel } from './image-edit-panel.ts';
-import { browserMediaDeps, type MediaSourceDeps, pickMedia } from './media-source.ts';
+import {
+  browserMediaDeps,
+  type MediaSourceDeps,
+  pickMedia,
+  uploadImageDirect
+} from './media-source.ts';
 import { initOpfsForUnifiedEditor } from './opfs-init-unified.ts';
 import { awaitDrainSettled } from './sync.ts';
 import { mountUnifiedShell } from './unified-shell.ts';
@@ -38,16 +44,6 @@ function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`blocks editor: missing #${id}`);
   return el as T;
-}
-
-/** Without OPFS the local-first queue is unavailable; post straight to
- * the server instead. */
-async function uploadImageDirect(file: File): Promise<string> {
-  const form = new FormData();
-  form.append('file', file, file.name);
-  const res = await fetch('/admin/upload', { method: 'POST', body: form });
-  if (!res.ok) throw new Error(`upload failed (${res.status})`);
-  return ((await res.json()) as { id: string }).id;
 }
 
 function wirePanel(onPreview: (id: string, url: string) => void, active: () => string | null) {
@@ -81,10 +77,9 @@ function wirePanel(onPreview: (id: string, url: string) => void, active: () => s
 function imageEditorHost(): ImageEditorHost {
   const section = byId<HTMLDivElement>('rkr-image-edit');
   const stash = byId('rkr-image-edit-host');
-  const previews = new Map<string, string>();
   let active: string | null = null;
   const panel: ImageEditPanel = wirePanel(
-    (id, url) => previews.set(id, url),
+    () => {},
     () => active
   );
   return {
@@ -93,17 +88,15 @@ function imageEditorHost(): ImageEditorHost {
       into.append(section);
       panel.activateForId(id, () => active === id);
     },
-    async apply() {
-      const id = active;
-      if (!id || !(await panel.save())) return null;
-      return previews.get(id) ?? `/admin/preview/${id}?v=${Date.now()}`;
-    },
+    apply: () => panel.save(),
     close(discard) {
       if (discard) panel.discard();
       panel.deactivate();
       active = null;
       stash.append(section);
-    }
+    },
+    dirty: () => panel.dirty(),
+    previewUrl: getPreviewUrl
   };
 }
 

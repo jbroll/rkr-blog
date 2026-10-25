@@ -65,11 +65,15 @@ export function validateFigureFields(values: FigureFieldValues): ValidatedFigure
 export interface ImageEditorHost {
   /** Mount the editor for `id` inside `into`. */
   open(id: string, into: Element): void;
-  /** Commit the edits; resolves with the new preview URL, or null when
-   * there was nothing to apply. */
-  apply(): Promise<string | null>;
+  /** Commit the edits; resolves false when there was nothing to apply. */
+  apply(): Promise<boolean>;
   /** Stash the editor again; `discard` drops unapplied edits. */
   close(discard: boolean): void;
+  /** True while the open image has edits that were not applied. */
+  dirty(): boolean;
+  /** The image's current edit preview, if one was rendered this session.
+   * Read live: each repaint revokes the URL before it. */
+  previewUrl(id: string): string | null;
 }
 
 export interface MediaDialogDeps extends MediaPicker {
@@ -103,7 +107,34 @@ function section(doc: Document, heading: string): HTMLElement {
   return el;
 }
 
-function positionField(doc: Document, initial: string, onChange: (v: string) => void) {
+/** "Discard unapplied edits?" in the editor dialog style; true discards. */
+function confirmDiscard(root: Element): Promise<boolean> {
+  const doc = root.ownerDocument;
+  return new Promise((resolve) => {
+    const body = doc.createElement('p');
+    body.className = 'rkr-confirm-text';
+    body.textContent = 'The changes you made to this image have not been applied.';
+    openEditorDialog({
+      root,
+      title: 'Discard unapplied edits?',
+      body,
+      primaryLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      onPrimary: () => {
+        resolve(true);
+        return true;
+      },
+      onCancel: () => resolve(false)
+    });
+  });
+}
+
+function positionField(
+  doc: Document,
+  initial: string,
+  positions: readonly (typeof JUSTIFY_ORDER)[number][],
+  onChange: (v: string) => void
+) {
   const wrap = doc.createElement('div');
   wrap.className = 'rkr-field';
   const label = doc.createElement('label');
@@ -111,14 +142,14 @@ function positionField(doc: Document, initial: string, onChange: (v: string) => 
   label.setAttribute('for', 'rkr-media-justify');
   const select = doc.createElement('select');
   select.id = 'rkr-media-justify';
-  for (const value of JUSTIFY_ORDER) {
+  for (const value of positions) {
     const option = doc.createElement('option');
     option.value = value;
     option.setAttribute('value', value);
     option.textContent = JUSTIFY_LABELS[value];
     select.append(option);
   }
-  select.value = JUSTIFY.has(initial) ? initial : 'center';
+  select.value = (positions as readonly string[]).includes(initial) ? initial : 'center';
   select.addEventListener('change', () => onChange(select.value));
   wrap.append(label, select);
   return wrap;
@@ -216,7 +247,7 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
   const list = mountImageList(doc, {
     rows,
     kind,
-    thumbUrl: (id) => opts.media.thumbUrl(kind, id),
+    thumbUrl: (id) => editor?.previewUrl(id) ?? opts.media.thumbUrl(kind, id),
     onChange: (next) => {
       rows = next;
       refresh();
@@ -239,9 +270,15 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
     body.append(layoutSection);
   }
   body.append(
-    positionField(doc, justify, (v) => {
-      justify = v;
-    })
+    // The video renderer has no inline layout; it maps inline to center.
+    positionField(
+      doc,
+      justify,
+      video ? JUSTIFY_ORDER.filter((j) => j !== 'inline') : JUSTIFY_ORDER,
+      (v) => {
+        justify = v;
+      }
+    )
   );
   refresh();
 
@@ -284,14 +321,14 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
       primaryLabel: 'Apply edits',
       cancelLabel: 'Back to figure',
       onPrimary: async () => {
-        const url = await host.apply();
-        if (url) {
-          edited = true;
-          list.setThumb(row.id, url);
-        }
+        if (await host.apply()) edited = true;
         return true;
       },
-      onLeave: (cancelled) => host.close(cancelled)
+      onLeave: (cancelled) => {
+        host.close(cancelled);
+        list.refresh();
+      },
+      confirmLeave: () => !host.dirty() || confirmDiscard(root)
     });
     host.open(row.id, into);
   };

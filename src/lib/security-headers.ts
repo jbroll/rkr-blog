@@ -33,7 +33,11 @@ function buildCsp(imgSrc: string): string {
 }
 
 const PUBLIC_CSP = buildCsp("'self' data:");
-const ADMIN_EDITOR_CSP = buildCsp("'self' data: blob:");
+// Cloud picker thumbnails (Drive and Photos from googleusercontent,
+// OneDrive from 1drv / svc.ms): the same hosts routes/admin-csp.ts allows.
+const ADMIN_EDITOR_CSP = buildCsp(
+  "'self' data: blob: https://*.googleusercontent.com https://*.1drv.com https://*.onedrive.live.com https://*.svc.ms"
+);
 
 function setSecurityHeaders(reply: FastifyReply, csp: string): void {
   reply.header('Content-Security-Policy', csp);
@@ -48,7 +52,8 @@ export function setPublicSecurityHeaders(reply: FastifyReply): void {
   setSecurityHeaders(reply, PUBLIC_CSP);
 }
 
-/** Same header set as the public pages, but with `blob:` in img-src.
+/** Same header set as the public pages, but img-src adds `blob:` and the
+ * cloud picker thumbnail hosts.
  * Only the unified block editor needs it: canvas-loaders draws the
  * original into a canvas and points `<img>` at the resulting object
  * URL, which Chromium refuses to decode under the public CSP. */

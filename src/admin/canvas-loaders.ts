@@ -181,3 +181,9 @@ export async function refreshImagePreview(id: string, ops: SidecarOp[]): Promise
     return `/admin/preview/${id}?v=${Date.now()}`;
   }
 }
+
+/** Latest preview URL for `id`, or null. Owned by the LRU above, which
+ * revokes it on the next repaint; read it fresh rather than keeping it. */
+export function getPreviewUrl(id: string): string | null {
+  return previewBlobUrls.get(id) ?? null;
+}

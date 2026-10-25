@@ -197,6 +197,41 @@ describe('image edit panel', () => {
     assert.ok(h.events.includes('commit'));
   });
 
+  it('step delete buttons are labelled by step number', async (t) => {
+    const h = harness(t);
+    h.panel.activateForId('abc', () => true);
+    await tick();
+    h.buttons.rotateR.click();
+    h.buttons.flipH.click();
+    assert.deepEqual(
+      h.editsList.querySelectorAll('button').map((b) => b.getAttribute('aria-label')),
+      ['Delete step 1', 'Delete step 2']
+    );
+  });
+
+  it('dirty reports unapplied edits', async (t) => {
+    const h = harness(t);
+    h.panel.activateForId('abc', () => true);
+    await tick();
+    assert.equal(h.panel.dirty(), false);
+    h.buttons.rotateR.click();
+    assert.equal(h.panel.dirty(), true);
+    await h.panel.save();
+    assert.equal(h.panel.dirty(), false);
+  });
+
+  it('a discard repaint after deactivate keeps the preview hidden', async (t) => {
+    const h = harness(t);
+    h.panel.activateForId('abc', () => true);
+    await tick();
+    h.buttons.rotateR.click();
+    await tick();
+    h.panel.discard();
+    h.panel.deactivate();
+    await tick();
+    assert.equal(h.preview.hidden, true);
+  });
+
   it('a stale activation does not paint', async (t) => {
     const h = harness(t);
     h.panel.activateForId('abc', () => false);

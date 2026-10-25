@@ -70,6 +70,19 @@ const CLOUD: Record<MediaKind, Record<CloudSource, () => Promise<string[]>>> = {
   video: { drive: pickFromDriveVideo, onedrive: pickFromOneDriveVideo, photos: pickFromPhotosVideo }
 };
 
+/** Without OPFS the local-first queue is unavailable; post straight to
+ * the server instead. */
+export async function uploadImageDirect(
+  file: File,
+  fetcher: typeof fetch = fetch
+): Promise<string> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetcher('/admin/upload', { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`upload failed (${res.status})`);
+  return ((await res.json()) as { id: string }).id;
+}
+
 function byId<T extends HTMLElement>(doc: Document, id: string): T {
   const el = doc.getElementById(id);
   if (!el) throw new Error(`media source: missing #${id}`);
