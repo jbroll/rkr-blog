@@ -85,3 +85,31 @@ export function readBlockPage(siteRoot: string, slug: string): BlockPage | null 
   }
   return null;
 }
+
+/** The file that stores `slug`: `<slug>.json` if present, else the file whose
+ * `fields.slug` matches (migrated pages carry a dated name). The scan only
+ * runs when the plain name is missing, so a page found once is a direct hit
+ * on every later save. */
+export function findBlockFile(siteRoot: string, slug: string): string | null {
+  const dir = path.join(siteRoot, 'content', 'blocks');
+  const direct = path.join(dir, `${slug}.json`);
+  if (fs.existsSync(direct)) return direct;
+  let files: string[];
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  for (const file of files.sort()) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+      if (isRecord(parsed) && isRecord(parsed.fields) && parsed.fields.slug === slug) {
+        return path.join(dir, file);
+      }
+    } catch {
+      // unrelated or malformed file
+    }
+  }
+  return null;
+}

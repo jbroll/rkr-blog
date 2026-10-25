@@ -496,7 +496,8 @@ describe('admin blocks save', () => {
       url: '/admin/blocks/new',
       payload: { slug: 'BAD' }
     });
-    assert.equal(bad.statusCode, 404);
+    assert.equal(bad.statusCode, 400);
+    assert.match(bad.body, /Use lowercase letters, digits and hyphens\./);
   });
 });
 
@@ -572,5 +573,30 @@ describe('admin blocks page fields', () => {
     const res = await app.inject({ method: 'GET', url: '/admin/blocks/edit/hello' });
     const json = /id="rkr-tree">([^<]*)</.exec(res.body)?.[1] ?? '';
     assert.deepEqual(JSON.parse(json).fields.tags, ['x']);
+  });
+
+  it('save writes back to the migrated file that holds the slug', async (t) => {
+    const { root, app } = await setup(t);
+    const dir = path.join(root, 'content', 'blocks');
+    const file = path.join(dir, '2020-03-04-my-post.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, body, fields: { title: 'Mine', slug: 'my-post', tags: ['x'] } })
+    );
+    fs.writeFileSync(path.join(dir, 'broken.json'), '{ not json');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/my-post',
+      payload: { tree: { version: 1, body, fields: { status: 'published' } } }
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(fs.existsSync(path.join(dir, 'my-post.json')), false);
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(saved.fields, {
+      title: 'Mine',
+      slug: 'my-post',
+      tags: ['x'],
+      status: 'published'
+    });
   });
 });
