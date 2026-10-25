@@ -61,6 +61,42 @@ describe('figure dialog fields', () => {
     });
   });
 
+  it('dialog carries the figure-dialog class and labelled full-width fields', () => {
+    const doc = new FakeDocument();
+    const root = doc.createElement('div');
+    openFigureDialog(root, {
+      initial: readFigureFields(FIGURE),
+      onCommit: () => {},
+      onCancel: () => {}
+    });
+    const dialog = root.querySelector('.rkr-figure-dialog');
+    assert.ok(dialog, 'dialog has .rkr-figure-dialog');
+    assert.match(dialog.className, /\brkr-cell-dialog\b/);
+    assert.equal(root.querySelectorAll('.rkr-figure-field').length, 4);
+  });
+
+  it('justify select offers every position and selects the current one', () => {
+    const doc = new FakeDocument();
+    const root = doc.createElement('div');
+    openFigureDialog(root, {
+      initial: readFigureFields(FIGURE),
+      onCommit: () => {},
+      onCancel: () => {}
+    });
+    const dialog = root.querySelector('.rkr-figure-dialog');
+    assert.ok(dialog);
+    const select = dialog.querySelector('select');
+    assert.ok(select, 'justify select exists');
+    const options = select.querySelectorAll('option');
+    assert.deepEqual(
+      options.map((o) => o.getAttribute('value')),
+      ['center', 'full', 'bleed', 'left', 'right', 'inline']
+    );
+    const selected = options.filter((o) => o.hasAttribute('selected'));
+    assert.equal(selected.length, 1, 'exactly one option selected');
+    assert.equal(selected[0]?.getAttribute('value'), 'left');
+  });
+
   it('dialog commit with bad ids reports errors and commits nothing', () => {
     const doc = new FakeDocument();
     const root = doc.createElement('div');

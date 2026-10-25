@@ -52,6 +52,24 @@ const UNIFIED_CSS = `
 [data-drop="after"]{box-shadow:inset 0 -3px 0 0 var(--rkr-link)}
 [data-drop="inside"]{outline:2px dashed var(--rkr-link);outline-offset:2px}
 .rkr-unified-config{border:1px solid var(--rkr-rule);background:var(--rkr-bg);color:inherit;border-radius:999px;padding:.15rem .6rem;font:inherit;font-size:.8rem;cursor:pointer}
+#rkroll-admin-status{margin:.5rem 0 1rem;color:var(--rkr-muted);font-size:.9rem}
+#rkroll-admin-status.is-error{color:var(--rkr-danger,#c0392b)}
+.rkr-figure-scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999}
+.rkr-figure-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;width:min(44rem,calc(100vw - 2rem));max-height:85vh;overflow:auto;padding:1rem;background:var(--rkr-bg);color:var(--rkr-text);border:1px solid var(--rkr-rule);border-radius:.5rem;box-shadow:0 18px 48px rgba(0,0,0,.35)}
+.rkr-figure-dialog .rkr-cell-dialog-body{grid-template-columns:1fr;gap:.75rem;padding:0;margin-top:.75rem}
+.rkr-figure-dialog .rkr-cell-dialog-head{padding:0 0 .5rem}
+.rkr-figure-field{display:grid;gap:.25rem}
+.rkr-figure-field label{font-size:.85rem;color:var(--rkr-muted)}
+.rkr-figure-field :is(input,select){width:100%;box-sizing:border-box;padding:.35rem;font:inherit}
+.rkr-figure-image-selector{display:flex;flex-wrap:wrap;gap:.5rem}
+.rkr-figure-image-thumb{width:64px;height:64px;padding:0;overflow:hidden;border:2px solid var(--rkr-rule);border-radius:.35rem;background:var(--rkr-bg);cursor:pointer}
+.rkr-figure-image-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.rkr-figure-image-thumb.is-active{border-color:var(--rkr-link);outline:2px solid var(--rkr-link);outline-offset:1px}
+.rkr-figure-dialog .rkr-cell-dialog-body #rkr-image-edit{display:grid;gap:.5rem;grid-column:1/-1}
+.rkr-figure-dialog #rkr-image-edit[hidden]{display:none}
+.rkr-figure-dialog-foot{display:flex;justify-content:flex-end;gap:.5rem}
+.rkr-figure-dialog-errors{margin:0;color:var(--rkr-danger,#c0392b)}
+.rkr-figure-dialog-errors:empty{display:none}
 @media (max-width:720px){.rkr-unified-shell[data-mode="edit"] .rkr-unified-layout{grid-template-columns:minmax(0,1fr)}}
 `;
 
@@ -76,6 +94,7 @@ ${headIcons(a)}
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
 <main id="main" tabindex="-1">
 <h1>Edit ${escapeText(data.slug)}</h1>
+<div id="rkroll-admin-status" role="status" aria-live="polite"></div>
 <div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}">${treeScript}
 <div id="rkr-unified-shell" class="rkr-unified-shell is-view" data-mode="view">
 <div id="rkr-unified-toolbar" class="rkr-unified-toolbar">

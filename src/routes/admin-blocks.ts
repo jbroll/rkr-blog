@@ -18,7 +18,10 @@ import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { runReindex } from '../lib/post-index.ts';
-import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
+import {
+  setAdminEditorSecurityHeaders,
+  setPublicSecurityHeaders
+} from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { buildVideoMap } from '../lib/video-map-fs.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
@@ -155,7 +158,7 @@ export function registerAdminBlockRoutes(
       };
       const bodyHtml = await renderBlockTree(page.tree, ctx, macroLib, { mark: pathMarker });
 
-      setPublicSecurityHeaders(reply);
+      setAdminEditorSecurityHeaders(reply);
       const assets = serverAssets('/admin/static');
       return reply.type('text/html; charset=utf-8').send(
         renderBlocksEditPage({

@@ -247,10 +247,25 @@ describe('admin blocks save', () => {
     assert.equal(res.statusCode, 200);
     assert.match(res.body, /rkr-blocks-edit-root/);
     assert.match(res.body, /blocks-page-editor-entry/);
+    // The editor's canvas preview pipeline renders a blob: URL; the
+    // public CSP omits blob: and would make Chromium reject the decode.
+    const csp = res.headers['content-security-policy'] as string;
+    assert.match(csp, /img-src 'self' data: blob:/);
+    assert.match(csp, /script-src 'self'/);
     assert.equal(
       (await app.inject({ method: 'GET', url: '/admin/blocks/edit/nope' })).statusCode,
       404
     );
+  });
+
+  it('public pages keep the tight CSP without blob:', async (t) => {
+    const { app } = await setup(t);
+    await publishPage(app, 'public-csp', [{ type: 'text', markdown: 'Hi' }]);
+    const res = await app.inject({ method: 'GET', url: '/public-csp' });
+    assert.equal(res.statusCode, 200);
+    const csp = res.headers['content-security-policy'] as string;
+    assert.match(csp, /img-src 'self' data:(;|$)/);
+    assert.equal(csp.includes('blob:'), false);
   });
 
   it('GET /admin/blocks/edit/:slug renders the page body with path markers and the tree', async (t) => {

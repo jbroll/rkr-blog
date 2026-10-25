@@ -6,7 +6,7 @@
 import sharp from 'sharp';
 
 import { expect, test } from './coverage-fixtures.ts';
-import { seedBlockPage } from './seed-blocks.ts';
+import { figureBlock, seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 
@@ -89,6 +89,45 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
   await page.goto(`/${slug}`);
   await expect(page.locator('article')).toContainText('Hello unified edited.');
   await expect(page.locator('article')).toContainText('Marina at dusk');
+});
+
+test('figure dialog hosts the image-edit pipeline with a blob preview', async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => consoleErrors.push(err.message));
+
+  await login(page);
+  const slug = `e2e-figure-preview-${Date.now()}`;
+  const imageId = await uploadJpeg(page);
+  await seedBlockPage(page, {
+    slug,
+    title: 'Figure preview',
+    body: [figureBlock(imageId)],
+    status: 'published'
+  });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('button', { name: 'Configure figure' }).click();
+  const dialog = page.locator('.rkr-figure-dialog');
+  await expect(dialog).toBeVisible();
+
+  // Selecting the image moves the (formerly hidden-hosted) pipeline
+  // into the dialog and paints the canvas result as a blob: preview.
+  await dialog.locator('.rkr-figure-image-thumb').first().click();
+  await expect(dialog.locator('#rkr-image-edit')).toBeVisible();
+  const preview = dialog.locator('#rkr-cell-preview');
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute('src', /^blob:/);
+
+  expect(consoleErrors.filter((m) => /decode failed|Content Security Policy/i.test(m))).toEqual([]);
+
+  // Closing returns the section to its stash so a reopen starts clean.
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('#rkr-image-edit-host #rkr-image-edit')).toHaveCount(1);
 });
 
 test('unified edit page has no horizontal overflow at phone width', async ({ page }) => {
