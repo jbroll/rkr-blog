@@ -189,7 +189,15 @@ describe('blocks-render', () => {
     assert.match(marked, /Hero/);
   });
 
-  it('empty text emits no marker', async () => {
+  it('blank text emits an edit placeholder only when marking', async () => {
+    const blank: BlockTree = { version: 1, body: [{ type: 'text', markdown: '' }] };
+    const marked = await renderBlockTree(blank, fakeCtx, emptyLib, { mark });
+    assert.ok(marked.includes('<!--rkr:path=0-->'));
+    assert.ok(marked.includes('data-rkr-blank'));
+    assert.equal(await renderBlockTree(blank, fakeCtx, emptyLib), '');
+  });
+
+  it('blank text keeps sibling markers aligned and public output unchanged', async () => {
     const tree: BlockTree = {
       version: 1,
       body: [
@@ -200,8 +208,11 @@ describe('blocks-render', () => {
     };
     const plain = await renderBlockTree(tree, fakeCtx, emptyLib);
     const marked = await renderBlockTree(tree, fakeCtx, emptyLib, { mark });
-    assert.equal(marked.replace(/<!--rkr:path=[0-9,]+-->/g, ''), plain);
-    assert.deepEqual(markerPaths(marked), [[1], [2]]);
+    assert.equal(
+      marked.replace(/<!--rkr:path=[0-9,]+-->|<p class="rkr-unified-blank"[^>]*><\/p>\n?/g, ''),
+      plain
+    );
+    assert.deepEqual(markerPaths(marked), [[0], [1], [2]]);
   });
 
   it('collects figure ids including inside macros', () => {

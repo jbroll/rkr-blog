@@ -15,6 +15,9 @@ import { describe, it } from 'node:test';
 import { PRIMITIVE_MACROS } from '../../src/admin/blocks-editor.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
 import type { BlockNode, BlockTree } from '../../src/lib/blocks.ts';
+import { renderBlockTree } from '../../src/lib/blocks-render.ts';
+import type { ImageMap } from '../../src/lib/image-map.ts';
+import { type VideoMapView, WidgetRegistry } from '../../src/lib/widgets.ts';
 
 import {
   FakeDocument,
@@ -82,18 +85,38 @@ function fixture(buildBody: (doc: FakeDocument) => FakeNode[]): Fixture {
   return { doc, root, shellEl, toolbar, body, dock };
 }
 
+const renderCtx = {
+  images: new Map() as ImageMap,
+  videos: new Map() as VideoMapView,
+  widgets: new WidgetRegistry()
+};
+
+/** The real server renderer with edit markers, so client hydration is
+ * checked against the same marker rules the edit route uses. */
+const markedRender = (tree: BlockTree): Promise<string> =>
+  renderBlockTree(
+    tree,
+    renderCtx,
+    { get: () => undefined },
+    {
+      mark: (p) => `<!--rkr:path=${p.join(',')}-->`
+    }
+  );
+
 function mount(
   f: Fixture,
   tree: BlockTree,
   onSave?: (tree: BlockTree) => Promise<void>,
   macros: { name: string; label: string; defaults?: Record<string, unknown> }[] = [
     { name: 'hero', label: 'Hero' }
-  ]
+  ],
+  render: (tree: BlockTree) => Promise<string> = markedRender
 ) {
   return mountUnifiedShell(f.root as unknown as Element, {
     tree,
     macros,
-    onSave: onSave ?? (async () => {})
+    onSave: onSave ?? (async () => {}),
+    render
   });
 }
 
@@ -130,7 +153,7 @@ describe('unified editor shell', () => {
     assert.deepEqual(shell.selectedPath, [1], 'the 2nd marker selects path [1]');
   });
 
-  it('skips empty text leaves so nested paths stay aligned', () => {
+  it('blank text leaves hydrate through their edit placeholder', () => {
     const tree: BlockTree = {
       version: 1,
       body: [
@@ -149,7 +172,17 @@ describe('unified editor shell', () => {
       section.className = 'rkr-section';
       const inner = doc.createElement('div');
       inner.className = 'rkr-section-inner';
-      inner.append(marker(doc, '0,0'), para(doc, 'A'), marker(doc, '0,2'), para(doc, 'B'));
+      const blank = doc.createElement('p');
+      blank.className = 'rkr-unified-blank';
+      blank.setAttribute('data-rkr-blank', '');
+      inner.append(
+        marker(doc, '0,0'),
+        para(doc, 'A'),
+        marker(doc, '0,1'),
+        blank,
+        marker(doc, '0,2'),
+        para(doc, 'B')
+      );
       section.append(inner);
       return [marker(doc, '0'), section];
     });
@@ -159,11 +192,13 @@ describe('unified editor shell', () => {
     const paragraphs = f.body.querySelectorAll('p');
     assert.deepEqual(
       paragraphs.map((p) => p.getAttribute('data-rkr-path')),
-      ['0,0', '0,2'],
-      'the empty text leaf at [0,1] emits no marker, so [0,2] must not shift'
+      ['0,0', '0,1', '0,2']
     );
+    shell.setMode('edit');
+    assert.equal(paragraphs[1]?.getAttribute('contenteditable'), 'true');
+    shell.setMode('view');
 
-    paragraphs[1]?.click();
+    paragraphs[2]?.click();
     assert.deepEqual(shell.selectedPath, [0, 2]);
 
     f.body.querySelector('section')?.click();
@@ -287,7 +322,7 @@ describe('unified editor shell', () => {
       .querySelectorAll('.rkr-blocks-palette-item')
       .find((btn) => btn.dataset.macro === 'primitive:figure');
     image?.click();
-    await Promise.resolve();
+    for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
 
     assert.equal(saved.length, 1, 'one save per insert');
     assert.deepEqual(
@@ -440,7 +475,7 @@ describe('unified shell figure dialog', () => {
     const saveBtn = f.root.querySelectorAll('button').find((b) => b.textContent === 'Save figure');
     assert.ok(saveBtn, 'dialog has a save button');
     saveBtn?.click();
-    await new Promise<void>((r) => setTimeout(r, 0));
+    for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
     assert.equal(saved.length, 1, 'exactly one save');
     const figure = saved[0]?.body[0] as { slots: Record<string, string> };
     assert.equal(figure.slots.alts, 'new alt');
@@ -641,7 +676,8 @@ describe('unified shell empty nodes', () => {
     const shell = mountUnifiedShell(root as unknown as Element, {
       tree,
       macros: [],
-      onSave: async () => {}
+      onSave: async () => {},
+      render: markedRender
     });
     const holder = body.querySelector('.rkr-unified-empty');
     assert.ok(holder, 'placeholder element planted for the empty figure');
@@ -740,6 +776,233 @@ describe('unified shell macro dialog', () => {
     await tick();
     assert.equal(saved.length, 1);
     assert.deepEqual((saved[0]?.body[0] as { slots?: unknown }).slots, { heading: 'Old' });
+  });
+});
+
+describe('unified shell live re-render', () => {
+  const tick = async (n = 10): Promise<void> => {
+    for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));
+  };
+
+  const hello = (): { f: Fixture; tree: BlockTree } => ({
+    f: fixture((doc) => [marker(doc, '0'), para(doc, 'Hello')]),
+    tree: { version: 1, body: [{ type: 'text', markdown: 'Hello' }] }
+  });
+
+  const paletteButton = (f: Fixture, label: string): FakeElement => {
+    const btn = f.dock.querySelectorAll('button').find((b) => b.textContent === label);
+    assert.ok(btn, `palette has ${label}`);
+    return btn;
+  };
+
+  function dropBefore(target: FakeElement, name: string): void {
+    (target as unknown as Record<string, unknown>).getBoundingClientRect = () => ({
+      top: 0,
+      height: 90
+    });
+    const dataTransfer = { getData: () => name, setData: () => {} };
+    target.dispatchEvent(Object.assign(new FakeEvent('drop'), { clientY: 5, dataTransfer }));
+  }
+
+  it('insert re-renders and reindexes', async () => {
+    const { f, tree } = hello();
+    const saved: BlockTree[] = [];
+    const renders: BlockTree[] = [];
+    const shell = mount(
+      f,
+      tree,
+      async (t) => {
+        saved.push(t);
+      },
+      undefined,
+      async (t) => {
+        renders.push(t);
+        return markedRender(t);
+      }
+    );
+    shell.setMode('edit');
+    const first = f.body.querySelector('p');
+    assert.ok(first);
+    dropBefore(first, 'primitive:text');
+    await tick();
+
+    assert.equal(renders.length, 1, 'the insert renders the new tree once');
+    assert.equal(f.body.querySelectorAll('[data-rkr-blank]').length, 1);
+    assert.equal(f.root.querySelectorAll('.rkr-unified-placeholder').length, 0);
+    const moved = f.body.querySelector('[data-rkr-path="1"]');
+    assert.ok(moved, 'the original paragraph is reindexed to [1]');
+    assert.equal(moved.textContent, 'Hello');
+    assert.equal(moved.getAttribute('contenteditable'), 'true', 'edit mode is re-applied');
+
+    moved.textContent = 'Hello edited';
+    moved.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.deepEqual(saved.at(-1)?.body, [
+      { type: 'text', markdown: '' },
+      { type: 'text', markdown: 'Hello edited' }
+    ]);
+    assert.equal(renders.length, 1, 'a text blur does not re-render');
+  });
+
+  it('failed render keeps the tree change and leaves the DOM as it was', async () => {
+    const { f, tree } = hello();
+    const saved: BlockTree[] = [];
+    let fail = true;
+    const shell = mount(
+      f,
+      tree,
+      async (t) => {
+        saved.push(t);
+      },
+      undefined,
+      async (t) => {
+        if (fail) throw new Error('render 503');
+        return markedRender(t);
+      }
+    );
+    shell.setMode('edit');
+    const before = f.body.innerHTML;
+    paletteButton(f, 'Text').click();
+    await tick();
+
+    assert.equal(f.body.innerHTML, before, 'no half-applied DOM');
+    assert.equal(saved.length, 0);
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    assert.match(
+      f.toolbar.querySelector('.rkr-unified-save-state')?.textContent ?? '',
+      /Couldn't refresh/
+    );
+
+    fail = false;
+    f.toolbar.querySelector('.rkr-unified-save')?.click();
+    await tick();
+    assert.equal(f.body.querySelectorAll('[data-rkr-blank]').length, 1, 'retry renders');
+    assert.deepEqual(
+      saved.at(-1)?.body.map((n) => n.type),
+      ['text', 'text'],
+      'the kept tree change is saved on retry'
+    );
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('latest structural change wins while a render is in flight', async () => {
+    const { f, tree } = hello();
+    const saved: BlockTree[] = [];
+    const renders: BlockTree[] = [];
+    const gates: (() => void)[] = [];
+    const shell = mount(
+      f,
+      tree,
+      async (t) => {
+        saved.push(t);
+      },
+      undefined,
+      (t) => {
+        renders.push(t);
+        return new Promise<string>((resolve) => {
+          gates.push(() => resolve(markedRender(t)));
+        });
+      }
+    );
+    shell.setMode('edit');
+    paletteButton(f, 'Text').click();
+    await tick(2);
+    paletteButton(f, 'Image').click();
+    await tick(2);
+    gates[0]?.();
+    await tick();
+    assert.equal(f.body.querySelectorAll('[data-rkr-blank]').length, 0, 'stale render discarded');
+    assert.equal(renders.length, 2, 'the latest tree is rendered next');
+    gates[1]?.();
+    await tick();
+
+    assert.deepEqual(
+      renders[1]?.body.map((n) => n.type),
+      ['text', 'text', 'figure']
+    );
+    assert.equal(f.body.querySelectorAll('[data-rkr-blank]').length, 1);
+    assert.equal(f.body.querySelector('.rkr-unified-empty')?.getAttribute('data-rkr-path'), '2');
+    assert.equal(saved.length, 1, 'one save, of the latest tree');
+    assert.deepEqual(
+      saved[0]?.body.map((n) => n.type),
+      ['text', 'text', 'figure']
+    );
+  });
+
+  it('view mode clears config tools for inserted nodes', async () => {
+    const { f, tree } = hello();
+    const shell = mount(f, tree);
+    shell.setMode('edit');
+    paletteButton(f, 'Image').click();
+    await tick();
+    const configs = f.root.querySelectorAll('.rkr-unified-config');
+    assert.deepEqual(
+      configs.map((c) => c.getAttribute('data-config-path')),
+      ['1']
+    );
+    shell.setMode('view');
+    assert.equal(f.root.querySelectorAll('.rkr-unified-config').length, 0);
+    assert.equal(f.root.querySelectorAll('.rkr-unified-node-tools').length, 0);
+  });
+
+  it('dialog commit re-renders in place without reloading', async (t) => {
+    let reloads = 0;
+    const g = globalThis as { location?: unknown };
+    const saved = g.location;
+    g.location = {
+      reload: () => {
+        reloads++;
+      }
+    };
+    t.after(() => {
+      g.location = saved;
+    });
+    const f = fixture((doc) => [
+      marker(doc, '0'),
+      para(doc, 'Kept'),
+      marker(doc, '1'),
+      doc.createElement('section')
+    ]);
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'Kept' },
+        { type: 'macro', macro: 'hero', slots: {} }
+      ]
+    };
+    const renders: BlockTree[] = [];
+    const shell = mount(
+      f,
+      tree,
+      undefined,
+      [{ name: 'hero', label: 'Hero', defaults: { heading: 'Fresh' } }],
+      async (next) => {
+        renders.push(next);
+        return markedRender(next);
+      }
+    );
+    shell.setMode('edit');
+    f.root.querySelector('.rkr-unified-config')?.click();
+    const heading = f.root
+      .querySelector('.rkr-macro-dialog')
+      ?.querySelectorAll('input')
+      .find((i) => i.getAttribute('name') === 'heading');
+    assert.ok(heading);
+    (heading as unknown as { value: string }).value = 'New band';
+    heading.dispatchEvent(new FakeEvent('input', { bubbles: true }));
+    f.root
+      .querySelectorAll('button')
+      .find((b) => b.textContent === 'Save macro')
+      ?.click();
+    await tick();
+    assert.equal(reloads, 0);
+    assert.equal(renders.length, 1);
+    assert.deepEqual((renders[0]?.body[1] as { slots?: unknown }).slots, { heading: 'New band' });
+    assert.equal(
+      f.root.querySelectorAll('.rkr-unified-config').length,
+      1,
+      'edit mode is re-applied after the swap'
+    );
   });
 });
 

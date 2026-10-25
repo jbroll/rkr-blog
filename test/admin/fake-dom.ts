@@ -253,6 +253,16 @@ export class FakeElement extends FakeNode {
     this.parentNode.insertBefore(node, this.nextSibling);
   }
 
+  get innerHTML(): string {
+    return this.childNodes.map(serialize).join('');
+  }
+
+  set innerHTML(html: string) {
+    for (const child of this.childNodes) child.parentNode = null;
+    this.childNodes = [];
+    this.append(...parseHtml(this.ownerDocument, html));
+  }
+
   click(): void {
     this.dispatchEvent(new FakeEvent('click'));
   }
@@ -287,6 +297,55 @@ export class FakeElement extends FakeNode {
     }
     return null;
   }
+}
+
+const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'source', 'wbr', 'meta', 'link']);
+const ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'"
+};
+const decode = (s: string): string => s.replace(/&(amp|lt|gt|quot|#39);/g, (m) => ENTITIES[m] ?? m);
+const encode = (s: string): string =>
+  s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+
+/** Enough of an HTML parser for renderer output: tags, attributes,
+ * comments, text, void elements. Input is assumed well-formed. */
+function parseHtml(doc: FakeDocument, html: string): FakeNode[] {
+  const top = doc.createElement('template');
+  const stack: FakeElement[] = [top];
+  const token =
+    /<!--([\s\S]*?)-->|<\/([a-zA-Z0-9-]+)\s*>|<([a-zA-Z0-9-]+)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>|([^<]+)/g;
+  const attr = /([^\s=>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+  for (const m of html.matchAll(token)) {
+    const parent = stack[stack.length - 1] as FakeElement;
+    if (m[1] !== undefined) parent.append(doc.createComment(m[1]));
+    else if (m[2] !== undefined) {
+      const tag = m[2].toUpperCase();
+      const at = stack.map((e) => e.tagName).lastIndexOf(tag);
+      if (at > 0) stack.length = at;
+    } else if (m[3] !== undefined) {
+      const el = doc.createElement(m[3]);
+      for (const a of (m[4] ?? '').matchAll(attr)) {
+        el.setAttribute(a[1] as string, decode(a[2] ?? a[3] ?? a[4] ?? ''));
+      }
+      parent.append(el);
+      if (!m[5] && !VOID_TAGS.has(m[3].toLowerCase())) stack.push(el);
+    } else if (m[6] !== undefined) parent.append(doc.createTextNode(decode(m[6])));
+  }
+  return [...top.childNodes];
+}
+
+function serialize(node: FakeNode): string {
+  if (node.nodeType === 3) return encode(node.nodeValue ?? '');
+  if (node.nodeType === 8) return `<!--${node.nodeValue ?? ''}-->`;
+  const el = node as FakeElement;
+  const tag = el.tagName.toLowerCase();
+  const attrs = [...el.attributes].map(([k, v]) => (v === '' ? ` ${k}` : ` ${k}="${encode(v)}"`));
+  const open = `<${tag}${attrs.join('')}>`;
+  return VOID_TAGS.has(tag) ? open : `${open}${el.innerHTML}</${tag}>`;
 }
 
 export class FakeDocument {

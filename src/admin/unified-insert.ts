@@ -26,18 +26,6 @@ import {
   resolveDrop
 } from './blocks-page-editor.ts';
 
-/** Reload so the DOM stays the server render: structural inserts have
- * no live markup until the save round-trips. Text blurs skip this. */
-export const reloadPage = (): void => {
-  try {
-    sessionStorage.setItem('rkr-edit-mode', '1');
-  } catch {
-    // sessionStorage may be unavailable (private mode); ignore.
-  }
-  const loc = (globalThis as { location?: { reload(): void } }).location;
-  loc?.reload();
-};
-
 const PAGE_CONTAINERS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
 
 function dropKind(name: string): string {
@@ -62,9 +50,10 @@ export interface InsertEnv {
   macros: PaletteMacro[];
   getTree(): BlockTree;
   getSelected(): Path | null;
-  /** Shell applies the tree, plants a placeholder DOM node at `path`,
-   * marks editing, and saves in the background (no reload). */
-  commitInsert(next: BlockTree, path: Path, node: BlockNode): void;
+  /** Commit the focused text leaf before an insert reads the tree. */
+  flushText(): void;
+  /** Shell re-renders `next` in place, selects `path`, and saves. */
+  commitInsert(next: BlockTree, path: Path): void;
   /** Surface a refusal (depth nudge) without changing state. */
   showNudge(text: string): void;
 }
@@ -107,10 +96,11 @@ export function mountPaletteInsert(env: InsertEnv): void {
       ? primitiveNode(name)
       : { type: 'macro', macro: name };
     const next = insertAtPath(env.getTree(), at, index, node);
-    env.commitInsert(next, [...at, index], node);
+    env.commitInsert(next, [...at, index]);
   };
 
   mountBlocksPalette(dock, macros, (name) => {
+    env.flushText();
     const at = insertTarget();
     const list =
       at.length === 0
@@ -130,6 +120,7 @@ export function mountPaletteInsert(env: InsertEnv): void {
   for (const btn of dock.querySelectorAll('.rkr-blocks-palette-item') as unknown as HTMLElement[]) {
     btn.draggable = true;
     btn.addEventListener('dragstart', (ev) => {
+      env.flushText();
       dragName = (btn as HTMLElement).dataset.macro ?? null;
       const dt = (ev as unknown as { dataTransfer?: { setData(t: string, v: string): void } })
         .dataTransfer;

@@ -73,9 +73,9 @@ interface RenderNodeOpts {
 }
 
 /** Render one node, then (when marking) prepend its path marker.
- * Nodes that render nothing — e.g. a text leaf with empty markdown —
- * emit no marker, so markers and the client's source-tree flattening
- * (same skip rule) stay aligned. */
+ * When marking, every node renders something (blank text renders an
+ * edit placeholder), so every node gets a marker and the client's
+ * render-order flattening (unified-hydrate.ts) skips nothing. */
 async function renderNode(
   node: BlockNode,
   ctx: RenderCtx,
@@ -128,7 +128,8 @@ async function renderNodeHtml(
     }
     case 'text': {
       const md = node.markdown ?? textOf(node.slots?.markdown);
-      if (!md) return '';
+      // Blank text is invisible to readers; the editor needs an element to type into.
+      if (!md) return opts?.mark ? '<p class="rkr-unified-blank" data-rkr-blank></p>\n' : '';
       const ast = remark().use(remarkDirective).parse(md);
       return renderPostHtml(ast as Parameters<typeof renderPostHtml>[0], ctx);
     }

@@ -363,6 +363,43 @@ describe('admin blocks save', () => {
     assert.doesNotMatch(pub.body, /figure: no ids resolved/);
   });
 
+  it('POST /admin/blocks/render returns marked html and writes nothing', async (t) => {
+    const { root, app } = await setup(t);
+    const blocksDir = path.join(root, 'content', 'blocks');
+    fs.writeFileSync(path.join(blocksDir, 'saved.json'), JSON.stringify(TREE));
+    const before = fs.readdirSync(blocksDir).length;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/render',
+      payload: {
+        tree: {
+          version: 1,
+          body: [
+            { type: 'text', markdown: 'Rendered' },
+            { type: 'text', markdown: '' }
+          ]
+        }
+      }
+    });
+    assert.equal(res.statusCode, 200);
+    const { html } = JSON.parse(res.body) as { html: string };
+    assert.ok(html.includes('<!--rkr:path=0-->'));
+    assert.match(html, /<p>Rendered<\/p>/);
+    assert.match(html, /<!--rkr:path=1--><p class="rkr-unified-blank" data-rkr-blank><\/p>/);
+    assert.equal(fs.readdirSync(blocksDir).length, before);
+    assert.equal(fs.existsSync(path.join(blocksDir, 'render.json')), false);
+  });
+
+  it('render rejects an invalid tree', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/render',
+      payload: { tree: { body: 'x' } }
+    });
+    assert.equal(res.statusCode, 400);
+  });
+
   it('GET /admin/blocks/new renders the new-page form', async (t) => {
     const { app } = await setup(t);
     const res = await app.inject({ method: 'GET', url: '/admin/blocks/new' });

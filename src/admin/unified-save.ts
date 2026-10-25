@@ -20,6 +20,9 @@ export interface SavePipeline {
   notice(text: string): void;
   /** Mark local edits without saving (input events, queued coalescing). */
   markEditing(): void;
+  /** Mark unsaved with `text` in the indicator (the change never reached
+   * a save, e.g. its re-render failed). Save and online still retry. */
+  fail(text: string): void;
   /** Persist `next`, coalescing with an in-flight save: the queued
    * tree always wins because immutable updates compose. Resolves when
    * the save (and any coalesced follow-up) settles. */
@@ -29,6 +32,8 @@ export interface SavePipeline {
 export interface SavePipelineDeps {
   onSave(tree: BlockTree): Promise<void>;
   getTree(): BlockTree;
+  /** Retry path for Save and online; defaults to saving `getTree()`. */
+  resave?(): Promise<void>;
   shellEl: Element;
   toolbar: Element;
 }
@@ -96,7 +101,7 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   const retry = (): void => {
     if (saveState === 'clean') return;
     if (inFlight) return;
-    void runSave(getTree());
+    void (deps.resave ? deps.resave() : runSave(getTree()));
   };
   saveBtn.addEventListener('click', retry);
   if (typeof window !== 'undefined') {
@@ -110,6 +115,10 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
     },
     markEditing: () => {
       if (saveState === 'clean') setState('editing');
+    },
+    fail: (text: string) => {
+      setState('unsaved');
+      indicator.textContent = text;
     },
     requestSave: (next: BlockTree): Promise<void> => {
       if (inFlight) {

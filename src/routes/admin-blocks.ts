@@ -12,10 +12,9 @@ import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { listBlockPages, readBlockPage } from '../lib/block-pages.ts';
 import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
-import { collectBlockFigureIds, renderBlockTree } from '../lib/blocks-render.ts';
+import { renderEditBody } from '../lib/blocks-edit-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
-import { buildImageMap } from '../lib/image-map-fs.ts';
 import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { runReindex } from '../lib/post-index.ts';
 import {
@@ -23,21 +22,12 @@ import {
   setPublicSecurityHeaders
 } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
-import { buildVideoMap } from '../lib/video-map-fs.ts';
-import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
 import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
-import figureWidget from '../widgets/figure.ts';
-import videoWidget from '../widgets/video.ts';
 import { prewarmBlockTree } from './admin-prewarm.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
-
-/** Invisible marker prepended to each rendered node on the edit page.
- * Form is pinned (`<!--rkr:path=i,j-->`, no spaces) so the client can
- * parse it with a single regex. */
-const pathMarker = (path: number[]): string => `<!--rkr:path=${path.join(',')}-->`;
 
 export interface AdminBlockRoutesOpts {
   siteRoot: string;
@@ -55,9 +45,6 @@ export function registerAdminBlockRoutes(
 ): void {
   const { siteRoot, getSite } = opts;
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
-  const widgets = new WidgetRegistry();
-  widgets.register(figureWidget);
-  widgets.register(videoWidget);
 
   fastify.get('/admin/blocks/macros', { ...guard }, async (_req, _reply) => {
     const lib = loadMacroLibrary(`${siteRoot}/macros`);
@@ -130,33 +117,7 @@ export function registerAdminBlockRoutes(
       const page = VALID_SLUG.test(slug) ? readBlockPage(siteRoot, slug) : null;
       if (!page) return reply.code(404).send({ error: 'not found' });
 
-      // Render the same body the public page shows (macro library,
-      // image/video maps, widget dispatch), plus invisible path markers
-      // for in-place editing, and embed the canonical tree for client
-      // hydration. The image prepass walks macro expansions exactly like
-      // the visitor-facing route (routes/public.ts), so a figure inside a
-      // macro resolves on both surfaces.
-      const lib = loadMacroLibrary(path.join(siteRoot, 'macros'));
-      const macroLib = {
-        get: (name: string) => {
-          const def = lib.get(name);
-          return def ? { defaults: def.defaults, tree: def.tree } : undefined;
-        }
-      };
-      const synthetic = collectBlockFigureIds(page.tree, (n) => lib.get(n)?.tree).map((ids) => ({
-        type: 'leafDirective',
-        name: 'figure',
-        attributes: { ids },
-        children: []
-      }));
-      const ctx = {
-        images: await buildImageMap(siteRoot, synthetic as unknown as DirectiveNode[], {
-          log: req.log
-        }),
-        videos: await buildVideoMap(siteRoot),
-        widgets
-      };
-      const bodyHtml = await renderBlockTree(page.tree, ctx, macroLib, { mark: pathMarker });
+      const bodyHtml = await renderEditBody(siteRoot, page.tree, req.log);
 
       setAdminEditorSecurityHeaders(reply);
       const assets = serverAssets('/admin/static');
@@ -173,6 +134,18 @@ export function registerAdminBlockRoutes(
       );
     }
   );
+
+  // Re-render for the editor after a structural change. Never writes;
+  // the save route persists.
+  fastify.post<{ Body: unknown }>('/admin/blocks/render', { ...guard }, async (req, reply) => {
+    let tree: BlockTree;
+    try {
+      tree = parseBlockTree((req.body as { tree?: unknown } | null)?.tree);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    return { html: await renderEditBody(siteRoot, tree, req.log) };
+  });
 
   fastify.post<{ Params: { slug: string }; Body: unknown }>(
     '/admin/blocks/:slug',

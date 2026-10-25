@@ -1,17 +1,14 @@
 // Unified editor shell: one server-rendered page, two modes.
 //
 // The edit route renders the public block HTML with invisible
-// `<!--rkr:path=i,j-->` markers in front of every node. This module
-// hydrates those markers back to tree paths (no second renderer, no
-// iframe), toggles View/Edit on the same DOM, and docks the palette on
-// the right. View mode leaves the page exactly as readers see it:
-// palette hidden, nothing contenteditable, no config buttons.
+// `<!--rkr:path=i,j-->` markers (unified-hydrate.ts zips them back to
+// tree paths), toggles View/Edit on the same DOM, and docks the palette
+// on the right. View mode leaves the page as readers see it: palette
+// hidden, nothing contenteditable, no config buttons.
 //
-// The marker order is the server's render order (`renderBlockTree`
-// with the `mark` option): containers are nodes themselves, macro
-// instances are a single unit, and an empty text leaf renders nothing
-// and therefore emits no marker. Hydration zips the markers to that
-// same flattened order, so paths never depend on the DOM shape.
+// Structural changes go through `applyTree`, which asks the server for
+// a fresh marked render and swaps it in, so DOM paths always match the
+// tree. Text blur edits the tree in place without re-rendering.
 //
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
@@ -21,7 +18,8 @@ import { getAtPath, type Path, setSlotAtPath, updateSlotsAtPath } from './blocks
 import { domToMarkdown } from './dom-markdown.ts';
 import { openFigureDialog, readFigureFields } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
-import { mountPaletteInsert, reloadPage } from './unified-insert.ts';
+import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
+import { mountPaletteInsert } from './unified-insert.ts';
 import { createSavePipeline } from './unified-save.ts';
 
 type Mode = 'view' | 'edit';
@@ -33,120 +31,26 @@ export interface UnifiedShellDeps {
   macros: PaletteMacro[];
   /** Persist the whole tree (`POST /admin/blocks/:slug`). */
   onSave(tree: BlockTree): Promise<void>;
+  /** Marked edit-page body for `tree` (`POST /admin/blocks/render`). */
+  render(tree: BlockTree): Promise<string>;
+}
+
+interface ApplyOpts {
+  /** Path (in the new tree) to select once the render lands. */
+  select?: Path;
 }
 
 export interface UnifiedShell {
   setMode(mode: Mode): void;
   readonly selectedPath: Path | null;
+  applyTree(next: BlockTree, opts?: ApplyOpts): Promise<void>;
 }
 
 /** Leaves whose extra parameters open a config dialog (figures,
  * macros). Text edits in place instead; containers need no dialog. */
 const CONFIG_TYPES: ReadonlySet<string> = new Set(['figure', 'macro', 'button']);
 
-const MARKER = /^rkr:path=([0-9,]+)$/;
-
-interface HydratedUnit {
-  path: Path;
-  node: BlockNode;
-  /** Elements rendered by this node. A text leaf can render several
-   * block elements (one per markdown block); containers render one. */
-  elements: Element[];
-}
-
-function kidsOf(node: BlockNode): BlockNode[] {
-  if (node.type === 'macro') return [];
-  const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-  return n.children ?? n.blocks ?? [];
-}
-
-/** Mirrors the renderer's empty-text rule: `!markdown` renders '' and
- * so emits no marker. */
-function isBlankText(node: BlockNode): boolean {
-  if (node.type !== 'text') return false;
-  const markdown =
-    node.markdown ?? (typeof node.slots?.markdown === 'string' ? node.slots.markdown : '');
-  return !markdown;
-}
-
-/** Tree nodes in the server's render order. */
-function serverOrder(tree: BlockTree): { path: Path; node: BlockNode }[] {
-  const out: { path: Path; node: BlockNode }[] = [];
-  const walk = (nodes: BlockNode[], base: Path): void => {
-    nodes.forEach((node, i) => {
-      const path = [...base, i];
-      if (isBlankText(node)) return;
-      out.push({ path, node });
-      if (node.type !== 'macro') walk(kidsOf(node), path);
-    });
-  };
-  walk(tree.body, []);
-  return out;
-}
-
-function parseMarker(value: string | null): Path | null {
-  const match = MARKER.exec((value ?? '').trim());
-  if (!match) return null;
-  const path = (match[1] as string).split(',').map(Number);
-  return path.some((i) => !Number.isInteger(i)) ? null : path;
-}
-
-function samePath(a: Path, b: Path): boolean {
-  return a.length === b.length && a.every((v, i) => b[i] === v);
-}
-
-/** Every path marker under `scope`, in document order. */
-function collectMarkers(scope: Element): Node[] {
-  const out: Node[] = [];
-  const walk = (parent: Node): void => {
-    for (let child = parent.firstChild; child; child = child.nextSibling) {
-      if (child.nodeType === 8 && parseMarker(child.nodeValue)) out.push(child);
-      else if (child.nodeType === 1) walk(child);
-    }
-  };
-  walk(scope);
-  return out;
-}
-
-/** Sibling elements emitted by the node whose marker is `marker`.
- * Sibling markers delimit units, so a container reports only its own
- * element while a multi-paragraph text leaf reports every paragraph. */
-function elementsAfter(marker: Node): Element[] {
-  const out: Element[] = [];
-  for (let next = marker.nextSibling; next; next = next.nextSibling) {
-    if (next.nodeType === 8 && parseMarker(next.nodeValue)) break;
-    if (next.nodeType === 1) out.push(next as Element);
-  }
-  return out;
-}
-
-function hydrate(tree: BlockTree, body: Element): HydratedUnit[] {
-  const ordered = serverOrder(tree);
-  const units: HydratedUnit[] = [];
-  collectMarkers(body).forEach((marker, i) => {
-    const markerPath = parseMarker(marker.nodeValue);
-    if (!markerPath) return;
-    const zipped = ordered[i];
-    const node =
-      zipped && samePath(zipped.path, markerPath) ? zipped.node : getAtPath(tree, markerPath);
-    if (!node) return;
-    let elements = elementsAfter(marker);
-    if (elements.length === 0) {
-      // The node rendered no elements (an unresolvable figure, an
-      // unknown macro): plant a selectable placeholder so it stays
-      // editable instead of becoming an invisible gap. The marker still
-      // delimits the unit, so a re-render zips identically.
-      const doc = body.ownerDocument;
-      const holder = doc.createElement('div');
-      holder.className = 'rkr-unified-empty';
-      holder.textContent = `Empty ${node.type === 'macro' ? `macro ${node.macro}` : node.type} — configure to add content`;
-      marker.parentNode?.insertBefore(holder, marker.nextSibling);
-      elements = [holder];
-    }
-    units.push({ path: markerPath, node, elements });
-  });
-  return units;
-}
+const RENDER_FAILED = "Couldn't refresh the page. Select Save page to retry.";
 
 function mustFind(scope: Element, selector: string): Element {
   const el = scope.querySelector(selector);
@@ -155,8 +59,8 @@ function mustFind(scope: Element, selector: string): Element {
 }
 
 /** Current markdown source of a text leaf (mirrors the renderer rule). */
-function textSource(node: BlockNode): string | null {
-  if (node.type !== 'text') return null;
+function textSource(node: BlockNode | null): string | null {
+  if (node?.type !== 'text') return null;
   const markdown = node.markdown ?? (node as { slots?: { markdown?: unknown } }).slots?.markdown;
   return typeof markdown === 'string' ? markdown : '';
 }
@@ -165,9 +69,17 @@ function nodeLabel(node: BlockNode): string {
   return node.type === 'macro' ? `macro ${node.macro}` : node.type;
 }
 
-/** Page-level depth gate, derived from the macro rule: containers may
- * not land at depth 3 or deeper — save the inner part as its own macro
- * instead. Leaves and macro instances are always allowed. */
+/** Merge touched macro fields over the instance slots; an empty value
+ * clears the override so the default flows through again. */
+function mergeMacroFields(slots: Slots, touched: Record<string, unknown>): Slots {
+  const merged = { ...slots };
+  for (const [key, value] of Object.entries(touched)) {
+    if (typeof value !== 'string' || value === '') delete merged[key];
+    else merged[key] = value;
+  }
+  return merged;
+}
+
 export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): UnifiedShell {
   const doc = root.ownerDocument;
   const shellEl = mustFind(root, '#rkr-unified-shell');
@@ -176,240 +88,97 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const body = mustFind(root, '#rkr-blocks-page-body');
 
   let tree = deps.tree;
+  // The tree the body DOM was rendered from. It differs from `tree`
+  // while a render is pending or after one failed; the body is inert
+  // then, because its paths no longer address `tree`.
+  let shown = deps.tree;
+  let mode: Mode = 'view';
   let selected: Path | null = null;
+  let units: HydratedUnit[] = [];
+  let unitOf = new Map<Element, HydratedUnit>();
   const tools: Element[] = [];
+  let generation = 0;
+  let latest: Promise<void> = Promise.resolve();
 
   const select = (path: Path): void => {
     selected = [...path];
   };
 
-  // Indexed after hydration below (units must exist first).
-  let unitByPath = new Map<string, HydratedUnit>();
-
   const save = createSavePipeline({
     onSave: deps.onSave,
     getTree: () => tree,
+    resave: () => applyTree(tree),
     shellEl,
     toolbar
   });
 
-  /** Persist `next` as the shell's tree through the pipeline. */
-  const saveTree = (next: BlockTree): Promise<void> => {
-    tree = next;
-    return save.requestSave(next);
+  const unitAt = (target: unknown): HydratedUnit | null => {
+    const card = (target as Element | null)?.closest?.('[data-rkr-path]');
+    return card ? (unitOf.get(card) ?? null) : null;
   };
 
-  // Blur on edited text serializes the leaf back to the markdown DSL.
-  // focusout bubbles, so one delegated listener covers every leaf.
-  body.addEventListener('focusout', (ev: Event) => {
-    const target = (ev as unknown as { target: Element | null }).target;
-    const card = target?.closest?.('[data-rkr-path]');
-    if (!card) return;
-    const key = String((card as Element).getAttribute('data-rkr-path'));
-    const unit = unitByPath.get(key);
+  /** Serialize the text leaf containing `target` back to the markdown
+   * DSL. Skipped while the DOM is stale: its paths don't address `tree`. */
+  const commitText = (target: unknown): void => {
+    if (shown !== tree) return;
+    const unit = unitAt(target);
     if (!unit) return;
-    const before = textSource(unit.node);
+    const before = textSource(getAtPath(tree, unit.path));
     if (before === null) return;
     const after = domToMarkdown(unit.elements);
     if (after === before) return;
     select(unit.path);
-    const next = setSlotAtPath(tree, unit.path, 'markdown', after);
+    tree = setSlotAtPath(tree, unit.path, 'markdown', after);
+    shown = tree;
     save.markEditing();
-    void saveTree(next);
+    void save.requestSave(tree);
+  };
+
+  // focusout bubbles, so one delegated listener covers every leaf.
+  body.addEventListener('focusout', (ev: Event) => {
+    commitText(ev.target);
   });
 
   body.addEventListener('input', () => {
     save.markEditing();
   });
 
-  // Now that hydration produced the live units, index them for blur lookup.
-  const units = hydrate(tree, body);
-  // Now that hydration produced the live units, index them for blur lookup.
-  unitByPath = new Map(units.map((u) => [u.path.join(','), u]));
-  for (const unit of units) {
-    for (const el of unit.elements) {
-      el.setAttribute('data-rkr-path', unit.path.join(','));
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        select(unit.path);
-      });
-    }
-  }
-
-  // Palette mounts once; modes only hide/show the dock. Placement lives
-  // in unified-insert; the shell applies the tree, saves, and reloads so
-  // the DOM stays the server render (Task 7 owns live refresh).
-  mountPaletteInsert({
-    dock,
-    body,
-    macros: deps.macros,
-    getTree: () => tree,
-    getSelected: () => selected,
-    commitInsert: (next, path, node) => {
-      tree = next;
-      // Plant a placeholder in the DOM so the dropped node is visible
-      // immediately, without waiting for a server round-trip + reload.
-      // The placeholder carries the node's path so clicks/config buttons
-      // work; the indicator reflects the in-flight save.
-      const doc = body.ownerDocument;
-      const placeholder = doc.createElement('div');
-      placeholder.setAttribute('data-rkr-path', path.join(','));
-      placeholder.className = 'rkr-unified-placeholder';
-      if (node.type === 'text') {
-        placeholder.setAttribute('contenteditable', 'true');
-        placeholder.textContent = node.markdown ?? '';
-      } else if (node.type === 'figure') {
-        placeholder.className = 'rkr-unified-empty';
-        placeholder.textContent = 'Empty figure — configure to add content';
-      } else if (node.type === 'macro') {
-        placeholder.textContent = `Macro: ${node.macro}`;
-      } else if (node.type === 'button') {
-        placeholder.textContent = String(node.slots?.label ?? 'Button');
-      } else {
-        placeholder.textContent = node.type;
-      }
-      // Find the parent element and insertion point.
-      const parentEl =
-        path.length <= 1
-          ? body
-          : body.querySelector(`[data-rkr-path="${path.slice(0, -1).join(',')}"]`);
-      if (parentEl) {
-        const idx = (path[path.length - 1] as number) ?? 0;
-        const siblings = [...parentEl.children].filter(
-          (c) => c.getAttribute('data-rkr-path')?.split(',').length === path.length
-        );
-        if (siblings.length > 0 && idx < siblings.length) {
-          const ref = siblings[idx];
-          if (ref) parentEl.insertBefore(placeholder, ref);
-          else parentEl.append(placeholder);
-        } else if (siblings.length > 0) {
-          const last = siblings[siblings.length - 1];
-          if (last) last.after(placeholder);
-          else parentEl.append(placeholder);
-        } else {
-          parentEl.append(placeholder);
-        }
-      } else {
-        body.append(placeholder);
-      }
-      // Hydrate the placeholder: click selection + config button.
-      placeholder.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        selected = [...path];
-      });
-      if (['figure', 'macro', 'button'].includes(node.type)) {
-        const holder = doc.createElement('div');
-        holder.className = 'rkr-unified-node-tools';
-        const btn = doc.createElement('button');
-        btn.type = 'button';
-        btn.className = 'rkr-unified-config';
-        btn.textContent = 'Configure';
-        btn.setAttribute(
-          'aria-label',
-          `Configure ${node.type === 'macro' ? `macro ${node.macro}` : node.type}`
-        );
-        btn.setAttribute('data-config-path', path.join(','));
-        btn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          selected = [...path];
-          if (node.type === 'figure') {
-            const n = getAtPath(tree, path);
-            if (n && n.type === 'figure') {
-              openFigureDialog(root, {
-                initial: readFigureFields(n),
-                onCommit: (slots) => commitFigureSlots(path, slots),
-                onCancel: () => {}
-              });
-            }
-          } else if (node.type === 'macro') {
-            const n = getAtPath(tree, path);
-            if (n && n.type === 'macro') {
-              const defs = macroDefaults.get(n.macro) ?? {};
-              openMacroDialog(root, {
-                fields: readMacroFields(n, defs),
-                onCommit: (touched) => {
-                  const next = updateSlotsAtPath(tree, path, (slots) => {
-                    const merged = { ...slots };
-                    for (const [key, value] of Object.entries(touched)) {
-                      if (typeof value !== 'string' || value === '') delete merged[key];
-                      else merged[key] = value;
-                    }
-                    return merged;
-                  });
-                  save.markEditing();
-                  void saveTree(next).then(
-                    () => reloadPage(),
-                    () => {}
-                  );
-                },
-                onCancel: () => {}
-              });
-            }
-          }
-        });
-        holder.append(btn);
-        placeholder.after(holder);
-      }
-      save.markEditing();
-      void save.requestSave(next);
-    },
-    showNudge: (text) => {
-      save.notice(text);
-    }
+  body.addEventListener('click', (ev: Event) => {
+    const unit = unitAt(ev.target);
+    if (unit) select(unit.path);
   });
 
-  /** Commit dialog slots for the figure at `path`: apply every key,
-   * then save the whole tree exactly once. Other slot keys pass
-   * through untouched. */
-  const commitFigureSlots = (path: Path, slots: Slots): void => {
-    let next = tree;
-    for (const [key, value] of Object.entries(slots)) {
-      if (typeof value === 'string') next = setSlotAtPath(next, path, key, value);
-    }
-    save.markEditing();
-    void saveTree(next).then(
-      () => reloadPage(),
-      () => {}
-    );
+  const reindex = (): void => {
+    units = hydrate(shown, body);
+    unitOf = new Map(units.flatMap((u) => u.elements.map((el) => [el, u] as const)));
   };
-
-  const macroDefaults = new Map(deps.macros.map((m) => [m.name, m.defaults ?? {}]));
 
   const openFigureConfig = (path: Path): void => {
     const node = getAtPath(tree, path);
-    if (!node || node.type !== 'figure') return;
-    select(path);
+    if (node?.type !== 'figure') return;
     openFigureDialog(root, {
       initial: readFigureFields(node),
-      onCommit: (slots) => commitFigureSlots(path, slots),
+      onCommit: (slots) => {
+        let next = tree;
+        for (const [key, value] of Object.entries(slots)) {
+          if (typeof value === 'string') next = setSlotAtPath(next, path, key, value);
+        }
+        void applyTree(next, { select: path });
+      },
       onCancel: () => {}
     });
   };
 
-  /** Merge touched macro fields over the instance slots (empty clears
-   * back to the default), then save once and reload so the DOM stays
-   * the server render. Untouched overrides are never dropped. */
+  const macroDefaults = new Map(deps.macros.map((m) => [m.name, m.defaults ?? {}]));
+
   const openMacroConfig = (path: Path): void => {
     const node = getAtPath(tree, path);
-    if (!node || node.type !== 'macro') return;
-    select(path);
-    const defs = macroDefaults.get(node.macro) ?? {};
+    if (node?.type !== 'macro') return;
     openMacroDialog(root, {
-      fields: readMacroFields(node, defs),
+      fields: readMacroFields(node, macroDefaults.get(node.macro) ?? {}),
       onCommit: (touched) => {
-        const next = updateSlotsAtPath(tree, path, (slots) => {
-          const merged = { ...slots };
-          for (const [key, value] of Object.entries(touched)) {
-            if (typeof value !== 'string' || value === '') delete merged[key];
-            else merged[key] = value;
-          }
-          return merged;
-        });
-        save.markEditing();
-        void saveTree(next).then(
-          () => reloadPage(),
-          () => {}
-        );
+        const next = updateSlotsAtPath(tree, path, (slots) => mergeMacroFields(slots, touched));
+        void applyTree(next, { select: path });
       },
       onCancel: () => {}
     });
@@ -434,9 +203,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       button.setAttribute('data-config-path', unit.path.join(','));
       button.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        select(unit.path);
         if (unit.node.type === 'figure') openFigureConfig(unit.path);
         else if (unit.node.type === 'macro') openMacroConfig(unit.path);
-        else select(unit.path);
       });
       holder.append(button);
       // Sibling, not child: a figure's caption/gallery markup stays
@@ -447,6 +216,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   };
 
   const setMode = (next: Mode): void => {
+    mode = next;
     shellEl.setAttribute('data-mode', next);
     shellEl.classList.toggle('is-view', next === 'view');
     shellEl.classList.toggle('is-edit', next === 'edit');
@@ -467,6 +237,70 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     if (next === 'edit') addTools();
   };
 
+  const swap = (html: string, rendered: BlockTree, opts: ApplyOpts): void => {
+    clearTools();
+    body.innerHTML = html;
+    shown = rendered;
+    reindex();
+    if (opts.select) select(opts.select);
+    if (selected && !getAtPath(tree, selected)) selected = null;
+    body.removeAttribute('inert');
+    setMode(mode);
+    if (opts.select && mode === 'edit') {
+      const key = opts.select.join(',');
+      const unit = units.find((u) => u.path.join(',') === key);
+      if (unit?.node.type === 'text') (unit.elements[0] as HTMLElement | undefined)?.focus();
+    }
+  };
+
+  /** Render `next`, swap it in, re-hydrate, re-apply the mode, restore
+   * selection, then save. Only the newest call swaps and saves; older
+   * calls resolve when it settles. A failed render keeps `next` as the
+   * tree, leaves the DOM untouched, and reports in the save indicator. */
+  const applyLatest = async (next: BlockTree, opts: ApplyOpts): Promise<void> => {
+    const mine = ++generation;
+    tree = next;
+    save.markEditing();
+    body.setAttribute('inert', '');
+    let html: string;
+    try {
+      html = shown === next ? '' : await deps.render(next);
+    } catch {
+      if (mine === generation) save.fail(RENDER_FAILED);
+      return mine === generation ? undefined : latest;
+    }
+    if (mine !== generation) return latest;
+    if (shown === next) body.removeAttribute('inert');
+    else swap(html, next, opts);
+    await save.requestSave(next);
+  };
+
+  const applyTree = (next: BlockTree, opts: ApplyOpts = {}): Promise<void> => {
+    latest = applyLatest(next, opts);
+    return latest;
+  };
+
+  reindex();
+
+  mountPaletteInsert({
+    dock,
+    body,
+    macros: deps.macros,
+    getTree: () => tree,
+    getSelected: () => selected,
+    // A palette button may not take focus (Safari, Firefox on macOS),
+    // so the focused leaf would only blur once the body goes inert.
+    flushText: () => {
+      commitText(doc.activeElement);
+    },
+    commitInsert: (next, path) => {
+      void applyTree(next, { select: path });
+    },
+    showNudge: (text) => {
+      save.notice(text);
+    }
+  });
+
   for (const button of toolbar.querySelectorAll('[data-mode]')) {
     button.addEventListener('click', () => {
       const next = (button as HTMLElement).dataset.mode;
@@ -476,20 +310,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
 
   setMode('view');
 
-  // Preserve edit mode across the reload that follows a structural save
-  // (insert, figure/macro dialog commit): the flag is set by reloadPage()
-  // and cleared here so a manual reload lands in view mode.
-  try {
-    if (sessionStorage.getItem('rkr-edit-mode') === '1') {
-      sessionStorage.removeItem('rkr-edit-mode');
-      setMode('edit');
-    }
-  } catch {
-    // sessionStorage may be unavailable; ignore.
-  }
-
   return {
     setMode,
+    applyTree,
     get selectedPath() {
       return selected;
     }

@@ -1,7 +1,8 @@
 // Blocks editor entry: hydrates the server-rendered page in place.
 // The edit route embeds the canonical tree (#rkr-tree) and renders the
 // public body with `rkr:path` markers, so this module only mounts the
-// unified shell: no page fetch, no client re-render, no iframe preview.
+// unified shell: no page fetch, no client-side renderer, no iframe
+// preview. Structural edits re-render through POST /admin/blocks/render.
 // Same-origin fetch carries the admin session cookie, so no token
 // handling is needed here; scripted clients use /admin/blocks/:slug.
 
@@ -37,12 +38,22 @@ if (root && slug && tree) {
     if (!res.ok) throw new Error(`save page ${res.status}`);
   };
 
+  const render = async (next: BlockTree): Promise<string> => {
+    const res = await fetch('/admin/blocks/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tree: next })
+    });
+    if (!res.ok) throw new Error(`render page ${res.status}`);
+    return ((await res.json()) as { html: string }).html;
+  };
+
   void (async () => {
     try {
       const res = await fetch('/admin/blocks/macros');
       if (!res.ok) throw new Error(`load macros ${res.status}`);
       const macros = (await res.json()) as PaletteMacro[];
-      mountUnifiedShell(root, { tree, macros, onSave: save });
+      mountUnifiedShell(root, { tree, macros, onSave: save, render });
 
       // Initialize OPFS for image editing.
       const opfsReady = await initOpfsForUnifiedEditor();

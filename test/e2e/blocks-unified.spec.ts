@@ -32,6 +32,13 @@ async function uploadJpeg(page: import('@playwright/test').Page): Promise<string
   return ((await res.json()) as { id: string }).id;
 }
 
+/** The page save, not the render preview that precedes it. */
+function saveResponse(page: import('@playwright/test').Page, slug: string) {
+  return page.waitForResponse(
+    (r) => r.url().endsWith(`/admin/blocks/${slug}`) && r.request().method() === 'POST'
+  );
+}
+
 test('unified flow: type, figure dialog, palette drop, save, reload', async ({ page }) => {
   await login(page);
   const slug = `e2e-unified-${Date.now()}`;
@@ -51,25 +58,20 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
   // Type in place; blur saves.
   await para.click();
   await para.fill('Hello unified edited.');
+  const typed = saveResponse(page, slug);
   await page.keyboard.press('Tab');
-  await page.waitForResponse(
-    (r) => r.url().includes('/admin/blocks/') && r.request().method() === 'POST'
-  );
+  await typed;
 
-  // Drag the Image primitive below the text leaf. The drop inserts a
-  // placeholder in place (no reload) so the dropped item stays visible
-  // and edit mode is preserved.
+  // Drag the Image primitive below the text leaf. The page re-renders in
+  // place, so edit mode stays active and the empty figure is visible.
   const box = await para.boundingBox();
   expect(box).not.toBeNull();
   const paletteImage = page.locator('.rkr-blocks-palette-item', { hasText: 'Image' });
+  const dropped = saveResponse(page, slug);
   await paletteImage.dragTo(para, {
     targetPosition: { x: box!.width / 2, y: box!.height - 5 }
   });
-  await page.waitForResponse(
-    (r) => r.url().includes('/admin/blocks/') && r.request().method() === 'POST'
-  );
-  // No reload: edit mode stays active and the dropped figure placeholder
-  // is visible without re-entering edit.
+  await dropped;
   await expect(page.locator('.rkr-unified-empty')).toBeVisible();
   const figureConfig = page.getByRole('button', { name: 'Configure figure' });
   await expect(figureConfig).toBeVisible();
@@ -80,15 +82,81 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
   await expect(dialog).toBeVisible();
   await dialog.locator('input').first().fill(imageId);
   await dialog.locator('input').nth(2).fill('Marina at dusk');
+  const committed = saveResponse(page, slug);
   await dialog.getByRole('button', { name: 'Save figure' }).click();
-  await page.waitForResponse(
-    (r) => r.url().includes('/admin/blocks/') && r.request().method() === 'POST'
-  );
+  await committed;
 
   // Public page shows the typed text and the captioned figure.
   await page.goto(`/${slug}`);
   await expect(page.locator('article')).toContainText('Hello unified edited.');
   await expect(page.locator('article')).toContainText('Marina at dusk');
+});
+
+async function dragTextAbove(
+  page: import('@playwright/test').Page,
+  target: import('@playwright/test').Locator
+): Promise<void> {
+  const box = await target.boundingBox();
+  expect(box).not.toBeNull();
+  await page
+    .locator('.rkr-blocks-palette-item', { hasText: 'Text' })
+    .dragTo(target, { targetPosition: { x: box!.width / 2, y: 2 } });
+}
+
+test('edit after insert writes the right block', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-insert-edit-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Insert edit', markdown: 'Welcome aboard.' });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const first = page.locator('#rkr-blocks-page-body p').first();
+  await expect(first).toHaveAttribute('contenteditable', 'true');
+
+  const inserted = saveResponse(page, slug);
+  await dragTextAbove(page, first);
+  await inserted;
+  await expect(page.locator('#rkr-blocks-page-body [data-rkr-blank]')).toHaveCount(1);
+
+  const original = page.locator('#rkr-blocks-page-body p[data-rkr-path="1"]');
+  await expect(original).toHaveText('Welcome aboard.');
+  await original.click();
+  await original.fill('Welcome aboard, edited');
+  const edited = saveResponse(page, slug);
+  await page.keyboard.press('Tab');
+  await edited;
+
+  await page.reload();
+  const res = await page.request.get(`/admin/blocks/${slug}`);
+  const { tree } = (await res.json()) as { tree: { body: { type: string; markdown?: string }[] } };
+  expect(tree.body).toEqual([
+    { type: 'text', markdown: '' },
+    { type: 'text', markdown: 'Welcome aboard, edited' }
+  ]);
+  const text = (await page.locator('#rkr-blocks-page-body').textContent()) ?? '';
+  expect(text.match(/Welcome/g)?.length).toBe(1);
+});
+
+test('insert does not reload', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-insert-noreload-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'No reload', markdown: 'Stay put.' });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.evaluate(() => {
+    (window as unknown as { __marker?: number }).__marker = 1;
+  });
+
+  const inserted = saveResponse(page, slug);
+  await dragTextAbove(page, page.locator('#rkr-blocks-page-body p').first());
+  await inserted;
+  await expect(page.locator('#rkr-blocks-page-body [data-rkr-blank]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  expect(await page.evaluate(() => (window as unknown as { __marker?: number }).__marker)).toBe(1);
 });
 
 test('figure dialog hosts the image-edit pipeline with a blob preview', async ({ page }) => {
