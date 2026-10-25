@@ -1,8 +1,8 @@
 // Image-edit pipeline UI: the crop / rotate / flip / perspective /
 // resample / undo / redo / save / reset buttons + the ordered edit-
-// steps list. Scoped to whichever image cell the author has clicked;
-// main.ts owns the active-cell state and calls `activateForId`
-// after each selection / click change.
+// steps list. Scoped to whichever image the host has activated; the
+// host owns the active-image state and calls `activateForId` after each
+// change, and `onPreview` tells it where the latest result lives.
 
 import type { SidecarOp } from '@rkr/image-edit';
 
@@ -23,20 +23,8 @@ import {
   openPerspective,
   type PipelineCache
 } from '@rkr/image-edit/canvas';
-import type { Editor } from '@tiptap/core';
-import {
-  getPipelineCache,
-  getPreviewUrl,
-  loadOriginal,
-  refreshImagePreview
-} from './canvas-loaders';
-import { setStatus } from './dom';
-import {
-  ensureLocalState,
-  getLocalEditState,
-  persistImageState,
-  saveImageEdits
-} from './image-edit';
+import { setStatus } from './dom.ts';
+import type { ImageEditPipeline } from './image-edit.ts';
 
 interface ImageEditPanelButtons {
   crop: HTMLButtonElement;
@@ -48,13 +36,17 @@ interface ImageEditPanelButtons {
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
   reset: HTMLButtonElement;
-  save: HTMLButtonElement;
+  /** The legacy editor's in-panel Save; the unified dialog applies
+   * through `save()` from its own footer instead. */
+  save?: HTMLButtonElement;
   resample: HTMLButtonElement;
   tilt: HTMLButtonElement;
 }
 
 export interface ImageEditPanelDeps {
-  editor: Editor;
+  /** A new preview URL for `id`: after each edit, on activate, and
+   * after an applied save. */
+  onPreview(id: string, url: string): void;
   section: HTMLDivElement;
   buttons: ImageEditPanelButtons;
   resampleInput: HTMLInputElement;
@@ -64,6 +56,8 @@ export interface ImageEditPanelDeps {
   /** Read the currently-active image id (null when no cell is
    * selected). Called at click time so the latest selection is used. */
   activeImageId: () => string | null;
+  /** `imageEditPipeline` in the app; tests pass fakes. */
+  pipeline: ImageEditPipeline;
 }
 
 export interface ImageEditPanel {
@@ -74,11 +68,16 @@ export interface ImageEditPanel {
   activateForId(id: string, stillCurrent: () => boolean): void;
   /** Hide the panel and clear its contents. */
   deactivate(): void;
+  /** Commit the active image's edits. Resolves false when there was
+   * nothing to apply; rejects when the commit fails. */
+  save(): Promise<boolean>;
+  /** Drop the active image's unapplied edits. */
+  discard(): void;
 }
 
 export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   const {
-    editor,
+    onPreview,
     section,
     buttons,
     resampleInput,
@@ -87,6 +86,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     editsList,
     activeImageId
   } = deps;
+  const pipeline = deps.pipeline;
   // Empty-state hint shown in the cell dialog when no cell is active.
   // openCellDialog can fire with activeCellIndex===null (idx falls back
   // to 0 for caption/alt but the image-edit section stays hidden), so
@@ -99,7 +99,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     buttons.undo.disabled = s.ops.length === 0;
     buttons.redo.disabled = s.redoStack.length === 0;
     buttons.reset.hidden = s.ops.length === 0;
-    buttons.save.disabled = !isDirty(s);
+    if (buttons.save) buttons.save.disabled = !isDirty(s);
     const items = s.ops.map((op, idx) => {
       const li = document.createElement('li');
       const span = document.createElement('span');
@@ -130,26 +130,26 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   function refreshAfterEdit(id: string, s: LocalEditState, label: string): void {
     setStatus(`${label} ${id.slice(0, 8)}…`);
     renderEditsPanel(id, s);
-    persistImageState(id, s);
-    void refreshImagePreview(editor, id, s.ops).then(() => updateDialogPreview(id));
+    pipeline.persist(id, s);
+    void repaint(id, s);
+  }
+
+  async function repaint(id: string, s: LocalEditState): Promise<void> {
+    const url = await pipeline.preview(id, s.ops);
+    onPreview(id, url);
+    updateDialogPreview(url);
   }
 
   /** Sync the in-dialog <img> to the latest pipeline output for `id`.
    * The blob URL is owned by canvas-loaders' LRU, so we just point
    * src at it — no revoke responsibility here. Clears any pending CSS
    * tilt preview so the final canvas result is shown unrotated. */
-  function updateDialogPreview(id: string): void {
+  function updateDialogPreview(url: string): void {
     const img = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
     if (!img) return;
     img.style.transform = '';
-    const url = getPreviewUrl(id);
-    if (url) {
-      img.src = url;
-      img.hidden = false;
-    } else {
-      img.removeAttribute('src');
-      img.hidden = true;
-    }
+    img.src = url;
+    img.hidden = false;
   }
 
   /** Apply a CSS rotation to the dialog preview for instant tilt feedback
@@ -166,7 +166,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   function runEdit(label: string, mutator: (ops: SidecarOp[]) => SidecarOp[]): void {
     const id = activeImageId();
     if (!id) return;
-    const s = getLocalEditState(id);
+    const s = pipeline.get(id);
     if (!s) return;
     localMutate(s, mutator);
     refreshAfterEdit(id, s, label);
@@ -178,7 +178,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   function runWithState(fn: (id: string, s: LocalEditState) => void): void {
     const id = activeImageId();
     if (!id) return;
-    const s = getLocalEditState(id);
+    const s = pipeline.get(id);
     if (!s) return;
     fn(id, s);
   }
@@ -188,16 +188,11 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
    * `open`. Surfaces load failures on the editor status line. */
   async function withCanvasSource(
     id: string,
-    open: (source: CanvasSource, pipeline: PipelineCache) => Promise<void>
+    open: (source: CanvasSource, cache: PipelineCache) => Promise<void>
   ): Promise<void> {
     try {
-      const img = await loadOriginal(id);
-      const source: CanvasSource = {
-        drawable: img,
-        width: img.naturalWidth,
-        height: img.naturalHeight
-      };
-      await open(source, getPipelineCache(id));
+      const { source, cache } = await pipeline.load(id);
+      await open(source, cache);
     } catch (err) {
       setStatus(`edit: ${(err as Error).message}`, true);
     }
@@ -206,8 +201,8 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   buttons.crop.addEventListener('click', () =>
     runWithState(
       (id, s) =>
-        void withCanvasSource(id, (source, pipeline) =>
-          openCropper(source, pipeline, s, () => refreshAfterEdit(id, s, 'crop'), setStatus)
+        void withCanvasSource(id, (source, cache) =>
+          openCropper(source, cache, s, () => refreshAfterEdit(id, s, 'crop'), setStatus)
         )
     )
   );
@@ -226,14 +221,8 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
   buttons.perspective.addEventListener('click', () =>
     runWithState(
       (id, s) =>
-        void withCanvasSource(id, (source, pipeline) =>
-          openPerspective(
-            source,
-            pipeline,
-            s,
-            () => refreshAfterEdit(id, s, 'perspective'),
-            setStatus
-          )
+        void withCanvasSource(id, (source, cache) =>
+          openPerspective(source, cache, s, () => refreshAfterEdit(id, s, 'perspective'), setStatus)
         )
     )
   );
@@ -283,39 +272,52 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
       refreshAfterEdit(id, s, 'edits reset');
     })
   );
-  buttons.save.addEventListener('click', () =>
+  /** Commit the active image's ops (bake + sidecar), then repaint from
+   * the committed state. */
+  async function save(): Promise<boolean> {
+    const id = activeImageId();
+    const s = id ? pipeline.get(id) : undefined;
+    if (!id || !s || !isDirty(s)) return false;
+    setStatus(`saving edits ${id.slice(0, 8)}…`);
+    try {
+      await pipeline.commit(id, s);
+    } catch (err) {
+      setStatus(`save edits failed: ${(err as Error).message}`);
+      throw err;
+    }
+    renderEditsPanel(id, s);
+    await repaint(id, s);
+    setStatus(`saved edits ${id.slice(0, 8)}…`);
+    return true;
+  }
+
+  function discard(): void {
     runWithState((id, s) => {
       if (!isDirty(s)) return;
+      s.ops = [...s.baseline.ops];
+      s.redoStack = [...s.baseline.redoStack];
+      refreshAfterEdit(id, s, 'edits discarded');
+    });
+  }
+
+  const legacySave = buttons.save;
+  if (legacySave) {
+    legacySave.addEventListener('click', () => {
       // Guard against double-clicks during the (potentially multi-MB)
-      // bake upload. Re-enabled by renderEditsPanel on success (where
-      // isDirty is now false → disabled stays true) or explicitly on
-      // failure so the user can retry.
-      buttons.save.disabled = true;
-      setStatus(`saving edits ${id.slice(0, 8)}…`);
-      void saveImageEdits(id, s).then(
-        () => {
-          renderEditsPanel(id, s);
-          // Repoint the editor's <img data-id> at the freshly-baked
-          // server derivative so the in-editor pixels match what
-          // visitors will see (and so a same-id cell elsewhere on the
-          // page picks up the bake without a re-select).
-          void refreshImagePreview(editor, id, s.ops).then(() => updateDialogPreview(id));
-          setStatus(`saved edits ${id.slice(0, 8)}…`);
-        },
-        (err: unknown) => {
-          buttons.save.disabled = false;
-          setStatus(`save edits failed: ${(err as Error).message}`);
-        }
-      );
-    })
-  );
+      // bake upload; renderEditsPanel resets it from isDirty.
+      legacySave.disabled = true;
+      save().catch(() => {
+        legacySave.disabled = false;
+      });
+    });
+  }
 
   function deactivate(): void {
     buttons.reset.hidden = true;
     resampleInput.value = '';
     buttons.undo.disabled = true;
     buttons.redo.disabled = true;
-    buttons.save.disabled = true;
+    if (buttons.save) buttons.save.disabled = true;
     editsList.replaceChildren();
     // Drop the dialog preview's src — otherwise reopening the dialog
     // for a different image would flash the previous image first.
@@ -335,7 +337,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     resampleInput.value = '';
     buttons.undo.disabled = true;
     buttons.redo.disabled = true;
-    buttons.save.disabled = true;
+    if (buttons.save) buttons.save.disabled = true;
     editsList.replaceChildren();
     section.hidden = false;
     // data-ready flips to "true" once the async ensureLocalState
@@ -343,7 +345,7 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     // image-edit button — otherwise getLocalEditState (sync) returns
     // null and the click silently no-ops.
     section.dataset.ready = 'false';
-    void ensureLocalState(id).then(
+    void pipeline.ensure(id).then(
       (s) => {
         // Selection may have moved on while the meta fetch was in
         // flight; only paint if we're still on this id.
@@ -353,11 +355,9 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
           resampleInput.value = String(resample.w);
         }
         renderEditsPanel(id, s);
-        // Repaint the cell preview from local ops — there might be
-        // unsaved edits from a prior selection of this image. Show
-        // the result in the dialog too once the canvas pipeline
-        // resolves.
-        void refreshImagePreview(editor, id, s.ops).then(() => updateDialogPreview(id));
+        // Repaint from local ops: there might be unsaved edits from a
+        // prior selection of this image.
+        void repaint(id, s);
         section.dataset.ready = 'true';
       },
       () => {
@@ -366,5 +366,5 @@ export function wireImageEditPanel(deps: ImageEditPanelDeps): ImageEditPanel {
     );
   }
 
-  return { activateForId, deactivate };
+  return { activateForId, deactivate, save, discard };
 }

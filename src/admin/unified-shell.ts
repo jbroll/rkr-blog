@@ -17,7 +17,7 @@ import type { PaletteMacro } from './blocks-editor.ts';
 import { getAtPath, type Path, setSlotAtPath, updateSlotsAtPath } from './blocks-page-editor.ts';
 import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
 import { domToMarkdown } from './dom-markdown.ts';
-import { openFigureDialog, readFigureFields } from './figure-dialog-tree.ts';
+import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
@@ -35,6 +35,9 @@ export interface UnifiedShellDeps {
   onSave(tree: BlockTree): Promise<void>;
   /** Marked edit-page body for `tree` (`POST /admin/blocks/_render`). */
   render(tree: BlockTree): Promise<string>;
+  /** Pickers and the image editor for media dialogs. Without it, media
+   * dialogs can rearrange and caption but not add. */
+  media?: MediaDialogDeps;
 }
 
 interface ApplyOpts {
@@ -49,7 +52,12 @@ export interface UnifiedShell {
 }
 
 /** Types `configure` opens a dialog for. */
-const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'macro', 'button']);
+const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'macro', 'button']);
+
+const NO_MEDIA: MediaDialogDeps = {
+  pick: async () => [],
+  thumbUrl: (kind, id) => (kind === 'image' ? `/admin/preview/${id}` : null)
+};
 
 const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
 
@@ -161,20 +169,25 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     unitOf = new Map(units.flatMap((u) => u.elements.map((el) => [el, u] as const)));
   };
 
-  const openFigureConfig = (path: Path): void => {
+  const media = deps.media ?? NO_MEDIA;
+
+  const openMediaConfig = (path: Path, fresh = false): void => {
     const node = getAtPath(tree, path);
-    if (node?.type !== 'figure') return;
-    openFigureDialog(root, {
-      initial: readFigureFields(node),
+    if (node?.type !== 'figure' && node?.type !== 'video') return;
+    openMediaDialog(root, {
+      kind: node.type,
+      slots: (node as { slots?: Slots }).slots ?? {},
+      fresh,
+      media,
       onCommit: (slots) => {
         flushText();
-        let next = tree;
-        for (const [key, value] of Object.entries(slots)) {
-          if (typeof value === 'string') next = setSlotAtPath(next, path, key, value);
-        }
+        const next = updateSlotsAtPath(tree, path, (current) => ({ ...current, ...slots }));
         void applyTree(next, { select: path });
       },
-      onCancel: () => {}
+      onCancel: (edited) => {
+        // Applied image edits changed the derivatives the page shows.
+        if (edited) void applyTree({ ...tree }, { select: path });
+      }
     });
   };
 
@@ -200,6 +213,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     openMacroDialog(root, {
       title: `Edit ${info?.label ?? node.macro}`,
       fields: readMacroFields(node, info?.defaults ?? {}, info?.fieldSchema),
+      media,
       onCommit: (touched) => {
         flushText();
         const next = updateSlotsAtPath(tree, path, (slots) => mergeMacroFields(slots, touched));
@@ -211,7 +225,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
 
   const configure = (path: Path): void => {
     const type = getAtPath(tree, path)?.type;
-    if (type === 'figure') openFigureConfig(path);
+    if (type === 'figure' || type === 'video') openMediaConfig(path);
     else if (type === 'macro') openMacroConfig(path);
     else if (type === 'button') openButtonConfig(path);
   };
@@ -298,8 +312,13 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     getTree: () => tree,
     getSelected: () => selected,
     flushText,
-    commitInsert: (next, path) => {
+    commitInsert: (next, path, inserted) => {
       void applyTree(next, { select: path });
+      const node = getAtPath(next, path);
+      const ids = (node as { slots?: Slots } | null)?.slots?.ids;
+      if (inserted && (node?.type === 'figure' || node?.type === 'video') && !ids) {
+        openMediaConfig(path, true);
+      }
     },
     showNudge: (text) => {
       save.notice(text);

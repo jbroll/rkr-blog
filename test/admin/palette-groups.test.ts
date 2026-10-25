@@ -14,7 +14,7 @@ describe('groupPalette', () => {
       groups.map((g) => [g.group, g.items.map((i) => i.label)]),
       [
         ['Basics', ['Text', 'Button']],
-        ['Media', ['Image']],
+        ['Media', ['Image', 'Video']],
         ['Layout', ['Section', 'Row', 'Column']],
         ['Sections', ['Hero']]
       ]

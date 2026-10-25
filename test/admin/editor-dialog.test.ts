@@ -84,6 +84,86 @@ describe('openEditorDialog', () => {
     assert.equal(find('.rkr-dialog-primary').hasAttribute('disabled'), false);
   });
 
+  it('an async primary holds the dialog busy so a double click submits once', async () => {
+    let calls = 0;
+    let release!: (ok: boolean) => void;
+    const { find, dialog, root } = setup({
+      onPrimary: () => {
+        calls++;
+        return new Promise<boolean>((resolve) => {
+          release = resolve;
+        });
+      }
+    });
+    find('.rkr-dialog-primary').click();
+    find('.rkr-dialog-primary').click();
+    assert.equal(calls, 1);
+    assert.ok(find('.rkr-dialog-primary').hasAttribute('disabled'));
+    assert.equal(dialog.getAttribute('aria-busy'), 'true');
+    release(false);
+    await tick();
+    assert.equal(find('.rkr-dialog-primary').hasAttribute('disabled'), false);
+    assert.equal(dialog.parentNode, root, 'false keeps it open');
+  });
+
+  it('a thrown primary is logged and shown, and the dialog stays open', async (t) => {
+    const logged: unknown[] = [];
+    t.mock.method(console, 'error', (...args: unknown[]) => {
+      logged.push(args);
+    });
+    const { find, dialog, root } = setup({
+      onPrimary: async () => {
+        throw new Error('upload failed');
+      }
+    });
+    find('.rkr-dialog-primary').click();
+    await tick();
+    assert.equal(logged.length, 1);
+    assert.equal(find('.rkr-dialog-error').hidden, false);
+    assert.equal(dialog.parentNode, root);
+    assert.equal(find('.rkr-dialog-primary').hasAttribute('disabled'), false);
+  });
+
+  it('pushView swaps body and footer and pops back on cancel or success', async () => {
+    let cancels = 0;
+    let leaves = 0;
+    const { handle, find, dialog } = setup({
+      onCancel: () => {
+        cancels++;
+      }
+    });
+    const base = find('.rkr-dialog-body').firstChild;
+    const sub = new FakeDocument().createElement('div');
+    const view = {
+      title: 'Edit image',
+      body: sub as unknown as Node,
+      primaryLabel: 'Apply edits',
+      cancelLabel: 'Back to figure',
+      onPrimary: async () => true,
+      onLeave: () => {
+        leaves++;
+      }
+    };
+    handle.pushView(view);
+    assert.equal(find('.rkr-dialog-body').firstChild, sub);
+    assert.equal(find('.rkr-dialog-primary').textContent, 'Apply edits');
+    assert.equal(find('.rkr-dialog-cancel').textContent, 'Back to figure');
+    assert.equal(find('.rkr-dialog-title').textContent, 'Edit image');
+
+    dialog.dispatchEvent(key('Escape'));
+    assert.equal(find('.rkr-dialog-body').firstChild, base, 'Escape pops the view');
+    assert.equal(find('.rkr-dialog-primary').textContent, 'Save');
+    assert.equal(find('.rkr-dialog-cancel').textContent, 'Cancel');
+    assert.equal(cancels, 0, 'popping is not a cancel');
+
+    handle.pushView(view);
+    find('.rkr-dialog-primary').click();
+    await tick();
+    assert.equal(find('.rkr-dialog-body').firstChild, base, 'success pops the view');
+    assert.equal(leaves, 2);
+    assert.ok(dialog.parentNode, 'the dialog stays open');
+  });
+
   it('Cancel button calls onCancel and removes the dialog', () => {
     let cancels = 0;
     const { find, root } = setup({

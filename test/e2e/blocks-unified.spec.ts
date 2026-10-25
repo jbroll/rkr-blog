@@ -6,6 +6,7 @@
 import sharp from 'sharp';
 
 import { expect, test } from './coverage-fixtures.ts';
+import { makeFixtureMp4, makePng } from './media-fixtures.ts';
 import { figureBlock, seedBlockPage } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
@@ -32,6 +33,30 @@ async function uploadJpeg(page: import('@playwright/test').Page): Promise<string
   return ((await res.json()) as { id: string }).id;
 }
 
+type Page = import('@playwright/test').Page;
+type Upload = { name: string; mimeType: string; buffer: Buffer };
+
+/** Answer the open source picker with local files. */
+async function chooseLocal(page: Page, files: Upload[]): Promise<void> {
+  const picker = page.locator('#rkr-source-picker');
+  await expect(picker).toBeVisible();
+  const chooser = page.waitForEvent('filechooser');
+  await picker.getByRole('button', { name: 'From this computer' }).click();
+  await (await chooser).setFiles(files);
+}
+
+/** Drop a palette primitive just below `target`. */
+async function dropBelow(page: Page, label: string, target: import('@playwright/test').Locator) {
+  const box = await target.boundingBox();
+  expect(box).not.toBeNull();
+  await page
+    .locator('.rkr-blocks-palette-item')
+    .filter({ has: page.getByText(label, { exact: true }) })
+    .dragTo(target, { targetPosition: { x: box!.width / 2, y: box!.height - 5 } });
+}
+
+const HEX_INPUT = /^[0-9a-f]{6,64}$/;
+
 /** The page save, not the render preview that precedes it. */
 function saveResponse(page: import('@playwright/test').Page, slug: string) {
   return page.waitForResponse(
@@ -48,7 +73,6 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
     markdown: 'Hello unified.',
     status: 'published'
   });
-  const imageId = await uploadJpeg(page);
 
   await page.goto(`/admin/blocks/edit/${slug}`);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -62,28 +86,19 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
   await page.keyboard.press('Tab');
   await typed;
 
-  // Drag the Image primitive below the text leaf. The page re-renders in
-  // place, so edit mode stays active and the empty figure is visible.
-  const box = await para.boundingBox();
-  expect(box).not.toBeNull();
-  const paletteImage = page.locator('.rkr-blocks-palette-item').filter({
-    has: page.getByText('Image', { exact: true })
-  });
+  // Dropping the Image primitive opens the figure dialog and the picker.
   const dropped = saveResponse(page, slug);
-  await paletteImage.dragTo(para, {
-    targetPosition: { x: box!.width / 2, y: box!.height - 5 }
-  });
+  await dropBelow(page, 'Image', para);
   await dropped;
-  await expect(page.locator('.rkr-unified-empty')).toBeVisible();
-  const figureConfig = page.getByRole('button', { name: 'Configure', exact: true });
-  await expect(figureConfig).toBeVisible();
-
-  // Figure dialog: real image id + caption, then save.
-  await figureConfig.click();
-  const dialog = page.locator('.rkr-figure-dialog');
-  await expect(dialog).toBeVisible();
-  await dialog.locator('input').first().fill(imageId);
-  await dialog.locator('input').nth(2).fill('Marina at dusk');
+  const jpeg = await sharp({
+    create: { width: 320, height: 240, channels: 3, background: { r: 90, g: 140, b: 200 } }
+  })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  await chooseLocal(page, [{ name: 'marina.jpg', mimeType: 'image/jpeg', buffer: jpeg }]);
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
+  await expect(dialog.locator('.rkr-media-row')).toHaveCount(1);
+  await dialog.getByLabel('Caption').fill('Marina at dusk');
   const committed = saveResponse(page, slug);
   await dialog.getByRole('button', { name: 'Save figure' }).click();
   await committed;
@@ -162,63 +177,92 @@ test('insert does not reload', async ({ page }) => {
   expect(await page.evaluate(() => (window as unknown as { __marker?: number }).__marker)).toBe(1);
 });
 
-test('figure dialog hosts the image-edit pipeline with a blob preview', async ({ page }) => {
+test('add image to empty figure via local upload', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-figure-upload-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Figure upload', markdown: 'Above the photos.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const para = page.locator('#rkr-blocks-page-body p').first();
+  await expect(para).toHaveAttribute('contenteditable', 'true');
+
+  const dropped = saveResponse(page, slug);
+  await dropBelow(page, 'Image', para);
+  await dropped;
+  const seed = Date.now();
+  await chooseLocal(page, [
+    { name: 'one.png', mimeType: 'image/png', buffer: await makePng(seed) },
+    { name: 'two.png', mimeType: 'image/png', buffer: await makePng(seed + 1) }
+  ]);
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
+  await expect(dialog.locator('.rkr-media-row')).toHaveCount(2);
+  const values = await dialog
+    .locator('input')
+    .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value));
+  expect(values.filter((v) => HEX_INPUT.test(v))).toEqual([]);
+
+  const committed = saveResponse(page, slug);
+  await dialog.getByRole('button', { name: 'Save figure' }).click();
+  await committed;
+  await page.reload();
+  await expect(page.locator('#rkr-blocks-page-body figure img')).toHaveCount(2);
+});
+
+test('rotate refreshes the row thumbnail', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
-  page.on('pageerror', (err) => consoleErrors.push(err.message));
-
   await login(page);
-  const slug = `e2e-figure-preview-${Date.now()}`;
+  const slug = `e2e-figure-rotate-${Date.now()}`;
   const imageId = await uploadJpeg(page);
-  await seedBlockPage(page, {
-    slug,
-    title: 'Figure preview',
-    body: [figureBlock(imageId)],
-    status: 'published'
-  });
+  await seedBlockPage(page, { slug, title: 'Rotate', body: [figureBlock(imageId)] });
 
   await page.goto(`/admin/blocks/edit/${slug}`);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.locator('#rkr-blocks-page-body figure').first().click();
   await page.getByRole('button', { name: 'Configure', exact: true }).click();
-  const dialog = page.locator('.rkr-figure-dialog');
-  await expect(dialog).toBeVisible();
-  // The section is moved, not cloned: exactly one node, inside the dialog.
-  await expect(page.locator('#rkr-image-edit')).toHaveCount(1);
-  await expect(dialog.locator('#rkr-image-edit')).toHaveCount(1);
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
+  const thumb = dialog.locator('.rkr-media-row img').first();
+  const before = await thumb.getAttribute('src');
 
-  // Selecting the image moves the (formerly hidden-hosted) pipeline
-  // into the dialog and paints the canvas result as a blob: preview.
-  const thumb = dialog.locator('.rkr-figure-image-thumb').first();
-  await thumb.click();
-  await expect(thumb).toHaveAttribute('aria-pressed', 'true');
-  await expect(dialog.locator('.rkr-figure-image-thumb.is-active')).toHaveCount(1);
-  await expect(dialog.locator('#rkr-image-edit')).toBeVisible();
-  const preview = dialog.locator('#rkr-cell-preview');
-  await expect(preview).toBeVisible();
-  await expect(preview).toHaveAttribute('src', /^blob:/);
+  await dialog.getByRole('button', { name: 'Edit image' }).click();
+  const editor = page.locator('[data-rkr-dialog] #rkr-image-edit');
+  await expect(editor).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#rkr-cell-preview')).toHaveAttribute('src', /^blob:/);
+  await expect(page.getByRole('button', { name: 'Back to figure' })).toBeVisible();
+  await page.getByRole('button', { name: 'Rotate right' }).click();
+  const commit = page.waitForResponse((r) => /\/admin\/sidecar\/[0-9a-f]+\/commit$/.test(r.url()));
+  await page.getByRole('button', { name: 'Apply edits' }).click();
+  expect((await commit).status()).toBe(200);
 
-  expect(
-    consoleErrors.filter(
-      (m) => /decode failed/i.test(m) || (/Content Security Policy/i.test(m) && /blob:/i.test(m))
-    )
-  ).toEqual([]);
-
-  // Closing returns the section to its stash so a reopen starts clean.
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toHaveCount(0);
+  await expect(dialog.locator('.rkr-media-row')).toHaveCount(1);
+  await expect(thumb).not.toHaveAttribute('src', before ?? '');
   await expect(page.locator('#rkr-image-edit-host #rkr-image-edit')).toHaveCount(1);
-  await expect(page.locator('#rkr-image-edit')).toBeHidden();
+  expect(consoleErrors.filter((m) => /Content Security Policy|decode failed/i.test(m))).toEqual([]);
+});
 
-  // Escape is the other cancel path; it must restore the same stash.
-  await page.getByRole('button', { name: 'Configure', exact: true }).click();
-  await expect(page.locator('.rkr-figure-dialog')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.rkr-figure-dialog')).toHaveCount(0);
-  await expect(page.locator('#rkr-image-edit-host #rkr-image-edit')).toHaveCount(1);
-  await expect(page.locator('#rkr-image-edit')).toBeHidden();
+test('add video block', async ({ page }) => {
+  test.setTimeout(120_000);
+  await login(page);
+  const slug = `e2e-video-block-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Video block', markdown: 'Watch this.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const para = page.locator('#rkr-blocks-page-body p').first();
+  await expect(para).toHaveAttribute('contenteditable', 'true');
+
+  const dropped = saveResponse(page, slug);
+  await dropBelow(page, 'Video', para);
+  await dropped;
+  await chooseLocal(page, [{ name: 'clip.mp4', mimeType: 'video/mp4', buffer: makeFixtureMp4() }]);
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save video' });
+  await expect(dialog.locator('.rkr-media-row')).toHaveCount(1, { timeout: 60_000 });
+  const committed = saveResponse(page, slug);
+  await dialog.getByRole('button', { name: 'Save video' }).click();
+  await committed;
+  await page.reload();
+  await expect(page.locator('#rkr-blocks-page-body video')).toHaveCount(1);
 });
 
 test('unified edit page has no horizontal overflow at phone width', async ({ page }) => {

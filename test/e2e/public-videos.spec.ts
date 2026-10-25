@@ -7,12 +7,8 @@
 // with a stubbed render; this spec drives the real ffmpeg render once, so
 // the Range/206 + immutable-cache path is exercised against real bytes.
 
-import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import { expect, test } from './coverage-fixtures.ts';
+import { makeFixtureMp4 } from './media-fixtures.ts';
 import { seedBlockPage, videoBlock } from './seed-blocks.ts';
 
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
@@ -36,45 +32,6 @@ async function seedPost(
     status: 'published',
     body: [body.video]
   });
-}
-
-/** Generate a tiny 2s 160x120 h264/aac mp4 via ffmpeg. The mp4 muxer
- * refuses non-seekable (pipe) output, so write to a temp file. */
-function makeFixtureMp4(): Buffer {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-video-fixture-'));
-  const out = path.join(dir, 'clip.mp4');
-  try {
-    execFileSync(
-      'ffmpeg',
-      [
-        '-y',
-        '-v',
-        'error',
-        '-f',
-        'lavfi',
-        '-i',
-        'testsrc=duration=2:size=160x120:rate=15',
-        '-f',
-        'lavfi',
-        '-i',
-        'sine=frequency=440:duration=2',
-        '-c:v',
-        'libx264',
-        '-preset',
-        'ultrafast',
-        '-pix_fmt',
-        'yuv420p',
-        '-c:a',
-        'aac',
-        '-shortest',
-        out
-      ],
-      { stdio: ['ignore', 'ignore', 'inherit'] }
-    );
-    return fs.readFileSync(out);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 test('site: public video derivative serves full + Range/206 + poster; bad ids 404', async ({

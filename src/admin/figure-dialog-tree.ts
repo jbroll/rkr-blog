@@ -1,27 +1,32 @@
-// Tree-backed figure config dialog for the unified editor.
+// Figure and video dialogs for the unified editor, built on the shared
+// editor dialog. Authors work with thumbnails: images come from the
+// media source picker, each row edits its alt text and caption, and the
+// layout is a segmented control. The slots keep their stored encoding
+// (figure-image-list.ts), and the commit writes only the dialog's keys;
+// the shell merges them over the node's other slots.
 //
-// The legacy figure-attr panel is bound to a TipTap `Editor`
-// (transactions, undo history, active-cell model) and keeps serving the
-// retired editor bundle untouched. This module drives the same dialog
-// surface from a block-tree path instead: read the figure's slots,
-// validate edits, and commit the merged slots through the shell's
-// standard whole-tree save. Unknown slot keys pass through untouched,
-// so a commit writes exactly the dialog's fields and nothing else.
+// "Edit image" pushes the image editor as a sub-view of the same dialog;
+// the host (blocks-page-editor-entry.ts) owns the edit pipeline.
 //
-// The image-edit pipeline (#rkr-image-edit) still lives in the page
-// template for the retired editor, but on the blocks page it is stashed
-// inside #rkr-image-edit-host. Opening the dialog moves the section
-// into the dialog body (preserving element identity for the panel that
-// was wired against it); closing moves it back.
-//
-// Browser-safe: no node:* imports. The `doc` parameter is the DOM
-// `Document` in production; tests pass a structurally compatible fake.
+// Browser-safe: no node:* imports.
 
-import type { BlockNode, Slots } from '../lib/blocks.ts';
+import type { Slots } from '../lib/blocks.ts';
+import { openEditorDialog } from './editor-dialog.ts';
+import {
+  type FigureImageRow,
+  figureSlotsFromList,
+  LAYOUT_LABELS,
+  type LayoutChoice,
+  layoutFromMatrix,
+  listFromFigureSlots,
+  matrixFromLayout,
+  mountImageList
+} from './figure-image-list.ts';
+import type { MediaPicker } from './media-source.ts';
 
 const HEX_ID = /^[0-9a-f]{6,64}$/;
-const JUSTIFY = new Set(['center', 'full', 'bleed', 'left', 'right', 'inline']);
 const JUSTIFY_ORDER = ['center', 'full', 'bleed', 'left', 'right', 'inline'] as const;
+const JUSTIFY = new Set<string>(JUSTIFY_ORDER);
 const JUSTIFY_LABELS: Record<(typeof JUSTIFY_ORDER)[number], string> = {
   center: 'Center',
   full: 'Full width',
@@ -30,6 +35,7 @@ const JUSTIFY_LABELS: Record<(typeof JUSTIFY_ORDER)[number], string> = {
   right: 'Float right',
   inline: 'Inline'
 };
+const BAD_ID = "One of these files couldn't be read. Remove it and add it again.";
 
 export interface FigureFieldValues {
   ids: string;
@@ -38,44 +44,16 @@ export interface FigureFieldValues {
   justify: string;
 }
 
-const FIELDS: ReadonlyArray<keyof FigureFieldValues> = ['ids', 'alts', 'captions', 'justify'];
-
-const FIELD_LABELS: Record<keyof FigureFieldValues, string> = {
-  ids: 'Image ids (comma-separated)',
-  alts: 'Alt text (comma-separated)',
-  captions: 'Captions (pipe-separated)',
-  justify: 'Position'
-};
-
-/** Current slot values as dialog fields. Missing slots read as ''. */
-export function readFigureFields(node: BlockNode): FigureFieldValues {
-  const slots = (node as { slots?: Slots }).slots ?? {};
-  const text = (key: string): string => {
-    const v = slots[key];
-    return typeof v === 'string' ? v : '';
-  };
-  return {
-    ids: text('ids'),
-    alts: text('alts'),
-    captions: text('captions'),
-    justify: text('justify')
-  };
-}
-
 export type ValidatedFigureFields = { ok: true; slots: Slots } | { ok: false; errors: string[] };
 
-/** Normalize + validate dialog input. Bad ids reject the whole commit;
- * unknown justify coerces to the renderer default. */
+/** Commit-time check. Bad ids reject the whole commit; unknown justify
+ * coerces to the renderer default. */
 export function validateFigureFields(values: FigureFieldValues): ValidatedFigureFields {
-  const errors: string[] = [];
   const ids = values.ids
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s !== '');
-  for (const id of ids) {
-    if (!HEX_ID.test(id)) errors.push(`id is not a 6-64 char hex sidecar id: ${id}`);
-  }
-  if (errors.length > 0) return { ok: false, errors };
+  if (ids.some((id) => !HEX_ID.test(id))) return { ok: false, errors: [BAD_ID] };
   const justify = JUSTIFY.has(values.justify) ? values.justify : 'center';
   return {
     ok: true,
@@ -83,305 +61,271 @@ export function validateFigureFields(values: FigureFieldValues): ValidatedFigure
   };
 }
 
-export interface FigureDialog {
-  /** Programmatic field edit (tests + future rich pickers). */
-  setField(name: keyof FigureFieldValues, value: string): void;
-  /** Validate and commit; returns false and surfaces errors on failure. */
-  commit(): boolean;
-  close(): void;
-  errors(): string[];
+/** The image editor the figure dialog swaps in for one image. */
+export interface ImageEditorHost {
+  /** Mount the editor for `id` inside `into`. */
+  open(id: string, into: Element): void;
+  /** Commit the edits; resolves with the new preview URL, or null when
+   * there was nothing to apply. */
+  apply(): Promise<string | null>;
+  /** Stash the editor again; `discard` drops unapplied edits. */
+  close(discard: boolean): void;
 }
 
-interface FigureDialogOpts {
-  initial: FigureFieldValues;
+export interface MediaDialogDeps extends MediaPicker {
+  imageEditor?: ImageEditorHost;
+}
+
+interface MediaDialogOpts {
+  kind: 'figure' | 'video';
+  slots: Slots;
+  /** Just inserted: an empty node opens the picker straight away. */
+  fresh?: boolean;
+  media: MediaDialogDeps;
   onCommit(slots: Slots): void;
-  /** Called once for every cancelled close (✕, scrim, Escape, Cancel);
-   * never for a successful Save-commit. */
-  onCancel?(): void;
-  /** Resolver for the stashed `#rkr-image-edit` section and its host.
-   * Defaults to the guarded global `document.getElementById`; tests
-   * inject a map-backed resolver because the fake document has none. */
-  getById?(id: string): HTMLElement | null;
+  /** `edited` is true when image edits were applied before cancelling,
+   * so the page needs a fresh render. */
+  onCancel?(edited: boolean): void;
 }
 
-/** Minimal control surface the dialog needs. Real DOM elements and the
- * test fake both satisfy it; everything beyond is accessed through
- * these members only. */
-interface DialogControl {
-  textContent: string | null;
-  value?: string;
-  className?: string;
-  id?: string;
-  type?: string;
-  selected?: boolean;
-  setAttribute?(name: string, value: string): void;
-  getAttribute?(name: string): string | null;
-  append?(...nodes: unknown[]): void;
-  addEventListener?(type: string, listener: () => void): void;
-  querySelectorAll?(selector: string): DialogControl[];
+const text = (slots: Slots, key: string): string => {
+  const v = slots[key];
+  return typeof v === 'string' ? v : '';
+};
+
+function section(doc: Document, heading: string): HTMLElement {
+  const el = doc.createElement('section');
+  el.className = 'rkr-media-section';
+  const h = doc.createElement('h3');
+  h.className = 'rkr-media-heading';
+  h.textContent = heading;
+  el.append(h);
+  return el;
 }
 
-/** Minimal DOM contract the dialog needs (real `Document` satisfies it). */
-export interface DialogRoot {
-  ownerDocument: {
-    createElement(tag: string): DialogControl & {
-      append(...nodes: unknown[]): void;
-      setAttribute(name: string, value: string): void;
-      addEventListener(type: string, listener: () => void): void;
-      querySelectorAll(selector: string): DialogControl[];
-    };
-  };
-  append(...nodes: unknown[]): void;
-  removeChild?(node: unknown): void;
-}
-
-/** Global-document lookup guarded for the fake-DOM unit tests (Node has
- * no `document`). */
-function defaultGetById(id: string): HTMLElement | null {
-  try {
-    return typeof document === 'undefined' ? null : document.getElementById(id);
-  } catch {
-    return null;
+function positionField(doc: Document, initial: string, onChange: (v: string) => void) {
+  const wrap = doc.createElement('div');
+  wrap.className = 'rkr-field';
+  const label = doc.createElement('label');
+  label.textContent = 'Position';
+  label.setAttribute('for', 'rkr-media-justify');
+  const select = doc.createElement('select');
+  select.id = 'rkr-media-justify';
+  for (const value of JUSTIFY_ORDER) {
+    const option = doc.createElement('option');
+    option.value = value;
+    option.setAttribute('value', value);
+    option.textContent = JUSTIFY_LABELS[value];
+    select.append(option);
   }
+  select.value = JUSTIFY.has(initial) ? initial : 'center';
+  select.addEventListener('change', () => onChange(select.value));
+  wrap.append(label, select);
+  return wrap;
 }
 
-/** Open the figure config dialog. Returns a driver the shell (and
- * tests) use instead of touching inputs directly. */
-export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): FigureDialog {
+function numberField(doc: Document, label: string, value: number, onInput: (n: number) => void) {
+  const wrap = doc.createElement('div');
+  wrap.className = 'rkr-field';
+  const id = `rkr-media-${label.toLowerCase()}`;
+  const lab = doc.createElement('label');
+  lab.textContent = label;
+  lab.setAttribute('for', id);
+  const input = doc.createElement('input');
+  input.id = id;
+  input.type = 'number';
+  input.setAttribute('min', '1');
+  input.setAttribute('max', '12');
+  input.value = String(value);
+  input.addEventListener('input', () => onInput(Number(input.value)));
+  wrap.append(lab, input);
+  return wrap;
+}
+
+/** Segmented Single / Grid / Carousel / Justified / Masonry control,
+ * with rows and columns shown for Grid. */
+function layoutControl(doc: Document, layout: LayoutChoice) {
+  const wrap = doc.createElement('div');
+  wrap.className = 'rkr-layout-control';
+  const group = doc.createElement('div');
+  group.className = 'rkr-segmented';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', 'Layout');
+  const grid = doc.createElement('div');
+  grid.className = 'rkr-layout-grid';
+  grid.append(
+    numberField(doc, 'Rows', layout.rows, (n) => {
+      layout.rows = n;
+    }),
+    numberField(doc, 'Columns', layout.cols, (n) => {
+      layout.cols = n;
+    })
+  );
+  const radios: HTMLButtonElement[] = [];
+  const sync = (): void => {
+    for (const r of radios) {
+      r.setAttribute('aria-checked', r.dataset.mode === layout.mode ? 'true' : 'false');
+    }
+    grid.hidden = layout.mode !== 'grid';
+  };
+  for (const [mode, label] of LAYOUT_LABELS) {
+    const btn = doc.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rkr-segment';
+    btn.setAttribute('role', 'radio');
+    btn.dataset.mode = mode;
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      layout.mode = mode;
+      sync();
+    });
+    radios.push(btn);
+    group.append(btn);
+  }
+  sync();
+  wrap.append(group, grid);
+  return { element: wrap, sync };
+}
+
+/** Open the figure or video dialog. */
+export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
   const doc = root.ownerDocument;
-  const getById = opts.getById ?? defaultGetById;
-  const values: FigureFieldValues = { ...opts.initial };
-  let errors: string[] = [];
-  let closed = false;
-
-  const shell = doc.createElement('div');
-  shell.className = 'rkr-cell-dialog rkr-figure-dialog';
-  shell.setAttribute('data-rkr-dialog', '');
-  shell.id = 'rkr-figure-config-dialog';
-  shell.setAttribute('role', 'dialog');
-  shell.setAttribute('aria-modal', 'true');
-  shell.setAttribute('aria-labelledby', 'rkr-figure-dialog-title');
-  shell.setAttribute('aria-label', 'Figure');
-
-  const head = doc.createElement('div');
-  head.className = 'rkr-cell-dialog-head';
-  const title = doc.createElement('h2');
-  title.id = 'rkr-figure-dialog-title';
-  title.textContent = 'Figure';
-  const closeBtn = doc.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'rkr-cell-dialog-close';
-  closeBtn.setAttribute('aria-label', 'Close');
-  closeBtn.textContent = '\u2715';
-  head.append(title, closeBtn);
+  const video = opts.kind === 'video';
+  const kind = video ? 'video' : 'image';
+  let rows: FigureImageRow[] = video
+    ? text(opts.slots, 'ids')
+      ? [{ id: text(opts.slots, 'ids'), alt: '', caption: text(opts.slots, 'caption') }]
+      : []
+    : listFromFigureSlots(opts.slots);
+  const layout = layoutFromMatrix(text(opts.slots, 'matrix'));
+  let justify = text(opts.slots, 'justify') || 'center';
+  let edited = false;
 
   const body = doc.createElement('div');
-  body.className = 'rkr-cell-dialog-body';
-  body.setAttribute('data-scope', 'figure');
+  body.className = 'rkr-dialog-fields rkr-media-dialog';
 
-  const inputs = new Map<string, DialogControl>();
-  for (const name of FIELDS) {
-    const field = doc.createElement('div');
-    field.className = 'rkr-figure-field';
+  const media = section(doc, video ? 'Video' : 'Images');
+  const empty = doc.createElement('p');
+  empty.className = 'rkr-media-empty';
+  empty.textContent = video ? 'No video yet.' : 'No images yet.';
+  const add = doc.createElement('button');
+  add.type = 'button';
+  add.className = 'rkr-edit-btn rkr-media-add';
 
-    const label = doc.createElement('label');
-    label.textContent = FIELD_LABELS[name];
-    const controlId = `rkr-figure-field-${name}`;
-    label.setAttribute('for', controlId);
+  const editor = video ? undefined : opts.media.imageEditor;
+  const list = mountImageList(doc, {
+    rows,
+    kind,
+    thumbUrl: (id) => opts.media.thumbUrl(kind, id),
+    onChange: (next) => {
+      rows = next;
+      refresh();
+    },
+    onEdit: editor ? (i) => editImage(editor, i) : undefined
+  });
 
-    const input = doc.createElement(name === 'justify' ? 'select' : 'input');
-    input.id = controlId;
-    if (name === 'justify') {
-      for (const optionValue of JUSTIFY_ORDER) {
-        const option = doc.createElement('option');
-        option.value = optionValue;
-        option.setAttribute('value', optionValue);
-        option.textContent = JUSTIFY_LABELS[optionValue];
-        if (optionValue === values.justify) {
-          option.selected = true;
-          option.setAttribute('selected', '');
-        }
-        input.append?.(option);
-      }
-      input.value = JUSTIFY.has(values.justify) ? values.justify : 'center';
-    } else {
-      input.value = values[name];
-    }
-    input.addEventListener('input', () => {
-      const current = inputs.get(name);
-      // Test fakes and real inputs both expose .value; unknown elements
-      // fall back to textContent so typing is never silently dropped.
-      const next = typeof current?.value === 'string' ? current.value : current?.textContent;
-      if (typeof next === 'string') values[name] = next;
-    });
-    inputs.set(name, input);
-    field.append(label, input);
-    body.append(field);
-  }
-
-  // Image selector: thumbnails for each image in the figure. Clicking
-  // one makes it the active image for the edit pipeline.
-  const ids = values.ids
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const thumbs: DialogControl[] = [];
-  const markActive = (active: DialogControl): void => {
-    for (const thumb of thumbs) {
-      const selected = thumb === active;
-      thumb.className = `rkr-figure-image-thumb${selected ? ' is-active' : ''}`;
-      thumb.setAttribute?.('aria-pressed', selected ? 'true' : 'false');
-    }
+  const refresh = (): void => {
+    empty.hidden = rows.length > 0;
+    add.textContent = video ? (rows.length ? 'Replace video' : 'Add video') : 'Add images';
   };
-  if (ids.length > 0) {
-    const selector = doc.createElement('div');
-    selector.className = 'rkr-figure-image-selector';
-    selector.setAttribute('role', 'group');
-    selector.setAttribute('aria-label', 'Images in this figure');
-    for (const id of ids) {
-      const thumb = doc.createElement('button');
-      thumb.type = 'button';
-      thumb.className = 'rkr-figure-image-thumb';
-      thumb.setAttribute('data-id', id);
-      thumb.setAttribute('aria-pressed', 'false');
-      thumb.setAttribute('aria-label', `Edit image ${id.slice(0, 8)}\u2026`);
-      const img = doc.createElement('img');
-      img.setAttribute('src', `/admin/preview/${id}`);
-      img.setAttribute('alt', '');
-      img.setAttribute('width', '64');
-      img.setAttribute('height', '64');
-      thumb.append(img);
-      thumb.addEventListener('click', () => {
-        markActive(thumb);
-        const setter = (window as unknown as Record<string, (id: string | null) => void>)
-          .__rkrSetActiveImage;
-        if (setter) setter(id);
-        // The section is now inside the dialog body; unhide it and let
-        // the wired panel fetch state + paint the blob preview.
-        const section = getById('rkr-image-edit');
-        if (section) section.hidden = false;
-        const panel = (
-          window as unknown as Record<
-            string,
-            { activateForId: (id: string, fn: () => boolean) => void } | undefined
-          >
-        ).__rkrImageEditPanel;
-        if (panel) panel.activateForId(id, () => true);
-      });
-      thumbs.push(thumb);
-      selector.append(thumb);
-    }
-    body.append(selector);
+  media.append(list.element, empty, add);
+  body.append(media);
+
+  let control: ReturnType<typeof layoutControl> | null = null;
+  if (!video) {
+    const layoutSection = section(doc, 'Layout');
+    control = layoutControl(doc, layout);
+    layoutSection.append(control.element);
+    body.append(layoutSection);
   }
+  body.append(
+    positionField(doc, justify, (v) => {
+      justify = v;
+    })
+  );
+  refresh();
 
-  // Move the image-edit pipeline in before the error/footer nodes so
-  // #rkr-cell-preview and the op buttons render inside the dialog.
-  // Element identity is preserved: wireImageEditPanel holds this node.
-  const section = getById('rkr-image-edit');
-  if (section) {
-    section.hidden = true;
-    body.append(section);
-  }
-
-  const errorList = doc.createElement('p');
-  errorList.className = 'rkr-figure-dialog-errors';
-  errorList.setAttribute('role', 'alert');
-  body.append(errorList);
-
-  const footer = doc.createElement('div');
-  footer.className = 'rkr-figure-dialog-foot';
-  const saveBtn = doc.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = 'rkr-figure-dialog-save';
-  saveBtn.textContent = 'Save figure';
-  const cancelBtn = doc.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.className = 'rkr-figure-dialog-cancel';
-  cancelBtn.textContent = 'Cancel';
-  footer.append(saveBtn, cancelBtn);
-  body.append(footer);
-
-  shell.append(head, body);
-
-  const scrim = doc.createElement('div');
-  scrim.className = 'rkr-figure-scrim';
-  scrim.setAttribute('aria-hidden', 'true');
-  root.append(scrim, shell);
-
-  /** Tear the dialog down: detach the key listener, stash the
-   * image-edit section back in its hidden host, then remove the shell
-   * and scrim. `cancelled` runs `onCancel` exactly once (✕, Cancel,
-   * scrim, Escape) and never for a Save-commit. Idempotent so a second
-   * close is a no-op. */
-  const close = (cancelled: boolean): void => {
-    if (closed) return;
-    closed = true;
-    detachKey();
-    if (section) {
-      section.hidden = true;
-      const host = getById('rkr-image-edit-host');
-      if (host) host.append(section);
-    }
-    root.removeChild?.(shell);
-    root.removeChild?.(scrim);
-    if (cancelled) opts.onCancel?.();
-  };
-
-  const onKey = (ev: Event): void => {
-    if ((ev as KeyboardEvent).key === 'Escape') close(true);
-  };
-  let keyAttached = false;
-  const detachKey = (): void => {
-    if (!keyAttached) return;
-    keyAttached = false;
+  const pickInto = async (): Promise<void> => {
+    add.setAttribute('disabled', '');
     try {
-      if (typeof document !== 'undefined') document.removeEventListener('keydown', onKey);
-    } catch {
-      // document may be unavailable in test environments
-    }
-  };
-  try {
-    if (typeof document !== 'undefined') {
-      document.addEventListener('keydown', onKey);
-      keyAttached = true;
-    }
-  } catch {
-    // ignore
-  }
-
-  closeBtn.addEventListener('click', () => close(true));
-  scrim.addEventListener('click', () => close(true));
-  saveBtn.addEventListener('click', () => {
-    driver.commit();
-  });
-  cancelBtn.addEventListener('click', () => {
-    driver.close();
-  });
-
-  const driver: FigureDialog = {
-    setField(name, value) {
-      values[name] = value;
-      const input = inputs.get(name);
-      if (input) input.value = value;
-    },
-    commit(): boolean {
-      const result = validateFigureFields(values);
-      if (!result.ok) {
-        errors = result.errors;
-        if (errorList) errorList.textContent = result.errors.join(' ');
-        return false;
+      const ids = await opts.media.pick(kind, !video);
+      if (ids.length === 0) return;
+      const picked = ids.map((id) => ({ id, alt: '', caption: '' }));
+      if (video) {
+        rows = [{ ...(picked[0] as FigureImageRow), caption: rows[0]?.caption ?? '' }];
+      } else {
+        if (rows.length === 0 && picked.length > 1 && layout.mode === 'single') {
+          layout.mode = 'justified';
+          control?.sync();
+        }
+        rows = [...rows, ...picked];
       }
-      errors = [];
-      opts.onCommit(result.slots);
-      close(false);
-      return true;
-    },
-    close() {
-      close(true);
-    },
-    errors() {
-      return [...errors];
+      list.setRows(rows);
+      refresh();
+    } catch (err) {
+      console.error('media pick:', err);
+      dialog.setError("Couldn't add that file. Try again.");
+    } finally {
+      add.removeAttribute('disabled');
     }
   };
-  return driver;
+  add.addEventListener('click', () => {
+    void pickInto();
+  });
+
+  const editImage = (host: ImageEditorHost, index: number): void => {
+    const row = rows[index];
+    if (!row) return;
+    const into = doc.createElement('div');
+    into.className = 'rkr-image-editor';
+    dialog.pushView({
+      title: 'Edit image',
+      body: into,
+      primaryLabel: 'Apply edits',
+      cancelLabel: 'Back to figure',
+      onPrimary: async () => {
+        const url = await host.apply();
+        if (url) {
+          edited = true;
+          list.setThumb(row.id, url);
+        }
+        return true;
+      },
+      onLeave: (cancelled) => host.close(cancelled)
+    });
+    host.open(row.id, into);
+  };
+
+  const commit = (): boolean => {
+    let slots: Slots;
+    if (video) {
+      slots = { ids: rows[0]?.id ?? '', caption: rows[0]?.caption.trim() ?? '', justify };
+    } else {
+      slots = figureSlotsFromList(rows, { matrix: matrixFromLayout(layout), justify });
+    }
+    const checked = validateFigureFields({
+      ids: text(slots, 'ids'),
+      alts: text(slots, 'alts'),
+      captions: text(slots, 'captions'),
+      justify
+    });
+    if (!checked.ok) {
+      dialog.setError(checked.errors.join(' '));
+      return false;
+    }
+    opts.onCommit({ ...slots, justify: text(checked.slots, 'justify') });
+    return true;
+  };
+
+  const dialog = openEditorDialog({
+    root,
+    title: video ? 'Video' : 'Figure',
+    body,
+    primaryLabel: video ? 'Save video' : 'Save figure',
+    wide: true,
+    onPrimary: commit,
+    onCancel: () => opts.onCancel?.(edited)
+  });
+
+  if (opts.fresh && rows.length === 0) void pickInto();
 }

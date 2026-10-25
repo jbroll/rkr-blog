@@ -59,8 +59,9 @@ export interface InsertEnv {
   getSelected(): Path | null;
   /** Commit the focused text leaf before an insert reads the tree. */
   flushText(): void;
-  /** Shell re-renders `next` in place, selects `path`, and saves. */
-  commitInsert(next: BlockTree, path: Path): void;
+  /** Shell re-renders `next` in place, selects `path`, and saves.
+   * `inserted` is false for a move. */
+  commitInsert(next: BlockTree, path: Path, inserted: boolean): void;
   /** Surface a refusal (depth nudge) without changing state. */
   showNudge(text: string): void;
 }
@@ -109,7 +110,7 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
       ? primitiveNode(name)
       : { type: 'macro', macro: name };
     const next = insertAtPath(env.getTree(), at, index, node);
-    env.commitInsert(next, [...at, index]);
+    env.commitInsert(next, [...at, index], true);
   };
 
   mountBlocksPalette(dock, macros, (name) => {
@@ -260,7 +261,7 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
     if (!at) return;
     if (from) {
       const next = moveBlock(env.getTree(), from, at.parentPath, at.index);
-      env.commitInsert(next, movedPath(from, at.parentPath, at.index));
+      env.commitInsert(next, movedPath(from, at.parentPath, at.index), false);
       return;
     }
     if (name) insertNode(name, at.parentPath, at.index);

@@ -74,6 +74,12 @@ export const PRIMITIVE_MACROS: PaletteMacro[] = [
   },
   { name: 'primitive:figure', label: 'Image', group: 'Media', description: 'Photos with captions' },
   {
+    name: 'primitive:video',
+    label: 'Video',
+    group: 'Media',
+    description: 'A video with a caption'
+  },
+  {
     name: 'primitive:section',
     label: 'Section',
     group: 'Layout',
@@ -90,6 +96,8 @@ export function primitiveNode(name: string): BlockNode {
       return { type: 'text', markdown: '' };
     case 'primitive:figure':
       return { type: 'figure', slots: { ids: '' } };
+    case 'primitive:video':
+      return { type: 'video', slots: { ids: '' } };
     case 'primitive:button':
       return { type: 'button', slots: { label: 'Button', href: '/', variant: 'primary' } };
     case 'primitive:row':

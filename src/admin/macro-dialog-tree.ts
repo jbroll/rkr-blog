@@ -15,6 +15,7 @@
 import type { BlockNode, Slots } from '../lib/blocks.ts';
 import type { PaletteFieldSpec } from './blocks-editor.ts';
 import { openEditorDialog } from './editor-dialog.ts';
+import type { MediaPicker } from './media-source.ts';
 
 export interface MacroField {
   name: string;
@@ -23,6 +24,8 @@ export interface MacroField {
   placeholder: string;
   multiline: boolean;
   options?: string[];
+  /** The slot holds an image id: shown as a thumbnail, never as text. */
+  image: boolean;
 }
 
 /** One editor per default key, prefilled with the instance override
@@ -51,7 +54,8 @@ export function readMacroFields(
         value.includes('\n') ||
         placeholder.includes('\n') ||
         name === 'markdown',
-      options: spec?.type === 'select' ? spec.options : undefined
+      options: spec?.type === 'select' ? spec.options : undefined,
+      image: spec?.type === 'image'
     };
   });
 }
@@ -71,6 +75,8 @@ export interface MacroDialogOpts {
   fields: MacroField[];
   onCommit(slots: Slots): void;
   onCancel(): void;
+  /** Image fields pick through this; without it they can only be removed. */
+  media?: MediaPicker;
 }
 
 type ValueControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
@@ -96,6 +102,66 @@ function control(doc: Document, f: MacroField): ValueControl {
   return doc.createElement('input');
 }
 
+/** Thumbnail plus Choose image and Remove. `set` records the new id
+ * ('' clears the override so the default shows again). */
+function imageControl(
+  doc: Document,
+  f: MacroField,
+  media: MediaPicker | undefined,
+  set: (id: string) => void
+): HTMLElement {
+  const wrap = doc.createElement('div');
+  wrap.className = 'rkr-image-field';
+  const preview = doc.createElement('div');
+  preview.className = 'rkr-media-thumb';
+  const choose = doc.createElement('button');
+  choose.type = 'button';
+  choose.className = 'rkr-edit-btn';
+  choose.textContent = 'Choose image';
+  const remove = doc.createElement('button');
+  remove.type = 'button';
+  remove.className = 'rkr-edit-btn is-quiet';
+  remove.textContent = 'Remove';
+  const show = (id: string): void => {
+    preview.textContent = '';
+    const url = id ? (media?.thumbUrl('image', id) ?? `/admin/preview/${id}`) : null;
+    if (url) {
+      const img = doc.createElement('img');
+      img.setAttribute('src', url);
+      img.setAttribute('alt', '');
+      img.setAttribute('width', '72');
+      img.setAttribute('height', '72');
+      preview.append(img);
+    } else {
+      preview.textContent = f.placeholder ? 'Default image' : 'No image';
+    }
+    remove.hidden = id === '';
+  };
+  if (media) {
+    choose.addEventListener('click', () => {
+      choose.setAttribute('disabled', '');
+      void media
+        .pick('image', false)
+        .then(([id]) => {
+          if (!id) return;
+          set(id);
+          show(id);
+        })
+        .catch((err: unknown) => console.error('macro image pick:', err))
+        .finally(() => choose.removeAttribute('disabled'));
+    });
+  } else {
+    choose.hidden = true;
+  }
+  remove.addEventListener('click', () => {
+    set('');
+    show('');
+  });
+  show(f.value);
+  wrap.append(preview, choose, remove);
+  return wrap;
+}
+
 /** Open the macro field dialog inside `root`. */
 export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDialog {
   const doc = root.ownerDocument;
@@ -112,6 +178,18 @@ export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDial
     const id = `rkr-macro-field-${i}`;
     const label = doc.createElement('label');
     label.textContent = f.label;
+    if (f.image) {
+      label.id = id;
+      const control = imageControl(doc, f, opts.media, (value) => {
+        values.set(f.name, value);
+        touched.add(f.name);
+      });
+      control.setAttribute('role', 'group');
+      control.setAttribute('aria-labelledby', id);
+      row.append(label, control);
+      form.append(row);
+      continue;
+    }
     label.setAttribute('for', id);
     const input = control(doc, f);
     input.id = id;

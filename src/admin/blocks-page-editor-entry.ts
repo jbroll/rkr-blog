@@ -6,11 +6,19 @@
 // Same-origin fetch carries the admin session cookie, so no token
 // handling is needed here; scripted clients use /admin/blocks/:slug.
 
+import 'cropperjs/dist/cropper.css';
+
 import type { BlockTree } from '../lib/blocks.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
-import { wireImageEditPanel } from './image-edit-panel.ts';
+import type { ImageEditorHost, MediaDialogDeps } from './figure-dialog-tree.ts';
+import { imageEditPipeline } from './image-edit.ts';
+import { type ImageEditPanel, wireImageEditPanel } from './image-edit-panel.ts';
+import { browserMediaDeps, type MediaSourceDeps, pickMedia } from './media-source.ts';
 import { initOpfsForUnifiedEditor } from './opfs-init-unified.ts';
+import { awaitDrainSettled } from './sync.ts';
 import { mountUnifiedShell } from './unified-shell.ts';
+import { uploadImage } from './upload.ts';
+import { uploadVideo } from './video-upload.ts';
 
 const root = document.getElementById('rkr-blocks-edit-root');
 const slug = root?.dataset.slug ?? '';
@@ -24,6 +32,109 @@ function embeddedTree(): BlockTree | null {
   } catch {
     return null;
   }
+}
+
+function byId<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`blocks editor: missing #${id}`);
+  return el as T;
+}
+
+/** Without OPFS the local-first queue is unavailable; post straight to
+ * the server instead. */
+async function uploadImageDirect(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetch('/admin/upload', { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`upload failed (${res.status})`);
+  return ((await res.json()) as { id: string }).id;
+}
+
+function wirePanel(onPreview: (id: string, url: string) => void, active: () => string | null) {
+  return wireImageEditPanel({
+    onPreview,
+    section: byId<HTMLDivElement>('rkr-image-edit'),
+    buttons: {
+      crop: byId('rkr-image-crop-btn'),
+      rotateL: byId('rkr-image-rotate-l-btn'),
+      rotateR: byId('rkr-image-rotate-r-btn'),
+      flipH: byId('rkr-image-flip-h-btn'),
+      flipV: byId('rkr-image-flip-v-btn'),
+      perspective: byId('rkr-image-perspective-btn'),
+      undo: byId('rkr-image-undo-btn'),
+      redo: byId('rkr-image-redo-btn'),
+      reset: byId('rkr-image-reset-btn'),
+      resample: byId('rkr-image-resample-btn'),
+      tilt: byId('rkr-image-tilt-btn')
+    },
+    resampleInput: byId('rkr-image-resample'),
+    tiltSlider: byId('rkr-image-tilt-slider'),
+    tiltInput: byId('rkr-image-tilt-input'),
+    editsList: byId('rkr-image-edits'),
+    activeImageId: active,
+    pipeline: imageEditPipeline
+  });
+}
+
+/** The page's image-edit section, lent to the figure dialog one image
+ * at a time and returned to its hidden stash afterwards. */
+function imageEditorHost(): ImageEditorHost {
+  const section = byId<HTMLDivElement>('rkr-image-edit');
+  const stash = byId('rkr-image-edit-host');
+  const previews = new Map<string, string>();
+  let active: string | null = null;
+  const panel: ImageEditPanel = wirePanel(
+    (id, url) => previews.set(id, url),
+    () => active
+  );
+  return {
+    open(id, into) {
+      active = id;
+      into.append(section);
+      panel.activateForId(id, () => active === id);
+    },
+    async apply() {
+      const id = active;
+      if (!id || !(await panel.save())) return null;
+      return previews.get(id) ?? `/admin/preview/${id}?v=${Date.now()}`;
+    },
+    close(discard) {
+      if (discard) panel.discard();
+      panel.deactivate();
+      active = null;
+      stash.append(section);
+    }
+  };
+}
+
+/** Media deps for the shell. The shell mounts before OPFS is ready, so
+ * uploads and the image editor check `opfs()` when they are used. */
+function pageMedia(opfs: () => boolean): MediaDialogDeps {
+  const posters = new Map<string, string>();
+  let editor: ImageEditorHost | undefined;
+  const io: Pick<MediaSourceDeps, 'upload' | 'settle'> = {
+    upload: async (kind, file) => {
+      if (kind === 'image') return opfs() ? (await uploadImage(file)).id : uploadImageDirect(file);
+      const video = await uploadVideo(file);
+      posters.set(video.id, video.posterUrl);
+      return video.id;
+    },
+    settle: async () => {
+      if (opfs()) await awaitDrainSettled();
+    }
+  };
+  return {
+    pick: (kind, multiple) => pickMedia(kind, browserMediaDeps(document, multiple, io)),
+    thumbUrl: (kind, id) => {
+      if (kind === 'image') return `/admin/preview/${id}`;
+      const rendered = document.querySelector(`video[poster*="${CSS.escape(id)}"]`);
+      return posters.get(id) ?? rendered?.getAttribute('poster') ?? null;
+    },
+    get imageEditor() {
+      if (opfs()) editor ??= imageEditorHost();
+      return editor;
+    }
+  };
 }
 
 const tree = embeddedTree();
@@ -53,77 +164,15 @@ if (root && slug && tree) {
       const res = await fetch('/admin/blocks/macros');
       if (!res.ok) throw new Error(`load macros ${res.status}`);
       const macros = (await res.json()) as PaletteMacro[];
-      mountUnifiedShell(root, { tree, macros, onSave: save, render });
-
-      // Initialize OPFS for image editing.
-      const opfsReady = await initOpfsForUnifiedEditor();
-
-      // Wire the image-edit panel with a mock editor whose view.dom
-      // contains an img.rkr-image[data-id] for the active image.
-      // The panel uses editor only for refreshImagePreview, which
-      // updates img.rkr-image[data-id] src. We provide a container.
-      const imageEditContainer = document.createElement('div');
-      imageEditContainer.id = 'rkr-image-edit-container';
-      root.append(imageEditContainer);
-
-      let activeImageIdValue: string | null = null;
-      const mockEditor = {
-        view: { dom: imageEditContainer },
-        isActive: () => true,
-        getAttributes: () => ({}),
-        chain: () => ({
-          focus: () => ({
-            command: () => ({ run: () => true }),
-            updateAttributes: () => ({ run: () => true })
-          })
-        })
-      } as unknown as import('@tiptap/core').Editor;
-
-      if (opfsReady) {
-        const panel = wireImageEditPanel({
-          editor: mockEditor,
-          section: document.getElementById('rkr-image-edit') as HTMLDivElement,
-          buttons: {
-            crop: document.getElementById('rkr-image-crop-btn') as HTMLButtonElement,
-            rotateL: document.getElementById('rkr-image-rotate-l-btn') as HTMLButtonElement,
-            rotateR: document.getElementById('rkr-image-rotate-r-btn') as HTMLButtonElement,
-            flipH: document.getElementById('rkr-image-flip-h-btn') as HTMLButtonElement,
-            flipV: document.getElementById('rkr-image-flip-v-btn') as HTMLButtonElement,
-            perspective: document.getElementById('rkr-image-perspective-btn') as HTMLButtonElement,
-            undo: document.getElementById('rkr-image-undo-btn') as HTMLButtonElement,
-            redo: document.getElementById('rkr-image-redo-btn') as HTMLButtonElement,
-            reset: document.getElementById('rkr-image-reset-btn') as HTMLButtonElement,
-            save: document.getElementById('rkr-image-save-btn') as HTMLButtonElement,
-            resample: document.getElementById('rkr-image-resample-btn') as HTMLButtonElement,
-            tilt: document.getElementById('rkr-image-tilt-btn') as HTMLButtonElement
-          },
-          resampleInput: document.getElementById('rkr-image-resample') as HTMLInputElement,
-          tiltSlider: document.getElementById('rkr-image-tilt-slider') as HTMLInputElement,
-          tiltInput: document.getElementById('rkr-image-tilt-input') as HTMLInputElement,
-          editsList: document.getElementById('rkr-image-edits') as HTMLOListElement,
-          activeImageId: () => activeImageIdValue
-        });
-        (window as unknown as Record<string, unknown>).__rkrImageEditPanel = panel;
-      }
-
-      // Expose for the figure dialog to set the active image.
-      (window as unknown as Record<string, unknown>).__rkrSetActiveImage = (id: string | null) => {
-        activeImageIdValue = id;
-        // Update the mock editor's view.dom with an img for this id.
-        imageEditContainer.innerHTML = '';
-        if (id) {
-          const img = document.createElement('img');
-          img.className = 'rkr-image';
-          img.setAttribute('data-id', id);
-          img.src = `/admin/preview/${id}`;
-          imageEditContainer.append(img);
-          const preview = document.getElementById('rkr-cell-preview') as HTMLImageElement | null;
-          if (preview) {
-            preview.src = `/admin/preview/${id}`;
-            preview.hidden = false;
-          }
-        }
-      };
+      let opfsReady = false;
+      mountUnifiedShell(root, {
+        tree,
+        macros,
+        onSave: save,
+        render,
+        media: pageMedia(() => opfsReady)
+      });
+      opfsReady = await initOpfsForUnifiedEditor();
     } catch (err: unknown) {
       root.innerHTML = `<p role="alert">Editor failed to load: ${err instanceof Error ? err.message : String(err)}</p>`;
     }

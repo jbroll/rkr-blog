@@ -174,6 +174,75 @@ describe('macro dialog behaviour', () => {
     );
   });
 
+  it('image fields show a thumbnail and Choose image, never the id', async () => {
+    const OLD = 'ab'.repeat(32);
+    const NEW = 'cd'.repeat(32);
+    const node: BlockNode = { type: 'macro', macro: 'card', slots: { photo: OLD } };
+    const fields = readMacroFields(
+      node,
+      { photo: '' },
+      {
+        photo: { label: 'Photo', type: 'image' }
+      }
+    );
+    assert.equal(fields[0]?.image, true);
+    const doc = new FakeDocument();
+    const root = doc.createElement('div');
+    const committed: unknown[] = [];
+    const picks: boolean[] = [];
+    openMacroDialog(root as unknown as Element, {
+      title: 'Edit card',
+      fields,
+      media: {
+        pick: async (_kind, multiple) => {
+          picks.push(multiple);
+          return [NEW, OLD];
+        },
+        thumbUrl: (_kind, id) => `/admin/preview/${id}`
+      },
+      onCommit: (s) => committed.push(s),
+      onCancel: () => {}
+    });
+    assert.equal(root.querySelectorAll('input').length, 0, 'no text input for an image');
+    assert.equal(root.querySelector('img')?.getAttribute('src'), `/admin/preview/${OLD}`);
+    assert.doesNotMatch(root.textContent ?? '', /[0-9a-f]{12}/);
+    const choose = root.querySelectorAll('button').find((b) => b.textContent === 'Choose image');
+    assert.ok(choose);
+    choose.click();
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(picks, [false], 'single pick');
+    assert.equal(root.querySelector('img')?.getAttribute('src'), `/admin/preview/${NEW}`);
+    root.querySelector('.rkr-dialog-primary')?.click();
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(committed, [{ photo: NEW }]);
+  });
+
+  it('Remove clears an image override', async () => {
+    const node: BlockNode = { type: 'macro', macro: 'card', slots: { photo: 'ab'.repeat(32) } };
+    const fields = readMacroFields(
+      node,
+      { photo: '' },
+      { photo: { label: 'Photo', type: 'image' } }
+    );
+    const doc = new FakeDocument();
+    const root = doc.createElement('div');
+    const committed: unknown[] = [];
+    openMacroDialog(root as unknown as Element, {
+      title: 'Edit card',
+      fields,
+      onCommit: (s) => committed.push(s),
+      onCancel: () => {}
+    });
+    root
+      .querySelectorAll('button')
+      .find((b) => b.textContent === 'Remove')
+      ?.click();
+    assert.equal(root.querySelector('img'), null);
+    root.querySelector('.rkr-dialog-primary')?.click();
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(committed, [{ photo: '' }]);
+  });
+
   it('setField ignores unknown names', () => {
     const { dialog } = open();
     dialog.setField('nope', 'x');

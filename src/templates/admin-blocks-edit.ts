@@ -33,6 +33,62 @@ function scriptSafeJson(json: string): string {
   return json.replace(/</g, '\\u003c');
 }
 
+const tool = (id: string, label: string, extra = ''): string =>
+  `<button type="button" class="rkr-edit-btn rkr-image-tool" id="${id}"${extra}>${label}</button>`;
+
+/** Media pipeline markup the editor bundle wires once: the image editor
+ * the figure dialog borrows (stashed in a hidden host), the source
+ * picker, the crop and straighten modals, and the file inputs. */
+const MEDIA_MARKUP = `<div id="rkr-image-edit-host" hidden>
+<div id="rkr-image-edit" hidden>
+<div class="rkr-image-tools" role="group" aria-label="Image tools">
+${tool('rkr-image-rotate-l-btn', 'Rotate left')}
+${tool('rkr-image-rotate-r-btn', 'Rotate right')}
+${tool('rkr-image-flip-h-btn', 'Flip horizontal')}
+${tool('rkr-image-flip-v-btn', 'Flip vertical')}
+${tool('rkr-image-crop-btn', 'Crop')}
+${tool('rkr-image-perspective-btn', 'Straighten')}
+${tool('rkr-image-undo-btn', 'Undo', ' disabled')}
+${tool('rkr-image-redo-btn', 'Redo', ' disabled')}
+${tool('rkr-image-reset-btn', 'Reset', ' hidden')}
+</div>
+<img id="rkr-cell-preview" class="rkr-image-preview" alt="Preview of the edited image" hidden/>
+<div class="rkr-image-adjust">
+<div class="rkr-field"><label for="rkr-image-tilt-input">Tilt (degrees)</label>
+<div class="rkr-image-inline"><input id="rkr-image-tilt-slider" type="range" min="-45" max="45" step="0.1" value="0" aria-label="Tilt"/><input id="rkr-image-tilt-input" type="number" min="-45" max="45" step="0.1" value="0"/>${tool('rkr-image-tilt-btn', 'Apply tilt')}</div></div>
+<div class="rkr-field"><label for="rkr-image-resample">Max width (px)</label>
+<div class="rkr-image-inline"><input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="No limit"/>${tool('rkr-image-resample-btn', 'Apply width')}</div></div>
+</div>
+<details class="rkr-image-steps"><summary>Edit steps</summary><ol id="rkr-image-edits" aria-label="Edit steps in order"></ol></details>
+</div>
+</div>
+<dialog id="rkr-source-picker" class="rkr-dialog rkr-source-dialog" data-rkr-dialog aria-labelledby="rkr-source-picker-title">
+<div class="rkr-dialog-head"><h2 id="rkr-source-picker-title" class="rkr-dialog-title">Add image</h2></div>
+<div class="rkr-dialog-body rkr-source-actions">
+<button type="button" class="rkr-edit-btn" data-source="local">From this computer</button>
+<button type="button" class="rkr-edit-btn" data-source="drive">From Google Drive</button>
+<button type="button" class="rkr-edit-btn" data-source="photos">From Google Photos</button>
+<button type="button" class="rkr-edit-btn" data-source="onedrive">From OneDrive</button>
+</div>
+<div class="rkr-dialog-foot"><button type="button" class="rkr-edit-btn is-quiet" data-source="">Cancel</button></div>
+</dialog>
+<dialog id="rkr-crop-modal" data-rkr-dialog aria-labelledby="rkr-crop-modal-title">
+<h2 id="rkr-crop-modal-title">Crop image</h2>
+<div class="rkr-crop-stage"><img id="rkr-crop-img" alt=""/></div>
+<div class="rkr-crop-actions"><span id="rkr-crop-status"></span>
+<button type="button" class="rkr-edit-btn is-quiet" id="rkr-crop-cancel">Cancel</button>
+<button type="button" class="rkr-edit-btn is-primary" id="rkr-crop-save">Crop</button></div>
+</dialog>
+<dialog id="rkr-persp-modal" data-rkr-dialog aria-labelledby="rkr-persp-modal-title">
+<h2 id="rkr-persp-modal-title">Straighten</h2>
+<div class="rkr-persp-stage" id="rkr-persp-stage"><img id="rkr-persp-img" alt=""/><svg id="rkr-persp-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+<div class="rkr-persp-actions"><span id="rkr-persp-status">Drag the four handles to the corners of the area to straighten</span>
+<button type="button" class="rkr-edit-btn is-quiet" id="rkr-persp-cancel">Cancel</button>
+<button type="button" class="rkr-edit-btn is-primary" id="rkr-persp-save">Straighten</button></div>
+</dialog>
+<input id="rkr-image-input" type="file" accept="image/*" multiple hidden/>
+<input id="rkr-video-input" type="file" accept="video/*" hidden/>`;
+
 export function renderBlocksEditPage(data: BlocksEditPageData): string {
   const a = data.assets;
   const treeScript = data.treeJson
@@ -48,6 +104,7 @@ ${stylesheetLinks(a)}
 ${headIcons(a)}
 <style>${ADMIN_CSS_CORE}</style>
 <style>${ADMIN_CSS_DIALOGS}</style>
+<link rel="stylesheet" href="${escapeAttr(data.bundleUrl.replace(/\.js(?=\?|$)/, '.css'))}"/>
 <style>${EDITOR_CSS}</style>
 </head>
 <body>
@@ -74,38 +131,7 @@ ${data.bodyHtml ?? ''}</div>
 </div>
 </main>
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
-<!-- Image-edit pipeline elements (used by the figure dialog). -->
-<div id="rkr-image-edit-host" hidden>
-  <div id="rkr-image-edit">
-    <span></span>
-    <span class="rkr-image-actions">
-      <button type="button" id="rkr-image-crop-btn">Crop…</button>
-      <button type="button" id="rkr-image-rotate-l-btn" aria-label="Rotate 90 degrees counter-clockwise" title="Rotate 90° counter-clockwise">↺</button>
-      <button type="button" id="rkr-image-rotate-r-btn" aria-label="Rotate 90 degrees clockwise" title="Rotate 90° clockwise">↻</button>
-      <button type="button" id="rkr-image-flip-h-btn" aria-label="Flip horizontally" title="Flip horizontally">⇋</button>
-      <button type="button" id="rkr-image-flip-v-btn" aria-label="Flip vertically" title="Flip vertically">⇕</button>
-      <button type="button" id="rkr-image-perspective-btn" aria-label="Perspective rectify" title="Straighten a tilted region (de-skew)">⌐</button>
-      <button type="button" id="rkr-image-undo-btn" aria-label="Undo last edit" title="Undo last edit" disabled>Undo</button>
-      <button type="button" id="rkr-image-redo-btn" aria-label="Redo" title="Redo" disabled>Redo</button>
-      <button type="button" id="rkr-image-reset-btn" hidden>Reset edits</button>
-      <button type="button" id="rkr-image-save-btn" class="rkr-image-save" aria-label="Save edits to this image" title="Commit ops + upload bake to the server" disabled>Save</button>
-    </span>
-    <label for="rkr-image-resample">Max width (px)</label>
-    <span class="rkr-image-actions">
-      <input id="rkr-image-resample" type="number" min="0" max="8000" step="50" placeholder="leave blank for none"/>
-      <button type="button" id="rkr-image-resample-btn">Apply</button>
-    </span>
-    <label for="rkr-image-tilt-input">Tilt (°)</label>
-    <span class="rkr-image-actions">
-      <input id="rkr-image-tilt-slider" type="range" min="-45" max="45" step="0.1" value="0" style="width:8em"/>
-      <input id="rkr-image-tilt-input" type="number" min="-45" max="45" step="0.1" value="0" style="width:4em"/>
-      <button type="button" id="rkr-image-tilt-btn">Apply</button>
-    </span>
-    <span id="rkr-image-edits-label">Edits</span>
-    <ol id="rkr-image-edits" aria-label="Current edit pipeline (in order)"></ol>
-    <img id="rkr-cell-preview" class="rkr-cell-preview" alt="" hidden/>
-  </div>
-</div>
+${MEDIA_MARKUP}
 <script type="module" src="${data.bundleUrl}"></script>
 </body>
 </html>

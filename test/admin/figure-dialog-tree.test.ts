@@ -1,233 +1,263 @@
-// Tree-backed figure dialog: pure field read/validate plus a minimal
-// DOM dialog driven by the shell. No TipTap dependency — the legacy
-// figure-attr panel keeps serving the retired editor bundle untouched.
-
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  openFigureDialog,
-  readFigureFields,
+  type ImageEditorHost,
+  type MediaDialogDeps,
+  openMediaDialog,
   validateFigureFields
 } from '../../src/admin/figure-dialog-tree.ts';
-import type { BlockNode } from '../../src/lib/blocks.ts';
-import { FakeDocument } from './fake-dom.ts';
+import type { Slots } from '../../src/lib/blocks.ts';
+import { FakeDocument, type FakeElement, FakeEvent } from './fake-dom.ts';
 
-const FIGURE: BlockNode = {
-  type: 'figure',
-  slots: { ids: 'aa'.repeat(32), alts: 'old alt', captions: 'old cap', justify: 'left' }
+const A = 'aa'.repeat(32);
+const B = 'bb'.repeat(32);
+const C = 'cc'.repeat(32);
+
+const tick = async (n = 5): Promise<void> => {
+  for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));
 };
 
-/** Fake page with the image-edit section stashed inside its hidden host,
- * plus the map-backed resolver the dialog uses instead of a global
- * document. Node has no `document`, and the fake document has no
- * getElementById, so Esc cannot be exercised here — the e2e spec covers
- * the browser keydown path. */
-function imageEditFixture() {
+interface Opened {
+  root: FakeElement;
+  commits: Slots[];
+  cancels: boolean[];
+  picks: string[];
+  find(label: string): FakeElement | undefined;
+  buttons(): string[];
+  rows(): FakeElement[];
+}
+
+function open(
+  kind: 'figure' | 'video',
+  slots: Slots,
+  over: Partial<MediaDialogDeps> & { fresh?: boolean; pickResult?: string[] } = {}
+): Opened {
   const doc = new FakeDocument();
   const root = doc.createElement('div');
-  const host = doc.createElement('div');
-  host.id = 'rkr-image-edit-host';
-  host.hidden = true;
-  const section = doc.createElement('div');
-  section.id = 'rkr-image-edit';
-  host.append(section);
-  root.append(host);
-  const elements = new Map<string, ReturnType<FakeDocument['createElement']>>([
-    ['rkr-image-edit-host', host],
-    ['rkr-image-edit', section]
-  ]);
-  const getById = (id: string): HTMLElement | null =>
-    (elements.get(id) ?? null) as unknown as HTMLElement | null;
-  return { doc, root, host, section, getById };
+  const commits: Slots[] = [];
+  const cancels: boolean[] = [];
+  const picks: string[] = [];
+  const media: MediaDialogDeps = {
+    pick: async (k, multiple) => {
+      picks.push(`${k}:${multiple}`);
+      return over.pickResult ?? [];
+    },
+    thumbUrl: (_k, id) => `/admin/preview/${id}`,
+    ...over
+  };
+  openMediaDialog(root as unknown as Element, {
+    kind,
+    slots,
+    fresh: over.fresh,
+    media,
+    onCommit: (s) => commits.push(s),
+    onCancel: (edited) => cancels.push(edited)
+  });
+  const all = () => root.querySelectorAll('button');
+  return {
+    root,
+    commits,
+    cancels,
+    picks,
+    find: (label) => all().find((b) => b.textContent === label),
+    buttons: () => all().map((b) => b.textContent),
+    rows: () => root.querySelectorAll('.rkr-media-row')
+  };
 }
 
-function openWithFixture(fixture: ReturnType<typeof imageEditFixture>, onCancel = () => {}) {
-  return openFigureDialog(fixture.root, {
-    initial: readFigureFields(FIGURE),
-    onCommit: () => {},
-    onCancel,
-    getById: fixture.getById
-  });
-}
+const FIGURE: Slots = {
+  ids: `${A},${B}`,
+  alts: 'Dock,Boat',
+  captions: 'Morning|Evening',
+  matrix: 'justified',
+  justify: 'left',
+  custom: 'kept elsewhere'
+};
 
-describe('figure dialog fields', () => {
-  it('reads current slots into fields', () => {
-    assert.deepEqual(readFigureFields(FIGURE), {
-      ids: 'aa'.repeat(32),
-      alts: 'old alt',
-      captions: 'old cap',
-      justify: 'left'
-    });
+describe('figure dialog', () => {
+  it('dialog never renders an input containing a hex id', () => {
+    const d = open('figure', FIGURE);
+    const inputs = d.root.querySelectorAll('input');
+    assert.ok(inputs.length >= 4, 'alt and caption inputs per row');
+    for (const input of inputs) {
+      const value = (input as unknown as { value?: string }).value ?? '';
+      assert.doesNotMatch(value, /^[0-9a-f]{6,64}$/);
+    }
+    assert.doesNotMatch(d.root.textContent ?? '', /[0-9a-f]{12}/, 'no id in visible text');
   });
 
-  it('rejects non-hex ids', () => {
+  it('has exactly one primary button, Save figure', () => {
+    const d = open('figure', FIGURE);
+    const primaries = d.root.querySelectorAll('.rkr-dialog-primary');
+    assert.equal(primaries.length, 1);
+    assert.equal(primaries[0]?.textContent, 'Save figure');
+    assert.equal(d.buttons().filter((t) => /^Save/.test(t)).length, 1);
+  });
+
+  it('Save figure commits the list, layout and position', async () => {
+    const d = open('figure', FIGURE);
+    const alt = d.rows()[1]?.querySelector('input');
+    assert.ok(alt);
+    (alt as unknown as { value: string }).value = 'Sailboat';
+    alt.dispatchEvent(new FakeEvent('input'));
+    d.find('Save figure')?.click();
+    await tick();
+    assert.deepEqual(d.commits, [
+      {
+        ids: `${A},${B}`,
+        alts: 'Dock,Sailboat',
+        captions: 'Morning|Evening',
+        matrix: 'justified',
+        justify: 'left'
+      }
+    ]);
+  });
+
+  it('layout control writes the matching matrix', async () => {
+    const d = open('figure', FIGURE);
+    const labels = d.root.querySelectorAll('[role="radio"]').map((b) => b.textContent);
+    assert.deepEqual(labels, ['Single', 'Grid', 'Carousel', 'Justified', 'Masonry']);
+    d.find('Carousel')?.click();
+    d.find('Save figure')?.click();
+    await tick();
+    assert.equal(d.commits[0]?.matrix, '1x1');
+  });
+
+  it('an empty figure opens the picker straight away when first inserted', async () => {
+    const d = open('figure', { ids: '' }, { fresh: true, pickResult: [A, B] });
+    await tick();
+    assert.deepEqual(d.picks, ['image:true']);
+    assert.equal(d.rows().length, 2);
+    d.find('Save figure')?.click();
+    await tick();
+    assert.equal(d.commits[0]?.ids, `${A},${B}`);
+    assert.equal(d.commits[0]?.matrix, 'justified', 'several new images default to justified');
+  });
+
+  it('Add images appends to the list', async () => {
+    const d = open('figure', FIGURE, { pickResult: [C] });
+    assert.deepEqual(d.picks, [], 'an existing figure does not open the picker');
+    d.find('Add images')?.click();
+    await tick();
+    assert.equal(d.rows().length, 3);
+  });
+
+  it('cancel reports whether image edits were applied', () => {
+    const d = open('figure', FIGURE);
+    d.find('Cancel')?.click();
+    assert.deepEqual(d.cancels, [false]);
+    assert.deepEqual(d.commits, []);
+  });
+
+  it('bad ids are still rejected at commit time', () => {
     const r = validateFigureFields({ ids: 'not-hex!', alts: '', captions: '', justify: 'center' });
     assert.equal(r.ok, false);
   });
 
-  it('coerces unknown justify to center', () => {
+  it('unknown justify coerces to center', () => {
     const r = validateFigureFields({ ids: '', alts: '', captions: '', justify: 'sideways' });
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.slots.justify, 'center');
   });
+});
 
-  it('dialog commit delivers exactly the edited slots', () => {
-    const doc = new FakeDocument();
-    const root = doc.createElement('div');
-    const commits: unknown[] = [];
-    const dialog = openFigureDialog(root, {
-      initial: readFigureFields(FIGURE),
-      onCommit: (slots) => {
-        commits.push(slots);
+describe('figure dialog image editor', () => {
+  function host() {
+    const calls: string[] = [];
+    const editor: ImageEditorHost = {
+      open: (id, into) => {
+        calls.push(`open:${id === B ? 'B' : id}`);
+        const panel = (into as unknown as FakeElement).ownerDocument.createElement('div');
+        panel.className = 'fake-editor';
+        (into as unknown as FakeElement).append(panel);
       },
-      onCancel: () => {}
-    });
-    dialog.setField('captions', 'new cap');
-    dialog.setField('alts', 'new alt');
-    dialog.commit();
-    assert.equal(commits.length, 1);
-    assert.deepEqual(commits[0], {
-      ids: 'aa'.repeat(32),
-      alts: 'new alt',
-      captions: 'new cap',
-      justify: 'left'
-    });
-  });
-
-  it('dialog carries the figure-dialog class and labelled full-width fields', () => {
-    const doc = new FakeDocument();
-    const root = doc.createElement('div');
-    openFigureDialog(root, {
-      initial: readFigureFields(FIGURE),
-      onCommit: () => {},
-      onCancel: () => {}
-    });
-    const dialog = root.querySelector('.rkr-figure-dialog');
-    assert.ok(dialog, 'dialog has .rkr-figure-dialog');
-    assert.match(dialog.className, /\brkr-cell-dialog\b/);
-    assert.equal(root.querySelectorAll('.rkr-figure-field').length, 4);
-  });
-
-  it('justify select offers every position and selects the current one', () => {
-    const doc = new FakeDocument();
-    const root = doc.createElement('div');
-    openFigureDialog(root, {
-      initial: readFigureFields(FIGURE),
-      onCommit: () => {},
-      onCancel: () => {}
-    });
-    const dialog = root.querySelector('.rkr-figure-dialog');
-    assert.ok(dialog);
-    const select = dialog.querySelector('select');
-    assert.ok(select, 'justify select exists');
-    const options = select.querySelectorAll('option');
-    assert.deepEqual(
-      options.map((o) => o.getAttribute('value')),
-      ['center', 'full', 'bleed', 'left', 'right', 'inline']
-    );
-    const selected = options.filter((o) => o.hasAttribute('selected'));
-    assert.equal(selected.length, 1, 'exactly one option selected');
-    assert.equal(selected[0]?.getAttribute('value'), 'left');
-    const selectValue = (select as unknown as { value?: string }).value;
-    assert.equal(selectValue, 'left', 'select value reflects the current slot');
-  });
-
-  it('dialog commit with bad ids reports errors and commits nothing', () => {
-    const doc = new FakeDocument();
-    const root = doc.createElement('div');
-    let commits = 0;
-    const dialog = openFigureDialog(root, {
-      initial: readFigureFields(FIGURE),
-      onCommit: () => {
-        commits++;
+      apply: async () => {
+        calls.push('apply');
+        return 'blob:rotated';
       },
-      onCancel: () => {}
-    });
-    dialog.setField('ids', 'zzz');
-    dialog.commit();
-    assert.equal(commits, 0);
-    assert.ok(dialog.errors().length > 0);
+      close: (discard) => {
+        calls.push(`close:${discard}`);
+      }
+    };
+    return { editor, calls };
+  }
+
+  it('Edit image swaps to the editor with Back to figure and Apply edits', async () => {
+    const h = host();
+    const d = open('figure', FIGURE, { imageEditor: h.editor });
+    const row = d.rows()[1];
+    row
+      ?.querySelectorAll('button')
+      .find((b) => b.textContent === 'Edit image')
+      ?.click();
+    assert.deepEqual(h.calls, ['open:B']);
+    assert.ok(d.root.querySelector('.fake-editor'), 'editor mounted in the dialog body');
+    assert.equal(d.rows().length, 0, 'list is swapped out');
+    assert.ok(d.find('Back to figure'));
+    assert.equal(d.root.querySelector('.rkr-dialog-primary')?.textContent, 'Apply edits');
+
+    d.find('Apply edits')?.click();
+    await tick();
+    assert.deepEqual(h.calls, ['open:B', 'apply', 'close:false']);
+    assert.equal(d.rows().length, 2, 'back on the list');
+    assert.equal(d.rows()[1]?.querySelector('img')?.getAttribute('src'), 'blob:rotated');
+    assert.equal(d.root.querySelector('.rkr-dialog-primary')?.textContent, 'Save figure');
+
+    d.find('Cancel')?.click();
+    assert.deepEqual(d.cancels, [true], 'applied edits are reported on cancel');
+  });
+
+  it('Back to figure discards unapplied edits', () => {
+    const h = host();
+    const d = open('figure', FIGURE, { imageEditor: h.editor });
+    d.rows()[0]
+      ?.querySelectorAll('button')
+      .find((b) => b.textContent === 'Edit image')
+      ?.click();
+    d.find('Back to figure')?.click();
+    assert.deepEqual(h.calls.slice(-1), ['close:true']);
+    assert.equal(d.rows().length, 2);
+    assert.equal(d.commits.length, 0);
+  });
+
+  it('rows offer no Edit image without an editor', () => {
+    const d = open('figure', FIGURE);
+    assert.equal(d.buttons().includes('Edit image'), false);
   });
 });
 
-describe('figure dialog image-edit hosting and close paths', () => {
-  it('open moves the same section node into the dialog body and hides it', () => {
-    const f = imageEditFixture();
-    openWithFixture(f);
-    const dialog = f.root.querySelector('.rkr-figure-dialog');
-    assert.ok(dialog);
-    const body = dialog.querySelector('.rkr-cell-dialog-body');
-    assert.ok(body);
-    assert.equal(f.section.parentNode, body, 'same section node, not a clone');
-    assert.equal(f.section.hidden, true);
-    assert.equal(f.host.children.length, 0, 'host is emptied while open');
+describe('video dialog', () => {
+  const VIDEO: Slots = { ids: C, caption: 'Launch day', justify: 'center', loop: 'true' };
+
+  it('shows a single item with no layout control and no image editor', () => {
+    const d = open('video', VIDEO);
+    assert.equal(d.rows().length, 1);
+    assert.equal(d.root.querySelectorAll('[role="radio"]').length, 0);
+    assert.equal(d.buttons().includes('Edit image'), false);
+    assert.equal(d.root.querySelector('.rkr-dialog-primary')?.textContent, 'Save video');
+    assert.deepEqual(
+      d
+        .rows()[0]
+        ?.querySelectorAll('label')
+        .map((l) => l.textContent),
+      ['Caption']
+    );
   });
 
-  it('✕ restores the section to the host and cancels once', () => {
-    const f = imageEditFixture();
-    let cancels = 0;
-    openWithFixture(f, () => {
-      cancels++;
-    });
-    const dialog = f.root.querySelector('.rkr-figure-dialog');
-    assert.ok(dialog);
-    const closeBtn = dialog.querySelector('.rkr-cell-dialog-close');
-    assert.ok(closeBtn);
-    closeBtn.click();
-    assert.equal(f.section.parentNode, f.host);
-    assert.equal(f.section.hidden, true);
-    assert.equal(cancels, 1);
+  it('Replace video picks one and Save commits ids, caption and position', async () => {
+    const d = open('video', VIDEO, { pickResult: [A, B] });
+    d.find('Replace video')?.click();
+    await tick();
+    assert.deepEqual(d.picks, ['video:false']);
+    d.find('Save video')?.click();
+    await tick();
+    assert.deepEqual(d.commits, [{ ids: A, caption: 'Launch day', justify: 'center' }]);
   });
 
-  it('scrim click restores the section to the host and cancels once', () => {
-    const f = imageEditFixture();
-    let cancels = 0;
-    openWithFixture(f, () => {
-      cancels++;
-    });
-    const scrim = f.root.querySelector('.rkr-figure-scrim');
-    assert.ok(scrim);
-    scrim.click();
-    assert.equal(f.section.parentNode, f.host);
-    assert.equal(f.section.hidden, true);
-    assert.equal(cancels, 1);
-  });
-
-  it('save commit restores the section without cancelling', () => {
-    const f = imageEditFixture();
-    let cancels = 0;
-    let commits = 0;
-    openFigureDialog(f.root, {
-      initial: readFigureFields(FIGURE),
-      onCommit: () => {
-        commits++;
-      },
-      onCancel: () => {
-        cancels++;
-      },
-      getById: f.getById
-    });
-    const dialog = f.root.querySelector('.rkr-figure-dialog');
-    assert.ok(dialog);
-    const saveBtn = dialog.querySelector('.rkr-figure-dialog-save');
-    assert.ok(saveBtn);
-    saveBtn.click();
-    assert.equal(commits, 1);
-    assert.equal(cancels, 0, 'save is not a cancel');
-    assert.equal(f.section.parentNode, f.host);
-    assert.equal(f.section.hidden, true);
-  });
-
-  it('double close is safe and cancels only once', () => {
-    const f = imageEditFixture();
-    let cancels = 0;
-    const driver = openWithFixture(f, () => {
-      cancels++;
-    });
-    driver.close();
-    driver.close();
-    assert.equal(cancels, 1);
-    assert.equal(f.section.parentNode, f.host);
-    assert.equal(f.section.hidden, true);
+  it('an empty video opens the picker when first inserted', async () => {
+    const d = open('video', { ids: '' }, { fresh: true, pickResult: [B] });
+    await tick();
+    assert.deepEqual(d.picks, ['video:false']);
+    assert.equal(d.rows().length, 1);
   });
 });

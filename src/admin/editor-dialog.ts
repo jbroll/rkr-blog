@@ -4,6 +4,10 @@
 // a click on the backdrop all cancel; onPrimary returning false keeps it
 // open so the caller can show an error.
 //
+// A dialog can push one sub-view (the figure dialog's image editor): it
+// swaps the body, title and footer labels until its primary succeeds or
+// it is cancelled, then the base view comes back.
+//
 // Browser-safe: no node:* imports. Tests pass a fake DOM root, so the
 // <dialog> methods are optional.
 
@@ -22,11 +26,24 @@ export interface EditorDialogOpts {
   root?: Element;
 }
 
+interface DialogView {
+  title: string;
+  body: Node;
+  primaryLabel: string;
+  cancelLabel: string;
+  /** Resolve true to return to the base view, false to stay. */
+  onPrimary(): boolean | Promise<boolean>;
+  /** Runs whenever the view is left: after a successful primary, on
+   * cancel, or when the whole dialog closes. */
+  onLeave?(cancelled: boolean): void;
+}
+
 export interface EditorDialog {
   /** Close without calling onCancel. */
   close(): void;
   setError(text: string): void;
   setBusy(busy: boolean): void;
+  pushView(view: DialogView): void;
 }
 
 const EDITING_ATTR = 'data-rkr-editing';
@@ -39,6 +56,10 @@ function button(doc: Document, className: string, text: string): HTMLButtonEleme
   el.className = `rkr-edit-btn ${className}`;
   el.textContent = text;
   return el;
+}
+
+function isThenable(value: unknown): value is PromiseLike<boolean> {
+  return typeof (value as { then?: unknown } | null)?.then === 'function';
 }
 
 export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
@@ -91,9 +112,28 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
 
   let closed = false;
   let busy = false;
+  let view: DialogView | null = null;
+
+  const show = (next: { title: string; body: Node; primaryLabel: string; cancelLabel: string }) => {
+    title.textContent = next.title;
+    bodyWrap.textContent = '';
+    bodyWrap.append(next.body);
+    primaryBtn.textContent = next.primaryLabel;
+    cancelBtn.textContent = next.cancelLabel;
+    handle.setError('');
+  };
+
+  const popView = (cancelled: boolean): void => {
+    const leaving = view;
+    if (!leaving) return;
+    view = null;
+    show({ ...opts, cancelLabel: 'Cancel' });
+    leaving.onLeave?.(cancelled);
+  };
 
   const finish = (cancelled: boolean): void => {
     if (closed) return;
+    popView(true);
     closed = true;
     if (pausedPage) html?.removeAttribute(EDITING_ATTR);
     if (dialog.open) dialog.close?.();
@@ -104,18 +144,34 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
   const submit = async (): Promise<void> => {
     if (busy || closed) return;
     handle.setError('');
-    let keepOpen = false;
+    const active = view;
+    let ok = false;
     try {
-      keepOpen = !(await opts.onPrimary());
-    } catch {
+      const result = (active ?? opts).onPrimary();
+      if (isThenable(result)) {
+        handle.setBusy(true);
+        try {
+          ok = await result;
+        } finally {
+          handle.setBusy(false);
+        }
+      } else {
+        ok = result;
+      }
+    } catch (err) {
+      console.error('editor dialog:', err);
       handle.setError('Something went wrong. Try again.');
-      keepOpen = true;
+      ok = false;
     }
-    if (!keepOpen) finish(false);
+    if (!ok || closed) return;
+    if (active) popView(false);
+    else finish(false);
   };
 
   const cancel = (): void => {
-    if (!busy) finish(true);
+    if (busy) return;
+    if (view) popView(true);
+    else finish(true);
   };
 
   const handle: EditorDialog = {
@@ -132,10 +188,18 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
       }
       if (next) dialog.setAttribute('aria-busy', 'true');
       else dialog.removeAttribute('aria-busy');
+    },
+    pushView: (next) => {
+      if (closed) return;
+      popView(true);
+      view = next;
+      show(next);
     }
   };
 
-  closeBtn.addEventListener('click', cancel);
+  closeBtn.addEventListener('click', () => {
+    if (!busy) finish(true);
+  });
   cancelBtn.addEventListener('click', cancel);
   primaryBtn.addEventListener('click', () => {
     void submit();

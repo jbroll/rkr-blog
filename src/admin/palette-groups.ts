@@ -32,6 +32,9 @@ const ICONS: Record<string, string> = {
   'primitive:figure': svg(
     '<rect x="2.5" y="4" width="15" height="12" rx="1.5"/><circle cx="7" cy="8.5" r="1.2"/><path d="M3 14.5l4.5-4 3 2.5 3-3 3.5 3.5"/>'
   ),
+  'primitive:video': svg(
+    '<rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M8.5 7.5v5l4-2.5z"/>'
+  ),
   'primitive:section': svg(
     '<rect x="2.5" y="3.5" width="15" height="13" rx="1.5"/><path d="M2.5 7.5h15"/>'
   ),

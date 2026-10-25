@@ -13,7 +13,7 @@ import { makeDropHandlers, wireDragOverlay } from './drag-drop';
 import { makeCommitFigureAttr, wireCellAttrs, wireDebouncedAttrInput } from './figure-attr-panel';
 import { type FigureAttrs, FigureNode } from './figure-node';
 import { wireFigureReorder } from './figure-reorder';
-import { dirtyImageStates } from './image-edit';
+import { dirtyImageStates, imageEditPipeline } from './image-edit';
 import { wireImageEditPanel } from './image-edit-panel';
 import { createImageInserter } from './image-insert';
 import { mountMatrixControl } from './matrix-control';
@@ -423,7 +423,10 @@ function mount(): void {
   }
 
   const editPanel = wireImageEditPanel({
-    editor,
+    onPreview: (id, url) => {
+      const sel = `img.rkr-image[data-id="${CSS.escape(id)}"]`;
+      for (const img of editor.view.dom.querySelectorAll<HTMLImageElement>(sel)) img.src = url;
+    },
     section: imageEditSection,
     buttons: {
       crop: attrCropBtn,
@@ -443,7 +446,8 @@ function mount(): void {
     tiltSlider: attrTiltSlider,
     tiltInput: attrTiltInput,
     editsList: attrEditsList,
-    activeImageId
+    activeImageId,
+    pipeline: imageEditPipeline
   });
 
   fileInput.addEventListener('change', () => void inserter.handleFileChange());

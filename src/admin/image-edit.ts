@@ -3,9 +3,9 @@
 
 import type { SidecarOp } from '@rkr/image-edit';
 import { isDirty, type LocalEditState, validateOps } from '@rkr/image-edit';
-import { webpOrJpeg } from '@rkr/image-edit/canvas';
+import { type CanvasSource, type PipelineCache, webpOrJpeg } from '@rkr/image-edit/canvas';
 import { buildIdHeader } from './build-id.ts';
-import { getPipelineCache, loadOriginal } from './canvas-loaders';
+import { getPipelineCache, loadOriginal, refreshImagePreview } from './canvas-loaders.ts';
 import { setStatus } from './dom.ts';
 import { getState } from './online-state.ts';
 import { readJson, removeFile, writeJson } from './opfs.ts';
@@ -103,12 +103,12 @@ onImageStateInvalidated((id) => {
   void removeFile(`${IMAGE_STATE_DIR}/${id}.json`);
 });
 
-export function getLocalEditState(id: string): LocalEditState | undefined {
+function getLocalEditState(id: string): LocalEditState | undefined {
   return localEditState.get(id);
 }
 
 /** Lookup order: in-process Map → OPFS persist → server fetch. */
-export async function ensureLocalState(id: string): Promise<LocalEditState> {
+async function ensureLocalState(id: string): Promise<LocalEditState> {
   const cached = localEditState.get(id);
   if (cached) return cached;
   const persisted = await loadImageState(id);
@@ -165,7 +165,7 @@ async function postCommit(
   };
 }
 
-export async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
+async function saveImageEdits(id: string, s: LocalEditState): Promise<void> {
   // Client-side validateOps so the bake's pixels match the ops the
   // server will store. Falls through to the server's validateOps on
   // failure (which returns 400 with a usable error string).
@@ -249,3 +249,31 @@ export async function flushDirtyImageEdits(): Promise<{ ok: number; failed: numb
   }
   return { ok, failed };
 }
+
+/** Where edit state lives and how previews, sources and commits are
+ * produced, as the image edit panel needs them. */
+export interface ImageEditPipeline {
+  ensure(id: string): Promise<LocalEditState>;
+  get(id: string): LocalEditState | undefined;
+  persist(id: string, s: LocalEditState): void;
+  /** Render `ops` for `id` and resolve with the URL to show. */
+  preview(id: string, ops: SidecarOp[]): Promise<string>;
+  commit(id: string, s: LocalEditState): Promise<void>;
+  /** Decoded original plus its pipeline cache, for crop and straighten. */
+  load(id: string): Promise<{ source: CanvasSource; cache: PipelineCache }>;
+}
+
+export const imageEditPipeline: ImageEditPipeline = {
+  ensure: ensureLocalState,
+  get: getLocalEditState,
+  persist: persistImageState,
+  preview: refreshImagePreview,
+  commit: saveImageEdits,
+  load: async (id) => {
+    const img = await loadOriginal(id);
+    return {
+      source: { drawable: img, width: img.naturalWidth, height: img.naturalHeight },
+      cache: getPipelineCache(id)
+    };
+  }
+};

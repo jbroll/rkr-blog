@@ -5,9 +5,8 @@
 
 import type { SidecarOp } from '@rkr/image-edit';
 import { canvasToBlob, PipelineCache } from '@rkr/image-edit/canvas';
-import type { Editor } from '@tiptap/core';
-import { setStatus } from './dom';
-import { readLocalOriginal } from './local-thumb';
+import { setStatus } from './dom.ts';
+import { readLocalOriginal } from './local-thumb.ts';
 
 /** Per-image cache cap. A 24-MP decoded HTMLImageElement is ~100 MB;
  * a PipelineCache canvas is similarly heavy. Cap session-resident
@@ -143,27 +142,11 @@ export function hasWebglSupport(): boolean {
   return webglSupportCached;
 }
 
-function setEditorImageSrc(editor: Editor, id: string, src: string): void {
-  const dom = editor.view.dom as HTMLElement;
-  for (const img of dom.querySelectorAll<HTMLImageElement>(
-    `img.rkr-image[data-id="${CSS.escape(id)}"]`
-  )) {
-    img.src = src;
-  }
-}
-
-/** Re-render the editor preview for one image. Tries client-side bake
+/** Re-render the preview for one image. Tries the client-side bake
  * first (canvas pipeline against the master); on any failure (decode
  * unsupported format, fetch error) falls back to the server-baked
- * /admin/preview/<id> with a cache-buster.
- *
- * Returns the produced WebP blob so the caller can upload it as the
- * server's bake; null when we fell back to the server-baked preview. */
-export async function refreshImagePreview(
-  editor: Editor,
-  id: string,
-  ops: SidecarOp[]
-): Promise<Blob | null> {
+ * /admin/preview/<id> with a cache-buster. Resolves with the URL to show. */
+export async function refreshImagePreview(id: string, ops: SidecarOp[]): Promise<string> {
   try {
     const original = await loadOriginal(id);
     // Per-image pipeline cache: when the new ops list is the previous
@@ -187,28 +170,14 @@ export async function refreshImagePreview(
     const old = previewBlobUrls.get(id);
     if (old) URL.revokeObjectURL(old);
     lruSet(previewBlobUrls, id, url, IMAGE_CACHE_CAP, (_k, v) => URL.revokeObjectURL(v));
-    setEditorImageSrc(editor, id, url);
-    return blob;
+    return url;
   } catch (err) {
     // Surface the failure: BEFORE save, /admin/preview redirects to a
     // derivative computed from the *previous* sidecar.ops, so a silent
-    // fallback would show the pre-edit image and make the canvas-
-    // pipeline failure invisible — exactly the misleading "my edits
-    // don't show" symptom we want to diagnose on Android Firefox.
+    // fallback would show the pre-edit image and hide the canvas failure.
     const msg = (err as Error).message ?? String(err);
     console.error(`refreshImagePreview ${id.slice(0, 8)}…:`, err);
     setStatus(`preview failed (${id.slice(0, 8)}…): ${msg}`, true);
-    setEditorImageSrc(editor, id, `/admin/preview/${id}?v=${Date.now()}`);
-    return null;
+    return `/admin/preview/${id}?v=${Date.now()}`;
   }
-}
-
-/** Latest blob URL produced by refreshImagePreview for `id`, or
- * `null` if the pipeline hasn't run yet. The cell-edit dialog reads
- * this to render an in-dialog preview that mirrors what the editor
- * <img> shows — visual feedback for each crop / rotate / flip / etc.
- * The URL is owned by the LRU above; callers must NOT revokeObjectURL
- * on it. */
-export function getPreviewUrl(id: string): string | null {
-  return previewBlobUrls.get(id) ?? null;
 }

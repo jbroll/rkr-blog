@@ -49,6 +49,21 @@ describe('blocks edit page template', () => {
     assert.doesNotMatch(html, /<h1>Edit /);
   });
 
+  it('ships the source picker, file inputs and labelled image tools', () => {
+    const html = renderBlocksEditPage(base);
+    assert.match(html, /<dialog id="rkr-source-picker"/);
+    for (const source of ['local', 'drive', 'photos', 'onedrive']) {
+      assert.match(html, new RegExp(`data-source="${source}"`));
+    }
+    assert.match(html, /id="rkr-image-input" type="file" accept="image\/\*" multiple hidden/);
+    assert.match(html, /id="rkr-video-input" type="file" accept="video\/\*" hidden/);
+    for (const label of ['Rotate left', 'Rotate right', 'Flip horizontal', 'Crop', 'Straighten']) {
+      assert.match(html, new RegExp(`>${label}</button>`));
+    }
+    assert.match(html, /<dialog id="rkr-crop-modal"/);
+    assert.match(html, /href="\/admin\/static\/admin\/blocks-page-editor-entry\.css\?v=abc"/);
+  });
+
   it('title falls back to the slug', () => {
     const html = renderBlocksEditPage(base);
     assert.match(html, /class="rkr-unified-title"[^>]*>hello</);

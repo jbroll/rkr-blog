@@ -86,6 +86,16 @@ describe('blocks editor', () => {
     assert.equal(inserted, 'hero');
   });
 
+  it('Media offers Image and Video, and Video inserts an empty video node', () => {
+    const dock = mount([], () => {});
+    const media = dock.querySelectorAll('.rkr-palette-group')[1];
+    assert.deepEqual(
+      media?.querySelectorAll('.rkr-palette-label').map((l) => l.textContent),
+      ['Image', 'Video']
+    );
+    assert.deepEqual(primitiveNode('primitive:video'), { type: 'video', slots: { ids: '' } });
+  });
+
   it('shows primitives when no macros are configured', () => {
     const dock = mount([], () => {});
     assert.equal(dock.querySelectorAll('.rkr-blocks-palette-item').length, PRIMITIVE_MACROS.length);

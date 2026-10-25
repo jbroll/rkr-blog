@@ -468,20 +468,14 @@ describe('unified shell figure dialog', () => {
     shell.setMode('edit');
     f.body.querySelector('figure')?.click();
     f.root.querySelector('[data-action="configure"]')?.click();
-    const dialog = f.root.querySelector('.rkr-cell-dialog');
+    const dialog = f.root.querySelector('[data-rkr-dialog]');
     assert.ok(dialog, 'dialog opens on config click');
-    const inputs = dialog.querySelectorAll('input');
-    assert.equal(inputs.length, 3, 'ids, alts, captions inputs');
-    const alts = inputs[1];
-    const caps = inputs[2];
-    assert.ok(alts);
-    assert.ok(caps);
-    alts.textContent = '';
-    (alts as unknown as { value: string }).value = 'new alt';
-    alts.dispatchEvent(new FakeEvent('input'));
-    caps.textContent = '';
-    (caps as unknown as { value: string }).value = 'new cap';
-    caps.dispatchEvent(new FakeEvent('input'));
+    const [alt, caption] = dialog.querySelectorAll('input');
+    assert.ok(alt && caption, 'alt and caption inputs for the one image');
+    (alt as unknown as { value: string }).value = 'new alt';
+    alt.dispatchEvent(new FakeEvent('input'));
+    (caption as unknown as { value: string }).value = 'new cap';
+    caption.dispatchEvent(new FakeEvent('input'));
     const saveBtn = f.root.querySelectorAll('button').find((b) => b.textContent === 'Save figure');
     assert.ok(saveBtn, 'dialog has a save button');
     saveBtn?.click();
@@ -494,6 +488,53 @@ describe('unified shell figure dialog', () => {
     assert.equal(figure.slots.custom, 'untouched', 'unknown slot keys pass through');
     assert.equal((saved[0]?.body[1] as { markdown?: string }).markdown, 'Kept');
     assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('inserting an image opens the picker and saves the picked ids', async () => {
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Kept')]);
+    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Kept' }] };
+    const saved: BlockTree[] = [];
+    const picks: string[] = [];
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      onSave: async (t) => {
+        saved.push(t);
+      },
+      render: markedRender,
+      media: {
+        pick: async (kind) => {
+          picks.push(kind);
+          return [IDS];
+        },
+        thumbUrl: () => null
+      }
+    });
+    shell.setMode('edit');
+    f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Image')
+      ?.click();
+    for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(picks, ['image']);
+    f.root
+      .querySelectorAll('button')
+      .find((b) => b.textContent === 'Save figure')
+      ?.click();
+    for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
+    assert.equal((saved.at(-1)?.body[1] as { slots?: { ids?: string } }).slots?.ids, IDS);
+  });
+
+  it('video blocks can be configured', () => {
+    const f = fixture((doc) => [marker(doc, '0'), doc.createElement('figure')]);
+    const tree: BlockTree = { version: 1, body: [{ type: 'video', slots: { ids: IDS } }] };
+    const shell = mount(f, tree);
+    shell.setMode('edit');
+    f.body.querySelector('figure')?.click();
+    const configure = f.root.querySelector('[data-action="configure"]');
+    assert.equal(configure?.hidden, false);
+    configure?.click();
+    assert.ok(f.root.querySelectorAll('button').find((b) => b.textContent === 'Save video'));
   });
 });
 

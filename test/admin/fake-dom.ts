@@ -72,6 +72,12 @@ export class FakeNode {
     }
   }
 
+  replaceChildren(...nodes: FakeNode[]): void {
+    for (const child of this.childNodes) child.parentNode = null;
+    this.childNodes = [];
+    this.append(...nodes);
+  }
+
   prepend(...nodes: FakeNode[]): void {
     nodes.forEach((node, i) => {
       node.parentNode?.removeChild(node);
