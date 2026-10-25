@@ -1,14 +1,14 @@
 {
   "description": "Three recent posts as cards",
-  "defaults": { "title": "Latest", "tag": "recipe", "limit": 3 },
+  "defaults": { "title": "Latest" },
   "fieldSchema": {
-    "title": { "label": "Band title", "type": "text" },
-    "tag": { "label": "Listing tag", "type": "text" }
+    "title": { "label": "Band title", "type": "text" }
   },
   "tree": {
     "type": "section",
     "slots": { "theme": "light", "edge": "straight" },
     "children": [
+      { "type": "text", "markdown": "# {{title}}" },
       {
         "type": "row",
         "children": [

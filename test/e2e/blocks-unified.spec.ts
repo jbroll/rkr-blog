@@ -299,3 +299,30 @@ test('drag an existing figure below the row', async ({ page }) => {
   const { tree } = (await res.json()) as { tree: { body: { type: string }[] } };
   expect(tree.body.map((n) => n.type)).toEqual(['row', 'figure']);
 });
+
+test('macro field edit renders', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-macro-field-${Date.now()}`;
+  await seedBlockPage(page, {
+    slug,
+    title: 'Macro field',
+    body: [{ type: 'macro', macro: 'hero', slots: {} }]
+  });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const body = page.locator('#rkr-blocks-page-body');
+  await expect(body).toContainText('Fresh food, owned by neighbors');
+  await body.locator('.rkr-section').click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  await page.getByLabel('Heading').fill('Probe hero heading');
+  const saved = saveResponse(page, slug);
+  await page.getByLabel('Edit Hero').getByRole('button', { name: 'Save' }).click();
+  await saved;
+
+  await expect(body).toContainText('Probe hero heading');
+  await expect(body).not.toContainText('Fresh food, owned by neighbors');
+  await page.goto(`/${slug}`);
+  await expect(page.locator('main')).toContainText('Probe hero heading');
+  await expect(page.locator('main')).not.toContainText('Fresh food, owned by neighbors');
+});

@@ -15,6 +15,7 @@ import path from 'node:path';
 import fastifyStatic from '@fastify/static';
 
 import { open } from '../../src/lib/db.ts';
+import { seedSiteMacros } from '../../src/lib/macro-library.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ensureSecretKey } from '../../src/lib/secrets.ts';
 import { buildApp } from '../../src/server.ts';
@@ -25,6 +26,7 @@ for (const sub of ['sidecars', 'originals', 'cache/img', 'data', 'content/posts'
   fs.mkdirSync(path.join(root, sub), { recursive: true });
 }
 ensureSecretKey(root);
+seedSiteMacros(root);
 
 // Dummy OAuth wiring so makeGoogleExchange() doesn't throw at route
 // registration. The e2e suite hits /admin/auth/token-login, not the

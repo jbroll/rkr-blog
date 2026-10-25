@@ -7,6 +7,7 @@ import {
   renderBlockTree
 } from '../../src/lib/blocks-render.ts';
 import type { ImageMap } from '../../src/lib/image-map.ts';
+import { loadMacroLibrary, seedMacrosDir } from '../../src/lib/macro-library.ts';
 import type { VideoMapView } from '../../src/lib/widgets.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
 
@@ -238,5 +239,54 @@ describe('blocks-render', () => {
       })),
       []
     );
+  });
+
+  describe('seeded macros', () => {
+    const lib = loadMacroLibrary(seedMacrosDir());
+    const renderLib: RenderMacroLib = { get: (n) => lib.get(n) };
+    const render = (macro: string, slots: Record<string, string>) =>
+      renderBlockTree({ version: 1, body: [{ type: 'macro', macro, slots }] }, fakeCtx, renderLib);
+
+    it('macro instance slots override defaults', async () => {
+      const html = await render('hero', { heading: 'Probe hero heading' });
+      assert.match(html, /Probe hero heading/);
+      assert.doesNotMatch(html, /Fresh food, owned by neighbors/);
+      assert.match(html, /community grocery/);
+    });
+
+    it('macro defaults render when no override is set', async () => {
+      const html = await render('hero', {});
+      assert.match(html, /Fresh food, owned by neighbors/);
+      assert.match(html, /rkr-theme-dark/);
+    });
+
+    it('every fieldSchema field of every placeable macro reaches the output', async () => {
+      for (const [name, def] of lib) {
+        if (name === 'page') continue;
+        for (const key of Object.keys(def.fieldSchema ?? {})) {
+          const probe = `Probe ${name} ${key}`;
+          const html = await render(name, { [key]: probe });
+          assert.ok(html.includes(probe), `${name}.${key} does not render`);
+        }
+      }
+    });
+
+    it('substitutes placeholders inside curried macros', async () => {
+      const curried: RenderMacroLib = {
+        get: (n) =>
+          n === 'outer'
+            ? {
+                defaults: { t: 'dflt' },
+                tree: { type: 'macro', macro: 'hero', slots: { heading: '{{t}}' } }
+              }
+            : renderLib.get(n)
+      };
+      const html = await renderBlockTree(
+        { version: 1, body: [{ type: 'macro', macro: 'outer', slots: { t: 'Curried probe' } }] },
+        fakeCtx,
+        curried
+      );
+      assert.match(html, /Curried probe/);
+    });
   });
 });

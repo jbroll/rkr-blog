@@ -47,6 +47,26 @@ function adjacencyFrom(lib: RenderMacroLib, root: string): Record<string, string
   return adj;
 }
 
+const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_-]+)\s*\}\}/g;
+
+/** Replace `{{name}}` in every string of a macro tree with the resolved
+ * slot value. Names with no slot stay literal. */
+function fillPlaceholders<T>(value: T, slots: Slots): T {
+  if (typeof value === 'string') {
+    return value.replace(PLACEHOLDER, (whole, name: string) => {
+      const v = slots[name];
+      return typeof v === 'string' || typeof v === 'number' ? String(v) : whole;
+    }) as T;
+  }
+  if (Array.isArray(value)) return value.map((v) => fillPlaceholders(v, slots)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, fillPlaceholders(v, slots)])
+    ) as T;
+  }
+  return value;
+}
+
 function leafDirective(name: string, attrs: Record<string, string>): DirectiveNode {
   const attributes: Record<string, string | null | undefined> = { ...attrs };
   return { type: 'leafDirective', name, attributes, children: [] };
@@ -183,11 +203,14 @@ async function renderNodeHtml(
       if (detectCycle(adjacencyFrom(lib, node.macro), node.macro)) {
         return `<!-- macro cycle: ${escapeText(node.macro)} -->`;
       }
-      const merged = resolveSlots({ defaults: def.defaults }, node.slots ?? {});
-      const tree: BlockNode =
-        def.tree.type === 'macro'
-          ? { ...def.tree, slots: merged.slots }
-          : ({ ...(def.tree as object), slots: merged.slots } as BlockNode);
+      const overrides = node.slots ?? {};
+      const merged = resolveSlots({ defaults: def.defaults }, overrides).slots;
+      const filled = fillPlaceholders(def.tree, merged);
+      // Keep the tree's own slots (theme, edge); only explicit overrides win.
+      const tree = {
+        ...filled,
+        slots: { ...merged, ...(filled.slots ?? {}), ...overrides }
+      } as BlockNode;
       // The instance is one editable unit: mark the instance path once,
       // render the expansion internals unmarked.
       return renderNodeHtml(tree, ctx, lib, [...stack, node.macro], path);

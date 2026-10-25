@@ -8,6 +8,7 @@
     "type": "section",
     "slots": { "theme": "light", "edge": "straight" },
     "children": [
+      { "type": "text", "markdown": "## {{title}}" },
       {
         "type": "row",
         "children": [

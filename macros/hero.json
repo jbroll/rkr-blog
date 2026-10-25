@@ -19,8 +19,8 @@
       {
         "type": "col",
         "children": [
-          { "type": "text", "markdown": "# Fresh food, owned by neighbors\n\nJoin the co-op building a community grocery." },
-          { "type": "button", "slots": { "label": "Join", "href": "/join", "variant": "primary" } }
+          { "type": "text", "markdown": "# {{heading}}\n\n{{text}}" },
+          { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary" } }
         ]
       }
     ]
