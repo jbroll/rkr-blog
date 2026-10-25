@@ -376,7 +376,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const macroDefaults = new Map(deps.macros.map((m) => [m.name, m.defaults ?? {}]));
 
   const openFigureConfig = (path: Path): void => {
-    console.log('[unified] openFigureConfig', path, 'node=', getAtPath(tree, path)?.type);
     const node = getAtPath(tree, path);
     if (!node || node.type !== 'figure') return;
     select(path);
@@ -435,7 +434,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       button.setAttribute('data-config-path', unit.path.join(','));
       button.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        console.log('[unified] config click', unit.node.type, unit.path);
         if (unit.node.type === 'figure') openFigureConfig(unit.path);
         else if (unit.node.type === 'macro') openMacroConfig(unit.path);
         else select(unit.path);

@@ -108,7 +108,6 @@ export interface DialogRoot {
 /** Open the figure config dialog. Returns a driver the shell (and
  * tests) use instead of touching inputs directly. */
 export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): FigureDialog {
-  console.log('[figure-dialog] openFigureDialog called, root=', root);
   const doc = root.ownerDocument;
   const values: FigureFieldValues = { ...opts.initial };
   let errors: string[] = [];
@@ -118,6 +117,10 @@ export function openFigureDialog(root: DialogRoot, opts: FigureDialogOpts): Figu
   shell.id = 'rkr-cell-dialog';
   shell.setAttribute('role', 'dialog');
   shell.setAttribute('aria-label', 'Image');
+  shell.setAttribute(
+    'style',
+    'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;'
+  );
 
   const head = doc.createElement('div');
   head.className = 'rkr-cell-dialog-head';
