@@ -79,6 +79,19 @@ describe('blocks-migrate', () => {
     assert.throws(() => runBlocksMigrate(root, 'nope'), /no post with slug/);
   });
 
+  it('default export exits 2 with usage when --post has no slug', async (t: TestContext) => {
+    withSiteRoot(t);
+    const errors: string[] = [];
+    t.mock.method(console, 'error', (...a: unknown[]) => {
+      errors.push(a.map(String).join(' '));
+    });
+    t.mock.method(process, 'exit', (code?: number) => {
+      throw new Error(`exit ${code}`);
+    });
+    await assert.rejects(blocksMigrateCmd(['--post']), /exit 2/);
+    assert.match(errors.join('\n'), /usage: site-admin blocks-migrate/);
+  });
+
   it('default export writes pretty JSON to a file', async (t: TestContext) => {
     const root = withSiteRoot(t);
     writePost(root, 't.md', POST);

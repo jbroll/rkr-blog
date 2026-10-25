@@ -32,6 +32,17 @@ async function setup(t: TestContext) {
       fields: { title: 'Hello page', slug: 'hello' }
     })
   );
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'with-macro.json'),
+    JSON.stringify({
+      version: 1,
+      body: [
+        { type: 'macro', macro: 'hero' },
+        { type: 'figure', slots: { ids: 'ab12cd' } }
+      ],
+      fields: { title: 'With macro', slug: 'with-macro' }
+    })
+  );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   const db = open(path.join(root, 'data', 'site.db'));
@@ -82,6 +93,22 @@ describe('blocks routes', () => {
     const { app } = await setup(t);
     assert.equal((await app.inject({ method: 'GET', url: '/pages/nope' })).statusCode, 404);
     assert.equal((await app.inject({ method: 'GET', url: '/pages/NOPE' })).statusCode, 404);
+  });
+
+  it('GET /pages/:slug expands macro instances and prepasses figures', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({ method: 'GET', url: '/pages/with-macro' });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /Fresh food/);
+    assert.match(res.body, /figure: no ids resolved/);
+  });
+
+  it('GET /admin/blocks/preview/:macro 404s unknown macros and bad names', async (t) => {
+    const { app } = await setup(t);
+    const bad = await app.inject({ method: 'GET', url: '/admin/blocks/preview/BAD' });
+    assert.equal(bad.statusCode, 404);
+    const missing = await app.inject({ method: 'GET', url: '/admin/blocks/preview/nope' });
+    assert.equal(missing.statusCode, 404);
   });
 
   it('GET /pages lists stored pages', async (t) => {

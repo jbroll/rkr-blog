@@ -83,6 +83,37 @@ describe('macro-library', () => {
     assert.deepEqual([...lib.keys()], ['a-macro', 'b-macro']);
   });
 
+  it('keeps a field schema and skips non-JSON files', (t: TestContext) => {
+    const dir = freshDir(t);
+    writeMacro(dir, 'hero', {
+      defaults: {},
+      fieldSchema: { heading: { label: 'Heading', type: 'text' } },
+      tree: { type: 'section', children: [] }
+    });
+    fs.writeFileSync(path.join(dir, 'README.md'), 'not a macro');
+    const lib = loadMacroLibrary(dir);
+    assert.deepEqual([...lib.keys()], ['hero']);
+    assert.equal(lib.get('hero')?.fieldSchema?.heading?.label, 'Heading');
+  });
+
+  it('rejects malformed macro files with the file named', (t: TestContext) => {
+    const cases: [unknown, RegExp][] = [
+      ['{not json', /bad\.json is not valid JSON/],
+      [{ defaults: [], tree: { type: 'text' } }, /bad\.json needs object defaults/],
+      [{ defaults: {}, tree: { type: 'nope' } }, /unknown block type nope/],
+      [{ defaults: {}, tree: 'text' }, /unknown block type \?/],
+      [{ defaults: {}, tree: { type: 'macro' } }, /macro instance needs a macro name/]
+    ];
+    for (const [json, error] of cases) {
+      const dir = freshDir(t);
+      fs.writeFileSync(
+        path.join(dir, 'bad.json'),
+        typeof json === 'string' ? json : JSON.stringify(json)
+      );
+      assert.throws(() => loadMacroLibrary(dir), error);
+    }
+  });
+
   it('types stored macros and field specs', () => {
     const spec: FieldSpec = { label: 'Title', type: 'text' };
     const stored: StoredMacro = {

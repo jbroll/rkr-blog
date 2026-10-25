@@ -67,6 +67,22 @@ describe('block-pages', () => {
     ]);
   });
 
+  it('lists only valid pages, skipping corrupt and malformed files', (t: TestContext) => {
+    const root = withBlocks(t, {
+      'a.json': 'not json{{{',
+      'b.json': { version: 1, body: [{ type: 'nope' }], fields: { slug: 'bad' } },
+      'c.json': { ...PAGE, fields: { slug: 'BAD SLUG' } },
+      'd.json': ['not', 'a', 'page'],
+      'e.json': { ...PAGE, fields: { slug: 'untitled' } },
+      'notes.txt': 'ignored',
+      'f.json': PAGE
+    });
+    assert.deepEqual(listBlockPages(root), [
+      { slug: 'hello', title: 'Hello' },
+      { slug: 'untitled', title: 'untitled' }
+    ]);
+  });
+
   it('lists nothing when the blocks dir is absent', (t: TestContext) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-block-pages-empty-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -85,6 +85,44 @@ describe('blocks-render', () => {
     assert.match(html, /<a[^>]*href="\/join"[^>]*>Join<\/a>/);
   });
 
+  it('renders marquee, accordion, and progress leaves with escaped text', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'marquee', slots: { text: 'Big <news>' } },
+        { type: 'accordion', slots: { items: [{ title: 'Q?', body: 'A & B' }, null] } },
+        { type: 'progress', slots: { goal: 200, raised: 50 } },
+        { type: 'progress', slots: { raised: 50 } }
+      ]
+    };
+    const html = await renderBlockTree(tree, fakeCtx, emptyLib);
+    assert.match(html, /<div class="rkr-marquee"><span>Big &lt;news&gt;<\/span><\/div>/);
+    assert.match(html, /<summary>Q\?<\/summary>\nA &amp; B\n<\/details>/);
+    assert.match(html, /<details><summary><\/summary>/);
+    assert.match(html, /aria-valuenow="25"[^>]*><div class="rkr-progress-bar" style="width: 25%">/);
+    assert.match(html, /aria-valuenow="0"/);
+  });
+
+  it('embeds allowed hosts, links others, and comments out invalid urls', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'embed', slots: { url: 'https://www.youtube.com/embed/x' } },
+        { type: 'embed', slots: { url: 'https://example.com/page' } },
+        { type: 'embed', slots: { url: 'not a url' } }
+      ]
+    };
+    const html = await renderBlockTree(tree, fakeCtx, emptyLib);
+    assert.match(html, /<iframe class="rkr-embed" src="https:\/\/www\.youtube\.com\/embed\/x"/);
+    assert.match(html, /<a href="https:\/\/example\.com\/page">https:\/\/example\.com\/page<\/a>/);
+    assert.match(html, /<!-- embed: invalid url -->/);
+  });
+
+  it('throws on an unknown block type', async () => {
+    const tree = { version: 1, body: [{ type: 'nope' }] } as unknown as BlockTree;
+    await assert.rejects(renderBlockTree(tree, fakeCtx, emptyLib), /unknown block type nope/);
+  });
+
   it('markers zip with source order, public output unchanged without mark', async () => {
     // Two top-level leaves then a section wrapping two leaves (a
     // section>… nesting: each child appends its index to the parent path).
