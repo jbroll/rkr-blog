@@ -11,7 +11,7 @@
 
 import type { BlockTree } from '../lib/blocks.ts';
 import { openEditorDialog } from './editor-dialog.ts';
-import type { DraftRecord, DraftStore } from './unified-draft.ts';
+import { type DraftRecord, type DraftStore, within } from './unified-draft.ts';
 
 type SaveState = 'clean' | 'editing' | 'saving' | 'unsaved' | 'offline' | 'conflict';
 
@@ -26,6 +26,9 @@ export class SaveConflict extends Error {
 
 /** Thrown by `onSave` for a refusal the author should read as is. */
 export class SaveFailure extends Error {}
+
+/** Thrown by `onSave` when the request never reached the server. */
+export class SaveOffline extends Error {}
 
 export interface SavePipeline {
   /** Current state (mirrored to the shell's data-save-state). */
@@ -44,8 +47,11 @@ export interface SavePipeline {
    * tree always wins because immutable updates compose. Resolves when
    * the save (and any coalesced follow-up) settles. */
   requestSave(next: BlockTree): Promise<void>;
-  /** Send the next save against `version` (a restored draft's base). */
-  rebase(version: string): void;
+  /** Send the next save against `version` (a restored draft's base).
+   * `restoredAt` is the draft's savedAt: its conflict defaults to Load latest. */
+  rebase(version: string, restoredAt?: number): void;
+  /** Write `tree` to the draft store without sending it. */
+  draft(tree: BlockTree): void;
 }
 
 export interface SavePipelineDeps {
@@ -65,6 +71,9 @@ export interface SavePipelineDeps {
   win?: EventTarget;
   /** "Load latest"; defaults to reloading the page. */
   reload?(): void;
+  /** How long one draft-store call may take before the save goes on
+   * without it. */
+  draftTimeoutMs?: number;
 }
 
 const LABELS: Record<SaveState, string> = {
@@ -79,6 +88,9 @@ const LABELS: Record<SaveState, string> = {
 const CONFLICT_TITLE = 'This page changed somewhere else.';
 const CONFLICT_TEXT =
   'Load latest discards your changes here. Keep mine saves your version over the other one.';
+const restoredText = (savedAt: number): string =>
+  `Unsaved changes from ${new Date(savedAt).toLocaleString()} on this device. ` +
+  'Load latest discards them. Keep mine saves them over the newer version.';
 
 const navigatorOffline = (): boolean =>
   typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -97,6 +109,9 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   let failure: string | null = null;
   let latest: string | null = null;
   let choosing = false;
+  // savedAt of a restored draft not yet stored; its conflict is likely stale.
+  let restored: number | null = null;
+  const timeoutMs = deps.draftTimeoutMs ?? 500;
 
   // The edit template ships both; the fallbacks keep bare toolbars working.
   const mountPoint = (selector: string, tag: string): HTMLElement => {
@@ -129,12 +144,11 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   const writeDraft = async (tree: BlockTree): Promise<DraftRecord | null> => {
     if (!drafts) return null;
     const record = { tree, baseVersion: version ?? '', savedAt: Date.now() };
-    try {
-      await drafts.put(record);
-      return record;
-    } catch {
-      return null;
-    }
+    const stored = await within(
+      drafts.put(record).then(() => true),
+      timeoutMs
+    );
+    return stored ? record : null;
   };
 
   const runSave = (snapshot: BlockTree): Promise<void> => {
@@ -153,7 +167,8 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
         }
         queued = null;
         inFlight = null;
-        if (draft) void drafts?.clear(draft.savedAt).catch(() => {});
+        restored = null;
+        if (draft && drafts) void within(drafts.clear(draft.savedAt), timeoutMs);
         setState('clean');
       },
       (err: unknown) => {
@@ -168,7 +183,7 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
           return;
         }
         if (err instanceof SaveFailure) failure = err.message;
-        setState(err instanceof TypeError || navigatorOffline() ? 'offline' : 'unsaved');
+        setState(err instanceof SaveOffline || navigatorOffline() ? 'offline' : 'unsaved');
       }
     );
     inFlight = done;
@@ -184,26 +199,43 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
     choosing = true;
     const body = doc.createElement('p');
     body.className = 'rkr-confirm-text';
-    body.textContent = CONFLICT_TEXT;
+    body.textContent = restored === null ? CONFLICT_TEXT : restoredText(restored);
+    const keepMine = (): void => {
+      if (latest !== null) version = latest;
+      resave();
+    };
+    const loadLatest = (): void => {
+      void (async () => {
+        if (drafts) await within(drafts.clear(), timeoutMs);
+        (deps.reload ?? (() => location.reload()))();
+      })();
+    };
+    // A leftover draft most likely lost to newer work, so Load latest
+    // leads; in a live session the author's own edit does.
+    const [primary, secondary] =
+      restored === null
+        ? [
+            { label: 'Keep mine', run: keepMine },
+            { label: 'Load latest', run: loadLatest }
+          ]
+        : [
+            { label: 'Load latest', run: loadLatest },
+            { label: 'Keep mine', run: keepMine }
+          ];
     openEditorDialog({
       root: deps.dialogRoot,
       title: CONFLICT_TITLE,
       body,
-      primaryLabel: 'Keep mine',
-      cancelLabel: 'Load latest',
+      primaryLabel: primary.label,
+      cancelLabel: secondary.label,
       onPrimary: () => {
         choosing = false;
-        if (latest !== null) version = latest;
-        resave();
+        primary.run();
         return true;
       },
       onCancel: (how) => {
         choosing = false;
-        if (how !== 'button') return;
-        void (async () => {
-          await drafts?.clear().catch(() => {});
-          (deps.reload ?? (() => location.reload()))();
-        })();
+        if (how === 'button') secondary.run();
       }
     });
   }
@@ -232,8 +264,12 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
       failure = text;
       setState('unsaved');
     },
-    rebase: (next: string) => {
+    rebase: (next: string, restoredAt?: number) => {
       version = next;
+      restored = restoredAt ?? null;
+    },
+    draft: (tree: BlockTree) => {
+      void writeDraft(tree);
     },
     requestSave: (next: BlockTree): Promise<void> => {
       failure = null;

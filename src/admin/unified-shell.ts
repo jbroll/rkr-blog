@@ -39,6 +39,8 @@ export interface UnifiedShellDeps {
   version?: string;
   /** Durable unsaved tree; a differing draft is restored on mount. */
   drafts?: DraftStore;
+  /** Source of `online` and `pagehide`; defaults to `window`. */
+  win?: EventTarget;
   /** Marked edit-page body for `tree` (`POST /admin/blocks/_render`). */
   render(tree: BlockTree): Promise<string>;
   /** Pickers and the image editor for media dialogs. Without it, media
@@ -70,6 +72,7 @@ const NO_MEDIA: MediaDialogDeps = {
 
 const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
 const OFFLINE_STRUCTURE = 'Reconnect to add or move blocks';
+const OFFLINE_DIALOG = "You're offline. Keep this open and save when you reconnect.";
 
 /** JSON with sorted keys, so equal trees compare equal whatever built them. */
 function stableJson(value: unknown): string {
@@ -140,8 +143,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     toolbar,
     version: deps.version,
     drafts: deps.drafts,
-    dialogRoot: root
+    dialogRoot: root,
+    win: deps.win
   });
+  // Dialog commits re-render, which needs the server.
+  const refuseOffline = (): string | null => (offline() ? OFFLINE_DIALOG : null);
 
   const unitAt = (target: unknown): HydratedUnit | null => {
     const card = (target as Element | null)?.closest?.('[data-rkr-path]');
@@ -203,6 +209,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       slots: (node as { slots?: Slots }).slots ?? {},
       fresh,
       media,
+      refuse: refuseOffline,
       onCommit: (slots) => {
         flushText();
         const next = updateSlotsAtPath(tree, path, (current) => ({ ...current, ...slots }));
@@ -225,6 +232,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     if (node?.type !== 'button') return;
     openButtonDialog(root, {
       initial: readButtonFields(node),
+      refuse: refuseOffline,
       onCommit: (slots) => {
         flushText();
         const next = updateSlotsAtPath(tree, path, (current) => ({ ...current, ...slots }));
@@ -241,6 +249,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       title: `Edit ${info?.label ?? node.macro}`,
       fields: readMacroFields(node, info?.defaults ?? {}, info?.fieldSchema),
       media,
+      refuse: refuseOffline,
       onCommit: (touched) => {
         flushText();
         const next = updateSlotsAtPath(tree, path, (slots) => mergeMacroFields(slots, touched));
@@ -256,6 +265,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     openPageSettings(root, {
       slug,
       fields: readPageFields(tree.fields, slug),
+      refuse: () => (shown !== tree ? refuseOffline() : null),
       onCommit: (fields) => {
         const next = {
           ...tree,
@@ -335,7 +345,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     // Set now, not at swap: a palette click before the render lands
     // must target the new tree.
     if (opts.select) select(opts.select);
-    if (!opts.renderOnly) save.markEditing();
+    if (!opts.renderOnly) {
+      save.markEditing();
+      // Durable before the render, which may fail or never return.
+      save.draft(next);
+    }
     body.setAttribute('inert', '');
     let html: string;
     try {
@@ -420,11 +434,21 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       await store.clear().catch(() => {});
       return;
     }
-    if (draft.baseVersion) save.rebase(draft.baseVersion);
+    if (draft.baseVersion) save.rebase(draft.baseVersion, draft.savedAt);
     await applyTree(draft.tree);
     if (save.state() === 'clean') save.notice('Restored unsaved changes');
   };
   if (deps.drafts) void restoreDraft(deps.drafts);
+
+  // Last chance for a focused, unblurred edit; IndexedDB writes started
+  // here usually complete.
+  (deps.win ?? (typeof window !== 'undefined' ? window : undefined))?.addEventListener(
+    'pagehide',
+    () => {
+      flushText();
+      if (save.state() !== 'clean') save.draft(tree);
+    }
+  );
 
   doc.addEventListener('keydown', (raw: Event) => {
     const ev = raw as KeyboardEvent;

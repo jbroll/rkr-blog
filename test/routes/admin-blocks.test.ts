@@ -690,7 +690,7 @@ describe('admin blocks save versions', () => {
     const first = await post(app, { tree: tree('One') });
     assert.equal(first.statusCode, 200);
     const v1 = first.json().version as string;
-    assert.equal(typeof v1, 'string');
+    assert.match(v1, /^[0-9a-f]{16}$/, 'the version is a content hash');
 
     const second = await post(app, { tree: tree('Two'), baseVersion: v1 });
     assert.equal(second.statusCode, 200);
@@ -703,6 +703,22 @@ describe('admin blocks save versions', () => {
     assert.equal(stale.statusCode, 409);
     assert.deepEqual(stale.json(), { error: 'conflict', version: v2 });
     assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
+
+  it('a rewrite within the same mtime tick still changes the version', async (t) => {
+    const { root, app } = await setup(t);
+    await post(app, { tree: tree('One') });
+    const file = path.join(root, 'content', 'blocks', 'versioned.json');
+    const tick = new Date('2026-01-01T00:00:00Z');
+    fs.utimesSync(file, tick, tick);
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/versioned' });
+    const loaded = /data-version="([^"]+)"/.exec(edit.body)?.[1];
+    const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+    stored.body[0].markdown = 'Changed elsewhere';
+    fs.writeFileSync(file, JSON.stringify(stored));
+    fs.utimesSync(file, tick, tick);
+    const stale = await post(app, { tree: tree('Mine'), baseVersion: loaded });
+    assert.equal(stale.statusCode, 409);
   });
 
   it('missing baseVersion still saves', async (t) => {

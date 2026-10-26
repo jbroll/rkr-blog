@@ -23,6 +23,26 @@ export interface DraftStore {
   clear(savedAt?: number): Promise<void>;
 }
 
+/** `op`'s result, or undefined once `ms` passes or it rejects. A storage
+ * call that never settles (a blocked IndexedDB open) must not hold up a
+ * save. */
+export function within<T>(op: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    op.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      }
+    );
+  });
+}
+
+const OP_TIMEOUT_MS = 500;
 const DB_NAME = 'rkr-blocks-editor';
 const STORE = 'drafts';
 
@@ -64,14 +84,21 @@ function isDraft(value: unknown): value is DraftRecord {
 
 export function indexedDbDraftStore(slug: string): DraftStore {
   let db: Promise<IDBDatabase> | null = null;
-  // Chained so a clear issued after a put can never land before it.
+  // Chained so a clear issued after a put can never land before it. The
+  // chain waits at most OP_TIMEOUT_MS per op, so one stuck op can't stall
+  // the rest, and an open that hangs is retried on the next op.
   let chain: Promise<unknown> = Promise.resolve();
   const run = <T>(mode: IDBTransactionMode, op: (store: IDBObjectStore) => T): Promise<T> => {
     const next = chain.then(async () => {
       db ??= openDb();
-      return transact(await db, mode, op);
+      const handle = await within(db, OP_TIMEOUT_MS);
+      if (!handle) {
+        db = null;
+        throw new Error('draft store unavailable');
+      }
+      return transact(handle, mode, op);
     });
-    chain = next.catch(() => {});
+    chain = within(next, OP_TIMEOUT_MS);
     return next;
   };
   return {

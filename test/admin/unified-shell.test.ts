@@ -14,6 +14,7 @@ import { describe, it } from 'node:test';
 
 import { PRIMITIVE_MACROS } from '../../src/admin/blocks-editor.ts';
 import type { DraftRecord } from '../../src/admin/unified-draft.ts';
+import { SaveConflict } from '../../src/admin/unified-save.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
 import type { BlockNode, BlockTree } from '../../src/lib/blocks.ts';
 import { renderBlockTree } from '../../src/lib/blocks-render.ts';
@@ -1508,6 +1509,206 @@ describe('unified shell drafts and offline', () => {
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick();
     assert.deepEqual(saved.at(-1)?.body, [{ type: 'text', markdown: 'Typed offline' }]);
+  });
+
+  const goOffline = (t: { after(fn: () => void): void }): void => {
+    const nav = globalThis.navigator as { onLine?: boolean };
+    Object.defineProperty(nav, 'onLine', { value: false, configurable: true });
+    t.after(() => {
+      delete nav.onLine;
+    });
+  };
+  const OFFLINE_DIALOG = "You're offline. Keep this open and save when you reconnect.";
+
+  it('a failed render keeps the new tree in the draft', async () => {
+    const { f, tree } = hello();
+    const store = drafts(null);
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v1',
+      drafts: store,
+      onSave: async () => {},
+      render: async () => {
+        throw new Error('render 503');
+      }
+    });
+    const next: BlockTree = { version: 1, body: [...tree.body, { type: 'text', markdown: '' }] };
+    await shell.applyTree(next);
+    await tick();
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    assert.equal(store.record?.tree, next);
+    assert.equal(store.record?.baseVersion, 'v1');
+  });
+
+  it('a restored draft that conflicts names its time on this device', async () => {
+    const { f, tree } = hello();
+    const savedAt = Date.UTC(2026, 9, 20, 9, 5);
+    const store = drafts({
+      tree: { version: 1, body: [{ type: 'text', markdown: 'Old device words' }] },
+      baseVersion: 'v1',
+      savedAt
+    });
+    mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v2',
+      drafts: store,
+      onSave: async () => {
+        throw new SaveConflict('v2');
+      },
+      render: markedRender
+    });
+    await tick();
+    const dialog = f.root.querySelector('[data-rkr-dialog]');
+    assert.ok(dialog);
+    assert.ok(
+      (dialog.textContent ?? '').includes(
+        `Unsaved changes from ${new Date(savedAt).toLocaleString()} on this device`
+      )
+    );
+    assert.equal(f.root.querySelector('.rkr-dialog-primary')?.textContent, 'Load latest');
+  });
+
+  it('pagehide commits the focused text and drafts it', () => {
+    const { f, tree } = hello();
+    const store = drafts(null);
+    const win = new EventTarget();
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v1',
+      drafts: store,
+      win,
+      onSave: () => new Promise(() => {}),
+      render: markedRender
+    });
+    shell.setMode('edit');
+    const p = f.body.querySelector('p') as FakeElement;
+    p.textContent = 'Typed before closing';
+    f.doc.activeElement = p;
+    win.dispatchEvent(new Event('pagehide'));
+    assert.deepEqual(store.record?.tree.body, [{ type: 'text', markdown: 'Typed before closing' }]);
+  });
+
+  it('an offline figure dialog stays open with its edits', async (t) => {
+    goOffline(t);
+    const f = fixture((doc) => [marker(doc, '0'), doc.createElement('figure')]);
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'figure', slots: { ids: 'ab'.repeat(32), alts: 'old' } }]
+    };
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (next) => {
+      saved.push(next);
+    });
+    shell.setMode('edit');
+    f.body.querySelector('figure')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
+    const alt = f.root.querySelector('[data-rkr-dialog]')?.querySelectorAll('input')[0];
+    assert.ok(alt);
+    (alt as unknown as { value: string }).value = 'typed offline';
+    alt.dispatchEvent(new FakeEvent('input'));
+    f.root
+      .querySelectorAll('button')
+      .find((b) => b.textContent === 'Save figure')
+      ?.click();
+    await tick();
+    assert.equal(saved.length, 0);
+    const dialog = f.root.querySelector('[data-rkr-dialog]');
+    assert.ok(dialog, 'the dialog stays open');
+    assert.equal(dialog.querySelector('.rkr-dialog-error')?.textContent, OFFLINE_DIALOG);
+    assert.equal((alt as unknown as { value: string }).value, 'typed offline');
+  });
+
+  it('an offline macro dialog stays open with its edits', async (t) => {
+    goOffline(t);
+    const f = fixture((doc) => {
+      const card = doc.createElement('div');
+      card.append(doc.createTextNode('hero'));
+      return [marker(doc, '0'), card];
+    });
+    const tree: BlockTree = { version: 1, body: [{ type: 'macro', macro: 'hero', slots: {} }] };
+    const saved: BlockTree[] = [];
+    const shell = mount(
+      f,
+      tree,
+      async (next) => {
+        saved.push(next);
+      },
+      [{ name: 'hero', label: 'Hero', defaults: { heading: 'Fresh' } }]
+    );
+    shell.setMode('edit');
+    f.body.querySelector('[data-rkr-path]')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
+    const heading = f.root
+      .querySelector('[data-rkr-dialog]')
+      ?.querySelectorAll('input')
+      .find((i) => i.getAttribute('name') === 'heading');
+    assert.ok(heading);
+    (heading as unknown as { value: string }).value = 'Offline band';
+    heading.dispatchEvent(new FakeEvent('input', { bubbles: true }));
+    f.root.querySelector('.rkr-dialog-primary')?.click();
+    await tick();
+    assert.equal(saved.length, 0);
+    const dialog = f.root.querySelector('[data-rkr-dialog]');
+    assert.ok(dialog, 'the dialog stays open');
+    assert.equal(dialog.querySelector('.rkr-dialog-error')?.textContent, OFFLINE_DIALOG);
+  });
+
+  it('an offline cancel after image edits keeps the pending text edit', async (t) => {
+    goOffline(t);
+    const f = fixture((doc) => [
+      marker(doc, '0'),
+      doc.createElement('figure'),
+      marker(doc, '1'),
+      para(doc, 'Kept')
+    ]);
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'figure', slots: { ids: 'ab'.repeat(32) } },
+        { type: 'text', markdown: 'Kept' }
+      ]
+    };
+    const saved: BlockTree[] = [];
+    const store = drafts(null);
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      drafts: store,
+      onSave: async (next) => {
+        saved.push(next);
+      },
+      render: markedRender,
+      media: {
+        pick: async () => [],
+        thumbUrl: () => null,
+        imageEditor: {
+          open: () => {},
+          apply: async () => true,
+          close: () => {},
+          dirty: () => false,
+          previewUrl: () => null
+        }
+      }
+    });
+    shell.setMode('edit');
+    f.body.querySelector('figure')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
+    const button = (label: string) =>
+      f.root.querySelectorAll('button').find((b) => b.textContent === label);
+    button('Edit image')?.click();
+    button('Apply edits')?.click();
+    await tick();
+    const p = f.body.querySelectorAll('p').find((el) => el.textContent === 'Kept');
+    assert.ok(p);
+    p.textContent = 'Kept offline';
+    f.doc.activeElement = p;
+    button('Cancel')?.click();
+    await tick();
+    assert.equal((saved.at(-1)?.body[1] as { markdown?: string }).markdown, 'Kept offline');
+    assert.equal(f.body.getAttribute('inert'), null);
   });
 });
 

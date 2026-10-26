@@ -64,6 +64,9 @@ interface PageSettingsOpts {
   slug: string;
   fields: PageFields;
   onCommit(fields: PageFields): void;
+  /** Asked before committing; a message keeps the dialog open with it
+   * as the error (e.g. offline), so nothing typed is lost. */
+  refuse?(): string | null;
   /** `YYYY-MM-DD`; defaults to the current UTC day. */
   today?: string;
 }
@@ -188,6 +191,11 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
         title.setAttribute('aria-invalid', 'true');
         dialog.setError(result.error);
         title.focus?.();
+        return false;
+      }
+      const refusal = opts.refuse?.();
+      if (refusal) {
+        dialog.setError(refusal);
         return false;
       }
       opts.onCommit(result.fields);

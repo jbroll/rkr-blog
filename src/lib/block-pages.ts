@@ -4,6 +4,7 @@
 // `import-wp --as-blocks` and plain names from `blocks-migrate` both
 // work. Corrupt files are skipped, never thrown.
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -15,14 +16,19 @@ export interface BlockPage {
   title: string;
   tree: BlockTree;
   fields: Record<string, unknown>;
-  /** Changes whenever the file is rewritten; the editor's save sends it
-   * back so a stale save is refused. */
+  /** Changes whenever the file's contents change; the editor's save sends
+   * it back so a stale save is refused. */
   version: string;
 }
 
-/** Version of a stored page file (its mtime, as a string). */
+// A content hash, not mtime: two writes inside one timestamp tick would
+// share an mtime and let a stale save through.
+const contentVersion = (bytes: string | Buffer): string =>
+  createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+
+/** Version of a stored page file. */
 export function blockFileVersion(file: string): string {
-  return String(fs.statSync(file).mtimeMs);
+  return contentVersion(fs.readFileSync(file));
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -82,8 +88,10 @@ function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
     if (!name.endsWith('.json')) continue;
     const file = path.join(dir, name);
     let parsed: unknown;
+    let bytes: Buffer;
     try {
-      parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      bytes = fs.readFileSync(file);
+      parsed = JSON.parse(bytes.toString('utf8'));
     } catch {
       continue;
     }
@@ -95,7 +103,7 @@ function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
       continue;
     }
     const title = typeof parsed.fields.title === 'string' ? parsed.fields.title : slug;
-    return { title, tree, fields: parsed.fields, file, version: blockFileVersion(file) };
+    return { title, tree, fields: parsed.fields, file, version: contentVersion(bytes) };
   }
   return null;
 }

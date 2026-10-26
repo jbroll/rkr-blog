@@ -24,7 +24,7 @@ import {
 import { initOpfsForUnifiedEditor } from './opfs-init-unified.ts';
 import { awaitDrainSettled } from './sync.ts';
 import { indexedDbDraftStore } from './unified-draft.ts';
-import { SaveConflict, SaveFailure } from './unified-save.ts';
+import { SaveConflict, SaveFailure, SaveOffline } from './unified-save.ts';
 import { mountUnifiedShell } from './unified-shell.ts';
 import { uploadImage } from './upload.ts';
 import { uploadVideo } from './video-upload.ts';
@@ -149,13 +149,18 @@ function pageMedia(opfs: () => boolean): MediaDialogDeps {
 const tree = embeddedTree();
 
 if (root && slug && tree) {
-  // fetch rejects with a TypeError when offline; the pipeline keys on it.
   const save = async (next: BlockTree, baseVersion?: string): Promise<string | undefined> => {
-    const res = await fetch(`/admin/blocks/${encodeURIComponent(slug)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tree: next, baseVersion })
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/admin/blocks/${encodeURIComponent(slug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tree: next, baseVersion })
+      });
+    } catch {
+      // fetch itself rejects only when the request never got a response.
+      throw new SaveOffline();
+    }
     const reply = (await res.json().catch(() => ({}))) as { error?: unknown; version?: unknown };
     const version = typeof reply.version === 'string' ? reply.version : undefined;
     if (res.status === 409 && reply.error === 'conflict' && version)

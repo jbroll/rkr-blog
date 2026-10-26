@@ -89,6 +89,9 @@ interface MediaDialogOpts {
   fresh?: boolean;
   media: MediaDialogDeps;
   onCommit(slots: Slots): void;
+  /** Asked before committing; a message keeps the dialog open with it
+   * as the error (e.g. offline), so nothing typed is lost. */
+  refuse?(): string | null;
   /** `edited` is true when image edits were applied before cancelling,
    * so the page needs a fresh render. */
   onCancel?(edited: boolean): void;
@@ -351,6 +354,11 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
     });
     if (!checked.ok) {
       dialog.setError(checked.errors.join(' '));
+      return false;
+    }
+    const refusal = opts.refuse?.();
+    if (refusal) {
+      dialog.setError(refusal);
       return false;
     }
     opts.onCommit({ ...slots, justify: text(checked.slots, 'justify') });

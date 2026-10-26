@@ -74,6 +74,9 @@ export interface MacroDialogOpts {
   title: string;
   fields: MacroField[];
   onCommit(slots: Slots): void;
+  /** Asked before committing; a message keeps the dialog open with it
+   * as the error (e.g. offline), so nothing typed is lost. */
+  refuse?(): string | null;
   onCancel(): void;
   /** Image fields pick through this; without it they can only be removed. */
   media?: MediaPicker;
@@ -243,7 +246,13 @@ export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDial
     primaryLabel: 'Save',
     wide: opts.fields.some((f) => f.multiline),
     onPrimary: () => {
-      if (touched.size > 0) opts.onCommit(collect());
+      if (touched.size === 0) return true;
+      const refusal = opts.refuse?.();
+      if (refusal) {
+        dialog.setError(refusal);
+        return false;
+      }
+      opts.onCommit(collect());
       return true;
     },
     onCancel: opts.onCancel
