@@ -407,8 +407,11 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
 
   // The fixed toolbar can sit over the drop target; a drop on it is refused.
   // Deferred so the browser still starts the drag from the handle.
-  const dragStarted = (): void => {
-    setTimeout(() => bar.setAttribute('data-dragging', ''), 0);
+  const dragStarted = (ev: Event): void => {
+    if (ev.defaultPrevented) return;
+    setTimeout(() => {
+      if (!ev.defaultPrevented) bar.setAttribute('data-dragging', '');
+    }, 0);
   };
   const dragEnded = (): void => {
     bar.removeAttribute('data-dragging');
@@ -416,6 +419,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   doc.addEventListener('dragstart', dragStarted);
   doc.addEventListener('dragend', dragEnded);
   doc.addEventListener('drop', dragEnded, true);
+  // A cancelled dragstart fires no dragend; pointer events never fire in a real drag.
+  doc.addEventListener('pointerup', dragEnded, true);
+  doc.addEventListener('mouseup', dragEnded, true);
 
   const view = doc.defaultView;
   view?.addEventListener('scroll', position, true);
@@ -431,6 +437,8 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
       doc.removeEventListener('dragstart', dragStarted);
       doc.removeEventListener('dragend', dragEnded);
       doc.removeEventListener('drop', dragEnded, true);
+      doc.removeEventListener('pointerup', dragEnded, true);
+      doc.removeEventListener('mouseup', dragEnded, true);
       view?.removeEventListener('scroll', position, true);
       view?.removeEventListener('resize', position);
       body.removeEventListener('input', position);

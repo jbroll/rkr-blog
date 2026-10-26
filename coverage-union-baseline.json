@@ -81,7 +81,7 @@
     "src/admin/tag-input.ts": 100,
     "src/admin/toast.ts": 88.46,
     "src/admin/toolbar.ts": 80,
-    "src/admin/unified-block-actions.ts": 98.42,
+    "src/admin/unified-block-actions.ts": 98.44,
     "src/admin/unified-configure.ts": 100,
     "src/admin/unified-draft.ts": 100,
     "src/admin/unified-hydrate.ts": 100,

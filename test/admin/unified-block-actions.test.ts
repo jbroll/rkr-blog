@@ -445,4 +445,40 @@ describe('toolbar while dragging', () => {
     h.doc.dispatchEvent(new FakeEvent('dragend'));
     assert.ok(!h.bar().hasAttribute('data-dragging'));
   });
+
+  const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('stays clear when another handler cancels the dragstart', async () => {
+    const h = harness(AB, [0], ['0', '1']);
+    h.doc.addEventListener('dragstart', (ev) => ev.preventDefault());
+    h.doc.dispatchEvent(new FakeEvent('dragstart'));
+    await tick();
+    assert.ok(!h.bar().hasAttribute('data-dragging'));
+  });
+
+  it('stays clear when the dragstart is cancelled after the listener ran', async () => {
+    const h = harness(AB, [0], ['0', '1']);
+    const ev = new FakeEvent('dragstart');
+    h.doc.dispatchEvent(ev);
+    ev.preventDefault();
+    await tick();
+    assert.ok(!h.bar().hasAttribute('data-dragging'));
+  });
+
+  it('a drop clears the flag', async () => {
+    const h = harness(AB, [0], ['0', '1']);
+    h.doc.dispatchEvent(new FakeEvent('dragstart'));
+    await tick();
+    h.doc.dispatchEvent(new FakeEvent('drop'));
+    assert.ok(!h.bar().hasAttribute('data-dragging'));
+  });
+
+  it('a pointerup clears a stale flag', async () => {
+    const h = harness(AB, [0], ['0', '1']);
+    h.doc.dispatchEvent(new FakeEvent('dragstart'));
+    await tick();
+    assert.ok(h.bar().hasAttribute('data-dragging'));
+    h.doc.dispatchEvent(new FakeEvent('pointerup'));
+    assert.ok(!h.bar().hasAttribute('data-dragging'));
+  });
 });
