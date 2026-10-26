@@ -1,12 +1,5 @@
-// Palette insert for the unified editor: click-to-append and
-// drag-and-drop onto live nodes.
-//
-// Extracted from unified-shell.ts to keep that file under the 500-line
-// size cap. The shell owns the tree and saving; this module owns
-// placement: click inserts after the selected block (or at the end of a
-// selected container, or of the page body), drags resolve to before/after/inside drop positions,
-// and containers that would nest deeper than the macro depth rule are
-// refused with the save-inner-part nudge.
+// Palette insert placement for the unified editor. The shell owns the tree
+// and saving; this module only decides where a click or drop lands.
 //
 // Browser-safe: no node:* imports.
 

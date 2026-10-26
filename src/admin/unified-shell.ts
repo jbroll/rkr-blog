@@ -326,7 +326,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     }
   });
 
-  mountAddSheet(dock);
+  mountAddSheet(dock, [body]);
   mountPhonePreview(toolbar, shellEl);
 
   actions = mountBlockActions({

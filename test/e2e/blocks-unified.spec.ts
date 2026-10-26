@@ -618,3 +618,21 @@ test('block toolbar stays below the sticky page toolbar at phone width', async (
   const box = (await bar.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(sticky.y + sticky.height - 0.5);
 });
+
+test('sticky toolbar is compact at phone width', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-compact-toolbar-${Date.now()}`;
+  await seedBlockPage(page, {
+    slug,
+    title: 'A reasonably long page title for the toolbar',
+    markdown: 'Hi.'
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const bar = page.locator('#rkr-unified-toolbar');
+  expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(88);
+  await bar.screenshot({
+    path: '/tmp/claude-1000/-home-john-src-rkr-blog/4c6dba75-fdb7-4084-9b13-74a41d2d8b7d/scratchpad/shots/task8/phone-toolbar-compact.png'
+  });
+});

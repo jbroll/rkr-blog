@@ -44,7 +44,17 @@ const TOOLBAR = `
 .rkr-unified-preview[aria-pressed="true"]{color:var(--rkr-edit-accent);border-color:var(--rkr-edit-accent)}
 .rkr-unified-shell[data-mode="view"] :is(.rkr-unified-save,.rkr-unified-settings){display:none}
 @media (min-width:601px){.rkr-unified-shell[data-phone] .rkr-blocks-page-body{box-sizing:border-box;width:100%;max-width:390px;justify-self:center;padding:0 .75rem;border:1px solid var(--rkr-edit-border);border-radius:14px;box-shadow:var(--rkr-edit-shadow)}}
-@media (max-width:600px){.rkr-unified-preview{display:none}.rkr-unified-title{flex-basis:100%}.rkr-unified-settings{margin-left:auto}.rkr-unified-settings+.rkr-unified-save-state{margin-left:0}.rkr-unified-save-state{margin-left:auto}}
+@media (max-width:600px){
+.rkr-unified-preview{display:none}
+.rkr-unified-toolbar{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:.35rem .5rem;padding:.35rem .5rem}
+.rkr-unified-title{grid-column:1/4;grid-row:1}
+.rkr-unified-save-state{grid-column:4;grid-row:1;justify-self:end;padding:.15rem .55rem}
+.rkr-unified-modes{grid-column:1;grid-row:2}
+.rkr-unified-settings{grid-column:3;grid-row:2}
+.rkr-unified-save{grid-column:4;grid-row:2}
+.rkr-unified-toolbar .rkr-edit-btn{min-height:2rem;padding:.25rem .75rem;white-space:nowrap}
+.rkr-unified-mode{min-height:1.6rem}
+}
 `;
 
 const PALETTE = `

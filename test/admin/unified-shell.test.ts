@@ -1817,3 +1817,18 @@ describe('unified shell page settings', () => {
     });
   });
 });
+
+describe('unified shell add-block sheet', () => {
+  it('makes the page body inert while open and restores it on close', () => {
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Hi')]);
+    mount(f, { version: 1, body: [{ type: 'text', markdown: 'Hi' }] });
+    const fab = f.root.querySelector('.rkr-add-fab') as FakeElement;
+    const close = f.root.querySelector('.rkr-sheet-close') as FakeElement;
+    fab.click();
+    assert.equal(f.body.hasAttribute('inert'), true);
+    assert.equal(f.dock.classList.contains('is-open'), true);
+    close.click();
+    assert.equal(f.body.hasAttribute('inert'), false);
+    assert.equal(f.dock.classList.contains('is-open'), false);
+  });
+});

@@ -667,3 +667,12 @@ test('token-login session lets user reach /admin/blocks', async (t) => {
   assert.equal(editor.statusCode, 200, `body=${editor.body}`);
   assert.match(editor.body, /<h1>Pages<\/h1>/);
 });
+
+test('GET /admin and /admin/blocks do not serve the pages list without a session', async (t) => {
+  const { app } = await setup(t, { idTokenPayload: {} });
+  for (const url of ['/admin', '/admin/blocks']) {
+    const res = await app.inject({ method: 'GET', url });
+    assert.ok([301, 302, 303, 401].includes(res.statusCode), `${url} gave ${res.statusCode}`);
+    assert.doesNotMatch(res.body, /rkr-pages/);
+  }
+});

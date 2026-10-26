@@ -4,7 +4,8 @@
 //
 // Browser-safe: no node:* imports.
 
-export function mountAddSheet(dock: HTMLElement): { close(): void } {
+/** `behind` is made inert while the sheet is open so focus and taps stay in it. */
+export function mountAddSheet(dock: HTMLElement, behind: Element[] = []): { close(): void } {
   const doc = dock.ownerDocument;
   const host = dock.parentNode as Element;
 
@@ -30,11 +31,15 @@ export function mountAddSheet(dock: HTMLElement): { close(): void } {
     dock.classList.toggle('is-open', open);
     scrim.classList.toggle('is-open', open);
     fab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    for (const el of behind) {
+      if (open) el.setAttribute('inert', '');
+      else el.removeAttribute('inert');
+    }
   };
   const close = (): void => {
     const wasOpen = dock.classList.contains('is-open');
     setOpen(false);
-    if (wasOpen && dock.contains(doc.activeElement)) fab.focus();
+    if (wasOpen && doc.activeElement?.closest?.('.rkr-blocks-palette-right')) fab.focus();
   };
 
   fab.addEventListener('click', () => {
@@ -43,9 +48,15 @@ export function mountAddSheet(dock: HTMLElement): { close(): void } {
   });
   scrim.addEventListener('click', close);
   closeBtn.addEventListener('click', close);
-  dock.addEventListener('click', (ev: Event) => {
-    if ((ev.target as Element | null)?.closest?.('.rkr-blocks-palette-item')) close();
-  });
+  // Capture: close before the item's own handler, so the render-pending
+  // inert it sets on the page body is not cleared by this close.
+  dock.addEventListener(
+    'click',
+    (ev: Event) => {
+      if ((ev.target as Element | null)?.closest?.('.rkr-blocks-palette-item')) close();
+    },
+    true
+  );
   dock.addEventListener('keydown', (ev: Event) => {
     if ((ev as KeyboardEvent).key !== 'Escape') return;
     ev.preventDefault();
