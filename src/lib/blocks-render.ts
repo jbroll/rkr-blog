@@ -94,17 +94,22 @@ function gridStyle(g: ReturnType<typeof readGridSlots>): string {
   return `--rkr-grid-cols:${g.cols};--rkr-grid-min:${GRID_MIN_REM[g.min]}rem${widths}`;
 }
 
+const hasElement = (html: string): boolean => /<[a-z]/i.test(html.replace(/<!--[\s\S]*?-->/g, ''));
+
 function renderGrid(
   node: Extract<BlockNode, { type: 'grid' }>,
   kids: string[],
   opts?: RenderNodeOpts
 ): string {
   const marked = Boolean(opts?.mark);
-  const cells = kids.filter(Boolean);
-  if (cells.length === 0 && !marked) return '';
+  // Readers get no empty cell for a child that renders only a comment; the
+  // editor keeps one so the block can be selected and deleted.
+  const inCell = (html: string): boolean => marked || hasElement(html);
+  const present = kids.filter(Boolean);
+  if (!marked && !present.some(hasElement)) return present.join('');
   const g = readGridSlots(node.slots);
-  const inner = cells.length
-    ? cells.map((c) => `<div class="rkr-grid-cell">${c}</div>\n`).join('')
+  const inner = present.length
+    ? present.map((c) => (inCell(c) ? `<div class="rkr-grid-cell">${c}</div>\n` : c)).join('')
     : '<p class="rkr-grid-empty" data-rkr-grid-empty>Empty grid: drag blocks here</p>\n';
   const stacked = g.widths !== null && g.cols > 1;
   const collapse = stacked ? ` rkr-collapse-${g.cols}-${g.min}` : '';

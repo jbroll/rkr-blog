@@ -1,7 +1,36 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { expandShorthand, gridLabel, gridSlotProblem, readGridSlots } from '../../src/lib/grid.ts';
+import {
+  expandShorthand,
+  GRID_MIN_REM,
+  gridLabel,
+  gridSlotProblem,
+  readGridSlots
+} from '../../src/lib/grid.ts';
+
+describe('default.css collapse thresholds', () => {
+  it('collapses a widths grid exactly when every column no longer fits at min', () => {
+    const css = readFileSync(new URL('../../static/themes/default.css', import.meta.url), 'utf8');
+    const gap = Number(/--rkr-gap:\s*([\d.]+)rem/.exec(css)?.[1]);
+    const rules = [
+      ...css.matchAll(
+        /@container \(max-width: ([\d.]+)rem\) \{\s*\.rkr-grid\[data-widths\]\.rkr-collapse-(\d)-(\w+)/g
+      )
+    ];
+    const found = new Map(rules.map((m) => [`${m[2]}-${m[3]}`, Number(m[1])]));
+    const expected = new Map<string, number>();
+    for (let n = 2; n <= 6; n++) {
+      for (const [min, rem] of Object.entries(GRID_MIN_REM)) {
+        expected.set(`${n}-${min}`, n * rem + (n - 1) * gap);
+      }
+    }
+    assert.equal(gap, 1.25);
+    assert.equal(rules.length, 15);
+    assert.deepEqual(found, expected);
+  });
+});
 
 describe('expandShorthand', () => {
   it('maps section theme and edge to a band grid', () => {

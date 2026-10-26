@@ -393,7 +393,13 @@ describe('renderBlockTree unknown types', () => {
 
     it('renders one cell per figure', async () => {
       const fig = { type: 'figure', slots: { ids: 'aaaa1111' } };
-      const html = await render(grid({ cols: 3 }, [fig, fig, fig]));
+      const widgets = new WidgetRegistry();
+      widgets.register({ name: 'figure', render: () => '<figure></figure>\n' });
+      const html = await renderBlockTree(
+        grid({ cols: 3 }, [fig, fig, fig]),
+        { ...fakeCtx, widgets },
+        emptyLib
+      );
       assert.equal((html.match(/class="rkr-grid-cell"/g) ?? []).length, 3);
     });
 
@@ -404,6 +410,35 @@ describe('renderBlockTree unknown types', () => {
 
     it('renders nothing for an empty grid on the public page', async () => {
       assert.equal(await render(grid({ cols: 2 }, [])), '');
+    });
+
+    it('gives readers no cell for a child that renders only a comment', async () => {
+      const kids = [
+        { type: 'text', markdown: 'x' },
+        { type: 'macro', macro: 'gone' }
+      ];
+      const html = await render(grid({ cols: 2 }, kids));
+      assert.equal((html.match(/class="rkr-grid-cell"/g) ?? []).length, 1);
+      assert.match(html, /<!-- unknown macro: gone -->/);
+      assert.doesNotMatch(html, /rkr-grid-cell"><!-- unknown macro/);
+    });
+
+    it('renders only the comments when no child of a public grid renders an element', async () => {
+      const html = await render(grid({ cols: 2 }, [{ type: 'macro', macro: 'gone' }]));
+      assert.equal(html, '<!-- unknown macro: gone -->');
+    });
+
+    it('keeps a cell for a comment-only child in the editor', async () => {
+      const kids = [
+        { type: 'text', markdown: 'x' },
+        { type: 'macro', macro: 'gone' }
+      ];
+      const html = await render(grid({ cols: 2 }, kids), true);
+      assert.equal((html.match(/class="rkr-grid-cell"/g) ?? []).length, 2);
+      assert.match(
+        html,
+        /<div class="rkr-grid-cell"><!--rkr:path=0,1--><!-- unknown macro: gone --><\/div>/
+      );
     });
 
     it('renders a labelled placeholder for an empty grid in the editor', async () => {

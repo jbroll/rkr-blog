@@ -348,9 +348,14 @@ editor, `blocks-migrate` or the WordPress importer creates one.
 | `theme` | `light`, `dark` (the themes with CSS) | `light` | Band background. |
 | `edge` | `straight`, `wave` | `straight` | Band bottom edge. |
 
-- Each child renders in its own `.rkr-grid-cell`.
+- Each child renders in its own `.rkr-grid-cell`. On the public page a
+  child that renders no element (an unknown macro's comment, a figure or
+  video whose media is missing) gets no cell; the editor keeps its cell
+  so the block can be selected and deleted.
 - Collapse follows the grid's own width, not the screen's, so a grid in a
-  narrow cell collapses too. On a phone every grid is one column.
+  narrow cell collapses too. On a phone every grid is one column, and no
+  cell is ever wider than its grid, even when the grid is narrower than
+  `min`.
 - An empty grid is valid. Readers see nothing; the editor shows "Empty
   grid: drag blocks here", which takes drops.
 - The page body is a one-column stack, not a stored grid.

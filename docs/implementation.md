@@ -505,13 +505,21 @@ throws rather than return a partial one, so nothing invalid reaches disk.
   comment for a cycle.
 - **Responsive by container, not viewport.** A grid is a CSS grid. Plain
   grids use `repeat(auto-fill, minmax(...))` capped at `--rkr-grid-cols`
-  and floored at `--rkr-grid-min`. CSS cannot express a ratio that
-  drops columns, so a `widths` grid gets `data-widths` and a
-  `.rkr-collapse-N-MIN` class, and container queries on `.rkr-grid-wrap`
-  switch it to one column when it cannot fit N cells at `min`. Values
-  ride in a `style` attribute, which the public CSP allows. Every child
-  sits in its own `.rkr-grid-cell` so the layout does not depend on what
-  the block renders. In edit mode `data-rkr-path` for a `widths` grid
+  and floored at `--rkr-grid-min`, with the track minimum wrapped in
+  `min(100%, ...)` so a grid narrower than `min` shrinks its one column
+  instead of overflowing. CSS cannot express a ratio that drops columns,
+  so a `widths` grid gets `data-widths` and a `.rkr-collapse-N-MIN`
+  class, and container queries on `.rkr-grid-wrap` switch it to one
+  column when it cannot fit N cells at `min`: at
+  `N × min + (N − 1) × --rkr-gap` (gap 1.25rem; container queries cannot
+  read a variable, so the 15 thresholds are literals, and
+  `test/lib/grid.test.ts` recomputes them from `GRID_MIN_REM` and the
+  gap). Its `fr` tracks need no cap, since cells have `min-width: 0`.
+  Values ride in a `style` attribute, which the public CSP allows. Every
+  child sits in its own `.rkr-grid-cell` so the layout does not depend
+  on what the block renders. A public child that renders only a comment
+  gets no cell, so it leaves no empty gap; marked renders keep the cell
+  for the editor. In edit mode `data-rkr-path` for a `widths` grid
   sits on `.rkr-grid-wrap`.
 
 ### One render path

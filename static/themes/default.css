@@ -1307,8 +1307,9 @@ body[data-mode="figure"] .rkr-meta {
 .rkr-grid {
   display: grid;
   gap: var(--rkr-gap);
-  /* Caps at --rkr-grid-cols, drops a column whenever a cell would fall below --rkr-grid-min. */
-  grid-template-columns: repeat(auto-fill, minmax(max(var(--rkr-grid-min, 16rem), (100% - (var(--rkr-grid-cols, 1) - 1) * var(--rkr-gap)) / var(--rkr-grid-cols, 1)), 1fr));
+  /* Caps at --rkr-grid-cols, drops a column whenever a cell would fall below --rkr-grid-min,
+     and never makes a track wider than the grid itself. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--rkr-grid-min, 16rem), (100% - (var(--rkr-grid-cols, 1) - 1) * var(--rkr-gap)) / var(--rkr-grid-cols, 1))), 1fr));
   min-width: 0;
 }
 .rkr-grid > * {
@@ -1384,77 +1385,77 @@ body[data-mode="figure"] .rkr-meta {
   margin: 0 auto;
   border: 1px dashed var(--rkr-rule);
 }
-@container (max-width: 21.5rem) {
+@container (max-width: 21.25rem) {
   .rkr-grid[data-widths].rkr-collapse-2-narrow {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 33.5rem) {
+@container (max-width: 33.25rem) {
   .rkr-grid[data-widths].rkr-collapse-2-medium {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 49.5rem) {
+@container (max-width: 49.25rem) {
   .rkr-grid[data-widths].rkr-collapse-2-wide {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 33rem) {
+@container (max-width: 32.5rem) {
   .rkr-grid[data-widths].rkr-collapse-3-narrow {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 51rem) {
+@container (max-width: 50.5rem) {
   .rkr-grid[data-widths].rkr-collapse-3-medium {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 75rem) {
+@container (max-width: 74.5rem) {
   .rkr-grid[data-widths].rkr-collapse-3-wide {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 44.5rem) {
+@container (max-width: 43.75rem) {
   .rkr-grid[data-widths].rkr-collapse-4-narrow {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 68.5rem) {
+@container (max-width: 67.75rem) {
   .rkr-grid[data-widths].rkr-collapse-4-medium {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 100.5rem) {
+@container (max-width: 99.75rem) {
   .rkr-grid[data-widths].rkr-collapse-4-wide {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 56rem) {
+@container (max-width: 55rem) {
   .rkr-grid[data-widths].rkr-collapse-5-narrow {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 86rem) {
+@container (max-width: 85rem) {
   .rkr-grid[data-widths].rkr-collapse-5-medium {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 126rem) {
+@container (max-width: 125rem) {
   .rkr-grid[data-widths].rkr-collapse-5-wide {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 67.5rem) {
+@container (max-width: 66.25rem) {
   .rkr-grid[data-widths].rkr-collapse-6-narrow {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 103.5rem) {
+@container (max-width: 102.25rem) {
   .rkr-grid[data-widths].rkr-collapse-6-medium {
     grid-template-columns: 1fr;
   }
 }
-@container (max-width: 151.5rem) {
+@container (max-width: 150.25rem) {
   .rkr-grid[data-widths].rkr-collapse-6-wide {
     grid-template-columns: 1fr;
   }
