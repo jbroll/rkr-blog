@@ -317,7 +317,7 @@ all use that one rule. Corrupt files are skipped.
 
 | Kind | Types |
 |---|---|
-| Containers | `section` (`theme`, `edge`), `row`, `col`, `flow` |
+| Container | `grid` (`slots`, `children`) |
 | Leaves | `text` (`markdown`), `figure`, `video`, `button` (`label`, `href`, `variant`), `list`, `marquee`, `accordion`, `progress`, `embed` |
 | Macro instance | `{ "type": "macro", "macro": "hero", "slots": { ... } }` |
 
@@ -330,13 +330,73 @@ youtu.be, vimeo.com, docs.google.com and maps.google.com URLs, but the
 public CSP has no `frame-src`, so browsers block it. Nothing in the
 editor, `blocks-migrate` or the WordPress importer creates one.
 
-Rows and columns are flexbox and stack on narrow screens. There is no
-free positioning and no per-page CSS; themes own the tokens.
+#### Grid
 
-A figure that opens the page, or opens a leading `flow`, is the page's
-hero: it renders in the banner slot (above the header with
+```json
+{ "type": "grid",
+  "slots": { "cols": 3, "min": "medium", "widths": "2 1", "band": true,
+             "theme": "dark", "edge": "wave" },
+  "children": [ ... ] }
+```
+
+| Slot | Values | Default | Effect |
+|---|---|---|---|
+| `cols` | integer 1 to 6 | 1 | Cells side by side when there is room. Children fill cells in reading order and wrap, so six children at `cols: 3` make two rows. |
+| `min` | `narrow` (10rem), `medium` (16rem), `wide` (24rem) | `medium` | Narrowest cell. A grid too narrow for `cols` cells of this width shows fewer columns, down to one. |
+| `widths` | space-separated positive numbers, one per column | equal | Column ratio, such as `2 1`. Ignored unless it has exactly `cols` entries. With `widths`, the grid goes straight to one column when it is too narrow for every column at `min`. |
+| `band` | boolean | false | Full page width with the section padding. `theme` and `edge` apply only with `band`. |
+| `theme` | `light`, `dark` (the themes with CSS) | `light` | Band background. |
+| `edge` | `straight`, `wave` | `straight` | Band bottom edge. |
+
+- Each child renders in its own `.rkr-grid-cell`.
+- Collapse follows the grid's own width, not the screen's, so a grid in a
+  narrow cell collapses too. On a phone every grid is one column.
+- An empty grid is valid. Readers see nothing; the editor shows "Empty
+  grid: drag blocks here", which takes drops.
+- The page body is a one-column stack, not a stored grid.
+- There is no free positioning and no per-page CSS; themes own the tokens.
+- Cells cannot span columns or rows; nest a grid instead.
+
+`section`, `row`, `col` and `flow` are accepted on read, in macro files
+and in older page files, and expanded to a grid. A page is saved with
+`grid` only. Macro files keep the shorthand.
+
+| Shorthand | Grid |
+|---|---|
+| `section` (`theme`, `edge`) | `band: true`, same `theme` and `edge`, `cols: 1` |
+| `row` | `cols` = number of children, capped at 6 |
+| `col`, `flow` (`children` or `blocks`) | `cols: 1` |
+
+#### Placement rules
+
+Every saved tree renders something defined. The save route enforces
+these (see Saving); the editor never builds a tree that breaks them.
+
+1. Block types are `grid`, the leaves above and `macro`.
+2. A macro instance names a macro in the site's library. The render
+   endpoint still renders a comment for an unknown macro, so a page whose
+   macro file was deleted opens.
+3. A `figure` has at least one image id and a `video` has an id.
+4. Leaves and macro instances have no children.
+5. At most three grid levels nest, counted from the page body. A macro's
+   own grids count inside its definition.
+6. Grid slots hold the values in the table above.
+
+Guidance, not errors: a band grid is offered only at page level, and a
+one-column grid directly inside another one-column grid is never offered.
+Existing trees that have either render and save. Nothing removes or
+unwraps a grid automatically.
+
+Reading (page files, macro files, the render endpoint) checks structure
+only and clamps out-of-range slots at render: `cols` to 1 to 6, an
+unknown `min` to `medium`, a `widths` with the wrong count ignored. Only
+saving applies the rules, so a page on disk always opens.
+
+A figure that opens the page, or opens a leading one-column grid, is the
+page's hero: it renders in the banner slot (above the header with
 `bannerAboveHeader`) and the index teaser, not in the body. This is the
-markdown rule for a post's leading `::figure`.
+markdown rule for a post's leading `::figure`. `blocks-migrate` writes a
+post's blocks straight into the page body with no wrapping container.
 
 ### Macros
 
@@ -431,7 +491,13 @@ the editing chrome. View and Edit are two modes of the same page.
   line between stacked ones. A slot that breaks a rule (a block into
   itself, a Section anywhere but the page body, a Column directly in a
   one-column grid, a fourth grid level, or a move that changes nothing)
-  shows no marker and the cursor shows the drop refused.
+  shows no marker and the cursor shows the drop refused. When the
+  nearest slot is illegal the drop is refused; it does not move to a
+  farther slot. Only palette items and the drag handle start a drop, so
+  dragged text or URLs insert nothing and the page's own images, links
+  and videos cannot be dragged in Edit mode. The dragged block follows
+  the pointer as a copy at most 320 by 240 px, and the toolbar ignores
+  the pointer during a drag. Drops never create structure.
 - **Layout presets** all insert a grid: Row `cols: 2`, Column `cols: 1`,
   Section `cols: 1, band: true` (light, straight edge). The toolbar
   label follows the slots: a band reads Section, one column reads
@@ -447,7 +513,8 @@ the editing chrome. View and Edit are two modes of the same page.
   (Narrow, Medium, Wide), Column widths (blank for equal, or one number
   per column, offered for 2 to 4 columns), Full-width band (shown only
   at page level, or on a band so it can be turned off), and with
-  the band on, Background and Bottom edge. Changing Columns so the
+  the band on, Background (Light or Dark) and Bottom edge (Straight or
+  Wave). Changing Columns so the
   widths no longer match keeps the dialog open with the message.
 - **Image and Video** show the new block and open its picker. Nothing
   saves or drafts until the dialog saves with something picked; Cancel,
@@ -480,7 +547,11 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   get `400` and are never stored. A tree that breaks a hard rule gets
   `400 { error: "invalid", message, path }`: the editor selects the
   block at `path`, shows `message` in its toolbar, shows Not saved, and
-  does not retry until the tree changes.
+  does not retry until the tree changes. A page that already breaks a
+  rule still opens and renders. The editor marks the block ("This block
+  can't be saved: the macro hero no longer exists. Delete it to save.")
+  and the save is refused until the author fixes it. The check also
+  looks at raw `children` on leaves and macro instances.
 - A save from an editor bundle older than the running server (its
   `X-Rkr-Build` differs) gets `426`; the editor asks for a reload.
 - New page refuses a slug that a fixed route answers (`about`, `search`,

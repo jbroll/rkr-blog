@@ -480,13 +480,35 @@ throws rather than return a partial one, so nothing invalid reaches disk.
   Filling the whole tree, not selected fields, lets a macro put a slot
   anywhere: button links, markdown, nested instances. It runs once, so
   a slot value cannot inject another placeholder.
-- **Depth is guidance, not a build error.** `containerDepth` counts
-  levels in one definition and the editor refuses a drop past three.
-  The renderer enforces only cycle safety (`detectCycle`), and prints a
-  comment for a cycle. A build never fails because an author nested too
-  deep.
-- **Responsive by construction.** Containers are divs, styled by the
-  theme with flexbox. There are no per-device settings.
+- **One container type.** Four container types differed only in
+  direction and looks, and authors could not tell which to use. `grid`
+  covers them with slots (`src/lib/grid.ts`: `readGridSlots`,
+  `gridLabel`, `GRID_MIN_REM`). `expandShorthand` turns `section`, `row`,
+  `col` and `flow` into a grid on read, so macro files and old pages need
+  no migration and every later layer sees only `grid`.
+- **Two validation levels.** `parseBlockTree` checks structure and clamps
+  slots at render, so a file on disk always opens. `validateForSave`
+  (`blocks.ts`) applies the placement rules and runs only in the save
+  route, which answers `400 { error: 'invalid', message, path }` for the
+  first problem. It also checks raw `children` before the parse drops
+  them. A page broken before the rules existed opens, the editor marks
+  the block, and saving waits for the author. The render endpoint keeps
+  drawing a comment for an unknown macro for the same reason.
+- **Depth is checked at save and in the editor.** At most three grid
+  levels from the page body (`MAX_GRID_LEVELS`). `fitsDepth` and
+  `depthNudge` in `drop-slots.ts` stop the editor short of it. The
+  renderer enforces only cycle safety (`detectCycle`) and prints a
+  comment for a cycle.
+- **Responsive by container, not viewport.** A grid is a CSS grid. Plain
+  grids use `repeat(auto-fill, minmax(...))` capped at `--rkr-grid-cols`
+  and floored at `--rkr-grid-min`. CSS cannot express a ratio that
+  drops columns, so a `widths` grid gets `data-widths` and a
+  `.rkr-collapse-N-MIN` class, and container queries on `.rkr-grid-wrap`
+  switch it to one column when it cannot fit N cells at `min`. Values
+  ride in a `style` attribute, which the public CSP allows. Every child
+  sits in its own `.rkr-grid-cell` so the layout does not depend on what
+  the block renders. In edit mode `data-rkr-path` for a `widths` grid
+  sits on `.rkr-grid-wrap`.
 
 ### One render path
 
@@ -524,8 +546,18 @@ in place:
   DOM and the tree. It measures grid cells, not the blocks in them, so
   gaps are the grid's own, and reads side by side versus stacked from
   live rects rather than `cols`, so a wrapped grid gets horizontal
-  markers. `unified-insert.ts` calls `preventDefault` in `dragover` only
-  for a legal slot.
+  markers. It picks the nearest slot first and then checks legality, so
+  an illegal nearest slot refuses the drop instead of falling through to
+  a farther one that would surprise the author. `unified-insert.ts` calls
+  `preventDefault` in `dragover` only for a legal slot.
+- Wrap and Unwrap are tree ops in `block-tree-ops.ts`, driven from
+  `unified-block-actions.ts`. The grid
+  dialog's field handling (`readGridFields`, `validateGridFields`,
+  `applyGridSlots`) is in `grid-dialog-tree.ts`, away from the DOM code.
+- Image and Video open the picker before anything saves. The block is
+  inserted into the live page so the author sees it, but it stays out of
+  the draft and the save until something is picked, so an empty figure
+  never reaches disk.
 - Phone preview sets a narrow width on the page body. An iframe at phone
   width would trigger the site's media queries, but public pages send
   `frame-ancestors 'none'`, so the preview stays in the same document and
@@ -604,7 +636,11 @@ markdown and are never converted.
 
 - **Reruns never overwrite.** A slug that already resolves to a page is
   skipped unless `--force`, so editor work survives a second `--all`.
-  `--force` replaces the file the slug resolves to, never a second file.
+  `--force` replaces the file the slug resolves to, never a second file,
+  and discards editor changes to it. It is how a site picks up a change
+  to the migration output.
+- **No wrapper.** Blocks go straight into the page body. A figure that
+  opens the body is the hero.
 - **Order and dates hold.** The twin takes the markdown file's mtime,
   and an undated published post gets that mtime as `fields.date`; the
   markdown index used the mtime for both, so neither moves.
