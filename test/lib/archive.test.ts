@@ -240,6 +240,30 @@ test('export includes JSON block pages and import restores them', (t) => {
   }
 });
 
+test('export includes macros and archived markdown, and import restores them', (t) => {
+  const src = freshSiteRoot(t);
+  const dst = freshSiteRoot(t);
+  const arcPath = path.join(os.tmpdir(), `rkr-arc-macros-${Date.now()}.sqlite`);
+  t.after(() => fs.rmSync(arcPath, { force: true }));
+
+  const files: Record<string, string> = {
+    'macros/hero.json': JSON.stringify({ defaults: {}, tree: { type: 'section' } }),
+    'content/posts-legacy/old.md': '---\ntitle: Old\nslug: old\n---\n\nArchived.\n'
+  };
+  for (const [rel, data] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(src, rel)), { recursive: true });
+    fs.writeFileSync(path.join(src, rel), data);
+  }
+  fs.writeFileSync(path.join(src, 'macros', 'notes.txt'), 'not a macro');
+
+  const stats = exportArchive(src, arcPath);
+  assert.equal(stats.files, 2);
+  importArchive(dst, arcPath);
+  for (const [rel, data] of Object.entries(files)) {
+    assert.equal(fs.readFileSync(path.join(dst, rel), 'utf8'), data, rel);
+  }
+});
+
 // ---- merge behaviour -------------------------------------------------------
 
 test('import merge skips existing files and comments', async (t) => {

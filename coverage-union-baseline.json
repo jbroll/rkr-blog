@@ -114,7 +114,7 @@
     "src/lib/admin-token.ts": 100,
     "src/lib/applied-outbox.ts": 100,
     "src/lib/archive-helpers.ts": 100,
-    "src/lib/archive.ts": 94.87,
+    "src/lib/archive.ts": 94.96,
     "src/lib/atomic-write.ts": 100,
     "src/lib/auth-middleware.ts": 100,
     "src/lib/bearer.ts": 100,

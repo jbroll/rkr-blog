@@ -128,6 +128,66 @@ an unregistered one 404s for everyone. So:
 $(git rev-parse HEAD)` to confirm the just-pushed commit is what's
 serving.
 
+### JSON page cutover (first deploy of the block editor)
+
+The first deploy that serves posts from JSON block pages converts every
+markdown post. Do it one site at a time, in this order. Run the
+`site-admin` steps on the VPS as the service user, from
+`/opt/<APP_NAME>`.
+
+1. **Back up**, with the build that is still running:
+   `bin/site-admin export -o /var/backups/<APP_NAME>-pre-cutover.sqlite`.
+   The archive holds the markdown posts, sidecars, originals, config,
+   comments, users and invites. Keep it until the cutover has run for a
+   while.
+2. **Check authoring browsers.** Confirm each browser that edited
+   offline with the old editor has no unsynced work: open the admin
+   online and let it sync. The new editor skips a queued `savePost`
+   from the old one, so anything still queued stays in that browser.
+3. **Deploy and verify** (`./deploy-full.sh <site>`, which runs
+   `verify-deploy.sh`). Posts still render from markdown.
+4. **Convert:** `bin/site-admin blocks-migrate --all --dry-run` lists
+   the twins it would write, any slug it skips because a page already
+   holds it, and any reserved slug (a fixed route answers its URL).
+   Then `bin/site-admin blocks-migrate --all`. A rerun never overwrites
+   a page; `--force` replaces the file a slug resolves to.
+5. **Spot-check** a few posts in a browser; each now renders from its
+   twin. Look at the hero banner (a leading figure stays in the banner
+   slot), links (reference-style links included), the subtitle under
+   the title, and the date and position on the index. To back out one
+   post, delete its file in `content/blocks/` and run `reindex`; the
+   markdown serves again until it is archived.
+6. **Archive:** `bin/site-admin blocks-migrate --archive --dry-run`, then
+   `bin/site-admin blocks-migrate --archive`. It moves each twinned
+   `content/posts/*.md` to `content/posts-legacy/` and refuses the whole
+   run, moving nothing, if a post has no JSON twin or its name is
+   already in `content/posts-legacy/`. `--include-untwinned` moves
+   untwinned posts anyway, and they drop out of the index, so use it
+   only for posts you are retiring. `_about.md` and `_site-banner.md`
+   stay in `content/posts/`: `/about` and the index banner read them
+   directly. The server never reads `content/posts-legacy/`.
+7. **Reindex:** `bin/site-admin reindex`. Each row now points at its
+   JSON file; slugs, permalinks and comment threads are keyed by slug and
+   carry over.
+
+After the cutover, `content/blocks/` is what makes posts readable, and
+`site-admin export` includes it along with `macros/` and
+`content/posts-legacy/`.
+
+**Rollback.**
+
+1. Redeploy the previous build (`./deploy-full.sh <site>` from that
+   commit).
+2. Move the JSON pages out of the read path:
+   `mv content/blocks content/blocks.rolled-back` under `SITE_ROOT`.
+3. `bin/site-admin import /var/backups/<APP_NAME>-pre-cutover.sqlite`.
+   The archived markdown is no longer in `content/posts/`, so the import
+   writes it back, merges comments (new ones stay) and rebuilds the
+   index. Page edits made since the export stay only in
+   `content/blocks.rolled-back`. `--replace` would instead discard
+   everything since the export, and refuses an archive with no owner
+   user.
+
 ### First deploy of a new site
 
 1. OAuth clients are shared across all three sites — one Google OAuth
@@ -447,39 +507,6 @@ through `/admin/posts` carry no `source_kind` — so read the `--dry-run`
 output before applying. (For the same reason, `fix-wp-dates`, which does
 gate on `source_kind: wordpress`, is a no-op on pushed posts.)
 
-### 5b. Archive markdown sources (JSON cutover)
-
-Once the post is served from its JSON twin, move the markdown source out
-of the read path. On the host, against the live content tree:
-
-```bash
-site-admin blocks-migrate --all        # write/refresh a JSON twin per post
-site-admin blocks-migrate --archive    # move content/posts/*.md → content/posts-legacy/
-site-admin reindex                     # refresh the SQLite index
-```
-
-`--archive` moves files, never copies or deletes them, and refuses the
-whole run (nothing moves) when a post has no JSON twin. Run
-`blocks-migrate --all` first, or pass `--include-untwinned` to archive
-untwinned posts anyway — they will drop out of the index. It also
-refuses to overwrite a name already present in `content/posts-legacy/`.
-Note that `--include-untwinned` moves the markdown *and* leaves the post
-unlisted, so only use it for posts you are deliberately retiring.
-
-`_`-prefixed system files (`_about.md`, `_site-banner.md`) stay in
-`content/posts/`: `/about` and the index banner read them directly and
-have no JSON fallback. The legacy directory is not read by the server.
-Slugs, permalinks, and comment threads are keyed by slug, so they
-survive the archive; `reindex` re-points each row at its JSON file.
-Rollback: move the files back into `content/posts/` and reindex.
-
-The SQLite backup commands cover both source trees: `site-admin export`
-packs `content/blocks/*.json` alongside `content/posts/*.md` (and
-sidecars, originals, config, comments, users, invites), and
-`site-admin import` restores both. Post-cutover the block pages are
-what make the posts readable, so do not prune `content/blocks/` from a
-backup.
-
 ### 6. Check image orientations
 
 `walk-site.sh` only HEADs each image for a 2xx — a photo rendered
@@ -541,7 +568,9 @@ the service user and managed via deploy, not by an interactive wipe.
 ## Block pages and macros
 
 Pages live in `<SITE_ROOT>/content/blocks/*.json` and macros in
-`<SITE_ROOT>/macros/*.json`. `site-admin export` archives both.
+`<SITE_ROOT>/macros/*.json`. `site-admin export` archives both. Moving a
+site from markdown posts to pages is the JSON page cutover under
+Deploying a site.
 
 - **Authoring.** `/admin/blocks` lists pages. New page creates a draft
   and opens it in the editor. A draft stays off the public site until
@@ -566,10 +595,6 @@ Pages live in `<SITE_ROOT>/content/blocks/*.json` and macros in
   the server has it. Clearing site data discards it. An edit page opens
   offline only if an earlier online visit cached it; otherwise it
   answers 503.
-- **Before upgrading** a site whose authors used the old editor offline,
-  confirm each authoring browser has no unsynced offline work. A queued
-  `savePost` from that editor is skipped, never sent, so its edit stays
-  stranded in that browser's outbox.
 - **Old URLs.** `/admin/editor` answers 404, `/admin/view/:slug`
   redirects to the editor, and `/admin` redirects to `/admin/blocks`.
 
