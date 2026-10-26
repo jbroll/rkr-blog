@@ -100,10 +100,11 @@ function renderGrid(
   opts?: RenderNodeOpts
 ): string {
   const marked = Boolean(opts?.mark);
-  if (kids.length === 0 && !marked) return '';
+  const cells = kids.filter(Boolean);
+  if (cells.length === 0 && !marked) return '';
   const g = readGridSlots(node.slots);
-  const inner = kids.length
-    ? kids.join('')
+  const inner = cells.length
+    ? cells.map((c) => `<div class="rkr-grid-cell">${c}</div>\n`).join('')
     : '<p class="rkr-grid-empty" data-rkr-grid-empty>Empty grid: drag blocks here</p>\n';
   const stacked = g.widths !== null && g.cols > 1;
   const collapse = stacked ? ` rkr-collapse-${g.cols}-${g.min}` : '';

@@ -145,7 +145,7 @@ describe('blocks-render', () => {
     // Today's public output, byte-for-byte.
     assert.equal(
       plain,
-      '<p>One</p>\n<p>Two</p>\n<section class="rkr-section rkr-theme-light">\n<div class="rkr-section-inner rkr-grid" style="--rkr-grid-cols:1;--rkr-grid-min:16rem">\n<p>Three</p>\n<p>Four</p>\n</div>\n</section>\n'
+      '<p>One</p>\n<p>Two</p>\n<section class="rkr-section rkr-theme-light">\n<div class="rkr-section-inner rkr-grid" style="--rkr-grid-cols:1;--rkr-grid-min:16rem">\n<div class="rkr-grid-cell"><p>Three</p>\n</div>\n<div class="rkr-grid-cell"><p>Four</p>\n</div>\n</div>\n</section>\n'
     );
 
     const marked = await renderBlockTree(tree, fakeCtx, emptyLib, { mark });
@@ -382,6 +382,24 @@ describe('renderBlockTree unknown types', () => {
       assert.match(html, /<section class="rkr-section rkr-theme-dark">/);
       assert.match(html, /rkr-section-inner rkr-grid/);
       assert.match(html, /rkr-section-wave/);
+    });
+
+    it('puts one text block with a heading and a paragraph in one cell', async () => {
+      const html = await render(
+        grid({ cols: 2 }, [{ type: 'text', markdown: '## Head\n\nBody.' }])
+      );
+      assert.equal((html.match(/rkr-grid-cell/g) ?? []).length, 1);
+    });
+
+    it('renders one cell per figure', async () => {
+      const fig = { type: 'figure', slots: { ids: 'aaaa1111' } };
+      const html = await render(grid({ cols: 3 }, [fig, fig, fig]));
+      assert.equal((html.match(/class="rkr-grid-cell"/g) ?? []).length, 3);
+    });
+
+    it('places the marker inside the cell', async () => {
+      const html = await render(grid({ cols: 2 }), true);
+      assert.match(html, /<div class="rkr-grid-cell"><!--rkr:path=0,0--><p>x<\/p>/);
     });
 
     it('renders nothing for an empty grid on the public page', async () => {
