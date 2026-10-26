@@ -567,7 +567,12 @@ before every request and clears it after the server has the tree
 
 `runReindex` (`src/lib/post-index.ts`) reads `content/blocks/*.json` and
 `content/posts/*.md` and pairs them by slug, so comment threads and
-permalinks survive. Text leaves reach the search index through the same
+permalinks survive. The JSON half lives in `post-index-blocks.ts`; the
+save route calls its `reindexBlockPage` for the one page it wrote, since
+a full reindex parses every post (most of a second at 400 pages) on the
+event loop. `GET /:slug` and the teaser read a row under
+`content/blocks/` straight from its file (`readIndexedBlockPage`) and
+resolve by slug only for twins whose markdown is still on disk. Text leaves reach the search index through the same
 mdast plain-text walk as markdown posts (`post-text.ts`), so markup,
 URLs and raw HTML stay out of snippets. A JSON page wins over a markdown post with the same
 slug and the pair renders once. A corrupt JSON file is skipped, and the

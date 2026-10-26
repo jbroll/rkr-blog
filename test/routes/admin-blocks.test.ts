@@ -107,6 +107,59 @@ describe('admin blocks save', () => {
     assert.match(page.body, /Fresh body/);
   });
 
+  it('a save updates only its own index row, tags and search text', async (t) => {
+    const { root, app, db } = await setup(t);
+    await publishPage(app, 'one', [{ type: 'text', markdown: 'First words.' }]);
+    // Siblings a full reindex would read: a corrupt page and an unindexed post.
+    fs.writeFileSync(path.join(root, 'content', 'blocks', 'bad.json'), '{ not json');
+    fs.mkdirSync(path.join(root, 'content', 'posts'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'content', 'posts', 'loose.md'),
+      '---\ntitle: Loose\nslug: loose\nstatus: published\n---\n\nLoose.\n'
+    );
+    const errors: string[] = [];
+    t.mock.method(console, 'error', (...a: unknown[]) => {
+      errors.push(a.map(String).join(' '));
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/one',
+      payload: {
+        tree: {
+          version: 1,
+          body: [{ type: 'text', markdown: 'Second **words**.' }],
+          fields: { title: 'One renamed', slug: 'one', status: 'published', tags: ['alpha'] }
+        }
+      }
+    });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(errors, [], 'no sibling was parsed');
+
+    const row = db.prepare<{ title: string }>('SELECT title FROM posts WHERE slug = ?').get('one');
+    assert.equal(row?.title, 'One renamed');
+    const fts = db
+      .prepare<{ body: string; tags: string }>('SELECT body, tags FROM posts_fts WHERE slug = ?')
+      .get('one');
+    assert.equal(fts?.body, 'Second words .');
+    assert.equal(fts?.tags, 'alpha');
+    const tags = db
+      .prepare<{ name: string }>(
+        `SELECT t.name FROM tags t JOIN post_tags pt ON pt.tag_id = t.id
+           JOIN posts p ON p.id = pt.post_id WHERE p.slug = ?`
+      )
+      .all('one');
+    assert.deepEqual(
+      tags.map((r) => r.name),
+      ['alpha']
+    );
+    assert.equal(
+      db.prepare('SELECT 1 FROM posts WHERE slug = ?').get('loose'),
+      undefined,
+      'no full reindex ran'
+    );
+  });
+
   it('POST /admin/blocks/:slug prewarms image variants referenced by the tree', async (t) => {
     const { root, app, db } = await setup(t);
     const id = 'e'.repeat(64);

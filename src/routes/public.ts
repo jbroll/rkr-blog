@@ -11,7 +11,7 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
-import { readBlockPage } from '../lib/block-pages.ts';
+import { readIndexedBlockPage } from '../lib/block-pages.ts';
 import { renderBlockPost } from '../lib/block-post-render.ts';
 import { extractBlockTeaser } from '../lib/block-teaser.ts';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
@@ -226,7 +226,7 @@ export default async function publicRoutes(
         try {
           let parts: { bannerHtml: string; excerptHtml: string } | null = null;
           if (isBlocksPagePath(top.path)) {
-            const twin = readBlockPage(siteRoot, top.slug);
+            const twin = readIndexedBlockPage(siteRoot, top);
             if (twin) {
               parts = await extractBlockTeaser(
                 siteRoot,
@@ -357,7 +357,7 @@ export default async function publicRoutes(
       // JSON-first: a stored twin renders the page body; the markdown
       // file (when paired) still supplies nothing at render time — the
       // index already carries its title, date, status, and tags.
-      const twin = readBlockPage(siteRoot, row.slug);
+      const twin = readIndexedBlockPage(siteRoot, row);
       const widgetsCtx = {
         images: new Map(),
         videos: await buildVideoMap(siteRoot),

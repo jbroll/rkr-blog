@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
-import { listBlockPages, readBlockPage } from '../../src/lib/block-pages.ts';
+import { listBlockPages, readBlockPage, readIndexedBlockPage } from '../../src/lib/block-pages.ts';
 
 const PAGE = {
   version: 1,
@@ -87,5 +87,25 @@ describe('block-pages', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-block-pages-empty-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     assert.deepEqual(listBlockPages(root), []);
+  });
+
+  it('reads an indexed page from its row path without resolving the slug', (t: TestContext) => {
+    const root = withBlocks(t, {
+      'a.json': { ...PAGE, fields: { title: 'First file', slug: 'hello' } },
+      'b.json': { ...PAGE, fields: { title: 'Indexed file', slug: 'hello' } }
+    });
+    const direct = readIndexedBlockPage(root, { slug: 'hello', path: 'content/blocks/b.json' });
+    assert.equal(direct?.title, 'Indexed file');
+    assert.equal(readBlockPage(root, 'hello')?.title, 'First file');
+  });
+
+  it('falls back to the slug when the row path is stale or markdown', (t: TestContext) => {
+    const root = withBlocks(t, {
+      'a.json': PAGE,
+      'b.json': { ...PAGE, fields: { title: 'Other', slug: 'other' } }
+    });
+    for (const p of ['content/blocks/b.json', 'content/blocks/gone.json', 'content/posts/a.md']) {
+      assert.equal(readIndexedBlockPage(root, { slug: 'hello', path: p })?.title, 'Hello', p);
+    }
   });
 });

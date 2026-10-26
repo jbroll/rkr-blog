@@ -442,7 +442,8 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   without `baseVersion` (scripted clients) overwrites.
 - A save that would create a file whose name another page already uses
   gets `409`. An invalid tree gets `400` and is never stored.
-- A save reindexes and queues derivative renders for the page's media.
+- A save updates that page's index entry (row, tags, search text) and
+  queues derivative renders for its media.
 - The tree is written to an IndexedDB draft before each request and
   cleared once the server has it. After a failed or offline save the
   draft restores on reload. The indicator shows clean, editing, saving,

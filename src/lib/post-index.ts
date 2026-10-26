@@ -8,12 +8,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Root } from 'mdast';
-import { remark } from 'remark';
-import remarkDirective from 'remark-directive';
-import { type BlockNode, type BlockTree, parseBlockTree } from './blocks.ts';
 import { type PostFrontmatter, parsePost } from './content.ts';
 import { type Db, open } from './db.ts';
 import { migrate } from './migrate.ts';
+import { indexBlockPages, syncPostTags } from './post-index-blocks.ts';
 import { extractPlainText } from './post-text.ts';
 
 export interface IndexedPost {
@@ -64,7 +62,6 @@ function doReindex(
   const onDiskFiles = new Set(listMarkdown(postsDir));
   const onDiskBlocks = new Set(listJson(blocksDir));
   const slugToFile = new Map<string, string>(); // duplicate-slug detection
-  const slugToBlockFile = new Map<string, string>();
 
   let inserted = 0;
   let updated = 0;
@@ -173,107 +170,12 @@ function doReindex(
       );
     }
 
-    // JSON twins: content/blocks/*.json matched to posts by fields.slug.
-    // A twin overrides its markdown sibling's indexed fields (title,
-    // status, tags, FTS body) while the row keeps the markdown sibling's
-    // id, so comment threads survive the cutover. Once the markdown file
-    // has been archived the row also adopts the JSON path (see below).
-    // JSON-only pages get their own rows pointing at content/blocks/.
-    for (const filename of onDiskBlocks) {
-      const fullPath = path.join(blocksDir, filename);
-      let raw: string;
-      try {
-        raw = fs.readFileSync(fullPath, 'utf8');
-      } catch {
-        continue;
-      }
-      let tree: BlockTree;
-      let fields: Record<string, unknown>;
-      try {
-        const parsed = JSON.parse(raw) as { version?: unknown; body?: unknown; fields?: unknown };
-        if (
-          !parsed ||
-          typeof parsed !== 'object' ||
-          !parsed.fields ||
-          typeof parsed.fields !== 'object'
-        ) {
-          throw new Error('blocks page needs object fields');
-        }
-        tree = parseBlockTree({ version: 1, body: parsed.body });
-        fields = parsed.fields as Record<string, unknown>;
-        if (typeof fields.slug !== 'string' || !fields.slug || typeof fields.title !== 'string') {
-          throw new Error('blocks page needs string fields.slug and fields.title');
-        }
-      } catch (err) {
-        // biome-ignore lint/suspicious/noConsole: surface unparseable twins to reindex output
-        console.error(
-          `reindex: JSON parse failed for ${filename} — retaining any existing DB row and comments: ${(err as Error).message}`
-        );
-        continue;
-      }
-      const slug = fields.slug as string;
-      if (slug.startsWith('_')) continue;
-      // Twins share their slug with the markdown sibling by design;
-      // only a second JSON file claiming the same slug is a duplicate.
-      if (slugToBlockFile.has(slug)) {
-        // biome-ignore lint/suspicious/noConsole: surface duplicate slugs to reindex output
-        console.error(`reindex: duplicate slug "${slug}" in blocks/${filename} — skipping`);
-        continue;
-      }
-      slugToBlockFile.set(slug, filename);
-
-      const stat = fs.statSync(fullPath);
-      const created = new Date(stat.birthtimeMs || stat.mtimeMs).toISOString();
-      const updatedAt = new Date(stat.mtimeMs).toISOString();
-      const status: 'draft' | 'published' = fields.status === 'draft' ? 'draft' : 'published';
-      const publishedAt =
-        status === 'published' ? (typeof fields.date === 'string' ? fields.date : updatedAt) : null;
-      const tags = Array.isArray(fields.tags) ? (fields.tags as string[]) : [];
-
-      // Match by slug only: a twin shares its row (and comment thread)
-      // with the markdown sibling, never by path. While the markdown
-      // sibling is still on disk the row keeps its markdown path (the
-      // index teaser reads it); once it has been archived the row adopts
-      // the JSON path so the orphan check keeps the row — and therefore
-      // its comments — alive.
-      const relPath = path.posix.join('content', 'blocks', filename);
-      const existing = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
-      const mdStillOnDisk = slugToFile.has(slug);
-      if (existing) {
-        if (mdStillOnDisk) {
-          db.prepare(
-            `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?
-             WHERE id = ?`
-          ).run(slug, fields.title as string, status, updatedAt, publishedAt, existing.id);
-        } else {
-          db.prepare(
-            `UPDATE posts SET slug = ?, title = ?, status = ?, updated_at = ?, published_at = ?, path = ?
-             WHERE id = ?`
-          ).run(slug, fields.title as string, status, updatedAt, publishedAt, relPath, existing.id);
-        }
-        updated++;
-      } else {
-        db.prepare(
-          `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        ).run(slug, fields.title as string, status, created, updatedAt, publishedAt, relPath);
-        insertedSlugs.add(slug);
-        inserted++;
-      }
-
-      db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(slug);
-      db.prepare('INSERT INTO posts_fts (slug, title, tags, body) VALUES (?, ?, ?, ?)').run(
-        slug,
-        fields.title as string,
-        tags.join(' '),
-        extractBlockPlainText(tree)
-      );
-
-      const postId =
-        existing?.id ??
-        (db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug)?.id as number);
-      syncPostTags(db, postId, tags);
-    }
+    // JSON twins override their markdown sibling's indexed fields and
+    // keep its row id; JSON-only pages get their own rows.
+    const blocks = indexBlockPages(db, blocksDir, onDiskBlocks, new Set(slugToFile.keys()));
+    inserted += blocks.inserted;
+    updated += blocks.updated;
+    for (const slug of blocks.insertedSlugs) insertedSlugs.add(slug);
   });
   upsert();
 
@@ -367,25 +269,6 @@ function doReindex(
   return { inserted, updated, removed };
 }
 
-/** Replace the full tag set for one post. Called inside the upsert transaction. */
-function syncPostTags(db: Db, postId: number, rawTags: string[]): void {
-  db.prepare('DELETE FROM post_tags WHERE post_id = ?').run(postId);
-  for (const raw of rawTags) {
-    const name = String(raw).trim();
-    if (!name) continue;
-    db.prepare('INSERT OR IGNORE INTO tags(name) VALUES (?)').run(name);
-    const tag = db
-      .prepare<{ id: number }>('SELECT id FROM tags WHERE name = ? COLLATE NOCASE')
-      .get(name);
-    if (tag) {
-      db.prepare('INSERT OR IGNORE INTO post_tags(post_id, tag_id) VALUES (?, ?)').run(
-        postId,
-        tag.id
-      );
-    }
-  }
-}
-
 function listMarkdown(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
@@ -402,28 +285,6 @@ function listJson(dir: string): string[] {
     .readdirSync(dir)
     .filter((f) => f.endsWith('.json'))
     .sort();
-}
-
-/** Plain-text bag for FTS: every text leaf's words (through the same
- * mdast extraction markdown posts use) plus button and marquee labels,
- * in document order. */
-function extractBlockPlainText(tree: BlockTree): string {
-  const parts: string[] = [];
-  const walk = (node: BlockNode): void => {
-    if (node.type === 'text' && node.markdown) {
-      const words = extractPlainText(remark().use(remarkDirective).parse(node.markdown) as Root);
-      if (words) parts.push(words);
-    }
-    if (node.type === 'button' && typeof node.slots?.label === 'string')
-      parts.push(node.slots.label);
-    if (node.type === 'marquee' && typeof node.slots?.text === 'string')
-      parts.push(node.slots.text);
-    if (node.type === 'macro') return;
-    const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-    for (const k of n.children ?? n.blocks ?? []) walk(k);
-  };
-  for (const n of tree.body) walk(n);
-  return parts.join('\n');
 }
 
 /** Orphan test that knows both content dirs. Rows pointing into

@@ -23,6 +23,7 @@ import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { loadMacroLibrary, ROOT_MACROS } from '../lib/macro-library.ts';
 import { readAllIndexedPosts, runReindex } from '../lib/post-index.ts';
+import { reindexBlockPage } from '../lib/post-index-blocks.ts';
 import {
   setAdminEditorSecurityHeaders,
   setPublicSecurityHeaders
@@ -282,12 +283,11 @@ export function registerAdminBlockRoutes(
       fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
       const version = blockFileVersion(dest);
 
-      // Public / and /:slug read the DB index, not the JSON files, so a
-      // save must reindex before the page is reachable (mirrors the
-      // retired markdown save handler). wp-push also reindexes after
-      // its POST; runReindex is idempotent, so the extra call is
-      // harmless.
-      runReindex(siteRoot);
+      // Public / and /:slug read the DB index, so a save updates this
+      // page's row before replying. Only this page: a full reindex parses
+      // every post and blocks the event loop for most of a second.
+      if (opts.db) reindexBlockPage(opts.db, siteRoot, slug);
+      else runReindex(siteRoot);
 
       // Warm the derivative queue for any media the saved tree
       // references. Best-effort: a pre-warm failure must not fail the

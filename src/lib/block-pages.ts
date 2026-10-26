@@ -72,6 +72,27 @@ interface ResolvedPage extends BlockPage {
   file: string;
 }
 
+/** One page file, when it parses and carries `slug`. */
+function readPageFile(file: string, slug: string): ResolvedPage | null {
+  let parsed: unknown;
+  let bytes: Buffer;
+  try {
+    bytes = fs.readFileSync(file);
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.fields) || parsed.fields.slug !== slug) return null;
+  let tree: BlockTree;
+  try {
+    tree = parseBlockTree({ version: 1, body: parsed.body });
+  } catch {
+    return null;
+  }
+  const title = typeof parsed.fields.title === 'string' ? parsed.fields.title : slug;
+  return { title, tree, fields: parsed.fields, file, version: contentVersion(bytes) };
+}
+
 /** The one slug-to-file rule: the first file, in sorted name order, whose
  * `fields.slug` equals the slug and whose tree parses. A `<slug>.json` with
  * a different `fields.slug` does not match. */
@@ -86,24 +107,8 @@ function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
   }
   for (const name of files.sort()) {
     if (!name.endsWith('.json')) continue;
-    const file = path.join(dir, name);
-    let parsed: unknown;
-    let bytes: Buffer;
-    try {
-      bytes = fs.readFileSync(file);
-      parsed = JSON.parse(bytes.toString('utf8'));
-    } catch {
-      continue;
-    }
-    if (!isRecord(parsed) || !isRecord(parsed.fields) || parsed.fields.slug !== slug) continue;
-    let tree: BlockTree;
-    try {
-      tree = parseBlockTree({ version: 1, body: parsed.body });
-    } catch {
-      continue;
-    }
-    const title = typeof parsed.fields.title === 'string' ? parsed.fields.title : slug;
-    return { title, tree, fields: parsed.fields, file, version: contentVersion(bytes) };
+    const page = readPageFile(path.join(dir, name), slug);
+    if (page) return page;
   }
   return null;
 }
@@ -118,4 +123,19 @@ export function readBlockPage(siteRoot: string, slug: string): BlockPage | null 
 /** Path of the file `readBlockPage` serves for `slug`, so a save lands on it. */
 export function findBlockFile(siteRoot: string, slug: string): string | null {
   return resolveBlockPage(siteRoot, slug)?.file ?? null;
+}
+
+/** The page an index row points at. A row under content/blocks/ names its
+ * file, so it is read directly when that file still carries the slug;
+ * any other row (a twin whose markdown is still on disk) resolves by slug. */
+export function readIndexedBlockPage(
+  siteRoot: string,
+  row: { slug: string; path: string }
+): BlockPage | null {
+  if (path.posix.dirname(row.path) === 'content/blocks' && VALID_SLUG.test(row.slug)) {
+    const page = readPageFile(path.join(siteRoot, row.path), row.slug);
+    if (page)
+      return { title: page.title, tree: page.tree, fields: page.fields, version: page.version };
+  }
+  return readBlockPage(siteRoot, row.slug);
 }
