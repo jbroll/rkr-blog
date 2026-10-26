@@ -599,4 +599,58 @@ describe('admin blocks page fields', () => {
       status: 'published'
     });
   });
+
+  const page = (slug: string, title: string, bodyNodes: unknown = body) =>
+    JSON.stringify({ version: 1, body: bodyNodes, fields: { title, slug } });
+
+  it('editor and save use the same file when two files claim a slug', async (t) => {
+    const { root, app } = await setup(t);
+    const dir = path.join(root, 'content', 'blocks');
+    fs.writeFileSync(path.join(dir, 'a-first.json'), page('dup', 'First'));
+    fs.writeFileSync(path.join(dir, 'b-second.json'), page('dup', 'Second'));
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/dup' });
+    assert.match(edit.body, /First/);
+    await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/dup',
+      payload: { tree: { version: 1, body, fields: { status: 'published' } } }
+    });
+    const first = JSON.parse(fs.readFileSync(path.join(dir, 'a-first.json'), 'utf8'));
+    assert.equal(first.fields.status, 'published');
+    assert.equal(fs.existsSync(path.join(dir, 'dup.json')), false);
+    const second = JSON.parse(fs.readFileSync(path.join(dir, 'b-second.json'), 'utf8'));
+    assert.equal(second.fields.status, undefined);
+  });
+
+  it('an invalid-tree first match is skipped by the editor and the save', async (t) => {
+    const { root, app } = await setup(t);
+    const dir = path.join(root, 'content', 'blocks');
+    fs.writeFileSync(path.join(dir, 'a-bad.json'), page('dup', 'Bad', 'not an array'));
+    fs.writeFileSync(path.join(dir, 'b-good.json'), page('dup', 'Good'));
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/dup' });
+    assert.match(edit.body, /Good/);
+    await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/dup',
+      payload: { tree: { version: 1, body, fields: { status: 'published' } } }
+    });
+    const good = JSON.parse(fs.readFileSync(path.join(dir, 'b-good.json'), 'utf8'));
+    assert.equal(good.fields.title, 'Good');
+    assert.equal(good.fields.status, 'published');
+    assert.equal(fs.existsSync(path.join(dir, 'dup.json')), false);
+  });
+
+  it('new page treats a mismatched <slug>.json as taken', async (t) => {
+    const { root, app } = await setup(t);
+    const file = path.join(root, 'content', 'blocks', 'taken.json');
+    const original = page('something-else', 'Other');
+    fs.writeFileSync(file, original);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/new',
+      payload: { title: 'Taken', slug: 'taken' }
+    });
+    assert.equal(res.statusCode, 409);
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+  });
 });

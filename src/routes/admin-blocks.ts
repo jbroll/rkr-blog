@@ -144,7 +144,7 @@ export function registerAdminBlockRoutes(
           error: 'Use lowercase letters, digits and hyphens.'
         });
       }
-      if (fs.existsSync(blockFile(siteRoot, slug)) || readBlockPage(siteRoot, slug)) {
+      if (fs.existsSync(blockFile(siteRoot, slug)) || findBlockFile(siteRoot, slug)) {
         return sendNewForm(reply, 409, {
           title,
           slug,

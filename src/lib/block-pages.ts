@@ -54,9 +54,14 @@ export function listBlockPages(siteRoot: string): { slug: string; title: string 
   return out.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 
-/** Read one page by slug. Returns null for missing, malformed, or
- * path-traversal slugs — a bad file on disk is a 404, not a 500. */
-export function readBlockPage(siteRoot: string, slug: string): BlockPage | null {
+interface ResolvedPage extends BlockPage {
+  file: string;
+}
+
+/** The one slug-to-file rule: the first file, in sorted name order, whose
+ * `fields.slug` equals the slug and whose tree parses. A `<slug>.json` with
+ * a different `fields.slug` does not match. */
+function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
   if (!VALID_SLUG.test(slug)) return null;
   const dir = path.join(siteRoot, 'content', 'blocks');
   let files: string[];
@@ -65,11 +70,12 @@ export function readBlockPage(siteRoot: string, slug: string): BlockPage | null 
   } catch {
     return null;
   }
-  for (const file of files.sort()) {
-    if (!file.endsWith('.json')) continue;
+  for (const name of files.sort()) {
+    if (!name.endsWith('.json')) continue;
+    const file = path.join(dir, name);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+      parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch {
       continue;
     }
@@ -81,35 +87,19 @@ export function readBlockPage(siteRoot: string, slug: string): BlockPage | null 
       continue;
     }
     const title = typeof parsed.fields.title === 'string' ? parsed.fields.title : slug;
-    return { title, tree, fields: parsed.fields };
+    return { title, tree, fields: parsed.fields, file };
   }
   return null;
 }
 
-/** The file that stores `slug`: `<slug>.json` if present, else the file whose
- * `fields.slug` matches (migrated pages carry a dated name). The scan only
- * runs when the plain name is missing, so a page found once is a direct hit
- * on every later save. */
+/** Read one page by slug. Returns null for missing, malformed, or
+ * path-traversal slugs — a bad file on disk is a 404, not a 500. */
+export function readBlockPage(siteRoot: string, slug: string): BlockPage | null {
+  const page = resolveBlockPage(siteRoot, slug);
+  return page && { title: page.title, tree: page.tree, fields: page.fields };
+}
+
+/** Path of the file `readBlockPage` serves for `slug`, so a save lands on it. */
 export function findBlockFile(siteRoot: string, slug: string): string | null {
-  const dir = path.join(siteRoot, 'content', 'blocks');
-  const direct = path.join(dir, `${slug}.json`);
-  if (fs.existsSync(direct)) return direct;
-  let files: string[];
-  try {
-    files = fs.readdirSync(dir);
-  } catch {
-    return null;
-  }
-  for (const file of files.sort()) {
-    if (!file.endsWith('.json')) continue;
-    try {
-      const parsed: unknown = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
-      if (isRecord(parsed) && isRecord(parsed.fields) && parsed.fields.slug === slug) {
-        return path.join(dir, file);
-      }
-    } catch {
-      // unrelated or malformed file
-    }
-  }
-  return null;
+  return resolveBlockPage(siteRoot, slug)?.file ?? null;
 }
