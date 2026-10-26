@@ -563,6 +563,10 @@ Pages live in `<SITE_ROOT>/content/blocks/*.json` and macros in
   the server has it. Clearing site data discards it. An edit page opens
   offline only if an earlier online visit cached it; otherwise it
   answers 503.
+- **Before upgrading** a site whose authors used the old editor offline,
+  confirm each authoring browser has no unsynced offline work. A queued
+  `savePost` from that editor is skipped, never sent, so its edit stays
+  stranded in that browser's outbox.
 - **Old URLs.** `/admin/editor` answers 404, `/admin/view/:slug`
   redirects to the editor, and `/admin` redirects to `/admin/blocks`.
 

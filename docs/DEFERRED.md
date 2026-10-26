@@ -26,21 +26,28 @@ Format: **item** — _revisit when:_ trigger.
 - **Underscore escaping in `dom-markdown.ts` treats non-ASCII letters as word edges**, so `_` beside an accented letter is escaped. _Revisit when:_ a non-English page shows stray backslashes.
 - **A multi-line slot value in a `# {{title}}` macro line breaks out of the heading.** Author-only and sanitized. _Revisit when:_ a macro puts a multi-line field in a heading.
 - **The figure dialog does not de-duplicate repeated image ids** (the renderer does). _Revisit when:_ a page shows a repeated image the author did not intend.
-- **Page settings writes an empty `excerpt` and `date` key to every file it saves, and the toolbar title changes before the save completes.** _Revisit when:_ a diff or a failed save makes either visible.
+- **Page settings writes an empty `excerpt` and `date` key to every file it saves.** _Revisit when:_ a diff makes it visible.
+- **The toolbar title changes before the page settings save completes.** _Revisit when:_ a failed save leaves a title that was never stored.
 - **Drafts carry no tree schema version.** A draft from an older bundle loads unchecked. _Revisit when:_ the block tree format changes.
-- **Failed draft writes (private mode, quota) are not surfaced**, and edits made before the draft finishes loading can be overwritten by it. _Revisit when:_ authors report a lost edit in private browsing.
-- **A conflict that follows a render failure or `pagehide` during an in-flight save defaults to Load latest**, which discards the author's own newest edit. A restored draft's `savedAt` also drifts across reloads. _Revisit when:_ an author reports this.
+- **Failed draft writes (private mode, quota) are not surfaced.** _Revisit when:_ authors report a lost edit in private browsing.
+- **Edits made before the stored draft finishes loading can be overwritten by it.** _Revisit when:_ an author reports a lost first edit after a reload.
+- **A conflict that follows a render failure or `pagehide` during an in-flight save defaults to Load latest**, which discards the author's own newest edit. _Revisit when:_ an author reports this.
+- **A restored draft's `savedAt` drifts across reloads.** _Revisit when:_ the conflict text shows a wrong time.
 - **No `beforeunload` warning for an open image dialog with unapplied edits.** _Revisit when:_ an author loses an unapplied crop or rotate.
 - **The pages list filters by title on the server only.** _Revisit when:_ the page count makes a round trip per keystroke worth avoiding.
-- **Unit tests for the shell wait with fixed tick loops** instead of awaiting `applyTree`; `selected` is not cleared during a pending render when `opts.select` is absent. _Revisit when:_ either causes a flaky test.
+- **Unit tests for the shell wait with fixed tick loops** instead of awaiting `applyTree`. _Revisit when:_ one turns flaky.
+- **`selected` is not cleared during a pending render when `opts.select` is absent.** _Revisit when:_ a toolbar appears over a block that is about to be replaced.
 - **No test for an unparseable `<slug>.json` colliding with a new page's file name** (same code path as a mismatched slug). _Revisit when:_ touching the collision check in `admin-blocks.ts`.
 
 ## Image pipeline
 
 - **`buildImageMapFromOpfs` blob: URLs are never revoked** — every URL it makes reaches the rendered document and must outlive it, and the preview renders once per page load, so there is nothing to revoke yet. _Revisit when:_ the preview starts re-rendering without a full page reload.
-- **Local-thumbnail blob URLs in the unified editor are never revoked, and HEIC originals show no local thumbnail** (the browser cannot decode them until the upload drains). _Revisit when:_ a long editing session grows memory, or HEIC uploads are common.
+- **Local-thumbnail blob URLs in the unified editor are never revoked.** _Revisit when:_ a long editing session grows memory.
+- **HEIC originals show no local thumbnail** (the browser cannot decode them until the upload drains). _Revisit when:_ HEIC uploads are common.
 
 ## UI / UX
+
+- **Likely-dead CSS from the retired editor in `src/templates/admin-styles-core.ts` and `admin-styles-dialogs.ts`** — `#rkroll-admin-root`, `-article`, `-toolbar`, `.rkr-multi*`, `.rkr-figure-actions`, `#rkr-sync-badge`, `#rkr-storage-panel`, `.rkr-admin-content` match nothing in `src/`. Many sit in shared selector lists, so removal also updates `test/templates/admin-styles.fixture.css`. `#rkroll-admin-status` is live. _Revisit when:_ next edit to those style files.
 
 - **Owner / user management UI** — users/sessions are DB/CLI only.
   _Revisit when:_ first co-author or multi-user pivot.
@@ -53,7 +60,7 @@ Format: **item** — _revisit when:_ trigger.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
 - **An edit page can be cached into the previous build's cache during a deploy's install/activate window.** _Revisit when:_ an author sees a stale editor right after a deploy.
-- **The outbox `savePost` drain path still posts to the retired `POST /admin/posts`** (`src/admin/drainers.ts`, `src/admin/sync.ts`). _Revisit when:_ the outbox is next edited.
+- **Legacy `savePost` outbox entries are skipped and never drained.** A browser upgraded with one queued keeps it (with a console warning per drain) and its edit is stranded. _Revisit when:_ someone reports a stranded edit, or one release after this ships; then delete the entries and the `savePost` op type.
 
 
 ## Test coverage

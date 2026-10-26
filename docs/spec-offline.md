@@ -123,7 +123,7 @@ data/site.db                              # index over the above
 ### Browser OPFS (new)
 
 ```
-opfs://drafts/<draftId>.json              # in-progress post doc + frontmatter
+opfs://drafts/<draftId>.json              # legacy in-progress post doc; the block editor's unsent tree is an IndexedDB draft instead (below)
 opfs://drafts/<draftId>.lock              # heartbeat: "this draft is in active use"
 opfs://originals/<id>.<ext>               # content-addressed bytes (matches server id)
 opfs://image-state/<id>.json              # full LocalEditState (current ops, redo, baseline)
@@ -506,13 +506,11 @@ unpinning marks `mode = "cached"`, eligible for the 7-day timer.
 
 ### Draft persistence frequency
 
-The draft document is written to OPFS on:
-
-- 500ms of typing inactivity (debounced), AND
-- editor blur.
-
-Worst-case data loss is 500ms of typing if the tab is killed
-mid-keystroke. The image-edit `LocalEditState` is written
+The block editor keeps one IndexedDB draft per slug (the unsent tree
+and the version it was edited from). It is written before every save
+request, on `pagehide` while the page is unsaved, and cleared once the
+server has the tree. Text edits save on blur, so a killed tab loses at
+most the text typed since the last blur. The image-edit `LocalEditState` is written
 synchronously after each op (rotate / flip / etc.) — those are
 single events, not streams.
 
@@ -646,7 +644,7 @@ Single tabular summary of every reconciliation point.
 | Two outbox entries `commitImageEdit` for the same `id` | Same coalescing as above. |
 | Image format the browser can't preview-decode (e.g. HEIC on a non-Safari) | Upload outbox entry succeeds (server has sharp); preview shows a placeholder; no failure. |
 | OPFS handle invalidated by long backgrounding | Some browsers expire handles. SPA re-acquires the root handle on every editor mount; doesn't rely on cross-load handle stability. |
-| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Cached edit pages stay readable offline after sign-out. Online, edit pages are network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached copy. Unsynced work is not lost — a drain against `/admin/posts`, `/admin/upload`, or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
+| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Cached edit pages stay readable offline after sign-out. Online, edit pages are network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached copy. Unsynced work is not lost — a drain against `/admin/upload` or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
 
 ## 13. HTTP routes added or changed
 

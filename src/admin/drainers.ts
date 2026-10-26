@@ -1,11 +1,10 @@
 // Per-op drainers: outbox entry → HTTP call. Registered by startup.ts.
 
 import { extForMime } from '../lib/content-id.ts';
-import type { OutboxEntry } from '../lib/outbox-types.ts';
 import { buildIdHeader } from './build-id.ts';
 import { readBlob } from './opfs.ts';
 import { clearPendingUpload } from './pending-uploads.ts';
-import { type Drainer, SavePostConflictError, StaleClientError } from './sync.ts';
+import { type Drainer, StaleClientError } from './sync.ts';
 
 /** 426 from any drain route: this bundle predates the running server,
  * so its writes go through a contract it no longer matches. Throwing
@@ -114,42 +113,5 @@ export const drainCommitImageEdit: Drainer = async (entry, blob) => {
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`commitImageEdit drain ${entry.seq}: ${res.status}${body ? ` ${body}` : ''}`);
-  }
-};
-
-export const drainSavePost: Drainer = async (entry: OutboxEntry) => {
-  if (entry.op !== 'savePost') return;
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    // Server-side idempotency key (Task 8) — see postFormDrain.
-    'x-rkr-outbox-seq': String(entry.seq),
-    'x-rkr-device-id': entry.deviceId,
-    ...buildIdHeader()
-  };
-  if (entry.payload.lastSyncedAt) {
-    headers['x-rkr-last-synced-at'] = entry.payload.lastSyncedAt;
-  }
-  const res = await fetch('/admin/posts', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(entry.payload)
-  });
-  throwIfStale('savePost', entry.seq, res);
-  if (res.status === 409) {
-    const body = (await res.json().catch(() => ({}))) as {
-      slug?: string;
-      serverUpdatedAt?: string;
-      clientLastSyncedAt?: string;
-    };
-    throw new SavePostConflictError({
-      slug: body.slug ?? entry.payload.slug,
-      seq: entry.seq,
-      serverUpdatedAt: body.serverUpdatedAt ?? '',
-      clientLastSyncedAt: body.clientLastSyncedAt ?? entry.payload.lastSyncedAt ?? ''
-    });
-  }
-  /* v8 ignore next 3 -- non-2xx, non-409 server response; prod-only */
-  if (!res.ok) {
-    throw new Error(`savePost drain ${entry.seq}: ${res.status}`);
   }
 };

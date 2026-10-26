@@ -347,6 +347,8 @@ only the slots it overrides.
   comment instead of looping.
 - The `page` macro holds site-wide defaults (site title, menu,
   announcement, footer). It is not placeable.
+- The editor does not edit macro definitions; change the JSON file.
+  There is no macro history or diff UI; git holds it.
 - A definition holds at most three container levels. The editor refuses
   a drop that would pass that and nudges the author to split it. The
   renderer does not enforce depth.
@@ -493,7 +495,7 @@ point of the flow.
 | `right` | mirror of `left` |
 | `full` | spans the wider content-column width (breaks out of prose column); ignores `width` |
 | `bleed` | spans the full viewport width (breaks out of content column too); ignores `width` |
-| `inline` | image flows inline with surrounding text at ~1.5em; `matrix`, `aspect`, `fit`, `width`, `caption` all ignored. Use only with a single `id` (extra ids are ignored). |
+| `inline` | (figures only; the video dialog hides it, and the markdown migration maps imported inline figures to `center`) image flows inline with surrounding text at ~1.5em; `matrix`, `aspect`, `fit`, `width`, `caption` all ignored. Use only with a single `id` (extra ids are ignored). |
 
 ### Sizing semantics
 

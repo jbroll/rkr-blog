@@ -32,15 +32,21 @@ const { resetMockOpfs, setGate } = installMockOpfs();
 const { writeJson } = await import('../../src/admin/opfs.ts');
 const { writeRoot } = await import('../../src/admin/opfs-schema.ts');
 const { append, list } = await import('../../src/admin/outbox.ts');
-const { drainSavePost } = await import('../../src/admin/drainers.ts');
-const { getStatus, registerDrainer, tryDrain } = await import('../../src/admin/sync.ts');
+const { getStatus, registerDrainer, SavePostConflictError, tryDrain } = await import(
+  '../../src/admin/sync.ts'
+);
 
-registerDrainer('savePost', drainSavePost);
+let uploadDrainer: () => Promise<void> = async () => {};
+registerDrainer('upload', () => uploadDrainer());
 
 beforeEach(async () => {
   resetMockOpfs();
   await writeRoot({ schemaVersion: 1, deviceId: 'dev', nextSeq: 0 });
 });
+
+function upload(id: string): Parameters<typeof append>[0] {
+  return { op: 'upload', payload: { id, filename: `${id}.jpg`, mimeType: 'image/jpeg' } };
+}
 
 function savePost(slug: string): Parameters<typeof append>[0] {
   return { op: 'savePost', payload: { slug, title: slug, markdown: '' } };
@@ -76,10 +82,9 @@ test('tryDrain: an entry appended while the leader is finishing is not stranded'
     });
   });
 
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ ok: true }), { status: 200 })) as typeof fetch;
+  uploadDrainer = async () => {};
 
-  await append(savePost('a'));
+  await append(upload('a'));
   const leader = tryDrain();
 
   // The leader has drained 'a', published idle, and is now inside
@@ -87,7 +92,7 @@ test('tryDrain: an entry appended while the leader is finishing is not stranded'
   await parked;
   assert.deepEqual(await list(), [], 'precondition: the queue looked empty to the leader');
 
-  await append(savePost('b'));
+  await append(upload('b'));
   await tryDrain();
   assert.equal((await list()).length, 1, 'precondition: the second tryDrain was a no-op');
 
@@ -99,15 +104,48 @@ test('tryDrain: an entry appended while the leader is finishing is not stranded'
 
 test('tryDrain: a conflicted head does not spin the re-check loop', async () => {
   let calls = 0;
-  globalThis.fetch = (async () => {
+  uploadDrainer = async () => {
     calls++;
-    return new Response(JSON.stringify({ error: 'post-superseded' }), { status: 409 });
-  }) as typeof fetch;
+    throw new SavePostConflictError({
+      slug: 'c',
+      seq: 0,
+      serverUpdatedAt: '',
+      clientLastSyncedAt: ''
+    });
+  };
 
-  await append(savePost('c'));
+  await append(upload('c'));
   await tryDrain();
 
   assert.equal(getStatus().kind, 'conflict');
   assert.ok(calls <= 2, `expected the loop to stop on conflict, saw ${calls} attempts`);
   assert.equal((await list()).length, 1, 'the conflicted entry stays queued for the author');
+});
+
+test('tryDrain: a queued legacy savePost is skipped and stays, and later entries drain', async () => {
+  const drained: string[] = [];
+  uploadDrainer = async () => {
+    drained.push('upload');
+  };
+  const warns: string[] = [];
+  const realWarn = console.warn;
+  console.warn = (msg: string) => {
+    warns.push(String(msg));
+  };
+  try {
+    await append(savePost('old-post'));
+    await append(upload('x'));
+    await tryDrain();
+  } finally {
+    console.warn = realWarn;
+  }
+
+  assert.deepEqual(drained, ['upload']);
+  assert.deepEqual(
+    (await list()).map((e) => e.op),
+    ['savePost']
+  );
+  assert.equal(warns.length, 1);
+  assert.match(warns[0] as string, /old-post/);
+  assert.equal(getStatus().kind, 'idle');
 });

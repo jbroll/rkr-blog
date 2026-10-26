@@ -1,11 +1,9 @@
 // Outbox drain loop + multi-tab leader election (spec-offline §5).
 //
 // Module graph: drainers.ts imports `Drainer` (type) and
-// `SavePostConflictError` (value) from here. One-way arrow — no
+// `StaleClientError` (value) from here. One-way arrow — no
 // cycle. Enforced by the circular-import gauntlet check.
 
-import { buildIdHeader } from './build-id.ts';
-import { setStatus } from './dom.ts';
 import { runEviction } from './eviction.ts';
 import { getState as getOnlineState } from './online-state.ts';
 import {
@@ -186,81 +184,6 @@ export async function discardConflictedSave(): Promise<void> {
   await tryDrain();
 }
 
-/** Re-POST with X-Rkr-Last-Synced-At set to the server version the
- * author was shown, so the force overwrites exactly that version
- * (spec-offline §6). A write that lands between the conflict and the
- * force advances the mtime past it and 409s again rather than being
- * silently clobbered.
- * @public */
-export async function forceConflictedSave(): Promise<void> {
-  /* v8 ignore start -- conflict-resolution UI lives in storage panel */
-  if (currentStatus.kind !== 'conflict') return;
-  const seq = currentStatus.seq;
-  const baseline = currentStatus.serverUpdatedAt;
-  const conflictSlug = currentStatus.slug;
-  const entries = await outboxList();
-  const entry = entries.find((e) => e.seq === seq);
-  if (!entry || entry.op !== 'savePost') {
-    await outboxRemove({ seq, op: 'savePost' });
-    publish({ kind: 'idle' });
-    await tryDrain();
-    return;
-  }
-  const res = await fetch('/admin/posts', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      // The version the author was shown and chose to overwrite, not
-      // the stale one the drain sent. Anything written to the slug
-      // since then 409s below instead of being lost.
-      'x-rkr-last-synced-at': baseline,
-      // Idempotency key (Task 8). Keying it the same as the normal
-      // drain means a lost-ACK replay of THIS request still
-      // short-circuits to the stored 2xx.
-      'x-rkr-outbox-seq': String(seq),
-      'x-rkr-device-id': entry.deviceId,
-      ...buildIdHeader()
-    },
-    body: JSON.stringify(entry.payload)
-  });
-  if (res.status === 409) {
-    // A third write landed in the gap. Re-prompt against the version
-    // that actually exists now; the outbox entry stays put so the
-    // author can force again.
-    const info = (await res.json().catch(() => null)) as {
-      slug?: string;
-      serverUpdatedAt?: string;
-    } | null;
-    publish({
-      kind: 'conflict',
-      slug: info?.slug ?? conflictSlug,
-      seq,
-      serverUpdatedAt: info?.serverUpdatedAt ?? baseline,
-      clientLastSyncedAt: baseline
-    });
-    return;
-  }
-  if (res.status === 426) {
-    // Leave the conflict standing: 'halted' would replace it, and
-    // both discard and force early-return unless the status is still
-    // 'conflict' — stranding the resolution UI until a reload.
-    setStatus('this editor is out of date — reload, then resolve the conflict', true);
-    return;
-  }
-  if (!res.ok) {
-    publish({
-      kind: 'halted',
-      reason: `force overwrite failed: ${res.status}`,
-      lastSeq: seq
-    });
-    return;
-  }
-  await outboxRemove({ seq, op: 'savePost' });
-  publish({ kind: 'idle' });
-  await tryDrain();
-  /* v8 ignore stop */
-}
-
 /** Acquire the leader lock and run the drain. No-op when another
  * tab holds the lock — that tab is the leader. Caveat: a tab
  * frozen mid-drainLoop releases the Web Lock at the OS level even
@@ -283,7 +206,7 @@ export function tryDrain(): Promise<void> {
         await drainLoop();
         if (getStatus().kind !== 'idle') return;
         if (getOnlineState() !== 'online') return;
-        if ((await outboxList()).length === 0) return;
+        if (!(await outboxList()).some((e) => e.op !== 'savePost')) return;
       }
     })
     .then(() => {});
@@ -331,11 +254,25 @@ async function drainLoop(): Promise<void> {
   const superseded = await listSuperseded();
   await Promise.all(superseded.map((stale) => outboxRemove(stale)));
 
-  let remaining = (await outboxList()).length;
+  const warned = new Set<number>();
+  // Legacy savePost entries stay queued untouched: nothing drains them
+  // any more, but deleting one would lose an unsynced edit.
+  const runnable = async (): Promise<import('../lib/outbox-types.ts').OutboxEntry[]> => {
+    const entries = await outboxList();
+    for (const e of entries) {
+      if (e.op === 'savePost' && !warned.has(e.seq)) {
+        warned.add(e.seq);
+        console.warn(`skipping legacy savePost entry ${e.seq} for "${e.payload.slug}"`);
+      }
+    }
+    return entries.filter((e) => e.op !== 'savePost');
+  };
+
+  let remaining = (await runnable()).length;
   publish({ kind: 'draining', remaining });
 
   while (remaining > 0) {
-    const entries = await outboxList();
+    const entries = await runnable();
     if (entries.length === 0) break;
     const head = entries[0] as import('../lib/outbox-types.ts').OutboxEntry;
     const drainer = drainers.get(head.op);
@@ -364,7 +301,7 @@ async function drainLoop(): Promise<void> {
     if (head.op === 'commitImageEdit') {
       publishImageStateInvalidation(head.payload.id);
     }
-    remaining = (await outboxList()).length;
+    remaining = (await runnable()).length;
     publish({ kind: 'draining', remaining });
   }
 
