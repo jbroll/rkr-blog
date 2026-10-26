@@ -1,31 +1,9 @@
 // Blocks palette + inline-field helpers for the JSON-pages editor.
 // Browser-safe: no node:* imports (bundled into the admin bundle).
-// Depth guidance lives here, not in the build: a macro definition holds
-// at most 3 grid levels, and the palette refuses a 4th level with
-// a "save inner part as its own macro" nudge.
 
-import { type BlockNode, containerDepth, type Slots } from '../lib/blocks.ts';
+import type { BlockNode, Slots } from '../lib/blocks.ts';
+import { MAX_GRID_LEVELS } from '../lib/grid.ts';
 import { groupPalette, paletteIcon } from './palette-groups.ts';
-
-const LAYOUT_PRESETS: ReadonlySet<string> = new Set([
-  'primitive:section',
-  'primitive:row',
-  'primitive:col'
-]);
-
-export const MAX_MACRO_DEPTH = 3;
-
-/** Palette names that insert a grid. */
-export function isLayoutPreset(name: string): boolean {
-  return LAYOUT_PRESETS.has(name);
-}
-
-/** Whether palette entry `name` may be inserted into `tree`. Layout
- * presets are refused at depth 3; leaves and macros are always allowed. */
-export function insertAllowed(tree: BlockNode, name: string): boolean {
-  if (!isLayoutPreset(name)) return true;
-  return containerDepth(tree) < MAX_MACRO_DEPTH;
-}
 
 /** Copy one macro instance's overrides for duplicate. Deep copy so the
  * duplicate never shares array/object identity with the source. */
@@ -35,7 +13,7 @@ export function duplicateOverrides(slots: Slots): Slots {
 
 /** Depth-meter copy, e.g. "Level 2 of 3". */
 export function depthLabel(depth: number): string {
-  return `Level ${depth} of ${MAX_MACRO_DEPTH}`;
+  return `Level ${depth} of ${MAX_GRID_LEVELS}`;
 }
 
 /** Stored macro names are lowercase slugs: `hero`, `cards-3`. */

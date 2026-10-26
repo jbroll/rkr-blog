@@ -30,11 +30,7 @@ interface BakeLogger {
  * unexpanded: a figure hidden inside a macro is not a page hero. */
 function blockLeaves(node: BlockNode): BlockNode[] {
   if (node.type === 'macro') return [];
-  const kids =
-    (node as { children?: BlockNode[]; blocks?: BlockNode[] }).children ??
-    (node as { children?: BlockNode[]; blocks?: BlockNode[] }).blocks;
-  if (kids) return kids.flatMap(blockLeaves);
-  return [node];
+  return node.type === 'grid' ? node.children.flatMap(blockLeaves) : [node];
 }
 
 /** The page hero and the tree without it. The hero is the body's first

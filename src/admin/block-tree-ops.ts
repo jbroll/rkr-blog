@@ -120,25 +120,3 @@ export function unwrapAtPath(tree: BlockTree, path: Path): BlockTree {
     ...list.slice(idx + 1)
   ]);
 }
-
-export type DropPosition = 'before' | 'after' | 'inside';
-
-/** Resolve a drop onto the card at `targetPath` to an insertion point.
- * before/after land in the target's parent; inside lands at the end of
- * the target, and only grids accept it — leaves and macro
- * instances (whose internals are not editable here) return null. */
-export function resolveDrop(
-  tree: BlockTree,
-  targetPath: Path,
-  position: DropPosition
-): { parentPath: Path; index: number } | null {
-  const target = getAtPath(tree, targetPath);
-  if (!target) return null;
-  if (position === 'inside') {
-    if (target.type !== 'grid') return null;
-    return { parentPath: targetPath, index: target.children.length };
-  }
-  const parentPath = targetPath.slice(0, -1);
-  const idx = targetPath[targetPath.length - 1] as number;
-  return { parentPath, index: position === 'after' ? idx + 1 : idx };
-}

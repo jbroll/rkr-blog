@@ -34,11 +34,7 @@ export interface BlockRoutesOpts {
 
 function figureLeaves(node: BlockNode, out: BlockNode[] = []): BlockNode[] {
   if (node.type === 'figure') out.push(node);
-  if (node.type === 'macro') return out;
-  const kids =
-    (node as { children?: BlockNode[] }).children ??
-    (node as { blocks?: BlockNode[] }).blocks ??
-    [];
+  const kids = node.type === 'grid' ? node.children : [];
   for (const k of kids) figureLeaves(k, out);
   return out;
 }

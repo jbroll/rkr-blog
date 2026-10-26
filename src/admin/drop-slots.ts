@@ -3,10 +3,9 @@
 // allow the dragged block there. Browser-safe: no node:* imports.
 
 import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
-import { gridLabel, readGridSlots } from '../lib/grid.ts';
+import { gridLabel, MAX_GRID_LEVELS, readGridSlots } from '../lib/grid.ts';
 import { isInside } from './block-move.ts';
 import { childrenOf, getAtPath, type Path } from './block-tree-ops.ts';
-import { MAX_MACRO_DEPTH } from './blocks-editor.ts';
 
 export interface DropSlot {
   parentPath: Path;
@@ -202,11 +201,11 @@ function nearestGap(items: Item[], x: number, y: number, rowRight: number | null
 
 /** Whether `node` placed in the list at `parentPath` stays within the grid depth limit. */
 export function fitsDepth(parentPath: Path, node: BlockNode): boolean {
-  return parentPath.length + containerDepth(node) <= MAX_MACRO_DEPTH;
+  return parentPath.length + containerDepth(node) <= MAX_GRID_LEVELS;
 }
 
 export function depthNudge(grid: Extract<BlockNode, { type: 'grid' }>): string {
-  return `${gridLabel(grid.slots)} can't go here: grids nest at most ${MAX_MACRO_DEPTH} levels. Save the inner part as its own macro.`;
+  return `${gridLabel(grid.slots)} can't go here: grids nest at most ${MAX_GRID_LEVELS} levels. Save the inner part as its own macro.`;
 }
 
 function legal(tree: BlockTree, slot: DropSlot, dragged: BlockNode, from: Path | null): boolean {

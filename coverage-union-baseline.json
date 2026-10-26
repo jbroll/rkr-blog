@@ -163,7 +163,7 @@
     "src/lib/outbox-types.ts": 100,
     "src/lib/perspective-resample.ts": 91.19,
     "src/lib/photos-picker.ts": 100,
-    "src/lib/post-index-blocks.ts": 96.43,
+    "src/lib/post-index-blocks.ts": 97.3,
     "src/lib/post-index.ts": 98.52,
     "src/lib/post-text.ts": 100,
     "src/lib/post-view-url.ts": 100,

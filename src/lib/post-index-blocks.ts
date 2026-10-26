@@ -47,9 +47,7 @@ function extractBlockPlainText(tree: BlockTree): string {
       parts.push(node.slots.label);
     if (node.type === 'marquee' && typeof node.slots?.text === 'string')
       parts.push(node.slots.text);
-    if (node.type === 'macro') return;
-    const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-    for (const k of n.children ?? n.blocks ?? []) walk(k);
+    if (node.type === 'grid') for (const k of node.children) walk(k);
   };
   for (const n of tree.body) walk(n);
   return parts.join('\n');

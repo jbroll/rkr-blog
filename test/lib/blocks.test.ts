@@ -4,7 +4,6 @@ import { describe, it } from 'node:test';
 
 import {
   type BlockNode,
-  type ContainerKind,
   type ContainerNode,
   containerDepth,
   detectCycle,
@@ -66,8 +65,6 @@ describe('blocks', () => {
   });
 
   it('exposes container, leaf, and macro node types', () => {
-    const kinds: ContainerKind[] = ['grid'];
-    assert.equal(kinds.length, 1);
     const leaf: LeafNode = { type: 'text', markdown: 'x' };
     const section: ContainerNode = { type: 'grid', children: [leaf] };
     const inst: MacroInstanceNode = { type: 'macro', macro: 'hero' };

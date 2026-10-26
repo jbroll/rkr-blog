@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BlockNode } from '../../src/lib/blocks.ts';
 import { renderBlockTree } from '../../src/lib/blocks-render.ts';
 import type { ImageMap } from '../../src/lib/image-map.ts';
 import { migratePostToTree } from '../../src/lib/markdown-migrate.ts';
@@ -12,8 +11,6 @@ const ctx = {
   videos: new Map() as VideoMapView,
   widgets: new WidgetRegistry()
 };
-
-const leaves = (tree: { body: BlockNode[] }): BlockNode[] => tree.body;
 
 describe('markdown-migrate', () => {
   it('maps frontmatter to page fields and puts blocks straight in the body', () => {
@@ -73,6 +70,6 @@ describe('markdown-migrate', () => {
 
   it('writes lists the way the editor serializes them', () => {
     const tree = migratePostToTree('---\ntitle: T\nslug: t\n---\n\n* one\n* two\n');
-    assert.equal((leaves(tree)[0] as { markdown?: string }).markdown, '- one\n- two');
+    assert.equal((tree.body[0] as { markdown?: string }).markdown, '- one\n- two');
   });
 });

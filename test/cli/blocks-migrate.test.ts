@@ -110,9 +110,15 @@ describe('blocks-migrate', () => {
     assert.equal(written.length, 2);
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', '2026-01-15-t.json')));
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'u.json')));
+    type Raw = { type?: string; children?: Raw[]; blocks?: Raw[] };
+    const types = (nodes: Raw[]): string[] =>
+      nodes.flatMap((n) => [n.type ?? '', ...types([...(n.children ?? []), ...(n.blocks ?? [])])]);
     for (const f of written) {
-      const text = fs.readFileSync(f.file, 'utf8');
-      assert.doesNotMatch(text, /"type": "(flow|section|row|col)"/);
+      const tree = JSON.parse(fs.readFileSync(f.file, 'utf8')) as { body: Raw[] };
+      const legacy = types(tree.body).filter((ty) =>
+        ['flow', 'section', 'row', 'col'].includes(ty)
+      );
+      assert.deepEqual(legacy, []);
     }
   });
 

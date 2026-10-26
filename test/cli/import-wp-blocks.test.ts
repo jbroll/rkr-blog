@@ -84,6 +84,6 @@ describe('import-wp post --as-blocks', () => {
     assert.equal(tree.version, 1);
     assert.equal(tree.fields.slug, 'hello');
     assert.notEqual(tree.body[0]?.type, 'grid');
-    assert.doesNotMatch(JSON.stringify(tree.body), /"(flow|section|row|col)"/);
+    assert.doesNotMatch(JSON.stringify(tree.body), /"type":"(flow|section|row|col)"/);
   });
 });

@@ -5,6 +5,9 @@ type GridMin = 'narrow' | 'medium' | 'wide';
 
 const GRID_MAX_COLS = 6;
 
+/** Grid levels allowed from the page body, or within one macro definition. */
+export const MAX_GRID_LEVELS = 3;
+
 export const GRID_MIN_REM: Record<GridMin, number> = { narrow: 10, medium: 16, wide: 24 };
 
 export interface GridSlots {
@@ -66,7 +69,9 @@ export function gridSlotProblem(slots: Record<string, unknown> | undefined): str
     const widths = parseWidths(s.widths);
     const cols = typeof s.cols === 'number' ? s.cols : 1;
     if (!widths || widths.length !== cols) {
-      return `Column widths must be ${cols} positive numbers separated by spaces.`;
+      return cols === 1
+        ? 'Column widths must be one positive number.'
+        : `Column widths must be ${cols} positive numbers separated by spaces.`;
     }
   }
   if (s.band !== undefined && typeof s.band !== 'boolean') return 'Band must be true or false.';

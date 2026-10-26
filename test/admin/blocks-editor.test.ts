@@ -4,47 +4,16 @@ import { describe, it } from 'node:test';
 import {
   depthLabel,
   duplicateOverrides,
-  insertAllowed,
-  isLayoutPreset,
   isValidMacroName,
-  MAX_MACRO_DEPTH,
   mountBlocksPalette,
   PALETTE_PRIMITIVES,
   type PaletteMacro,
   primitiveNode
 } from '../../src/admin/blocks-editor.ts';
-import type { BlockNode } from '../../src/lib/blocks.ts';
+import { MAX_GRID_LEVELS } from '../../src/lib/grid.ts';
 import { FakeDocument, type FakeElement, FakeEvent } from './fake-dom.ts';
 
-const depth3Macro: BlockNode = {
-  type: 'grid',
-  children: [
-    {
-      type: 'grid',
-      children: [{ type: 'grid', children: [{ type: 'text', markdown: 'hi' }] }]
-    }
-  ]
-};
-
 describe('blocks editor', () => {
-  it('blocks a 4th container level inside one macro', () => {
-    assert.equal(insertAllowed(depth3Macro, 'primitive:row'), false);
-    assert.equal(insertAllowed(depth3Macro, 'primitive:col'), false);
-    assert.equal(insertAllowed(depth3Macro, 'primitive:section'), false);
-  });
-
-  it('allows leaves and macros at any depth', () => {
-    assert.equal(insertAllowed(depth3Macro, 'primitive:text'), true);
-    assert.equal(insertAllowed(depth3Macro, 'primitive:figure'), true);
-    assert.equal(insertAllowed(depth3Macro, 'hero'), true);
-    assert.equal(insertAllowed(depth3Macro, 'row'), true, 'node type names are not palette names');
-  });
-
-  it('allows containers below depth 3', () => {
-    const shallow: BlockNode = { type: 'grid', children: [{ type: 'text' }] };
-    assert.equal(insertAllowed(shallow, 'primitive:row'), true);
-  });
-
   it('duplicate copies overrides only', () => {
     assert.deepEqual(duplicateOverrides({ title: 'X' }), { title: 'X' });
     const src = { items: [{ a: 1 }] };
@@ -55,7 +24,7 @@ describe('blocks editor', () => {
 
   it('labels depth for the meter', () => {
     assert.equal(depthLabel(2), 'Level 2 of 3');
-    assert.equal(depthLabel(MAX_MACRO_DEPTH), `Level ${MAX_MACRO_DEPTH} of ${MAX_MACRO_DEPTH}`);
+    assert.equal(depthLabel(MAX_GRID_LEVELS), `Level ${MAX_GRID_LEVELS} of ${MAX_GRID_LEVELS}`);
   });
 
   it('validates macro names', () => {
@@ -145,9 +114,6 @@ describe('blocks editor', () => {
       slots: { cols: 1, band: true, theme: 'light', edge: 'straight' },
       children: []
     });
-    assert.equal(isLayoutPreset('primitive:section'), true);
-    assert.equal(isLayoutPreset('primitive:figure'), false);
-    assert.equal(isLayoutPreset('grid'), false);
   });
 
   it('keeps the palette labels Row, Column and Section', () => {

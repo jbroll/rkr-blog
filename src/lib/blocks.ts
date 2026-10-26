@@ -2,11 +2,9 @@
 // A page is a macro tree, not a markdown file. Markdown survives only as
 // the value language inside `text` widgets (`text.markdown`).
 
-import { expandShorthand, gridSlotProblem } from './grid.ts';
+import { expandShorthand, gridSlotProblem, MAX_GRID_LEVELS } from './grid.ts';
 
 export type Slots = Record<string, unknown>;
-
-export type ContainerKind = 'grid';
 
 export interface ContainerNode {
   type: 'grid';
@@ -181,8 +179,6 @@ export function rawChildrenProblem(body: unknown): { path: number[]; message: st
   return null;
 }
 
-const MAX_GRID_LEVELS = 3;
-
 function hasIds(slots: Slots | undefined): boolean {
   const ids = slots?.ids;
   const list = Array.isArray(ids) ? ids : typeof ids === 'string' ? ids.split(',') : [];
@@ -207,7 +203,7 @@ export function validateForSave(
         return hasIds(node.slots) ? null : 'A video block has no video.';
       case 'grid':
         return level > MAX_GRID_LEVELS
-          ? 'Grids nest at most 3 levels.'
+          ? `Grids nest at most ${MAX_GRID_LEVELS} levels.`
           : gridSlotProblem(node.slots);
       default:
         return null;

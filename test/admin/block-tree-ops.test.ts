@@ -6,7 +6,6 @@ import {
   getAtPath,
   insertAtPath,
   removeAtPath,
-  resolveDrop,
   setSlotAtPath,
   unwrapAtPath,
   updateSlotsAtPath,
@@ -64,22 +63,6 @@ describe('block tree ops', () => {
     assert.equal((back.body[0] as { children: unknown[] }).children.length, 2);
   });
 
-  it('resolves drops before and after a card to its parent', () => {
-    assert.deepEqual(resolveDrop(TREE, [0, 1], 'before'), { parentPath: [0], index: 1 });
-    assert.deepEqual(resolveDrop(TREE, [0, 1], 'after'), { parentPath: [0], index: 2 });
-    assert.deepEqual(resolveDrop(TREE, [0], 'before'), { parentPath: [], index: 0 });
-  });
-
-  it('resolves inside drops to container ends, never into leaves or macros', () => {
-    assert.deepEqual(resolveDrop(TREE, [0, 1], 'inside'), { parentPath: [0, 1], index: 1 });
-    assert.equal(resolveDrop(TREE, [0, 0], 'inside'), null);
-    assert.deepEqual(resolveDrop(TREE, [0], 'inside'), { parentPath: [0], index: 2 });
-    assert.equal(
-      resolveDrop({ ...TREE, body: [{ type: 'macro', macro: 'hero' }] }, [0], 'inside'),
-      null
-    );
-  });
-
   it('inserts into an empty grid and removes its last child', () => {
     const tree: BlockTree = {
       version: 1,
@@ -90,7 +73,6 @@ describe('block tree ops', () => {
       childrenOf(next.body[0] as never).map((n) => n.type),
       ['text']
     );
-    assert.deepEqual(resolveDrop(next, [0], 'inside'), { parentPath: [0], index: 1 });
     assert.deepEqual(childrenOf(removeAtPath(next, [0, 0]).body[0] as never), []);
   });
 

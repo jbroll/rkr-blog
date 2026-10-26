@@ -76,6 +76,17 @@ describe('gridSlotProblem', () => {
     assert.ok(gridSlotProblem({ edge: 'zigzag' }));
   });
 
+  it('words the widths message for a single column in the singular', () => {
+    assert.equal(
+      gridSlotProblem({ cols: 1, widths: '1 1' }),
+      'Column widths must be one positive number.'
+    );
+    assert.equal(
+      gridSlotProblem({ cols: 3, widths: '1 1' }),
+      'Column widths must be 3 positive numbers separated by spaces.'
+    );
+  });
+
   it('accepts valid and absent slots', () => {
     assert.equal(gridSlotProblem({ cols: 2, widths: '2 1' }), null);
     assert.equal(
