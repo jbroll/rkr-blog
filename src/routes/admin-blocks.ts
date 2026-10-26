@@ -229,6 +229,9 @@ export function registerAdminBlockRoutes(
         return reply.code(400).send({ error: (err as Error).message });
       }
       const dest = existing ?? blockFile(siteRoot, slug);
+      if (!existing && fs.existsSync(dest)) {
+        return reply.code(409).send({ error: 'slug collides with an existing file' });
+      }
       const inserted = !existing;
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);

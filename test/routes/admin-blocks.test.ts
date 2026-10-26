@@ -653,4 +653,23 @@ describe('admin blocks page fields', () => {
     assert.equal(res.statusCode, 409);
     assert.equal(fs.readFileSync(file, 'utf8'), original);
   });
+
+  it('save refuses to overwrite another page that owns <slug>.json', async (t) => {
+    const { root, app } = await setup(t);
+    const file = path.join(root, 'content', 'blocks', 'taken.json');
+    const original = JSON.stringify({
+      version: 1,
+      body,
+      fields: { title: 'Other', slug: 'something-else' }
+    });
+    fs.writeFileSync(file, original);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/taken',
+      payload: { tree: { version: 1, body, fields: { title: 'Mine' } } }
+    });
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.json().error, 'slug collides with an existing file');
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+  });
 });
