@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { PRIMITIVE_MACROS } from '../../src/admin/blocks-editor.ts';
+import { PALETTE_PRIMITIVES } from '../../src/admin/blocks-editor.ts';
 import type { DraftRecord } from '../../src/admin/unified-draft.ts';
 import { SaveConflict } from '../../src/admin/unified-save.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
@@ -227,7 +227,7 @@ describe('unified editor shell', () => {
     // The dock is mounted once and merely hidden: no re-mount on toggle.
     assert.equal(
       f.dock.querySelectorAll('.rkr-blocks-palette-item').length,
-      PRIMITIVE_MACROS.length + 1
+      PALETTE_PRIMITIVES.length + 1
     );
   });
 
@@ -311,6 +311,63 @@ describe('unified editor shell', () => {
     assert.equal(f.dock.hidden, true);
     assert.equal(f.body.querySelector('p')?.getAttribute('contenteditable'), null);
     assert.equal(f.root.querySelectorAll('.rkr-unified-config').length, 0);
+  });
+
+  it('a click on a link is suppressed in edit mode and left alone in view mode', () => {
+    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: '[go](/x)' }] };
+    const f = fixture((doc) => {
+      const p = doc.createElement('p');
+      const a = doc.createElement('a');
+      a.setAttribute('href', '/x');
+      a.append(doc.createTextNode('go'));
+      p.append(a);
+      return [marker(doc, '0'), p];
+    });
+    const shell = mount(f, tree);
+    const link = f.body.querySelector('a') as FakeElement;
+    const click = (): FakeEvent => {
+      const ev = new FakeEvent('click');
+      link.dispatchEvent(ev);
+      return ev;
+    };
+    assert.equal(click().defaultPrevented, false, 'view mode follows the link');
+    shell.setMode('edit');
+    assert.equal(click().defaultPrevented, true, 'edit mode does not navigate');
+  });
+
+  it('palette click inserts right after the selected leaf', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'A' },
+        { type: 'text', markdown: 'B' },
+        { type: 'text', markdown: 'C' }
+      ]
+    };
+    const saved: BlockTree[] = [];
+    const f = fixture((doc) => [
+      marker(doc, '0'),
+      para(doc, 'A'),
+      marker(doc, '1'),
+      para(doc, 'B'),
+      marker(doc, '2'),
+      para(doc, 'C')
+    ]);
+    const shell = mount(f, tree, async (next) => {
+      saved.push(next);
+    });
+    shell.setMode('edit');
+    f.body.querySelectorAll('p')[0]?.click();
+    f.dock
+      .querySelectorAll('.rkr-blocks-palette-item')
+      .find((btn) => btn.dataset.macro === 'primitive:button')
+      ?.click();
+    for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(
+      saved[0]?.body.map((n) => n.type),
+      ['text', 'button', 'text', 'text']
+    );
+    assert.deepEqual(shell.selectedPath, [1]);
   });
 
   it('palette click appends a node and saves the whole tree', async () => {

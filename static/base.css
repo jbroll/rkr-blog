@@ -136,3 +136,5 @@ main:focus-visible { outline: none; }
    link colours come from the theme's .rkr-site-head-auth-btn. base.css
    is always loaded, so this is theme-independent. */
 .rkr-site-head-nav { display: flex; align-items: center; gap: 1rem; }
+
+.rkr-site-head-version { font-size: 0.75rem; color: var(--rkr-muted); }

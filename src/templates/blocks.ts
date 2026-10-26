@@ -17,6 +17,8 @@ export interface BlocksPageData extends SiteChrome {
   slug?: string;
   bodyHtml: string;
   isAdmin?: boolean;
+  /** Extra CSS appended to the head (admin list pages). */
+  css?: string;
 }
 
 /** Index of stored JSON pages: title links in slug order, with an
@@ -61,6 +63,7 @@ export function renderBlocksPage(data: BlocksPageData): string {
 ${stylesheetLinks(a)}
 ${headIcons(a)}
 ${buildMetaTag(a.hash)}
+${data.css ? `<style>${data.css}</style>` : ''}
 </head>
 <body>
 ${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash })}

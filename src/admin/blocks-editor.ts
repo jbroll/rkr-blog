@@ -59,7 +59,7 @@ export interface PaletteMacro {
 /** Built-in primitives, always present even with an empty macro
  * library. Names are `primitive:<kind>` so the page editor can build
  * the node directly instead of expanding a macro. */
-export const PRIMITIVE_MACROS: PaletteMacro[] = [
+export const PALETTE_PRIMITIVES: PaletteMacro[] = [
   {
     name: 'primitive:text',
     label: 'Text',
@@ -112,8 +112,8 @@ export function primitiveNode(name: string): BlockNode {
 }
 
 /** Mount the palette into `root`: a heading, then one titled group per
- * kind, each item a full-width row. Click, double-click, or Enter
- * inserts; the latter two exist so placement never requires a drag. */
+ * kind, each item a full-width row. Click inserts; Enter and Space on a
+ * focused item arrive as clicks, so placement never requires a drag. */
 export function mountBlocksPalette(
   root: Element,
   macros: PaletteMacro[],
@@ -127,7 +127,7 @@ export function mountBlocksPalette(
   heading.textContent = 'Add block';
   palette.append(heading);
 
-  for (const { group, items } of groupPalette([...PRIMITIVE_MACROS, ...macros])) {
+  for (const { group, items } of groupPalette([...PALETTE_PRIMITIVES, ...macros])) {
     const section = doc.createElement('div');
     section.className = 'rkr-palette-group';
     section.setAttribute('role', 'group');
@@ -158,10 +158,6 @@ export function mountBlocksPalette(
       }
       btn.append(icon, text);
       btn.addEventListener('click', () => onInsert(m.name));
-      btn.addEventListener('dblclick', () => onInsert(m.name));
-      btn.addEventListener('keydown', (ev) => {
-        if ((ev as KeyboardEvent).key === 'Enter') onInsert(m.name);
-      });
       section.append(btn);
     }
     palette.append(section);

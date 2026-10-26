@@ -83,6 +83,7 @@ function pathOf(el: Element | null | undefined): Path | null {
 }
 
 const TOOLBAR_HEIGHT = 34;
+const OUTLINE_GAP = 4;
 
 export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; dispose(): void } {
   const { body } = env;
@@ -97,6 +98,14 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   const label = doc.createElement('span');
   label.className = 'rkr-block-type';
   bar.append(label);
+
+  // One box around every element the block rendered; per-element CSS
+  // outlines would box a heading and its paragraph separately.
+  const outline = doc.createElement('div');
+  outline.className = 'rkr-block-outline';
+  outline.setAttribute('aria-hidden', 'true');
+  outline.hidden = true;
+  host.append(outline);
 
   const isBusy = (): boolean => body.hasAttribute('inert');
   const editing = (): boolean => env.isEditing?.() ?? true;
@@ -205,13 +214,32 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
 
   const position = (): void => {
     const path = env.getSelected();
-    const first = path ? body.querySelector(`[data-rkr-path="${pathKey(path)}"]`) : null;
-    const rect = first?.getBoundingClientRect?.();
-    if (!rect) return;
+    const rects = path
+      ? [...body.querySelectorAll(`[data-rkr-path="${pathKey(path)}"]`)]
+          .map((el) => el.getBoundingClientRect?.())
+          .filter((r) => !!r)
+      : [];
+    const first = rects[0];
+    if (!first) return;
+    const box = {
+      top: Math.min(...rects.map((r) => r.top)),
+      left: Math.min(...rects.map((r) => r.left)),
+      right: Math.max(...rects.map((r) => r.right)),
+      bottom: Math.max(...rects.map((r) => r.bottom))
+    };
+    outline.setAttribute(
+      'style',
+      `top:${box.top - OUTLINE_GAP}px;left:${box.left - OUTLINE_GAP}px;width:${box.right - box.left + 2 * OUTLINE_GAP}px;height:${box.bottom - box.top + 2 * OUTLINE_GAP}px`
+    );
     const width = (bar as HTMLElement).offsetWidth || 0;
     const viewport = doc.defaultView?.innerWidth ?? Number.POSITIVE_INFINITY;
-    const left = Math.max(4, Math.min(rect.left, viewport - width - 4));
-    bar.setAttribute('style', `top:${Math.max(4, rect.top - TOOLBAR_HEIGHT)}px;left:${left}px`);
+    const left = Math.max(4, Math.min(box.left, viewport - width - 4));
+    const stuck =
+      doc.getElementById?.('rkr-unified-toolbar')?.getBoundingClientRect?.().bottom ?? 0;
+    bar.setAttribute(
+      'style',
+      `top:${Math.max(4, stuck + 4, box.top - TOOLBAR_HEIGHT)}px;left:${left}px`
+    );
   };
 
   const refresh = (): void => {
@@ -224,6 +252,7 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     const els = path ? [...body.querySelectorAll(`[data-rkr-path="${pathKey(path)}"]`)] : [];
     if (!path || !node || !editing() || els.length === 0) {
       bar.hidden = true;
+      outline.hidden = true;
       return;
     }
     for (const el of els) el.setAttribute('data-rkr-selected', '');
@@ -234,6 +263,7 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     setDisabled(down, idx >= size - 1);
     config.hidden = !env.canConfigure(node);
     bar.hidden = false;
+    outline.hidden = false;
     position();
   };
 
@@ -288,6 +318,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   const view = doc.defaultView;
   view?.addEventListener('scroll', position, true);
   view?.addEventListener('resize', position);
+  body.addEventListener('input', position);
+  const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(position);
+  resizes?.observe(body);
 
   return {
     refresh,
@@ -295,7 +328,10 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
       doc.removeEventListener('keydown', onKeydown);
       view?.removeEventListener('scroll', position, true);
       view?.removeEventListener('resize', position);
+      body.removeEventListener('input', position);
+      resizes?.disconnect();
       bar.remove();
+      outline.remove();
     }
   };
 }

@@ -75,6 +75,33 @@ describe('openEditorDialog', () => {
     assert.equal(root.querySelector('[data-rkr-dialog]'), null);
   });
 
+  it('Enter submits from an input but not from a select', async () => {
+    let calls = 0;
+    const { dialog } = setup({
+      onPrimary: () => {
+        calls++;
+        return false;
+      }
+    });
+    const doc = dialog.ownerDocument as unknown as FakeDocument;
+    const select = doc.createElement('select');
+    const input = doc.createElement('input');
+    dialog.append(select, input);
+    const press = (target: FakeElement): FakeEvent => {
+      const ev = key('Enter');
+      ev.target = target;
+      dialog.dispatchEvent(ev);
+      return ev;
+    };
+    const fromSelect = press(select);
+    await tick();
+    assert.equal(calls, 0, 'select Enter does not submit');
+    assert.equal(fromSelect.defaultPrevented, false, 'select keeps its own Enter behavior');
+    press(input);
+    await tick();
+    assert.equal(calls, 1);
+  });
+
   it('setBusy disables both buttons', () => {
     const { handle, find } = setup({});
     handle.setBusy(true);

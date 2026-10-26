@@ -24,6 +24,7 @@ import type { DraftStore } from './unified-draft.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
 import { createSavePipeline, type SavePipelineDeps } from './unified-save.ts';
+import { mountAddSheet, mountPhonePreview } from './unified-sheet.ts';
 
 type Mode = 'view' | 'edit';
 
@@ -240,6 +241,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       const key = opts.select.join(',');
       const unit = units.find((u) => u.path.join(',') === key);
       if (unit?.node.type === 'text') (unit.elements[0] as HTMLElement | undefined)?.focus();
+      unit?.elements[0]?.scrollIntoView?.({ block: 'nearest' });
     }
   };
 
@@ -323,6 +325,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       save.notice(text);
     }
   });
+
+  mountAddSheet(dock);
+  mountPhonePreview(toolbar, shellEl);
 
   actions = mountBlockActions({
     body,

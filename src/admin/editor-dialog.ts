@@ -239,8 +239,7 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
       ev.preventDefault();
       cancel();
     } else if (key === 'Enter') {
-      const tag = (ev.target as Element | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT') {
+      if ((ev.target as Element | null)?.tagName === 'INPUT') {
         ev.preventDefault();
         void submit();
       }

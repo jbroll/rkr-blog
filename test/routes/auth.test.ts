@@ -432,7 +432,7 @@ test('GET /admin/blocks succeeds with a valid session cookie', async (t) => {
     headers: { cookie: `rkr_session=${sid}` }
   });
   assert.equal(res.statusCode, 200, `body=${res.body}`);
-  assert.match(res.body, /<h1>Blocks<\/h1>/);
+  assert.match(res.body, /<h1>Pages<\/h1>/);
 
   // Sanity: session and user actually exist in the db.
   assert.ok(findUserByEmail(db, 'first@example.com'));
@@ -665,5 +665,5 @@ test('token-login session lets user reach /admin/blocks', async (t) => {
     headers: { cookie: `rkr_session=${sid}` }
   });
   assert.equal(editor.statusCode, 200, `body=${editor.body}`);
-  assert.match(editor.body, /<h1>Blocks<\/h1>/);
+  assert.match(editor.body, /<h1>Pages<\/h1>/);
 });

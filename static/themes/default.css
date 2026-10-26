@@ -1385,12 +1385,6 @@ body[data-mode="figure"] .rkr-meta {
   margin: 0 auto;
   border: 1px dashed var(--rkr-rule);
 }
-.rkr-blocks-palette {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-}
 @media (max-width: 720px) {
   .rkr-row {
     flex-direction: column;
@@ -1407,7 +1401,4 @@ body[data-mode="figure"] .rkr-meta {
 .rkr-block-card[data-drop='inside'] {
   outline: 2px dashed var(--rkr-link);
   outline-offset: 2px;
-}
-.rkr-blocks-palette-item {
-  cursor: grab;
 }

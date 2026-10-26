@@ -744,3 +744,46 @@ describe('admin blocks save versions', () => {
     assert.equal(fs.existsSync(path.join(dir, 'versioned.json')), false);
   });
 });
+
+describe('admin pages list', () => {
+  it('GET /admin redirects to /admin/blocks', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({ method: 'GET', url: '/admin' });
+    assert.equal(res.statusCode, 302);
+    assert.equal(res.headers.location, '/admin/blocks');
+  });
+
+  it('blocks index shows status and an empty state', async (t) => {
+    const { root, app } = await setup(t);
+    const empty = await app.inject({ method: 'GET', url: '/admin/blocks' });
+    assert.match(empty.body, /No pages yet\. Create your first page\./);
+    assert.match(empty.body, /href="\/admin\/blocks\/new"[^>]*>New page</);
+
+    await publishPage(app, 'live', [{ type: 'text', markdown: 'Hi' }]);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'wip.json'),
+      JSON.stringify({ version: 1, body: [], fields: { title: 'Work in progress', slug: 'wip' } })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks' });
+    assert.doesNotMatch(res.body, /No pages yet/);
+    assert.match(res.body, /<th[^>]*>Title<\/th>/);
+    assert.match(res.body, /<th[^>]*>Status<\/th>/);
+    assert.match(res.body, /<th[^>]*>Updated<\/th>/);
+    assert.match(res.body, /rkr-status--published[^>]*>Published</);
+    assert.match(res.body, /rkr-status--draft[^>]*>Draft</);
+    assert.match(res.body, /href="\/admin\/blocks\/edit\/live"[^>]*>Edit</);
+    assert.match(res.body, /href="\/pages\/live"[^>]*>View</);
+    assert.match(res.body, /<input[^>]*name="q"/);
+  });
+
+  it('filters rows by title with ?q=', async (t) => {
+    const { app } = await setup(t);
+    await publishPage(app, 'alpha', []);
+    await publishPage(app, 'beta', []);
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks?q=ALP' });
+    assert.match(res.body, /edit\/alpha/);
+    assert.doesNotMatch(res.body, /edit\/beta/);
+    const none = await app.inject({ method: 'GET', url: '/admin/blocks?q=zzz' });
+    assert.match(none.body, /No pages match/);
+  });
+});

@@ -112,6 +112,8 @@ export default async function adminRoutes(
   // endpoint that used to live beside it has been retired.
   registerAdminPostsRoutes(fastify, { guard });
 
+  fastify.get('/admin', { ...guard }, async (_req, reply) => reply.redirect('/admin/blocks', 302));
+
   // Site settings (title / tagline / theme) — surfaces the persisted
   // config that lib/config.ts already reads on every request.
   registerAdminSettingsRoutes(fastify, { guard, ownerGuard, db: opts.db, siteRoot });

@@ -3,8 +3,8 @@
 //
 // Extracted from unified-shell.ts to keep that file under the 500-line
 // size cap. The shell owns the tree and saving; this module owns
-// placement: click appends at the end of the selected container (or
-// the page body), drags resolve to before/after/inside drop positions,
+// placement: click inserts after the selected block (or at the end of a
+// selected container, or of the page body), drags resolve to before/after/inside drop positions,
 // and containers that would nest deeper than the macro depth rule are
 // refused with the save-inner-part nudge.
 //
@@ -85,14 +85,26 @@ export interface PaletteInsert {
 export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
   const { dock, body, macros } = env;
 
-  const insertTarget = (): Path => {
+  const childCount = (at: Path): number => {
+    const list =
+      at.length === 0
+        ? env.getTree().body
+        : (getAtPath(env.getTree(), at) as { children?: BlockNode[]; blocks?: BlockNode[] });
+    const kids = Array.isArray(list) ? list : (list.children ?? list.blocks ?? []);
+    return kids.length;
+  };
+
+  /** Directly after the selected leaf; at the end of a selected container;
+   * at the end of the page when nothing is selected. */
+  const clickTarget = (): { at: Path; index: number } => {
     const selected = env.getSelected();
-    if (selected) {
-      if (isContainerPath(env.getTree(), selected)) return selected;
-      const parent = selected.slice(0, -1);
-      if (parent.length > 0 && isContainerPath(env.getTree(), parent)) return parent;
+    if (selected && getAtPath(env.getTree(), selected)) {
+      if (isContainerPath(env.getTree(), selected)) {
+        return { at: selected, index: childCount(selected) };
+      }
+      return { at: selected.slice(0, -1), index: (selected[selected.length - 1] as number) + 1 };
     }
-    return [];
+    return { at: [], index: childCount([]) };
   };
 
   const nudge = (kind: string): void => {
@@ -115,13 +127,8 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
 
   mountBlocksPalette(dock, macros, (name) => {
     env.flushText();
-    const at = insertTarget();
-    const list =
-      at.length === 0
-        ? env.getTree().body
-        : (getAtPath(env.getTree(), at) as { children?: BlockNode[]; blocks?: BlockNode[] });
-    const kids = Array.isArray(list) ? list : (list.children ?? list.blocks ?? []);
-    insertNode(name, at, kids.length);
+    const { at, index } = clickTarget();
+    insertNode(name, at, index);
   });
 
   let dragName: string | null = null;

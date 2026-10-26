@@ -8,8 +8,8 @@ import {
   isValidMacroName,
   MAX_MACRO_DEPTH,
   mountBlocksPalette,
+  PALETTE_PRIMITIVES,
   type PaletteMacro,
-  PRIMITIVE_MACROS,
   primitiveNode
 } from '../../src/admin/blocks-editor.ts';
 import type { BlockNode } from '../../src/lib/blocks.ts';
@@ -78,7 +78,7 @@ describe('blocks editor', () => {
       ['Basics', 'Media', 'Layout', 'Sections']
     );
     const items = dock.querySelectorAll('.rkr-blocks-palette-item');
-    assert.equal(items.length, PRIMITIVE_MACROS.length + 1);
+    assert.equal(items.length, PALETTE_PRIMITIVES.length + 1);
     const hero = items[items.length - 1];
     assert.equal(hero?.querySelector('.rkr-palette-label')?.textContent, 'Hero');
     assert.equal(hero?.querySelector('.rkr-palette-desc')?.textContent, 'Opening band');
@@ -98,14 +98,17 @@ describe('blocks editor', () => {
 
   it('shows primitives when no macros are configured', () => {
     const dock = mount([], () => {});
-    assert.equal(dock.querySelectorAll('.rkr-blocks-palette-item').length, PRIMITIVE_MACROS.length);
+    assert.equal(
+      dock.querySelectorAll('.rkr-blocks-palette-item').length,
+      PALETTE_PRIMITIVES.length
+    );
     assert.deepEqual(
       dock.querySelectorAll('.rkr-palette-group-title').map((t) => t.textContent),
       ['Basics', 'Media', 'Layout']
     );
   });
 
-  it('double-click and Enter insert like click', () => {
+  it('inserts only on click, since a button turns Enter into a click itself', () => {
     const inserted: string[] = [];
     const dock = mount([{ name: 'hero', label: 'Hero' }], (name) => {
       inserted.push(name);
@@ -113,8 +116,9 @@ describe('blocks editor', () => {
     const hero = dock.querySelectorAll('.rkr-blocks-palette-item').pop() as FakeElement;
     hero.dispatchEvent(new FakeEvent('dblclick'));
     hero.dispatchEvent(Object.assign(new FakeEvent('keydown'), { key: 'Enter' }));
-    hero.dispatchEvent(Object.assign(new FakeEvent('keydown'), { key: ' ' }));
-    assert.deepEqual(inserted, ['hero', 'hero']);
+    assert.deepEqual(inserted, []);
+    hero.click();
+    assert.deepEqual(inserted, ['hero']);
   });
 
   it('builds primitive nodes from palette names', () => {

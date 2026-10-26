@@ -22,7 +22,7 @@ import { renderEditBody } from '../lib/blocks-edit-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { loadMacroLibrary, ROOT_MACROS } from '../lib/macro-library.ts';
-import { runReindex } from '../lib/post-index.ts';
+import { readAllIndexedPosts, runReindex } from '../lib/post-index.ts';
 import {
   setAdminEditorSecurityHeaders,
   setPublicSecurityHeaders
@@ -30,7 +30,12 @@ import {
 import { serverAssets } from '../lib/site-assets.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
-import { renderBlocksIndex, renderBlocksPage } from '../templates/blocks.ts';
+import {
+  PAGES_LIST_CSS,
+  type PageRow,
+  renderAdminPagesIndex
+} from '../templates/admin-pages-list.ts';
+import { renderBlocksPage } from '../templates/blocks.ts';
 import { prewarmBlockTree } from './admin-prewarm.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
@@ -48,6 +53,24 @@ function readStoredFields(file: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/** Stored pages with status and last-change time. The index wins; a page
+ * saved but not yet indexed falls back to its file. */
+function pageRows(siteRoot: string, db: Db | undefined): PageRow[] {
+  const indexed = new Map((db ? readAllIndexedPosts(db) : []).map((p) => [p.slug, p]));
+  return listBlockPages(siteRoot)
+    .map(({ slug, title }) => {
+      const hit = indexed.get(slug);
+      if (hit) {
+        return { slug, title, status: hit.status, updatedAt: hit.updated_at };
+      }
+      const file = findBlockFile(siteRoot, slug);
+      const status = readStoredFields(file).status === 'published' ? 'published' : 'draft';
+      const updatedAt = file ? fs.statSync(file).mtime.toISOString() : '';
+      return { slug, title, status, updatedAt } satisfies PageRow;
+    })
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
 }
 
 export interface AdminBlockRoutesOpts {
@@ -99,19 +122,27 @@ export function registerAdminBlockRoutes(
     }
   );
 
-  fastify.get('/admin/blocks', { ...guard }, async (_req, reply) => {
-    setPublicSecurityHeaders(reply);
-    const assets = serverAssets('/admin/static');
-    return reply.type('text/html; charset=utf-8').send(
-      renderBlocksPage({
-        site: getSite(),
-        assets,
-        title: 'Blocks',
-        bodyHtml: `<h1>Blocks</h1>\n${renderBlocksIndex(listBlockPages(siteRoot), { newPageUrl: '/admin/blocks/new', editBase: '/admin/blocks/edit' })}`,
-        isAdmin: true
-      })
-    );
-  });
+  fastify.get<{ Querystring: { q?: string } }>(
+    '/admin/blocks',
+    { ...guard },
+    async (req, reply) => {
+      setPublicSecurityHeaders(reply);
+      const assets = serverAssets('/admin/static');
+      const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+      const all = pageRows(siteRoot, opts.db);
+      const rows = q ? all.filter((r) => r.title.toLowerCase().includes(q.toLowerCase())) : all;
+      return reply.type('text/html; charset=utf-8').send(
+        renderBlocksPage({
+          site: getSite(),
+          assets,
+          title: 'Pages',
+          bodyHtml: renderAdminPagesIndex(rows, { q, total: all.length }),
+          css: PAGES_LIST_CSS,
+          isAdmin: true
+        })
+      );
+    }
+  );
 
   const sendNewForm = (
     reply: FastifyReply,

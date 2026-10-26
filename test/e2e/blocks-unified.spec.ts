@@ -509,3 +509,112 @@ test('publish a new page', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('link', { name })).toBeVisible();
 });
+
+const paletteItem = (page: Page, label: string) =>
+  page.locator('.rkr-blocks-palette-item').filter({ has: page.getByText(label, { exact: true }) });
+
+test('phone width add block via sheet', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-sheet-${Date.now()}`;
+  const filler = Array.from({ length: 30 }, (_, i) => `Paragraph ${i}.`).join('\n\n');
+  await seedBlockPage(page, {
+    slug,
+    title: 'Sheet',
+    body: [
+      { type: 'text', markdown: filler },
+      { type: 'text', markdown: 'Last block.' }
+    ]
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const dock = page.locator('#rkr-unified-dock');
+  await expect(dock).not.toBeInViewport();
+
+  await page.locator('#rkr-blocks-page-body p').last().click();
+  await page.getByRole('button', { name: 'Add block' }).click();
+  await expect(dock).toBeVisible();
+  const saved = saveResponse(page, slug);
+  await paletteItem(page, 'Text').click();
+  await saved;
+
+  await expect(dock).not.toBeVisible();
+  const blank = page.locator('#rkr-blocks-page-body [data-rkr-blank]');
+  await expect(blank).toHaveCount(1);
+  await expect(blank).toBeInViewport();
+});
+
+test('keyboard insert', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-kbd-insert-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Keyboard', markdown: 'One.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+
+  const saved = saveResponse(page, slug);
+  await paletteItem(page, 'Text').focus();
+  await page.keyboard.press('Enter');
+  await saved;
+
+  await expect(page.locator('#rkr-blocks-page-body [data-rkr-blank]')).toHaveCount(1);
+  await expect(page.locator('#rkr-blocks-page-body [data-rkr-selected]')).toHaveAttribute(
+    'data-rkr-path',
+    '1'
+  );
+});
+
+test('phone preview narrows body', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-phone-preview-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Preview', markdown: 'Wide page.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  const body = page.locator('#rkr-blocks-page-body');
+  const wide = await body.evaluate((el) => el.clientWidth);
+  expect(wide).toBeGreaterThan(500);
+
+  await page.getByRole('button', { name: 'Phone preview' }).click();
+  expect(await body.evaluate((el) => el.clientWidth)).toBeLessThanOrEqual(390);
+  await page.getByRole('button', { name: 'Phone preview' }).click();
+  expect(await body.evaluate((el) => el.clientWidth)).toBe(wide);
+});
+
+test('a multi-element text block is outlined as one box', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-outline-${Date.now()}`;
+  await seedBlockPage(page, {
+    slug,
+    title: 'Outline',
+    markdown: '# A heading\n\nBody paragraph under it.'
+  });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const heading = page.locator('#rkr-blocks-page-body h1');
+  const para = page.locator('#rkr-blocks-page-body p');
+  await para.click();
+
+  await expect(page.locator('.rkr-block-outline')).toHaveCount(1);
+  const h = (await heading.boundingBox())!;
+  const p = (await para.boundingBox())!;
+  const o = (await page.locator('.rkr-block-outline').boundingBox())!;
+  expect(o.y).toBeLessThanOrEqual(h.y);
+  expect(o.y + o.height).toBeGreaterThanOrEqual(p.y + p.height);
+  for (const el of [heading, para]) {
+    expect(await el.evaluate((n) => getComputedStyle(n).outlineStyle)).toBe('none');
+  }
+});
+
+test('block toolbar stays below the sticky page toolbar at phone width', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-toolbar-overlap-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Overlap', markdown: 'Near the top.' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.locator('#rkr-blocks-page-body p').click();
+
+  const sticky = (await page.locator('#rkr-unified-toolbar').boundingBox())!;
+  const bar = page.locator('.rkr-block-toolbar');
+  await expect(bar).toBeVisible();
+  const box = (await bar.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(sticky.y + sticky.height - 0.5);
+});

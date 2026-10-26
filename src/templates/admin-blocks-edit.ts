@@ -121,6 +121,7 @@ ${siteHead(data.site, { isAdmin: data.isAdmin })}
 <button type="button" class="rkr-unified-mode" data-mode="view" aria-pressed="true">View</button>
 <button type="button" class="rkr-unified-mode" data-mode="edit" aria-pressed="false">Edit</button>
 </div>
+<button type="button" class="rkr-unified-preview rkr-edit-btn is-quiet" aria-pressed="false">Phone preview</button>
 <button type="button" class="rkr-unified-settings rkr-edit-btn">Page settings</button>
 <span class="rkr-unified-save-state" aria-live="polite">Saved</span>
 <button type="button" class="rkr-unified-save rkr-edit-btn is-primary" disabled>Save</button>
