@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import type { ImageMap } from '../../src/lib/image-map.ts';
 import type { VideoMapView } from '../../src/lib/widgets.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
-import { renderBlocksIndex, renderBlocksPage } from '../../src/templates/blocks.ts';
+import { renderBlocksPage } from '../../src/templates/blocks.ts';
 
 const fakeCtx = {
   images: new Map() as ImageMap,
@@ -54,29 +54,5 @@ describe('blocks page template', () => {
     assert.match(html, /rkr-site-head/);
     assert.match(html, /rkr-section/);
     assert.match(html, /Hero &lt;demo&gt;/);
-  });
-
-  it('renders an index of stored pages as escaped links', () => {
-    const html = renderBlocksIndex([
-      { slug: 'b', title: 'Bee <b>' },
-      { slug: 'a', title: 'Aye' }
-    ]);
-    assert.match(html, /post-list/);
-    assert.match(html, /\/pages\/b/);
-    assert.match(html, /Bee &lt;b&gt;/);
-    assert.doesNotMatch(html, /admin\/blocks\/new/);
-  });
-
-  it('adds a new-page link for admins', () => {
-    const html = renderBlocksIndex([], { newPageUrl: '/admin/blocks/new' });
-    assert.match(html, /href="\/admin\/blocks\/new"/);
-    assert.match(html, /aria-label="New page"/);
-  });
-
-  it('adds per-row edit links when asked', () => {
-    const html = renderBlocksIndex([{ slug: 'a', title: 'Aye' }], {
-      editBase: '/admin/blocks/edit'
-    });
-    assert.match(html, /href="\/admin\/blocks\/edit\/a"/);
   });
 });

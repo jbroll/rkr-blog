@@ -24,26 +24,6 @@ export interface BlocksPageData extends SiteChrome {
   adminPwa?: boolean;
 }
 
-/** Index of stored JSON pages: title links in slug order, with an
- * optional "+" link to the new-page form and per-row Edit links. */
-export function renderBlocksIndex(
-  pages: { slug: string; title: string }[],
-  opts: { newPageUrl?: string; editBase?: string } = {}
-): string {
-  const items = pages
-    .map((p) => {
-      const edit = opts.editBase
-        ? ` <a href="${escapeAttr(opts.editBase)}/${escapeAttr(p.slug)}">Edit</a>`
-        : '';
-      return `<li><a href="/pages/${escapeAttr(p.slug)}">${escapeText(p.title)}</a>${edit}</li>`;
-    })
-    .join('\n');
-  const actions = opts.newPageUrl
-    ? `<p><a class="rkr-fab rkr-fab--slot-1" href="${escapeAttr(opts.newPageUrl)}" aria-label="New page" title="New page">+</a></p>\n`
-    : '';
-  return `${actions}<ul class="post-list">\n${items}\n</ul>\n`;
-}
-
 /** Pencil button into the JSON editor, mirroring postAdminFab for
  * markdown posts. Rendered only for signed-in admins on stored pages. */
 function blocksAdminFab(slug: string): string {

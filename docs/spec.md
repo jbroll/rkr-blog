@@ -664,6 +664,7 @@ GET    /about                         about page
 GET    /search                        full-text search page
 GET    /:slug                         rendered single post
 GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug (published only)
+GET    /pages/:slug                   old block-page URL → 301 /:slug (published only)
 GET    /img/:filename                 derivative image (cache-miss handler)
 GET    /video/:filename               derivative mp4, Range/206-capable (cache-miss handler)
 GET    /video/poster/:filename        derivative jpeg poster (cache-miss handler)
@@ -697,6 +698,7 @@ GET    /admin/blocks/:slug            page JSON (title, tree)
 POST   /admin/blocks/:slug            save the whole tree; 400 invalid, 409 conflict or file collision
 POST   /admin/blocks/_render          re-render a posted tree for the editor; never writes
 GET    /admin/blocks/macros           palette entries for the site's macros
+GET    /admin/blocks/preview/:macro   one macro rendered with its defaults
 
 # Admin posts — admin-posts.ts
 GET    /admin/posts                   301 → / (old bookmarks)

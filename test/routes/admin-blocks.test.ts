@@ -275,7 +275,7 @@ describe('admin blocks save', () => {
     );
     const res = await app.inject({ method: 'GET', url: '/admin/blocks' });
     assert.equal(res.statusCode, 200);
-    assert.match(res.body, /\/pages\/saved/);
+    assert.match(res.body, /href="\/saved"/);
     assert.match(res.body, /\/admin\/blocks\/edit\/saved/);
     assert.match(res.body, /\/admin\/blocks\/new/);
   });
@@ -786,7 +786,8 @@ describe('admin pages list', () => {
     assert.match(res.body, /rkr-status--published[^>]*>Published</);
     assert.match(res.body, /rkr-status--draft[^>]*>Draft</);
     assert.match(res.body, /href="\/admin\/blocks\/edit\/live"[^>]*>Edit</);
-    assert.match(res.body, /href="\/pages\/live"[^>]*>View</);
+    assert.match(res.body, /href="\/live"[^>]*>View</);
+    assert.doesNotMatch(res.body, /href="\/pages\//);
     assert.match(res.body, /<input[^>]*name="q"/);
   });
 

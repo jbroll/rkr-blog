@@ -82,7 +82,7 @@ function row(p: PageRow, now: number): string {
 <td><span class="rkr-pages-title">${escapeText(p.title)}</span><span class="rkr-pages-slug">/${escapeText(p.slug)}</span></td>
 <td><span class="rkr-status rkr-status--${p.status}">${label}</span></td>
 <td class="rkr-pages-updated"><time datetime="${escapeAttr(p.updatedAt)}" title="${escapeAttr(p.updatedAt)}">${escapeText(relativeDate(p.updatedAt, now))}</time></td>
-<td class="rkr-pages-actions"><span class="rkr-pages-links"><a href="/admin/blocks/edit/${slug}">Edit</a><a href="/pages/${slug}">View</a></span></td>
+<td class="rkr-pages-actions"><span class="rkr-pages-links"><a href="/admin/blocks/edit/${slug}">Edit</a><a href="/${slug}">View</a></span></td>
 </tr>`;
 }
 
