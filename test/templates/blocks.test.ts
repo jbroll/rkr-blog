@@ -32,7 +32,7 @@ async function renderFixture(name: string): Promise<string> {
 describe('block fixtures', () => {
   it('cards-3 fixture renders three columns with buttons', async () => {
     const html = await renderFixture('cards-3');
-    assert.equal((html.match(/rkr-col/g) ?? []).length, 3);
+    assert.match(html, /--rkr-grid-cols:3;/);
     assert.equal((html.match(/rkr-btn/g) ?? []).length, 3);
   });
 
@@ -44,6 +44,6 @@ describe('block fixtures', () => {
 
   it('logo-wall fixture renders four columns', async () => {
     const html = await renderFixture('logo-wall');
-    assert.equal((html.match(/rkr-col/g) ?? []).length, 4);
+    assert.match(html, /--rkr-grid-cols:4;/);
   });
 });

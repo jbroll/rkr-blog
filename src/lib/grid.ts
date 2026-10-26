@@ -5,6 +5,8 @@ type GridMin = 'narrow' | 'medium' | 'wide';
 
 const GRID_MAX_COLS = 6;
 
+export const GRID_MIN_REM: Record<GridMin, number> = { narrow: 10, medium: 16, wide: 24 };
+
 export interface GridSlots {
   cols: number;
   min: GridMin;

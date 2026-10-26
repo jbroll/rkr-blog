@@ -99,12 +99,11 @@ const BLOCKS = `
 .rkr-unified-shell[data-mode="view"] :is(.rkr-unified-blank,.rkr-unified-empty){display:none}
 .rkr-unified-shell[data-mode="edit"] .rkr-unified-blank{min-height:1.5em;outline:1px dashed var(--rkr-edit-border);outline-offset:4px}
 .rkr-unified-shell[data-mode="edit"] [data-rkr-blank]:empty::before{content:"Type something…";color:var(--rkr-edit-muted)}
-.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]{min-height:2.5rem;outline:1px dashed color-mix(in srgb,var(--rkr-edit-accent) 30%,transparent);outline-offset:-1px}
-.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]::before{position:absolute;top:0;left:0;z-index:1;padding:0 .4rem;font:500 .6875rem/1.5 var(--rkr-edit-font);color:var(--rkr-edit-muted);background:var(--rkr-edit-surface);border:1px solid var(--rkr-edit-border);border-width:0 1px 1px 0;border-radius:0 0 4px 0;opacity:0;pointer-events:none}
-.rkr-unified-shell[data-mode="edit"] :is(.rkr-row,.rkr-col,.rkr-flow)[data-rkr-path]:is(:hover,[data-rkr-selected])::before{opacity:1}
-.rkr-unified-shell[data-mode="edit"] .rkr-row[data-rkr-path]::before{content:"Row"}
-.rkr-unified-shell[data-mode="edit"] .rkr-col[data-rkr-path]::before{content:"Column"}
-.rkr-unified-shell[data-mode="edit"] .rkr-flow[data-rkr-path]::before{content:"Flow"}
+.rkr-unified-shell[data-mode="edit"] :is(.rkr-grid[data-rkr-path],.rkr-grid-wrap[data-rkr-path]>.rkr-grid){min-height:2.5rem;outline:1px dashed color-mix(in srgb,var(--rkr-edit-accent) 30%,transparent);outline-offset:-1px}
+.rkr-unified-shell[data-mode="edit"] :is(.rkr-grid[data-rkr-path],.rkr-grid-wrap[data-rkr-path]>.rkr-grid)::before{content:attr(data-rkr-grid-label);position:absolute;top:0;left:0;z-index:1;padding:0 .4rem;font:500 .6875rem/1.5 var(--rkr-edit-font);color:var(--rkr-edit-muted);background:var(--rkr-edit-surface);border:1px solid var(--rkr-edit-border);border-width:0 1px 1px 0;border-radius:0 0 4px 0;opacity:0;pointer-events:none}
+.rkr-unified-shell[data-mode="edit"] :is(.rkr-grid[data-rkr-path],.rkr-grid-wrap[data-rkr-path]>.rkr-grid):is(:hover,[data-rkr-selected])::before,.rkr-unified-shell[data-mode="edit"] .rkr-grid-wrap[data-rkr-selected]>.rkr-grid::before{opacity:1}
+.rkr-unified-shell[data-mode="edit"] .rkr-grid-empty{grid-column:1/-1;margin:0;padding:1.5rem 1rem;text-align:center;font:500 .8125rem/1.4 var(--rkr-edit-font);color:var(--rkr-edit-muted);border:2px dashed var(--rkr-edit-border);border-radius:4px}
+.rkr-unified-shell[data-mode="view"] .rkr-grid-empty{display:none}
 [data-drop="before"]{box-shadow:inset 0 3px 0 0 var(--rkr-edit-accent,var(--rkr-link))}
 [data-drop="after"]{box-shadow:inset 0 -3px 0 0 var(--rkr-edit-accent,var(--rkr-link))}
 [data-drop="inside"]{outline:2px dashed var(--rkr-edit-accent,var(--rkr-link));outline-offset:2px}

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { extractBlockTeaser } from '../../src/lib/block-teaser.ts';
-import type { BlockTree } from '../../src/lib/blocks.ts';
+import { type BlockTree, parseBlockTree } from '../../src/lib/blocks.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
 import figureWidget from '../../src/widgets/figure.ts';
 
@@ -74,4 +74,23 @@ test('extractBlockTeaser: a figure that does not open the page is no hero', asyn
     ]
   };
   assert.equal(await extractBlockTeaser(root, tree, registry(), 30), null);
+});
+
+test('extractBlockTeaser: a flow shorthand opening with a figure has a hero', async (t) => {
+  const root = freshSiteRoot(t);
+  const tree = parseBlockTree({
+    version: 1,
+    body: [
+      {
+        type: 'flow',
+        blocks: [
+          { type: 'figure', slots: { ids: 'aaaa1111' } },
+          { type: 'text', markdown: 'Lede after hero.' }
+        ]
+      }
+    ]
+  });
+  const parts = await extractBlockTeaser(root, tree, registry(), 30);
+  assert.ok(parts);
+  assert.match(parts.excerptHtml, /Lede after hero\./);
 });

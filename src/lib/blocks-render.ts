@@ -7,7 +7,7 @@ import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
 import { type BlockNode, type BlockTree, detectCycle, resolveSlots, type Slots } from './blocks.ts';
 import { escapeAttr, escapeText, type RenderCtx, renderPostHtml } from './content.ts';
-import { readGridSlots } from './grid.ts';
+import { GRID_MIN_REM, gridLabel, readGridSlots } from './grid.ts';
 import { safeLinkUrl } from './safe-url.ts';
 import type { DirectiveNode } from './widgets.ts';
 
@@ -89,6 +89,33 @@ interface RenderNodeOpts {
   mark?: (path: number[]) => string;
 }
 
+function gridStyle(g: ReturnType<typeof readGridSlots>): string {
+  const widths = g.widths ? `;--rkr-grid-widths:${g.widths.map((w) => `${w}fr`).join(' ')}` : '';
+  return `--rkr-grid-cols:${g.cols};--rkr-grid-min:${GRID_MIN_REM[g.min]}rem${widths}`;
+}
+
+function renderGrid(
+  node: Extract<BlockNode, { type: 'grid' }>,
+  kids: string[],
+  opts?: RenderNodeOpts
+): string {
+  const marked = Boolean(opts?.mark);
+  if (kids.length === 0 && !marked) return '';
+  const g = readGridSlots(node.slots);
+  const inner = kids.length
+    ? kids.join('')
+    : '<p class="rkr-grid-empty" data-rkr-grid-empty>Empty grid: drag blocks here</p>\n';
+  const stacked = g.widths !== null && g.cols > 1;
+  const collapse = stacked ? ` rkr-collapse-${g.cols}-${g.min}` : '';
+  const cls = `${g.band ? 'rkr-section-inner ' : ''}rkr-grid${collapse}`;
+  const label = marked ? ` data-rkr-grid-label="${escapeAttr(gridLabel(node.slots))}"` : '';
+  const grid = `<div class="${cls}" style="${gridStyle(g)}"${stacked ? ' data-widths' : ''}${label}>\n${inner}</div>`;
+  const body = stacked ? `<div class="rkr-grid-wrap">${grid}</div>` : grid;
+  if (!g.band) return `${body}\n`;
+  const wave = g.edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
+  return `<section class="rkr-section rkr-theme-${escapeAttr(g.theme)}">\n${body}${wave}\n</section>\n`;
+}
+
 /** Render one node, then (when marking) prepend its path marker.
  * When marking, every node renders something (blank text renders an
  * edit placeholder), so every node gets a marker and the client's
@@ -119,16 +146,8 @@ async function renderNodeHtml(
     Promise.all(kids.map((k, i) => renderNode(k, ctx, lib, stack, [...path, i], opts)));
 
   switch (node.type) {
-    case 'grid': {
-      const g = readGridSlots(node.slots);
-      const inner = (await renderKids(node.children)).join('');
-      if (g.band) {
-        const wave =
-          g.edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
-        return `<section class="rkr-section rkr-theme-${escapeAttr(g.theme)}">\n<div class="rkr-section-inner">\n${inner}</div>${wave}\n</section>\n`;
-      }
-      return `<div class="${g.cols === 1 ? 'rkr-col' : 'rkr-row'}">\n${inner}</div>\n`;
-    }
+    case 'grid':
+      return renderGrid(node, await renderKids(node.children), opts);
     case 'text': {
       const md = node.markdown ?? textOf(node.slots?.markdown);
       // Blank text is invisible to readers; the editor needs an element to type into.

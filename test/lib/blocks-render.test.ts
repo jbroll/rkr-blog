@@ -48,9 +48,9 @@ const sectionWithHello: BlockTree = {
 };
 
 describe('blocks-render', () => {
-  it('renders section>row>text to nested divs', async () => {
+  it('renders a section band holding a grid of text', async () => {
     const html = await renderBlockTree(sectionWithHello, fakeCtx, emptyLib);
-    assert.match(html, /rkr-section.*rkr-row.*Hello/s);
+    assert.match(html, /rkr-section.*rkr-grid.*Hello/s);
   });
 
   it('renders text markdown bold', async () => {
@@ -145,13 +145,15 @@ describe('blocks-render', () => {
     // Today's public output, byte-for-byte.
     assert.equal(
       plain,
-      '<p>One</p>\n<p>Two</p>\n<section class="rkr-section rkr-theme-light">\n<div class="rkr-section-inner">\n<p>Three</p>\n<p>Four</p>\n</div>\n</section>\n'
+      '<p>One</p>\n<p>Two</p>\n<section class="rkr-section rkr-theme-light">\n<div class="rkr-section-inner rkr-grid" style="--rkr-grid-cols:1;--rkr-grid-min:16rem">\n<p>Three</p>\n<p>Four</p>\n</div>\n</section>\n'
     );
 
     const marked = await renderBlockTree(tree, fakeCtx, emptyLib, { mark });
-    // Markers are invisible HTML comments: removing them restores the
-    // exact public output.
-    assert.equal(marked.replace(/<!--rkr:path=[0-9,]+-->/g, ''), plain);
+    // Markers and the grid label are the only editor additions.
+    assert.equal(
+      marked.replace(/<!--rkr:path=[0-9,]+-->/g, '').replace(/ data-rkr-grid-label="[^"]*"/g, ''),
+      plain
+    );
     // Document order === source order; the section itself is a node
     // ([2]) as well as its children ([2,0], [2,1]) so the client zip
     // matches the source-tree flattening.
@@ -345,5 +347,54 @@ describe('renderBlockTree unknown types', () => {
     assert.match(html, /Kept/);
     assert.doesNotMatch(html, /mystery/);
     assert.match(warned.join('\n'), /unknown block type mystery/);
+  });
+
+  describe('grid', () => {
+    const grid = (
+      slots: Record<string, unknown>,
+      children: unknown[] = [{ type: 'text', markdown: 'x' }]
+    ) => ({ version: 1, body: [{ type: 'grid', slots, children }] }) as BlockTree;
+    const render = (tree: BlockTree, mk?: boolean) =>
+      renderBlockTree(tree, fakeCtx, emptyLib, mk ? { mark } : undefined);
+
+    it('renders columns and minimum cell width as custom properties', async () => {
+      const html = await render(grid({ cols: 3 }));
+      assert.match(html, /class="rkr-grid" style="--rkr-grid-cols:3;--rkr-grid-min:16rem"/);
+    });
+
+    it('renders widths as fr tracks inside a collapse wrapper', async () => {
+      const html = await render(grid({ cols: 2, widths: '2 1', min: 'narrow' }));
+      assert.match(html, /--rkr-grid-widths:2fr 1fr/);
+      assert.match(html, /data-widths/);
+      assert.match(html, /<div class="rkr-grid-wrap"><div class="rkr-grid rkr-collapse-2-narrow"/);
+    });
+
+    it('falls back to one column for a bad cols value', async () => {
+      assert.match(await render(grid({ cols: 'x' })), /--rkr-grid-cols:1;/);
+    });
+
+    it('rounds a fractional cols value', async () => {
+      assert.match(await render(grid({ cols: 2.5 })), /--rkr-grid-cols:3;/);
+    });
+
+    it('renders a band with theme and wave edge', async () => {
+      const html = await render(grid({ band: true, theme: 'dark', edge: 'wave' }));
+      assert.match(html, /<section class="rkr-section rkr-theme-dark">/);
+      assert.match(html, /rkr-section-inner rkr-grid/);
+      assert.match(html, /rkr-section-wave/);
+    });
+
+    it('renders nothing for an empty grid on the public page', async () => {
+      assert.equal(await render(grid({ cols: 2 }, [])), '');
+    });
+
+    it('renders a labelled placeholder for an empty grid in the editor', async () => {
+      const html = await render(grid({ cols: 2 }, []), true);
+      assert.match(html, /data-rkr-grid-label="Row \(2 columns\)"/);
+      assert.match(
+        html,
+        /<p class="rkr-grid-empty" data-rkr-grid-empty>Empty grid: drag blocks here<\/p>/
+      );
+    });
   });
 });

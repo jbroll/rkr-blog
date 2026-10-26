@@ -408,7 +408,7 @@ test('drag an existing figure to the bottom of the row lands beside its nearest 
   const handle = page.getByRole('button', { name: 'Drag to move' });
   await expect(handle).toBeVisible();
 
-  const row = page.locator('#rkr-blocks-page-body .rkr-row');
+  const row = page.locator('#rkr-blocks-page-body .rkr-grid');
   const box = await row.boundingBox();
   expect(box).not.toBeNull();
   const moved = saveResponse(page, slug);
