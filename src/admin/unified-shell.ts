@@ -17,6 +17,7 @@ import type { PaletteMacro } from './blocks-editor.ts';
 import { getAtPath, type Path, setSlotAtPath } from './blocks-page-editor.ts';
 import { domToMarkdown } from './dom-markdown.ts';
 import type { MediaDialogDeps } from './figure-dialog-tree.ts';
+import { createInertHolds, type ReleaseInert } from './inert-holds.ts';
 import { openPageSettings, readPageFields } from './page-settings.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
 import { createConfigurator } from './unified-configure.ts';
@@ -108,6 +109,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   let unitOf = new Map<Element, HydratedUnit>();
   let generation = 0;
   let latest: Promise<void> = Promise.resolve();
+
+  const holdInert = createInertHolds(body);
+  let releaseRender: ReleaseInert = () => {};
 
   let actions: { refresh(): void } | undefined;
 
@@ -235,7 +239,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     shown = rendered;
     reindex();
     if (selected && !getAtPath(tree, selected)) selected = null;
-    body.removeAttribute('inert');
+    releaseRender();
     setMode(mode);
     if (opts.select && mode === 'edit') {
       const key = opts.select.join(',');
@@ -265,7 +269,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       // Durable before the render, which may fail or never return.
       save.draft(next);
     }
-    body.setAttribute('inert', '');
+    // One render hold at a time. A failed render keeps its hold until Retry.
+    releaseRender();
+    releaseRender = holdInert();
     let html: string;
     try {
       html = shown === next ? '' : await deps.render(next);
@@ -274,7 +280,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       return mine === generation ? undefined : latest;
     }
     if (mine !== generation) return latest;
-    if (shown === next) body.removeAttribute('inert');
+    if (shown === next) releaseRender();
     else swap(html, next, opts);
     if (!opts.renderOnly) await save.requestSave(next);
   };
@@ -326,7 +332,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     }
   });
 
-  mountAddSheet(dock, [body]);
+  mountAddSheet(dock, holdInert);
   mountPhonePreview(toolbar, shellEl);
 
   actions = mountBlockActions({

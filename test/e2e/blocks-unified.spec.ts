@@ -632,7 +632,4 @@ test('sticky toolbar is compact at phone width', async ({ page }) => {
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   const bar = page.locator('#rkr-unified-toolbar');
   expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(88);
-  await bar.screenshot({
-    path: '/tmp/claude-1000/-home-john-src-rkr-blog/4c6dba75-fdb7-4084-9b13-74a41d2d8b7d/scratchpad/shots/task8/phone-toolbar-compact.png'
-  });
 });

@@ -1831,4 +1831,52 @@ describe('unified shell add-block sheet', () => {
     assert.equal(f.body.hasAttribute('inert'), false);
     assert.equal(f.dock.classList.contains('is-open'), false);
   });
+
+  const deferred = () => {
+    let resolve!: (html: string) => void;
+    const promise = new Promise<string>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  };
+  const setup = () => {
+    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Hi' }] };
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Hi')]);
+    const pending = deferred();
+    const shell = mount(f, tree, undefined, undefined, () => pending.promise);
+    const next: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Hi!' }] };
+    return {
+      f,
+      pending,
+      render: () => shell.applyTree(next),
+      fab: f.root.querySelector('.rkr-add-fab') as FakeElement,
+      close: f.root.querySelector('.rkr-sheet-close') as FakeElement
+    };
+  };
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
+  };
+
+  it('closing the sheet mid-render leaves the body inert until the render lands', async () => {
+    const { f, pending, render, fab, close } = setup();
+    const done = render();
+    fab.click();
+    close.click();
+    assert.equal(f.body.hasAttribute('inert'), true, 'render still holds it');
+    pending.resolve('<!--rkr:path=0--><p>Hi!</p>');
+    await done;
+    assert.equal(f.body.hasAttribute('inert'), false);
+  });
+
+  it('a render landing under an open sheet leaves the body inert until it closes', async () => {
+    const { f, pending, render, fab, close } = setup();
+    const done = render();
+    fab.click();
+    pending.resolve('<!--rkr:path=0--><p>Hi!</p>');
+    await done;
+    await settle();
+    assert.equal(f.body.hasAttribute('inert'), true, 'sheet still holds it');
+    close.click();
+    assert.equal(f.body.hasAttribute('inert'), false);
+  });
 });

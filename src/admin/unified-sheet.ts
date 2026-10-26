@@ -4,8 +4,10 @@
 //
 // Browser-safe: no node:* imports.
 
-/** `behind` is made inert while the sheet is open so focus and taps stay in it. */
-export function mountAddSheet(dock: HTMLElement, behind: Element[] = []): { close(): void } {
+import type { ReleaseInert } from './inert-holds.ts';
+
+/** `holdInert` keeps the page behind the sheet inert while it is open. */
+export function mountAddSheet(dock: HTMLElement, holdInert: () => ReleaseInert): { close(): void } {
   const doc = dock.ownerDocument;
   const host = dock.parentNode as Element;
 
@@ -27,13 +29,15 @@ export function mountAddSheet(dock: HTMLElement, behind: Element[] = []): { clos
   dock.prepend(closeBtn);
   host.append(fab, scrim);
 
+  let releaseBehind: ReleaseInert | null = null;
   const setOpen = (open: boolean): void => {
     dock.classList.toggle('is-open', open);
     scrim.classList.toggle('is-open', open);
     fab.setAttribute('aria-expanded', open ? 'true' : 'false');
-    for (const el of behind) {
-      if (open) el.setAttribute('inert', '');
-      else el.removeAttribute('inert');
+    if (open && !releaseBehind) releaseBehind = holdInert();
+    if (!open) {
+      releaseBehind?.();
+      releaseBehind = null;
     }
   };
   const close = (): void => {
