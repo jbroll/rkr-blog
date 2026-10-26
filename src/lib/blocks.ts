@@ -151,12 +151,17 @@ export function parseBlockTree(json: unknown): BlockTree {
 
 const CONTAINER_TYPES = new Set(['grid', 'section', 'row', 'col', 'flow']);
 
-/** Hard rule 4 on the raw request body, because `parseBlockTree` drops
- * children from leaves and macros and empties a non-array container.
- * Paths are raw paths. */
-export function rawChildrenProblem(body: unknown): { path: number[]; message: string } | null {
+/** Hard rules 1 and 4 on the raw request body, with the block's path:
+ * `parseBlockTree` names no path, drops children from leaves and macros,
+ * and empties a non-array container. Paths are raw paths. */
+export function rawTreeProblem(body: unknown): { path: number[]; message: string } | null {
   const visit = (raw: unknown, path: number[]): { path: number[]; message: string } | null => {
-    if (!isRecord(raw) || typeof raw.type !== 'string') return null;
+    if (!isRecord(raw) || typeof raw.type !== 'string') {
+      return { path, message: 'Every block needs a type.' };
+    }
+    if (!CONTAINER_TYPES.has(raw.type) && !LEAVES.has(raw.type) && raw.type !== 'macro') {
+      return { path, message: `Unknown block type ${raw.type}.` };
+    }
     if (!CONTAINER_TYPES.has(raw.type)) {
       return 'children' in raw
         ? { path, message: `A ${raw.type} block can't hold other blocks.` }

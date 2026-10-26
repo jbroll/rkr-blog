@@ -544,14 +544,18 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
 - A save that would create a file whose name another page already uses
   gets `409`. An invalid tree, a title, subtitle, status, date or
   excerpt that is not a string, or tags that are not a list of strings
-  get `400` and are never stored. A tree that breaks a hard rule gets
-  `400 { error: "invalid", message, path }`: the editor selects the
-  block at `path`, shows `message` in its toolbar, shows Not saved, and
-  does not retry until the tree changes. A page that already breaks a
-  rule still opens and renders. The editor marks the block ("This block
-  can't be saved: the macro hero no longer exists. Delete it to save.")
-  and the save is refused until the author fixes it. The check also
-  looks at raw `children` on leaves and macro instances.
+  get `400` and are never stored. Every `400` for the request body has
+  one shape, `{ error: "invalid", message, path? }`. `path` names the
+  block when there is one: an unknown type (even one with `children`),
+  `children` on a leaf or macro instance, a container whose
+  `children`/`blocks` is not a list, and every hard rule. When `path` is
+  present the editor selects that block, shows `message` in its toolbar,
+  shows Not saved, and does not retry until the tree changes. A page
+  that already breaks a rule still opens and renders. The editor marks
+  the block ("This block can't be saved: the macro hero no longer
+  exists. Delete it to save.") and the save is refused until the author
+  fixes it. A macro library that fails to load is the server's fault and
+  gets `500`.
 - A save from an editor bundle older than the running server (its
   `X-Rkr-Build` differs) gets `426`; the editor asks for a reload.
 - New page refuses a slug that a fixed route answers (`about`, `search`,

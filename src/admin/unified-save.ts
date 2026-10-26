@@ -42,8 +42,8 @@ export class SaveInvalid extends Error {
 
 const INVALID_FALLBACK = "This page can't be saved.";
 
-/** The save route's 400 reply: `{error:'invalid', message, path}`, or
- * `{error}` alone for a body it could not parse. */
+/** The save route's 400 reply, `{error:'invalid', message, path?}`; a bare
+ * `{error}` from an older server is read as the message. */
 export function invalidFromReply(reply: unknown): SaveInvalid {
   const r = (reply ?? {}) as { error?: unknown; message?: unknown; path?: unknown };
   const text = [r.message, r.error].find((v) => typeof v === 'string' && v !== '');

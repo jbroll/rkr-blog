@@ -490,8 +490,12 @@ throws rather than return a partial one, so nothing invalid reaches disk.
   slots at render, so a file on disk always opens. `validateForSave`
   (`blocks.ts`) applies the placement rules and runs only in the save
   route, which answers `400 { error: 'invalid', message, path }` for the
-  first problem. It also checks raw `children` before the parse drops
-  them. A page broken before the rules existed opens, the editor marks
+  first problem. `rawTreeProblem` runs first on the raw body, because
+  the parse names no path and drops `children` from leaves: it reports
+  unknown types (before any children check), stray `children` and
+  non-list containers with their raw path. Any other parse or field
+  failure gets the same shape without `path`; a macro library that fails
+  to load is a `500`. A page broken before the rules existed opens, the editor marks
   the block, and saving waits for the author. The render endpoint keeps
   drawing a comment for an unknown macro for the same reason.
 - **Depth is checked at save and in the editor.** At most three grid

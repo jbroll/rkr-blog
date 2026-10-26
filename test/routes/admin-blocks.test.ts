@@ -365,6 +365,74 @@ describe('admin blocks save', () => {
       assert.deepEqual(res.json().path, [0]);
     });
 
+    it('an unknown type is 400 with its path, even when it has children', async (t) => {
+      const { app } = await setup(t);
+      const res = await save(app, [{ type: 'grid', children: [{ type: 'nope', children: [] }] }]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json(), {
+        error: 'invalid',
+        path: [0, 0],
+        message: 'Unknown block type nope.'
+      });
+    });
+
+    it('a macro with children is 400', async (t) => {
+      const { app } = await setup(t);
+      const res = await save(app, [{ type: 'macro', macro: 'hero', children: [] }]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json(), {
+        error: 'invalid',
+        path: [0],
+        message: "A macro block can't hold other blocks."
+      });
+    });
+
+    it('a col whose blocks is not a list is 400', async (t) => {
+      const { app } = await setup(t);
+      const res = await save(app, [{ type: 'col', blocks: 'x' }]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json(), {
+        error: 'invalid',
+        path: [0],
+        message: 'A grid needs a list of blocks.'
+      });
+    });
+
+    it('other parse failures share the invalid shape', async (t) => {
+      const { app } = await setup(t);
+      const res = await save(app, [{ type: 'macro', macro: '' }]);
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.json().error, 'invalid');
+      assert.match(res.json().message, /macro name/);
+      const none = await app.inject({ method: 'POST', url: '/admin/blocks/rules', payload: {} });
+      assert.deepEqual(none.json(), { error: 'invalid', message: 'missing tree' });
+    });
+
+    it('a refused save leaves the existing page file byte-identical', async (t) => {
+      const { root, app } = await setup(t);
+      const first = await save(app, [{ type: 'text', markdown: 'Kept' }]);
+      assert.equal(first.statusCode, 200);
+      const before = fs.readFileSync(rulesFile(root));
+      for (const body of [
+        [{ type: 'nope' }],
+        [{ type: 'text', children: [] }],
+        [{ type: 'figure' }]
+      ]) {
+        const res = await save(app, body);
+        assert.equal(res.statusCode, 400);
+      }
+      assert.deepEqual(fs.readFileSync(rulesFile(root)), before);
+    });
+
+    it('a macro library that fails to load is 500', async (t) => {
+      const { root, app } = await setup(t);
+      fs.rmSync(path.join(root, 'macros'), { recursive: true, force: true });
+      fs.writeFileSync(path.join(root, 'macros'), 'not a directory');
+      const res = await save(app, [{ type: 'text', markdown: 'a' }]);
+      assert.equal(res.statusCode, 500);
+      assert.equal(fs.existsSync(rulesFile(root)), false);
+    });
+
     it('shorthand saves as an expanded grid', async (t) => {
       const { root, app } = await setup(t);
       const res = await save(app, [
