@@ -14,13 +14,12 @@
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
-import { getAtPath, type Path, setSlotAtPath, updateSlotsAtPath } from './blocks-page-editor.ts';
-import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
+import { getAtPath, type Path, setSlotAtPath } from './blocks-page-editor.ts';
 import { domToMarkdown } from './dom-markdown.ts';
-import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
-import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
+import type { MediaDialogDeps } from './figure-dialog-tree.ts';
 import { openPageSettings, readPageFields } from './page-settings.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
+import { createConfigurator } from './unified-configure.ts';
 import type { DraftStore } from './unified-draft.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
@@ -62,14 +61,6 @@ export interface UnifiedShell {
   applyTree(next: BlockTree, opts?: ApplyOpts): Promise<void>;
 }
 
-/** Types `configure` opens a dialog for. */
-const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'macro', 'button']);
-
-const NO_MEDIA: MediaDialogDeps = {
-  pick: async () => [],
-  thumbUrl: (kind, id) => (kind === 'image' ? `/admin/preview/${id}` : null)
-};
-
 const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
 const OFFLINE_STRUCTURE = 'Reconnect to add or move blocks';
 const OFFLINE_DIALOG = "You're offline. Keep this open and save when you reconnect.";
@@ -96,17 +87,6 @@ function textSource(node: BlockNode | null): string | null {
   if (node?.type !== 'text') return null;
   const markdown = node.markdown ?? (node as { slots?: { markdown?: unknown } }).slots?.markdown;
   return typeof markdown === 'string' ? markdown : '';
-}
-
-/** Merge touched macro fields over the instance slots; an empty value
- * clears the override so the default flows through again. */
-function mergeMacroFields(slots: Slots, touched: Record<string, unknown>): Slots {
-  const merged = { ...slots };
-  for (const [key, value] of Object.entries(touched)) {
-    if (typeof value !== 'string' || value === '') delete merged[key];
-    else merged[key] = value;
-  }
-  return merged;
 }
 
 export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): UnifiedShell {
@@ -199,66 +179,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     unitOf = new Map(units.flatMap((u) => u.elements.map((el) => [el, u] as const)));
   };
 
-  const media = deps.media ?? NO_MEDIA;
-
-  const openMediaConfig = (path: Path, fresh = false): void => {
-    const node = getAtPath(tree, path);
-    if (node?.type !== 'figure' && node?.type !== 'video') return;
-    openMediaDialog(root, {
-      kind: node.type,
-      slots: (node as { slots?: Slots }).slots ?? {},
-      fresh,
-      media,
-      refuse: refuseOffline,
-      onCommit: (slots) => {
-        flushText();
-        const next = updateSlotsAtPath(tree, path, (current) => ({ ...current, ...slots }));
-        void applyTree(next, { select: path });
-      },
-      onCancel: (edited) => {
-        if (!edited) return;
-        // Applied image edits changed the derivatives the page shows. A
-        // pending text edit saves itself through flushText.
-        flushText();
-        void applyTree({ ...tree }, { select: path, renderOnly: true });
-      }
-    });
-  };
-
-  const macroInfo = new Map(deps.macros.map((m) => [m.name, m]));
-
-  const openButtonConfig = (path: Path): void => {
-    const node = getAtPath(tree, path);
-    if (node?.type !== 'button') return;
-    openButtonDialog(root, {
-      initial: readButtonFields(node),
-      refuse: refuseOffline,
-      onCommit: (slots) => {
-        flushText();
-        const next = updateSlotsAtPath(tree, path, (current) => ({ ...current, ...slots }));
-        void applyTree(next, { select: path });
-      }
-    });
-  };
-
-  const openMacroConfig = (path: Path): void => {
-    const node = getAtPath(tree, path);
-    if (node?.type !== 'macro') return;
-    const info = macroInfo.get(node.macro);
-    openMacroDialog(root, {
-      title: `Edit ${info?.label ?? node.macro}`,
-      fields: readMacroFields(node, info?.defaults ?? {}, info?.fieldSchema),
-      media,
-      refuse: refuseOffline,
-      onCommit: (touched) => {
-        flushText();
-        const next = updateSlotsAtPath(tree, path, (slots) => mergeMacroFields(slots, touched));
-        void applyTree(next, { select: path });
-      },
-      onCancel: () => {}
-    });
-  };
-
   const openSettings = (): void => {
     flushText();
     const slug = (root as HTMLElement).dataset?.slug ?? '';
@@ -284,13 +204,6 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
         void save.requestSave(next);
       }
     });
-  };
-
-  const configure = (path: Path): void => {
-    const type = getAtPath(tree, path)?.type;
-    if (type === 'figure' || type === 'video') openMediaConfig(path);
-    else if (type === 'macro') openMacroConfig(path);
-    else if (type === 'button') openButtonConfig(path);
   };
 
   const setMode = (next: Mode): void => {
@@ -377,6 +290,16 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     commitText(doc.activeElement);
   };
 
+  const { configure, openMediaConfig, canConfigure } = createConfigurator({
+    root,
+    macros: deps.macros,
+    media: deps.media,
+    getTree: () => tree,
+    applyTree,
+    flushText,
+    refuse: refuseOffline
+  });
+
   const insert = mountPaletteInsert({
     dock,
     body,
@@ -408,7 +331,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     select,
     applyTree,
     configure,
-    canConfigure: (node) => CONFIGURABLE.has(node.type),
+    canConfigure,
     flushText,
     isEditing: () => mode === 'edit',
     drag: { start: (path) => insert.beginMove(path), end: () => insert.endMove() }
