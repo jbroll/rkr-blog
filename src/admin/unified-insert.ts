@@ -16,6 +16,7 @@ import {
   depthLabel,
   MAX_MACRO_DEPTH,
   mountBlocksPalette,
+  PALETTE_PRIMITIVES,
   type PaletteMacro,
   primitiveNode
 } from './blocks-editor.ts';
@@ -152,16 +153,29 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
     return target?.closest?.('[data-rkr-path]') ?? null;
   };
 
+  // Drag text from elsewhere (an image URL, selected words) is not a
+  // block name; only palette entries may insert.
+  const paletteNames = new Set([...PALETTE_PRIMITIVES, ...macros].map((m) => m.name));
+
   const dropName = (ev: Event): string | null => {
     if (dragName) return dragName;
     const dt = (ev as unknown as { dataTransfer?: { getData(t: string): string } }).dataTransfer;
     try {
       const name = dt?.getData('text/plain');
-      return name ? name : null;
+      return name && paletteNames.has(name) ? name : null;
     } catch {
       return null;
     }
   };
+
+  // The page's own images and links would otherwise start a native drag
+  // that drops their URL; blocks move by the toolbar's Drag handle.
+  body.addEventListener('dragstart', (ev: Event) => {
+    const target = (ev as unknown as { target: Element | null }).target;
+    if (['img', 'a', 'picture', 'video'].some((tag) => target?.closest?.(tag))) {
+      ev.preventDefault();
+    }
+  });
 
   const dropPath = (card: Element): Path =>
     String(card.getAttribute('data-rkr-path'))
@@ -172,17 +186,93 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
   let moving: Path | null = null;
   let lastMarked: Element | null = null;
 
-  const dropAt = (
-    ev: Event,
-    card: Element
-  ): { pos: DropPosition; at: ReturnType<typeof resolveDrop> } => {
-    const path = dropPath(card);
-    const pos = dropPosition(
-      (ev as unknown as { clientY?: number }).clientY ?? 0,
-      card.getBoundingClientRect(),
-      isContainerPath(env.getTree(), path)
-    );
-    return { pos, at: resolveDrop(env.getTree(), path, pos) };
+  const cardsOf = (path: Path): Element[] => {
+    const key = path.join(',');
+    return [...body.querySelectorAll(`[data-rkr-path="${key}"]`)];
+  };
+
+  const childPaths = (parent: Path): Path[] => {
+    const key = parent.join(',');
+    const seen = new Map<string, Path>();
+    for (const el of body.querySelectorAll('[data-rkr-path]')) {
+      const p = dropPath(el);
+      if (p.length === parent.length + 1 && p.slice(0, -1).join(',') === key) {
+        seen.set(p.join(','), p);
+      }
+    }
+    return [...seen.values()];
+  };
+
+  const unionRect = (els: Element[]) => {
+    const rects = els.map((el) => {
+      const r: Partial<DOMRect> = el.getBoundingClientRect?.() ?? {};
+      const top = r.top ?? 0;
+      const left = r.left ?? 0;
+      return {
+        top,
+        left,
+        bottom: r.bottom ?? top + (r.height ?? 0),
+        right: r.right ?? left + (r.width ?? 0)
+      };
+    });
+    const top = Math.min(...rects.map((r) => r.top));
+    const left = Math.min(...rects.map((r) => r.left));
+    const bottom = Math.max(...rects.map((r) => r.bottom));
+    const right = Math.max(...rects.map((r) => r.right));
+    return { top, left, bottom, right, height: bottom - top };
+  };
+
+  /** The card and side a drag lands on. Over a gap (between a
+   * container's children, or outside every block) it is the nearest
+   * block, so the marker never jumps to a distant container edge; only
+   * an empty container takes a drop inside. */
+  const dropTarget = (ev: Event): { card: Element; path: Path; pos: DropPosition } | null => {
+    const { clientX: x = 0, clientY: y = 0 } = ev as unknown as {
+      clientX?: number;
+      clientY?: number;
+    };
+    const tree = env.getTree();
+    const hovered = dropCard(ev);
+    let path: Path = hovered ? dropPath(hovered) : [];
+    for (;;) {
+      if (path.length > 0 && !isContainerPath(tree, path)) break;
+      const kids = childPaths(path);
+      if (kids.length === 0) break;
+      let best: {
+        path: Path;
+        rect: ReturnType<typeof unionRect>;
+        dx: number;
+        dy: number;
+        dist: number;
+      } | null = null;
+      for (const kid of kids) {
+        const rect = unionRect(cardsOf(kid));
+        const dx = Math.max(rect.left - x, 0, x - rect.right);
+        const dy = Math.max(rect.top - y, 0, y - rect.bottom);
+        const dist = Math.hypot(dx, dy);
+        if (!best || dist < best.dist) best = { path: kid, rect, dx, dy, dist };
+      }
+      if (!best) break;
+      const sideways = getAtPath(tree, path)?.type === 'row';
+      // Level with a container (e.g. in the margin beside a page-wide
+      // flow): look inside it rather than dropping at its far edge.
+      const level = sideways ? best.dx === 0 : best.dy === 0;
+      if (best.dist === 0 || (level && isContainerPath(tree, best.path))) {
+        path = best.path;
+        continue;
+      }
+      const before = sideways
+        ? x < (best.rect.left + best.rect.right) / 2
+        : y < best.rect.top + best.rect.height / 2;
+      const els = cardsOf(best.path);
+      const card = (before ? els[0] : els[els.length - 1]) as Element;
+      return { card, path: best.path, pos: before ? 'before' : 'after' };
+    }
+    if (path.length === 0) return null;
+    const els = cardsOf(path);
+    const pos = dropPosition(y, unionRect(els), isContainerPath(tree, path));
+    const card = (pos === 'after' ? els[els.length - 1] : els[0]) as Element;
+    return { card, path, pos };
   };
 
   /** Where a dragged block may land, or null when the move is refused
@@ -204,21 +294,25 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
 
   const resolveHover = (
     ev: Event,
-    card: Element | null,
     from: Path | null
-  ): { pos: DropPosition; at: { parentPath: Path; index: number } | null } => {
-    if (!card) {
+  ): {
+    card: Element | null;
+    pos: DropPosition;
+    at: { parentPath: Path; index: number } | null;
+  } => {
+    const hit = dropTarget(ev);
+    if (!hit) {
       const end = { parentPath: [], index: env.getTree().body.length };
-      return { pos: 'inside', at: from ? moveTarget(from, end) : end };
+      return { card: null, pos: 'inside', at: from ? moveTarget(from, end) : end };
     }
-    const { pos, at } = dropAt(ev, card);
-    return { pos, at: from ? moveTarget(from, at) : at };
+    const at = resolveDrop(env.getTree(), hit.path, hit.pos);
+    return { card: hit.card, pos: hit.pos, at: from ? moveTarget(from, at) : at };
   };
 
   body.addEventListener('dragover', (ev: Event) => {
-    ev.preventDefault();
     if (!dragName && !moving && !dropName(ev)) return;
-    const card = dropCard(ev);
+    ev.preventDefault();
+    const { card, pos, at } = resolveHover(ev, moving);
     if (!card) {
       if (lastMarked) {
         lastMarked.removeAttribute('data-drop');
@@ -228,7 +322,6 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
       return;
     }
     body.removeAttribute('data-drop');
-    const { pos, at } = resolveHover(ev, card, moving);
     if (!at) {
       if (lastMarked) {
         lastMarked.removeAttribute('data-drop');
@@ -250,14 +343,13 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
   body.addEventListener('drop', (ev: Event) => {
     ev.preventDefault();
     const name = dropName(ev);
-    const card = dropCard(ev);
     clearDropMarks();
     body.removeAttribute('data-drop');
     dragName = null;
     const from = moving;
     moving = null;
     if (!name && !from) return;
-    const { at } = resolveHover(ev, card, from);
+    const { at } = resolveHover(ev, from);
     if (!at) return;
     if (from) {
       const next = moveBlock(env.getTree(), from, at.parentPath, at.index);

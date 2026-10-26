@@ -273,6 +273,42 @@ describe('block actions flush and guards', () => {
     assert.deepEqual(h.log, ['flush']);
   });
 
+  it('dragstart uses a shrunken, unmarked copy of the block as the drag image', async () => {
+    const h = harness(ABC, [0], ['0', '1', '2']);
+    const source = h.body.querySelector('[data-rkr-path="0"]') as FakeElement;
+    const copy = h.doc.createElement('p');
+    copy.setAttribute('data-rkr-path', '0');
+    copy.setAttribute('data-rkr-selected', '');
+    Object.assign(source, {
+      getBoundingClientRect: () => ({
+        top: 0,
+        left: 0,
+        right: 900,
+        bottom: 400,
+        width: 900,
+        height: 400
+      }),
+      cloneNode: () => copy
+    });
+    const images: Array<{ el: unknown; x: number; y: number }> = [];
+    const ev = Object.assign(new FakeEvent('dragstart'), {
+      dataTransfer: {
+        effectAllowed: '',
+        setData: () => {},
+        setDragImage: (el: unknown, x: number, y: number) => images.push({ el, x, y })
+      }
+    });
+    h.bar().querySelector('[data-action="drag"]')?.dispatchEvent(ev);
+    assert.equal(images.length, 1);
+    assert.equal(images[0]?.el, copy);
+    assert.equal(copy.getAttribute('data-rkr-path'), null);
+    assert.equal(copy.getAttribute('data-rkr-selected'), null);
+    assert.match(copy.getAttribute('style') ?? '', /width:320px/);
+    assert.ok(copy.parentNode, 'ghost is in the document while the browser snapshots it');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(copy.parentNode, null, 'ghost removed after dragstart');
+  });
+
   it('the applied tree reflects what the flush committed', () => {
     const h = harness(ABC, [0], ['0', '1', '2']);
     h.state.onFlush = () => {

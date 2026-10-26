@@ -892,6 +892,81 @@ describe('unified shell palette drop', () => {
     assert.equal(saved.length, 0);
   });
 
+  it('a dropped image URL or other text inserts nothing', async () => {
+    const { f, tree } = twoText();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    const [, two] = f.body.querySelectorAll('p');
+    assert.ok(two);
+    rectOf(two, 100, 40);
+    for (const text of ['http://localhost:3010/img/abc.webp', 'some words']) {
+      two.dispatchEvent(
+        Object.assign(new FakeEvent('drop'), { clientY: 130, dataTransfer: dragData(text) })
+      );
+    }
+    await tick();
+    assert.equal(saved.length, 0);
+  });
+
+  it("the page's own images and links cannot start a native drag", () => {
+    const { f, tree } = twoText();
+    const shell = mount(f, tree, async () => {});
+    shell.setMode('edit');
+    const img = (f.body as unknown as { ownerDocument: FakeDocument }).ownerDocument.createElement(
+      'img'
+    );
+    f.body.querySelector('p')?.append(img);
+    const ev = new FakeEvent('dragstart');
+    img.dispatchEvent(ev);
+    assert.equal(ev.defaultPrevented, true);
+  });
+
+  it('over a gap inside a container the nearest block takes the drop', async () => {
+    const f = fixture((doc) => {
+      const flow = doc.createElement('div');
+      flow.className = 'rkr-flow';
+      flow.append(marker(doc, '0,0'), para(doc, 'One'), marker(doc, '0,1'), para(doc, 'Two'));
+      return [marker(doc, '0'), flow];
+    });
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        {
+          type: 'flow',
+          children: [
+            { type: 'text', markdown: 'One' },
+            { type: 'text', markdown: 'Two' }
+          ]
+        }
+      ]
+    };
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    const flow = f.body.querySelector('.rkr-flow');
+    const [one, two] = f.body.querySelectorAll('p');
+    assert.ok(flow && one && two);
+    rectOf(flow, 0, 1000);
+    rectOf(one, 0, 100);
+    rectOf(two, 600, 100);
+    const over = { clientY: 560, dataTransfer: dragData('primitive:figure') };
+    flow.dispatchEvent(Object.assign(new FakeEvent('dragover'), over));
+    assert.equal(two.getAttribute('data-drop'), 'before');
+    assert.equal(flow.getAttribute('data-drop'), null, 'the flow edge is not marked');
+    flow.dispatchEvent(Object.assign(new FakeEvent('drop'), over));
+    await tick();
+    const kids = (saved.at(-1)?.body[0] as { children: BlockNode[] }).children;
+    assert.deepEqual(
+      kids.map((n) => n.type),
+      ['text', 'figure', 'text']
+    );
+  });
+
   it('container refused at depth 3 with nudge', async () => {
     const doc = new FakeDocument();
     void doc;

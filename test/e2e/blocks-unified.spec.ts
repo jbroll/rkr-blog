@@ -383,7 +383,9 @@ test('delete an empty text block', async ({ page }) => {
   expect(tree.body).toEqual([{ type: 'text', markdown: 'Keep me.' }]);
 });
 
-test('drag an existing figure below the row', async ({ page }) => {
+test('drag an existing figure to the bottom of the row lands beside its nearest block', async ({
+  page
+}) => {
   await login(page);
   const slug = `e2e-drag-figure-${Date.now()}`;
   const imageId = await uploadJpeg(page);
@@ -411,8 +413,11 @@ test('drag an existing figure below the row', async ({ page }) => {
 
   await page.reload();
   const res = await page.request.get(`/admin/blocks/${slug}`);
-  const { tree } = (await res.json()) as { tree: { body: { type: string }[] } };
-  expect(tree.body.map((n) => n.type)).toEqual(['row', 'figure']);
+  const { tree } = (await res.json()) as {
+    tree: { body: { type: string; children?: { type: string }[] }[] };
+  };
+  expect(tree.body.map((n) => n.type)).toEqual(['row']);
+  expect(tree.body[0]?.children?.map((n) => n.type)).toEqual(['figure', 'text']);
 });
 
 test('macro field edit renders', async ({ page }) => {

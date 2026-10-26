@@ -51,6 +51,30 @@ function typeLabel(node: BlockNode): string {
   return TYPE_LABELS[node.type] ?? capitalize(node.type);
 }
 
+const GHOST_WIDTH = 320;
+const GHOST_HEIGHT = 240;
+
+/** A shrunken copy of the dragged block to use as the drag image. The
+ * browser snapshots it during dragstart, so the caller removes it on
+ * the next tick. */
+function dragGhost(doc: Document, source: Element | null): HTMLElement | null {
+  const rect = source?.getBoundingClientRect?.();
+  if (!source?.cloneNode || !rect?.width) return null;
+  const ghost = source.cloneNode(true) as HTMLElement;
+  for (const el of [ghost, ...ghost.querySelectorAll('[data-rkr-path],[data-rkr-selected]')]) {
+    el.removeAttribute('data-rkr-path');
+    el.removeAttribute('data-rkr-selected');
+    el.removeAttribute('contenteditable');
+  }
+  ghost.classList?.add('rkr-drag-ghost');
+  ghost.setAttribute(
+    'style',
+    `position:fixed;top:-10000px;left:0;width:${Math.min(GHOST_WIDTH, rect.width)}px;max-height:${GHOST_HEIGHT}px;overflow:hidden;pointer-events:none`
+  );
+  (doc.body ?? doc.documentElement).append(ghost);
+  return ghost;
+}
+
 function kidsOf(node: BlockNode): BlockNode[] {
   if (node.type === 'macro') return [];
   const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
@@ -187,7 +211,11 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     env.flushText?.();
     const dt = (
       ev as unknown as {
-        dataTransfer?: { setData(t: string, v: string): void; effectAllowed: string };
+        dataTransfer?: {
+          setData(t: string, v: string): void;
+          setDragImage?(el: Element, x: number, y: number): void;
+          effectAllowed: string;
+        };
       }
     ).dataTransfer;
     try {
@@ -196,6 +224,13 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     } catch {
       // Locked-down browsers and test fakes may refuse; the drag state
       // lives in the insert module.
+    }
+    if (dt?.setDragImage) {
+      const ghost = dragGhost(doc, body.querySelector(`[data-rkr-path="${pathKey(path)}"]`));
+      if (ghost) {
+        dt.setDragImage(ghost, 16, 16);
+        setTimeout(() => ghost.remove(), 0);
+      }
     }
     env.drag?.start(path);
   });
