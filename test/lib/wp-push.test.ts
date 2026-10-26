@@ -181,7 +181,7 @@ function readSavedTree(root: string, slug: string): SavedTree {
 }
 
 function flowBlocks(tree: SavedTree): SavedBlock[] {
-  return tree.body.flatMap((node) => (node as { children?: SavedBlock[] }).children ?? []);
+  return tree.body;
 }
 
 test('pushPost: WP fixture → target via bearer; JSON blocks + originals land', async (t) => {

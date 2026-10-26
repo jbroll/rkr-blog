@@ -13,26 +13,33 @@ const ctx = {
   widgets: new WidgetRegistry()
 };
 
-const leaves = (tree: { body: BlockNode[] }): BlockNode[] =>
-  (tree.body[0] as { children?: BlockNode[] }).children ?? [];
+const leaves = (tree: { body: BlockNode[] }): BlockNode[] => tree.body;
 
 describe('markdown-migrate', () => {
-  it('maps frontmatter to page fields and body to flow array', () => {
+  it('maps frontmatter to page fields and puts blocks straight in the body', () => {
     const tree = migratePostToTree(
-      '---\ntitle: T\nslug: t\n---\n\nHello\n\n::figure{ids="ab12cd"}\n'
+      '---\ntitle: T\nslug: t\n---\n\n::figure{ids="ab12cd"}\n\nHello\n\nWorld\n'
     );
-    assert.equal(tree.body[0]?.type, 'grid');
+    assert.equal(tree.body[0]?.type, 'figure');
+    assert.equal(tree.body.length, 3);
     assert.equal(tree.fields.title, 'T');
     assert.equal(tree.fields.slug, 't');
+  });
+
+  it('turns a directive container into a band grid', () => {
+    const tree = migratePostToTree('---\ntitle: T\nslug: t\n---\n\n:::box\nInside\n:::\n');
+    assert.deepEqual(tree.body[0], {
+      type: 'grid',
+      slots: { band: true, theme: 'light', edge: 'straight', cols: 1 },
+      children: [{ type: 'text', markdown: 'Inside' }]
+    });
   });
 
   it('maps justify=inline to centered figure', () => {
     const tree = migratePostToTree(
       '---\ntitle: T\nslug: t\n---\n\n::figure{ids="ab12cd" justify="inline"}\n'
     );
-    const grid = tree.body[0];
-    assert.equal(grid?.type, 'grid');
-    const first = grid?.type === 'grid' ? grid.children[0] : undefined;
+    const first = tree.body[0];
     assert.equal(first?.type, 'figure');
     assert.equal(first?.slots?.justify, 'center');
   });

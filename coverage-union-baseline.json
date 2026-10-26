@@ -150,7 +150,7 @@
     "src/lib/login-throttle.ts": 100,
     "src/lib/macro-library.ts": 100,
     "src/lib/mailer.ts": 100,
-    "src/lib/markdown-migrate.ts": 95.65,
+    "src/lib/markdown-migrate.ts": 98.6,
     "src/lib/matrix.ts": 100,
     "src/lib/microsoft-graph.ts": 99.64,
     "src/lib/migrate.ts": 100,

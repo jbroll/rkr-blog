@@ -101,6 +101,28 @@ test('a leading bleed figure inside the first flow renders in the banner slot', 
   assert.match(article, /Day one\./);
 });
 
+test('a leading one-column grid hero renders in the banner slot like a bare figure', async (t) => {
+  const { root, app, page } = await setup(t);
+  const id = await ingestImage(root);
+  page('grid-trip', [
+    {
+      type: 'grid',
+      slots: { cols: 1 },
+      children: [
+        { type: 'figure', slots: { ids: id, justify: 'bleed' } },
+        { type: 'text', markdown: 'Day one.' }
+      ]
+    }
+  ]);
+  const res = await app.inject({ method: 'GET', url: '/grid-trip' });
+  assert.equal(res.statusCode, 200);
+  const at = placement(res.body);
+  assert.ok(at.figure > at.head && at.figure < at.main, 'banner sits between header and main');
+  const article = res.body.slice(res.body.indexOf('<article>'));
+  assert.doesNotMatch(article, /rkr-justify-bleed/, 'hero is not repeated in the body');
+  assert.match(article, /Day one\./);
+});
+
 test('bannerAboveHeader puts a JSON page hero above the site header', async (t) => {
   const { root, app, page } = await setup(t, { bannerAboveHeader: true });
   const id = await ingestImage(root);

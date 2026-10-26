@@ -71,7 +71,8 @@ describe('blocks-migrate', () => {
     writePost(root, 't.md', POST);
     const tree = runBlocksMigrate(root, 't');
     assert.equal(tree.fields.slug, 't');
-    assert.equal(tree.body[0]?.type, 'grid');
+    assert.equal(tree.body[0]?.type, 'text');
+    assert.equal(tree.body[1]?.type, 'figure');
   });
 
   it('throws for a missing post', (t: TestContext) => {
@@ -109,6 +110,10 @@ describe('blocks-migrate', () => {
     assert.equal(written.length, 2);
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', '2026-01-15-t.json')));
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'u.json')));
+    for (const f of written) {
+      const text = fs.readFileSync(f.file, 'utf8');
+      assert.doesNotMatch(text, /"type": "(flow|section|row|col)"/);
+    }
   });
 
   it('archive moves markdown out of the read path and reindex keeps the slug', (t: TestContext) => {

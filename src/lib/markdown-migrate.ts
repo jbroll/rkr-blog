@@ -1,6 +1,6 @@
 // One-way migration: markdown post (frontmatter + mdast body) to a JSON
 // block tree. Frontmatter becomes page fields; the body sequence becomes
-// one `flow` node with mixed text/figure/video leaves in page order.
+// the page body directly, as text/figure/video leaves in page order.
 // justify=inline figures map to centered figures (inline is dropped).
 
 import type { Definition, Root, RootContent } from 'mdast';
@@ -101,8 +101,13 @@ function convertNode(node: RootContent): BlockNode[] {
   }
   if (node.type === 'containerDirective') {
     const inner = (node as unknown as { children: RootContent[] }).children ?? [];
-    // Old markdown has no sections; nest converted content directly.
-    return [{ type: 'grid', slots: { cols: 1, band: true }, children: inner.flatMap(convertNode) }];
+    return [
+      {
+        type: 'grid',
+        slots: { band: true, theme: 'light', edge: 'straight', cols: 1 },
+        children: inner.flatMap(convertNode)
+      }
+    ];
   }
   if (node.type === 'html') return [{ type: 'text', markdown: (node as { value: string }).value }];
   const md = stringifyOne(node);
@@ -125,7 +130,7 @@ export function migratePostToTree(raw: string): MigratedTree {
   );
   return {
     version: 1,
-    body: [{ type: 'grid', slots: { cols: 1 }, children: blocks }],
+    body: blocks,
     fields: {
       ...extra,
       title: frontmatter.title,
