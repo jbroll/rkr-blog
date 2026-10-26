@@ -428,6 +428,7 @@ describe('unified save pipeline', () => {
     assert.equal(bare.message, 'Unknown block type.');
     assert.equal(bare.path, undefined);
     assert.equal(invalidFromReply({ error: 'x', path: ['a'] }).path, undefined);
+    assert.equal(invalidFromReply({ error: 'invalid', message: 'm', path: [] }).path, undefined);
     assert.equal(invalidFromReply(null).message, "This page can't be saved.");
   });
 });

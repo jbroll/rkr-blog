@@ -122,6 +122,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   let releaseRender: ReleaseInert = () => {};
 
   let actions: { refresh(): void } | undefined;
+  const events = deps.win ?? (typeof window !== 'undefined' ? window : undefined);
   // The last save the server refused, until the next save starts.
   let refusal: SaveRefusal | null = null;
   // A media block shown while its picker is open; never saved or drafted.
@@ -353,6 +354,23 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     refuse: refuseOffline
   });
 
+  /** Drop the cancelled block from the tree now; the page shows it until
+   * a render can run, so the body stays inert until then. */
+  const restoreOffline = (back: BlockTree, renderOnly: boolean, previous: Path | null): void => {
+    tree = back;
+    select(previous);
+    releaseRender();
+    releaseRender = holdInert();
+    save.notice(OFFLINE_STRUCTURE);
+    events?.addEventListener(
+      'online',
+      () => {
+        if (tree === back && shown !== back) void applyTree(back, { renderOnly });
+      },
+      { once: true }
+    );
+  };
+
   /** Show the new block and open its picker; it saves only once the
    * dialog commits ids, and leaves the page on Cancel. */
   const insertMedia = (next: BlockTree, path: Path): void => {
@@ -365,7 +383,13 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
         pendingMedia = null;
         if (kept || !isEmptyMedia(getAtPath(tree, path))) return;
         const back = tree === next ? before : removeAtPath(tree, path);
-        void applyTree(back, { renderOnly: true, ...(previous ? { select: previous } : {}) });
+        // A superseded structural change still needs its save.
+        const renderOnly = save.state() === 'clean';
+        if (offline()) {
+          restoreOffline(back, renderOnly, previous);
+          return;
+        }
+        void applyTree(back, { renderOnly, ...(previous ? { select: previous } : {}) });
       }
     });
   };
@@ -440,13 +464,10 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
 
   // Last chance for a focused, unblurred edit; IndexedDB writes started
   // here usually complete.
-  (deps.win ?? (typeof window !== 'undefined' ? window : undefined))?.addEventListener(
-    'pagehide',
-    () => {
-      flushText();
-      if (save.state() !== 'clean') save.draft(savable());
-    }
-  );
+  events?.addEventListener('pagehide', () => {
+    flushText();
+    if (save.state() !== 'clean') save.draft(savable());
+  });
 
   doc.addEventListener('keydown', (raw: Event) => {
     const ev = raw as KeyboardEvent;

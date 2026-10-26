@@ -2111,21 +2111,35 @@ describe('unified shell media-first insert and refused saves', () => {
     return btn;
   };
 
-  function mediaShell(picked: string[]) {
+  interface MediaOpts {
+    failFirstSave?: boolean;
+    gateRenders?: boolean;
+  }
+
+  function mediaShell(picked: string[], opts: MediaOpts = {}) {
     const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Kept')]);
     const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Kept' }] };
     const saved: BlockTree[] = [];
     const renders: BlockTree[] = [];
     const puts: DraftRecord[] = [];
+    const gates: (() => void)[] = [];
+    const win = new EventTarget();
+    let sends = 0;
     const shell = mountUnifiedShell(f.root as unknown as Element, {
       tree,
       macros: [],
+      win,
       onSave: async (t) => {
+        sends++;
+        if (opts.failFirstSave && sends === 1) throw new Error('save page 500');
         saved.push(t);
       },
-      render: async (t) => {
+      render: (t) => {
         renders.push(t);
-        return markedRender(t);
+        if (!opts.gateRenders) return markedRender(t);
+        return new Promise<string>((resolve) => {
+          gates.push(() => resolve(markedRender(t)));
+        });
       },
       drafts: {
         load: async () => null,
@@ -2137,8 +2151,115 @@ describe('unified shell media-first insert and refused saves', () => {
       media: { pick: async () => picked, thumbUrl: () => null }
     });
     shell.setMode('edit');
-    return { f, shell, saved, renders, puts };
+    const openGates = (): void => {
+      for (const open of gates.splice(0)) open();
+    };
+    return { f, shell, saved, renders, puts, win, openGates, sends: () => sends };
   }
+
+  /** Type into the first paragraph and blur it. */
+  const editKept = (f: Fixture, text: string): void => {
+    const p = f.body.querySelector('p');
+    assert.ok(p);
+    typeInto(p, text);
+    p.dispatchEvent(new FakeEvent('focusout'));
+  };
+
+  it('Configure on an existing figure refuses to save it empty', async () => {
+    const f = fixture((doc) => [marker(doc, '0'), doc.createElement('figure')]);
+    const tree: BlockTree = { version: 1, body: [{ type: 'figure', slots: { ids: IDS } }] };
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    f.body.querySelector('figure')?.click();
+    f.root.querySelector('[data-action="configure"]')?.click();
+    button(f, 'Remove')?.click();
+    button(f, 'Save figure')?.click();
+    await tick();
+    assert.equal(saved.length, 0);
+    assert.ok(f.root.querySelector('[data-rkr-dialog]'), 'the dialog stays open');
+    assert.match(
+      f.root.querySelector('[data-rkr-dialog]')?.textContent ?? '',
+      /Pick an image, or delete the block\./
+    );
+  });
+
+  it('cancelling an Image that superseded a pending insert still saves that insert', async () => {
+    const h = mediaShell([], { gateRenders: true });
+    palette(h.f, 'Text').click();
+    await tick(2);
+    palette(h.f, 'Image').click();
+    await tick(2);
+    button(h.f, 'Cancel')?.click();
+    await tick(2);
+    h.openGates();
+    await tick();
+    h.openGates();
+    await tick();
+    assert.deepEqual(
+      h.saved.at(-1)?.body.map((n) => n.type),
+      ['text', 'text']
+    );
+  });
+
+  it('Cancel while offline drops the block from the tree at once', async (t) => {
+    const h = mediaShell([]);
+    palette(h.f, 'Image').click();
+    await tick();
+    const nav = globalThis.navigator as { onLine?: boolean };
+    Object.defineProperty(nav, 'onLine', { value: false, configurable: true });
+    t.after(() => {
+      delete nav.onLine;
+    });
+    const rendersBefore = h.renders.length;
+    button(h.f, 'Cancel')?.click();
+    await tick();
+    assert.equal(h.renders.length, rendersBefore, 'no render offline');
+    assert.equal(h.f.body.getAttribute('inert'), '', 'the stale page is inert');
+    delete nav.onLine;
+    h.win.dispatchEvent(new Event('online'));
+    await tick();
+    assert.deepEqual(
+      h.renders.at(-1)?.body.map((n) => n.type),
+      ['text']
+    );
+    assert.equal(h.f.body.getAttribute('inert'), null);
+    editKept(h.f, 'Kept online');
+    await tick();
+    assert.deepEqual(
+      h.saved.at(-1)?.body.map((n) => n.type),
+      ['text']
+    );
+  });
+
+  it('Retry while the picker is open sends nothing', async () => {
+    const h = mediaShell([], { failFirstSave: true });
+    editKept(h.f, 'Kept edited');
+    await tick();
+    assert.equal(h.f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    palette(h.f, 'Image').click();
+    await tick();
+    h.f.root.querySelector('.rkr-unified-save')?.click();
+    await tick();
+    assert.equal(h.sends(), 1, 'the pending block is never sent');
+    button(h.f, 'Cancel')?.click();
+    await tick();
+    assert.equal(h.sends(), 2, 'Cancel saves the earlier edit');
+    assert.deepEqual(h.saved.at(-1)?.body, [{ type: 'text', markdown: 'Kept edited' }]);
+  });
+
+  it('pagehide while the picker is open drafts the tree without the block', async () => {
+    const h = mediaShell([], { failFirstSave: true });
+    editKept(h.f, 'Kept edited');
+    await tick();
+    palette(h.f, 'Image').click();
+    await tick();
+    h.win.dispatchEvent(new Event('pagehide'));
+    await tick();
+    assert.deepEqual(h.puts.at(-1)?.tree.body, [{ type: 'text', markdown: 'Kept edited' }]);
+  });
 
   it('Image then Cancel saves nothing and removes the block', async () => {
     const h = mediaShell([]);

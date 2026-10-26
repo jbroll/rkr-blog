@@ -429,7 +429,9 @@ the editing chrome. View and Edit are two modes of the same page.
   Column, otherwise Row (N columns).
 - **Image and Video** show the new block and open its picker. Nothing
   saves or drafts until the dialog saves with something picked; Cancel,
-  or saving with nothing picked, removes the block.
+  or saving with nothing picked, removes the block. Configure on an
+  existing figure or video will not save it empty: "Pick an image, or
+  delete the block." ("Pick a video" for a video).
 - **Phones**: the palette becomes an Add block bottom sheet.
   Phone preview narrows the page body to phone width. It does not make
   the site's viewport media queries fire, so rules keyed on the screen

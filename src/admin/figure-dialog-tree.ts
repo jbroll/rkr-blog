@@ -340,6 +340,12 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
   };
 
   const commit = (): boolean => {
+    if (!opts.fresh && rows.length === 0) {
+      dialog.setError(
+        video ? 'Pick a video, or delete the block.' : 'Pick an image, or delete the block.'
+      );
+      return false;
+    }
     let slots: Slots;
     if (video) {
       slots = { ids: rows[0]?.id ?? '', caption: rows[0]?.caption.trim() ?? '', justify };

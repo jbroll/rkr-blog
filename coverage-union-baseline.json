@@ -34,7 +34,7 @@
     "src/admin/editor-leave.ts": 100,
     "src/admin/eviction.ts": 96.32,
     "src/admin/figure-attr-panel.ts": 92.86,
-    "src/admin/figure-dialog-tree.ts": 97.63,
+    "src/admin/figure-dialog-tree.ts": 97.66,
     "src/admin/figure-image-list.ts": 100,
     "src/admin/figure-node.ts": 100,
     "src/admin/figure-reorder.ts": 46.5,

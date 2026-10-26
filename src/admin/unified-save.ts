@@ -48,7 +48,7 @@ export function invalidFromReply(reply: unknown): SaveInvalid {
   const r = (reply ?? {}) as { error?: unknown; message?: unknown; path?: unknown };
   const text = [r.message, r.error].find((v) => typeof v === 'string' && v !== '');
   const path =
-    Array.isArray(r.path) && r.path.every((i) => Number.isInteger(i) && i >= 0)
+    Array.isArray(r.path) && r.path.length > 0 && r.path.every((i) => Number.isInteger(i) && i >= 0)
       ? (r.path as Path)
       : undefined;
   return new SaveInvalid((text as string | undefined) ?? INVALID_FALLBACK, path);
