@@ -4,6 +4,7 @@
 // Browser-safe: no node:* imports.
 
 import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
+import { readGridSlots } from '../lib/grid.ts';
 import { moveBlock, movedPath } from './block-move.ts';
 import {
   type DropPosition,
@@ -21,14 +22,14 @@ import {
   primitiveNode
 } from './blocks-editor.ts';
 
-const PAGE_CONTAINERS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
+const LAYOUT_PRIMITIVES: ReadonlySet<string> = new Set(['section', 'row', 'col']);
 
 function dropKind(name: string): string {
   return name.startsWith('primitive:') ? name.slice('primitive:'.length) : name;
 }
 
 function dropRefused(name: string, depth: number): boolean {
-  return PAGE_CONTAINERS.has(dropKind(name)) && depth >= MAX_MACRO_DEPTH;
+  return LAYOUT_PRIMITIVES.has(dropKind(name)) && depth >= MAX_MACRO_DEPTH;
 }
 
 /** Containers split the hovered card in thirds: top → before, bottom →
@@ -58,6 +59,10 @@ export interface InsertEnv {
   commitInsert(next: BlockTree, path: Path, inserted: boolean): void;
   /** Surface a refusal (depth nudge) without changing state. */
   showNudge(text: string): void;
+}
+
+function isRow(node: BlockNode | null): boolean {
+  return node?.type === 'grid' && readGridSlots(node.slots).cols > 1;
 }
 
 function isContainerPath(tree: BlockTree, path: Path): boolean {
@@ -253,7 +258,7 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
         if (!best || dist < best.dist) best = { path: kid, rect, dx, dy, dist };
       }
       if (!best) break;
-      const sideways = getAtPath(tree, path)?.type === 'row';
+      const sideways = isRow(getAtPath(tree, path));
       // Level with a container (e.g. in the margin beside a page-wide
       // flow): look inside it rather than dropping at its far edge.
       const level = sideways ? best.dx === 0 : best.dy === 0;

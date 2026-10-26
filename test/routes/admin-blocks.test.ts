@@ -440,7 +440,7 @@ describe('admin blocks save', () => {
     assert.equal(tree.version, 1);
     assert.deepEqual(
       tree.body.map((n) => n.type),
-      ['text', 'section', 'macro']
+      ['text', 'grid', 'macro']
     );
   });
 

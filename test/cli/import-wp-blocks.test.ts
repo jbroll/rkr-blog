@@ -83,6 +83,6 @@ describe('import-wp post --as-blocks', () => {
     ) as { version: number; fields: { slug: string }; body: { type: string }[] };
     assert.equal(tree.version, 1);
     assert.equal(tree.fields.slug, 'hello');
-    assert.equal(tree.body[0]?.type, 'flow');
+    assert.equal(tree.body[0]?.type, 'grid');
   });
 });

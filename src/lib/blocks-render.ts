@@ -7,6 +7,7 @@ import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
 import { type BlockNode, type BlockTree, detectCycle, resolveSlots, type Slots } from './blocks.ts';
 import { escapeAttr, escapeText, type RenderCtx, renderPostHtml } from './content.ts';
+import { readGridSlots } from './grid.ts';
 import { safeLinkUrl } from './safe-url.ts';
 import type { DirectiveNode } from './widgets.ts';
 
@@ -23,11 +24,7 @@ function textOf(v: unknown, fallback = ''): string {
 /** Direct macro-instance names inside a tree (one level). */
 function directRefs(node: BlockNode): string[] {
   if (node.type === 'macro') return [node.macro];
-  const kids =
-    (node as { children?: BlockNode[] }).children ??
-    (node as { blocks?: BlockNode[] }).blocks ??
-    [];
-  return kids.flatMap(directRefs);
+  return node.type === 'grid' ? node.children.flatMap(directRefs) : [];
 }
 
 /** Build an adjacency map by walking macro trees from `root`. */
@@ -122,29 +119,15 @@ async function renderNodeHtml(
     Promise.all(kids.map((k, i) => renderNode(k, ctx, lib, stack, [...path, i], opts)));
 
   switch (node.type) {
-    case 'section': {
-      const slots = node.slots ?? {};
-      const theme = /^[a-z-]+$/.test(textOf(slots.theme, 'light'))
-        ? textOf(slots.theme, 'light')
-        : 'light';
-      const edge = textOf(slots.edge, 'straight');
-      const kids = node.children ?? [];
-      const inner = (await renderKids(kids)).join('');
-      const wave =
-        edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
-      return `<section class="rkr-section rkr-theme-${escapeAttr(theme)}">\n<div class="rkr-section-inner">\n${inner}</div>${wave}\n</section>\n`;
-    }
-    case 'row': {
-      const kids = node.children ?? [];
-      const inner = (await renderKids(kids)).join('');
-      return `<div class="rkr-row">\n${inner}</div>\n`;
-    }
-    case 'col':
-    case 'flow': {
-      const cls = node.type === 'col' ? 'rkr-col' : 'rkr-flow';
-      const kids = node.children ?? node.blocks ?? [];
-      const inner = (await renderKids(kids)).join('');
-      return `<div class="${cls}">\n${inner}</div>\n`;
+    case 'grid': {
+      const g = readGridSlots(node.slots);
+      const inner = (await renderKids(node.children)).join('');
+      if (g.band) {
+        const wave =
+          g.edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
+        return `<section class="rkr-section rkr-theme-${escapeAttr(g.theme)}">\n<div class="rkr-section-inner">\n${inner}</div>${wave}\n</section>\n`;
+      }
+      return `<div class="${g.cols === 1 ? 'rkr-col' : 'rkr-row'}">\n${inner}</div>\n`;
     }
     case 'text': {
       const md = node.markdown ?? textOf(node.slots?.markdown);
@@ -246,8 +229,7 @@ export function collectBlockFigureIds(
       if (def) walk(def);
       return;
     }
-    const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-    for (const k of n.children ?? n.blocks ?? []) walk(k);
+    if (node.type === 'grid') for (const k of node.children) walk(k);
   };
   for (const n of tree.body) walk(n);
   return out;

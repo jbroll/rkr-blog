@@ -14,14 +14,14 @@ const ctx = {
 };
 
 const leaves = (tree: { body: BlockNode[] }): BlockNode[] =>
-  (tree.body[0] as { blocks?: BlockNode[] }).blocks ?? [];
+  (tree.body[0] as { children?: BlockNode[] }).children ?? [];
 
 describe('markdown-migrate', () => {
   it('maps frontmatter to page fields and body to flow array', () => {
     const tree = migratePostToTree(
       '---\ntitle: T\nslug: t\n---\n\nHello\n\n::figure{ids="ab12cd"}\n'
     );
-    assert.equal(tree.body[0]?.type, 'flow');
+    assert.equal(tree.body[0]?.type, 'grid');
     assert.equal(tree.fields.title, 'T');
     assert.equal(tree.fields.slug, 't');
   });
@@ -30,10 +30,9 @@ describe('markdown-migrate', () => {
     const tree = migratePostToTree(
       '---\ntitle: T\nslug: t\n---\n\n::figure{ids="ab12cd" justify="inline"}\n'
     );
-    const flow = tree.body[0];
-    assert.equal(flow?.type, 'flow');
-    const first =
-      flow && 'blocks' in flow && Array.isArray(flow.blocks) ? flow.blocks[0] : undefined;
+    const grid = tree.body[0];
+    assert.equal(grid?.type, 'grid');
+    const first = grid?.type === 'grid' ? grid.children[0] : undefined;
     assert.equal(first?.type, 'figure');
     assert.equal(first?.slots?.justify, 'center');
   });

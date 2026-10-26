@@ -394,7 +394,11 @@ test('drag an existing figure to the bottom of the row lands beside its nearest 
     title: 'Drag figure',
     body: [
       figureBlock(imageId),
-      { type: 'row', children: [{ type: 'text', markdown: 'Inside the row.' }] }
+      {
+        type: 'grid',
+        slots: { cols: 2 },
+        children: [{ type: 'text', markdown: 'Inside the row.' }]
+      }
     ]
   });
 
@@ -416,7 +420,7 @@ test('drag an existing figure to the bottom of the row lands beside its nearest 
   const { tree } = (await res.json()) as {
     tree: { body: { type: string; children?: { type: string }[] }[] };
   };
-  expect(tree.body.map((n) => n.type)).toEqual(['row']);
+  expect(tree.body.map((n) => n.type)).toEqual(['grid']);
   expect(tree.body[0]?.children?.map((n) => n.type)).toEqual(['figure', 'text']);
 });
 

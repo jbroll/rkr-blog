@@ -32,11 +32,15 @@ const sectionWithHello: BlockTree = {
   version: 1,
   body: [
     {
-      type: 'section',
+      type: 'grid',
+      slots: { cols: 1, band: true },
       children: [
         {
-          type: 'row',
-          children: [{ type: 'col', children: [{ type: 'text', markdown: 'Hello' }] }]
+          type: 'grid',
+          slots: { cols: 2 },
+          children: [
+            { type: 'grid', slots: { cols: 1 }, children: [{ type: 'text', markdown: 'Hello' }] }
+          ]
         }
       ]
     }
@@ -128,7 +132,8 @@ describe('blocks-render', () => {
         { type: 'text', markdown: 'One' },
         { type: 'text', markdown: 'Two' },
         {
-          type: 'section',
+          type: 'grid',
+          slots: { cols: 1, band: true },
           children: [
             { type: 'text', markdown: 'Three' },
             { type: 'text', markdown: 'Four' }
@@ -160,11 +165,19 @@ describe('blocks-render', () => {
           ? {
               defaults: {},
               tree: {
-                type: 'section',
+                type: 'grid',
+                slots: { cols: 1, band: true },
                 children: [
                   {
-                    type: 'row',
-                    children: [{ type: 'col', children: [{ type: 'text', markdown: 'Hero' }] }]
+                    type: 'grid',
+                    slots: { cols: 2 },
+                    children: [
+                      {
+                        type: 'grid',
+                        slots: { cols: 1 },
+                        children: [{ type: 'text', markdown: 'Hero' }]
+                      }
+                    ]
                   }
                 ]
               }
@@ -317,7 +330,8 @@ describe('renderBlockTree unknown types', () => {
           ? {
               defaults: {},
               tree: {
-                type: 'section',
+                type: 'grid',
+                slots: { cols: 1, band: true },
                 children: [{ type: 'mystery' } as never, { type: 'text', markdown: 'Kept' }]
               }
             }

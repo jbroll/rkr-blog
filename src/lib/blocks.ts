@@ -2,16 +2,16 @@
 // A page is a macro tree, not a markdown file. Markdown survives only as
 // the value language inside `text` widgets (`text.markdown`).
 
+import { expandShorthand, gridSlotProblem } from './grid.ts';
+
 export type Slots = Record<string, unknown>;
 
-export type ContainerKind = 'section' | 'row' | 'col' | 'flow';
+export type ContainerKind = 'grid';
 
 export interface ContainerNode {
-  type: ContainerKind;
+  type: 'grid';
   slots?: Slots;
-  children?: BlockNode[];
-  /** Flow containers hold leaves in page order under `blocks`. */
-  blocks?: BlockNode[];
+  children: BlockNode[];
 }
 
 export interface LeafNode {
@@ -48,7 +48,6 @@ export interface MacroDef {
   defaults: Slots;
 }
 
-const CONTAINERS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
 const LEAVES: ReadonlySet<string> = new Set([
   'text',
   'figure',
@@ -95,21 +94,21 @@ export function detectCycle(lib: Record<string, string[]>, name: string): string
   return null;
 }
 
-/** Count container levels in one macro definition. section/row/col/flow
- * each count 1; leaves and macro instances count 0. */
+/** Count grid levels in one macro definition. Each grid counts 1; leaves
+ * and macro instances count 0. */
 export function containerDepth(node: BlockNode): number {
   if (node.type === 'macro') return 0;
   if (LEAVES.has(node.type)) return 0;
-  const kids: BlockNode[] =
-    (node as ContainerNode).children ?? (node as ContainerNode).blocks ?? [];
+  const kids = (node as ContainerNode).children ?? [];
   if (kids.length === 0) return 1;
   return 1 + Math.max(...kids.map(containerDepth));
 }
 
-function parseNode(node: unknown): BlockNode {
-  if (!isRecord(node) || typeof node.type !== 'string') {
+function parseNode(raw: unknown): BlockNode {
+  if (!isRecord(raw) || typeof raw.type !== 'string') {
     throw new Error('parseBlockTree: every node needs a string type');
   }
+  const node = expandShorthand(raw) as Record<string, unknown> & { type: string };
   if (node.type === 'macro') {
     if (typeof node.macro !== 'string' || node.macro.length === 0) {
       throw new Error('parseBlockTree: macro instance needs a macro name');
@@ -129,16 +128,15 @@ function parseNode(node: unknown): BlockNode {
       markdown: typeof node.markdown === 'string' ? node.markdown : undefined
     };
   }
-  if (CONTAINERS.has(node.type)) {
-    const children = Array.isArray(node.children) ? node.children.map(parseNode) : undefined;
-    const blocks = Array.isArray((node as Record<string, unknown>).blocks)
-      ? ((node as Record<string, unknown>).blocks as unknown[]).map(parseNode)
-      : undefined;
+  if (node.type === 'grid') {
+    if (node.slots !== undefined && !isRecord(node.slots)) {
+      throw new Error('parseBlockTree: grid slots must be an object');
+    }
+    const kids = Array.isArray(node.children) ? node.children : [];
     return {
-      type: node.type as ContainerKind,
-      slots: isRecord(node.slots) ? (node.slots as Slots) : undefined,
-      ...(children ? { children } : {}),
-      ...(blocks ? { blocks } : {})
+      type: 'grid',
+      slots: node.slots as Slots | undefined,
+      children: kids.map(parseNode)
     };
   }
   throw new Error(`parseBlockTree: unknown block type ${(node as { type: unknown }).type}`);
@@ -151,4 +149,57 @@ export function parseBlockTree(json: unknown): BlockTree {
     throw new Error('parseBlockTree: tree needs a body array');
   }
   return { version: 1, body: json.body.map(parseNode) };
+}
+
+const MAX_GRID_LEVELS = 3;
+
+function hasIds(slots: Slots | undefined): boolean {
+  const ids = slots?.ids;
+  const list = Array.isArray(ids) ? ids : typeof ids === 'string' ? ids.split(',') : [];
+  return list.some((id) => typeof id === 'string' && id.trim() !== '');
+}
+
+/** Hard rules 2-6 for a tree about to be saved (rule 1 is `parseBlockTree`).
+ * Returns the first problem in document order, or null. */
+export function validateForSave(
+  tree: BlockTree,
+  macroNames: ReadonlySet<string>
+): { path: number[]; message: string } | null {
+  const own = (node: BlockNode, level: number): string | null => {
+    switch (node.type) {
+      case 'macro':
+        return macroNames.has(node.macro)
+          ? null
+          : `This block can't be saved: the macro ${node.macro} no longer exists. Delete it to save.`;
+      case 'figure':
+        return hasIds(node.slots) ? null : 'An image block has no images.';
+      case 'video':
+        return hasIds(node.slots) ? null : 'A video block has no video.';
+      case 'grid':
+        return level > MAX_GRID_LEVELS
+          ? 'Grids nest at most 3 levels.'
+          : gridSlotProblem(node.slots);
+      default:
+        return null;
+    }
+  };
+  const visit = (
+    node: BlockNode,
+    path: number[],
+    level: number
+  ): { path: number[]; message: string } | null => {
+    const message = own(node, level);
+    if (message) return { path, message };
+    if (node.type !== 'grid') return null;
+    for (const [i, kid] of node.children.entries()) {
+      const found = visit(kid, [...path, i], level + 1);
+      if (found) return found;
+    }
+    return null;
+  };
+  for (const [i, node] of tree.body.entries()) {
+    const found = visit(node, [i], 1);
+    if (found) return found;
+  }
+  return null;
 }

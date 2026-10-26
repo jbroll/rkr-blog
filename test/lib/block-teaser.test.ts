@@ -36,8 +36,8 @@ test('extractBlockTeaser: skips macros and non-text leaves, reads slots.markdown
     version: 1,
     body: [
       {
-        type: 'flow',
-        blocks: [
+        type: 'grid',
+        children: [
           { type: 'figure', slots: { ids: ['aaaa1111', 'bbbb2222'], justify: null } },
           { type: 'macro', macro: 'hidden-lede' },
           { type: 'video', slots: { ids: 'cccc3333' } },

@@ -169,7 +169,8 @@ describe('unified editor shell', () => {
       version: 1,
       body: [
         {
-          type: 'section',
+          type: 'grid',
+          slots: { cols: 1, band: true },
           children: [
             { type: 'text', markdown: 'A' },
             { type: 'text', markdown: '' },
@@ -238,7 +239,8 @@ describe('unified editor shell', () => {
       body: [
         { type: 'text', markdown: 'Hello' },
         {
-          type: 'section',
+          type: 'grid',
+          slots: { cols: 1, band: true },
           children: [
             { type: 'figure', slots: { ids: 'abc' } },
             { type: 'button', slots: { label: 'Go' } },
@@ -507,7 +509,7 @@ describe('unified shell saving', () => {
     ];
     const tree: BlockTree = {
       version: 1,
-      body: [{ type: 'flow', blocks: source.map((markdown) => ({ type: 'text', markdown })) }]
+      body: [{ type: 'grid', children: source.map((markdown) => ({ type: 'text', markdown })) }]
     };
     const saved: BlockTree[] = [];
     const { f, shell } = await mountRendered(tree, saved);
@@ -875,7 +877,7 @@ describe('unified shell palette drop', () => {
     });
     const tree: BlockTree = {
       version: 1,
-      body: [{ type: 'row', children: [{ type: 'text', markdown: 'In' }] }]
+      body: [{ type: 'grid', slots: { cols: 2 }, children: [{ type: 'text', markdown: 'In' }] }]
     };
     const saved: BlockTree[] = [];
     const shell = mount(f, tree, async (t) => {
@@ -935,7 +937,7 @@ describe('unified shell palette drop', () => {
       version: 1,
       body: [
         {
-          type: 'flow',
+          type: 'grid',
           children: [
             { type: 'text', markdown: 'One' },
             { type: 'text', markdown: 'Two' }
@@ -985,11 +987,13 @@ describe('unified shell palette drop', () => {
       version: 1,
       body: [
         {
-          type: 'section',
+          type: 'grid',
+          slots: { cols: 1, band: true },
           children: [
             {
-              type: 'row',
-              children: [{ type: 'col', blocks: [{ type: 'text', markdown: 'Deep' }] }]
+              type: 'grid',
+              slots: { cols: 2 },
+              children: [{ type: 'grid', children: [{ type: 'text', markdown: 'Deep' }] }]
             }
           ]
         }
@@ -1030,7 +1034,11 @@ describe('unified shell palette drop', () => {
     const tree: BlockTree = {
       version: 1,
       body: [
-        { type: 'section', children: [{ type: 'text', markdown: 'In' }] },
+        {
+          type: 'grid',
+          slots: { cols: 1, band: true },
+          children: [{ type: 'text', markdown: 'In' }]
+        },
         { type: 'text', markdown: 'After' }
       ]
     };
@@ -1538,7 +1546,7 @@ describe('unified shell live re-render', () => {
     for (const open of gates) open();
     await tick();
     const section = saved.at(-1)?.body[2] as { type: string; children?: BlockNode[] };
-    assert.equal(section.type, 'section');
+    assert.equal(section.type, 'grid');
     assert.equal(section.children?.length, 1, 'the second insert lands inside the new section');
   });
 

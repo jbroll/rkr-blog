@@ -16,11 +16,11 @@ import type { BlockNode } from '../../src/lib/blocks.ts';
 import { FakeDocument, type FakeElement, FakeEvent } from './fake-dom.ts';
 
 const depth3Macro: BlockNode = {
-  type: 'section',
+  type: 'grid',
   children: [
     {
-      type: 'row',
-      children: [{ type: 'col', children: [{ type: 'text', markdown: 'hi' }] }]
+      type: 'grid',
+      children: [{ type: 'grid', children: [{ type: 'text', markdown: 'hi' }] }]
     }
   ]
 };
@@ -38,7 +38,7 @@ describe('blocks editor', () => {
   });
 
   it('allows containers below depth 3', () => {
-    const shallow: BlockNode = { type: 'section', children: [{ type: 'text' }] };
+    const shallow: BlockNode = { type: 'grid', children: [{ type: 'text' }] };
     assert.equal(insertAllowed(shallow, 'row'), true);
   });
 

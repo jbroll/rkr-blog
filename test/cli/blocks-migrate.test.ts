@@ -71,7 +71,7 @@ describe('blocks-migrate', () => {
     writePost(root, 't.md', POST);
     const tree = runBlocksMigrate(root, 't');
     assert.equal(tree.fields.slug, 't');
-    assert.equal(tree.body[0]?.type, 'flow');
+    assert.equal(tree.body[0]?.type, 'grid');
   });
 
   it('throws for a missing post', (t: TestContext) => {

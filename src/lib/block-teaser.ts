@@ -8,8 +8,9 @@
 import type { Paragraph, Root } from 'mdast';
 import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
-import type { BlockNode, BlockTree, ContainerNode, LeafNode } from './blocks.ts';
+import type { BlockNode, BlockTree, LeafNode } from './blocks.ts';
 import { type RenderCtx, renderPostHtml } from './content.ts';
+import { readGridSlots } from './grid.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import { truncateParagraph } from './teaser-truncate.ts';
 import { buildVideoMap } from './video-map-fs.ts';
@@ -37,21 +38,20 @@ function blockLeaves(node: BlockNode): BlockNode[] {
 }
 
 /** The page hero and the tree without it. The hero is the body's first
- * node when that is a figure, or the first block of a leading flow (where
+ * node when that is a figure, or the first block of a leading one-column grid (where
  * a migrated post's body lives). */
 export function splitHero(tree: BlockTree): { hero: LeafNode | null; rest: BlockTree } {
   const first = tree.body[0];
   if (first?.type === 'figure') {
     return { hero: first as LeafNode, rest: { ...tree, body: tree.body.slice(1) } };
   }
-  if (first?.type === 'flow') {
-    const flow = first as ContainerNode;
-    const key = flow.blocks ? 'blocks' : 'children';
-    const kids = flow[key] ?? [];
+  const lead = first?.type === 'grid' ? readGridSlots(first.slots) : null;
+  if (first?.type === 'grid' && lead && lead.cols === 1 && !lead.band) {
+    const kids = first.children;
     if (kids[0]?.type === 'figure') {
       const rest: BlockTree = {
         ...tree,
-        body: [{ ...flow, [key]: kids.slice(1) }, ...tree.body.slice(1)]
+        body: [{ ...first, children: kids.slice(1) }, ...tree.body.slice(1)]
       };
       return { hero: kids[0] as LeafNode, rest };
     }

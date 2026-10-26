@@ -107,7 +107,10 @@ describe('block actions toolbar', () => {
   });
 
   it('duplicate inserts a deep copy after', () => {
-    const tree: BlockTree = { version: 1, body: [{ type: 'row', children: [text('x')] }] };
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'grid', slots: { cols: 2 }, children: [text('x')] }]
+    };
     const h = harness(tree, [0], ['0']);
     h.click('duplicate');
     const next = h.applied[0]?.tree as BlockTree;

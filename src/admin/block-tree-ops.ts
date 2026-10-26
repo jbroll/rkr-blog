@@ -7,7 +7,7 @@ import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
 
 export type Path = number[];
 
-const CONTAINERS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
+const CONTAINERS: ReadonlySet<string> = new Set(['grid']);
 
 function kids(node: BlockNode): BlockNode[] {
   if (node.type === 'macro') return [];

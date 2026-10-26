@@ -102,7 +102,7 @@ function convertNode(node: RootContent): BlockNode[] {
   if (node.type === 'containerDirective') {
     const inner = (node as unknown as { children: RootContent[] }).children ?? [];
     // Old markdown has no sections; nest converted content directly.
-    return [{ type: 'section', children: inner.flatMap(convertNode) }];
+    return [{ type: 'grid', slots: { cols: 1, band: true }, children: inner.flatMap(convertNode) }];
   }
   if (node.type === 'html') return [{ type: 'text', markdown: (node as { value: string }).value }];
   const md = stringifyOne(node);
@@ -125,7 +125,7 @@ export function migratePostToTree(raw: string): MigratedTree {
   );
   return {
     version: 1,
-    body: [{ type: 'flow', blocks }],
+    body: [{ type: 'grid', slots: { cols: 1 }, children: blocks }],
     fields: {
       ...extra,
       title: frontmatter.title,

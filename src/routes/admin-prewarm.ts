@@ -41,7 +41,7 @@ function collectMediaRefs(tree: BlockTree): string {
       parts.push(node.slots.ids);
     }
     if (node.type === 'macro') return;
-    const kids = (node as ContainerNode).children ?? (node as ContainerNode).blocks ?? [];
+    const kids = (node as ContainerNode).children ?? [];
     for (const kid of kids) walk(kid);
   };
   for (const node of tree.body) walk(node);

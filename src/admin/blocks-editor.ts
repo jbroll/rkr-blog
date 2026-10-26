@@ -7,7 +7,7 @@
 import { type BlockNode, containerDepth, type Slots } from '../lib/blocks.ts';
 import { groupPalette, paletteIcon } from './palette-groups.ts';
 
-const CONTAINER_KINDS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
+const CONTAINER_KINDS: ReadonlySet<string> = new Set(['grid', 'section', 'row', 'col']);
 
 export const MAX_MACRO_DEPTH = 3;
 
@@ -101,11 +101,11 @@ export function primitiveNode(name: string): BlockNode {
     case 'primitive:button':
       return { type: 'button', slots: { label: 'Button', href: '/', variant: 'primary' } };
     case 'primitive:row':
-      return { type: 'row', children: [] };
+      return { type: 'grid', slots: { cols: 2 }, children: [] };
     case 'primitive:col':
-      return { type: 'col', children: [] };
+      return { type: 'grid', slots: { cols: 1 }, children: [] };
     case 'primitive:section':
-      return { type: 'section', slots: { theme: 'light', edge: 'straight' }, children: [] };
+      return { type: 'grid', slots: { cols: 1, band: true }, children: [] };
     default:
       throw new Error(`blocks editor: unknown primitive ${name}`);
   }

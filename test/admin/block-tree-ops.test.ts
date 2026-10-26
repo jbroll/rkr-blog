@@ -15,10 +15,10 @@ const TREE: BlockTree = {
   version: 1,
   body: [
     {
-      type: 'section',
+      type: 'grid',
       children: [
         { type: 'text', markdown: 'Hello' },
-        { type: 'row', children: [{ type: 'text', markdown: 'Card' }] }
+        { type: 'grid', children: [{ type: 'text', markdown: 'Card' }] }
       ]
     }
   ]
@@ -41,7 +41,7 @@ describe('block tree ops', () => {
 
   it('reads nodes by path', () => {
     assert.equal(getAtPath(TREE, [])?.type, undefined);
-    assert.equal(getAtPath(TREE, [0])?.type, 'section');
+    assert.equal(getAtPath(TREE, [0])?.type, 'grid');
     assert.equal(getAtPath(TREE, [0, 1, 0])?.type, 'text');
     assert.equal(getAtPath(TREE, [0, 9]), null);
   });

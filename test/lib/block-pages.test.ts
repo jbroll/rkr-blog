@@ -8,7 +8,7 @@ import { listBlockPages, readBlockPage, readIndexedBlockPage } from '../../src/l
 
 const PAGE = {
   version: 1,
-  body: [{ type: 'flow', blocks: [{ type: 'text', markdown: 'Hello world.' }] }],
+  body: [{ type: 'grid', children: [{ type: 'text', markdown: 'Hello world.' }] }],
   fields: { title: 'Hello', slug: 'hello' }
 };
 
@@ -29,7 +29,7 @@ describe('block-pages', () => {
     const page = readBlockPage(root, 'hello');
     assert.ok(page);
     assert.equal(page.title, 'Hello');
-    assert.equal(page.tree.body[0]?.type, 'flow');
+    assert.equal(page.tree.body[0]?.type, 'grid');
   });
 
   it('returns null for missing pages and bad slugs', (t: TestContext) => {

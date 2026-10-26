@@ -8,7 +8,7 @@ const tree: BlockTree = {
   version: 1,
   body: [
     { type: 'text', markdown: 'T' },
-    { type: 'row', children: [{ type: 'text', markdown: 'R' }] },
+    { type: 'grid', slots: { cols: 2 }, children: [{ type: 'text', markdown: 'R' }] },
     { type: 'text', markdown: 'U' }
   ]
 };
@@ -18,7 +18,7 @@ describe('moveBlock', () => {
     const next = moveBlock(tree, [0], [1], 1);
     assert.deepEqual(
       next.body.map((n) => n.type),
-      ['row', 'text']
+      ['grid', 'text']
     );
     assert.equal((next.body[0] as { children: unknown[] }).children.length, 2);
     assert.deepEqual(movedPath([0], [1], 1), [0, 1]);
@@ -30,7 +30,7 @@ describe('moveBlock', () => {
     const next = moveBlock(tree, [0], [], 3);
     assert.deepEqual(
       next.body.map((n) => (n as { markdown?: string }).markdown ?? n.type),
-      ['row', 'U', 'T']
+      ['grid', 'U', 'T']
     );
   });
 

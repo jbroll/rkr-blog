@@ -55,8 +55,9 @@ function readMacro(file: string, raw: string): StoredMacro {
   if (!isRecord(parsed) || !isRecord(parsed.defaults)) {
     throw new Error(`macro-library: ${file} needs object defaults`);
   }
+  let tree: BlockNode;
   try {
-    parseBlockTree({ version: 1, body: [parsed.tree] });
+    tree = parseBlockTree({ version: 1, body: [parsed.tree] }).body[0] as BlockNode;
   } catch (err) {
     throw new Error(`macro-library: ${file}: ${(err as Error).message}`);
   }
@@ -66,7 +67,7 @@ function readMacro(file: string, raw: string): StoredMacro {
     fieldSchema: isRecord(parsed.fieldSchema)
       ? (parsed.fieldSchema as Record<string, FieldSpec>)
       : undefined,
-    tree: parsed.tree as BlockNode
+    tree
   };
 }
 
