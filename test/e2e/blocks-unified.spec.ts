@@ -377,9 +377,7 @@ test('delete an empty text block', async ({ page }) => {
   expect(tree.body).toEqual([{ type: 'text', markdown: 'Keep me.' }]);
 });
 
-test('drag an existing figure to the bottom of the row lands beside its nearest block', async ({
-  page
-}) => {
+test('drag an existing figure below the row', async ({ page }) => {
   await login(page);
   const slug = `e2e-drag-figure-${Date.now()}`;
   const imageId = await uploadJpeg(page);
@@ -392,7 +390,8 @@ test('drag an existing figure to the bottom of the row lands beside its nearest 
         type: 'grid',
         slots: { cols: 2 },
         children: [{ type: 'text', markdown: 'Inside the row.' }]
-      }
+      },
+      { type: 'text', markdown: 'After the row.' }
     ]
   });
 
@@ -402,14 +401,47 @@ test('drag an existing figure to the bottom of the row lands beside its nearest 
   const handle = page.getByRole('button', { name: 'Drag to move' });
   await expect(handle).toBeVisible();
 
-  const row = page.locator('#rkr-blocks-page-body .rkr-grid');
-  const box = await row.boundingBox();
-  expect(box).not.toBeNull();
+  const body = page.locator('#rkr-blocks-page-body');
+  const bodyBox = await body.boundingBox();
+  const rowBox = await page.locator('#rkr-blocks-page-body .rkr-grid').boundingBox();
+  expect(bodyBox && rowBox).toBeTruthy();
+  const below = rowBox!.y + rowBox!.height + 2 - bodyBox!.y;
   const moved = saveResponse(page, slug);
-  await handle.dragTo(row, { targetPosition: { x: 4, y: box!.height - 3 } });
+  await handle.dragTo(body, { targetPosition: { x: rowBox!.x - bodyBox!.x + 4, y: below } });
   await moved;
 
   await page.reload();
+  const res = await page.request.get(`/admin/blocks/${slug}`);
+  const { tree } = (await res.json()) as {
+    tree: { body: { type: string; children?: { type: string }[] }[] };
+  };
+  expect(tree.body.map((n) => n.type)).toEqual(['grid', 'figure', 'text']);
+  expect(tree.body[0]?.children?.map((n) => n.type)).toEqual(['text']);
+});
+
+test('a Text dropped in the free column of a two-column grid lands beside its figure', async ({
+  page
+}) => {
+  await login(page);
+  const slug = `e2e-drop-free-column-${Date.now()}`;
+  const imageId = await uploadJpeg(page);
+  await seedBlockPage(page, {
+    slug,
+    title: 'Free column',
+    body: [{ type: 'grid', slots: { cols: 2 }, children: [figureBlock(imageId)] }]
+  });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const grid = page.locator('#rkr-blocks-page-body .rkr-grid');
+  const box = await grid.boundingBox();
+  expect(box).not.toBeNull();
+  const inserted = saveResponse(page, slug);
+  await paletteItem(page, 'Text').dragTo(grid, {
+    targetPosition: { x: box!.width * 0.75, y: box!.height / 2 }
+  });
+  await inserted;
+
   const res = await page.request.get(`/admin/blocks/${slug}`);
   const { tree } = (await res.json()) as {
     tree: { body: { type: string; children?: { type: string }[] }[] };

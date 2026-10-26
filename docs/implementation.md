@@ -520,6 +520,12 @@ in place:
   leaf, at the end of a selected container, else at the end of the page.
   Container-end keeps drops into empty rows and columns possible; moving
   a block after a container is the toolbar's Move.
+- Drag placement is `findDropSlot` in `drop-slots.ts`, pure over the live
+  DOM and the tree. It measures grid cells, not the blocks in them, so
+  gaps are the grid's own, and reads side by side versus stacked from
+  live rects rather than `cols`, so a wrapped grid gets horizontal
+  markers. `unified-insert.ts` calls `preventDefault` in `dragover` only
+  for a legal slot.
 - Phone preview sets a narrow width on the page body. An iframe at phone
   width would trigger the site's media queries, but public pages send
   `frame-ancestors 'none'`, so the preview stays in the same document and

@@ -869,27 +869,26 @@ describe('unified shell palette drop', () => {
   });
 
   it('a block cannot be dropped into itself', async () => {
-    const f = fixture((doc) => {
-      const row = doc.createElement('div');
-      row.className = 'rkr-row';
-      row.append(marker(doc, '0,0'), para(doc, 'In'));
-      return [marker(doc, '0'), row];
-    });
     const tree: BlockTree = {
       version: 1,
       body: [{ type: 'grid', slots: { cols: 2 }, children: [{ type: 'text', markdown: 'In' }] }]
     };
+    const f = fixture(() => []);
+    f.body.innerHTML = await markedRender(tree);
     const saved: BlockTree[] = [];
     const shell = mount(f, tree, async (t) => {
       saved.push(t);
     });
     shell.setMode('edit');
-    const row = f.body.querySelector('.rkr-row');
-    assert.ok(row);
-    rectOf(row, 0, 90);
-    row.click();
+    const grid = f.body.querySelector('.rkr-grid');
+    assert.ok(grid);
+    rectOf(f.body.querySelector('.rkr-grid-cell') as FakeElement, 0, 90);
+    grid.click();
     f.root.querySelector('.rkr-block-drag')?.dispatchEvent(new FakeEvent('dragstart'));
-    row.dispatchEvent(Object.assign(new FakeEvent('drop'), { clientY: 45 }));
+    const over = Object.assign(new FakeEvent('dragover'), { clientY: 45 });
+    grid.dispatchEvent(over);
+    assert.equal(over.defaultPrevented, false, 'a refused slot leaves the drop refused');
+    grid.dispatchEvent(Object.assign(new FakeEvent('drop'), { clientY: 45 }));
     await tick();
     assert.equal(saved.length, 0);
   });
@@ -913,6 +912,29 @@ describe('unified shell palette drop', () => {
     assert.equal(saved.length, 0);
   });
 
+  it('a palette drag that ends refused leaves no name for a later foreign drop', async () => {
+    const { f, tree } = twoText();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    const [, two] = f.body.querySelectorAll('p');
+    assert.ok(two);
+    rectOf(two, 100, 40);
+    const btn = f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Button');
+    assert.ok(btn);
+    btn.dispatchEvent(new FakeEvent('dragstart'));
+    btn.dispatchEvent(new FakeEvent('dragend'));
+    two.dispatchEvent(
+      Object.assign(new FakeEvent('drop'), { clientY: 130, dataTransfer: dragData('words') })
+    );
+    await tick();
+    assert.equal(saved.length, 0);
+  });
+
   it("the page's own images and links cannot start a native drag", () => {
     const { f, tree } = twoText();
     const shell = mount(f, tree, async () => {});
@@ -926,13 +948,7 @@ describe('unified shell palette drop', () => {
     assert.equal(ev.defaultPrevented, true);
   });
 
-  it('over a gap inside a container the nearest block takes the drop', async () => {
-    const f = fixture((doc) => {
-      const flow = doc.createElement('div');
-      flow.className = 'rkr-flow';
-      flow.append(marker(doc, '0,0'), para(doc, 'One'), marker(doc, '0,1'), para(doc, 'Two'));
-      return [marker(doc, '0'), flow];
-    });
+  it('over the gap between stacked cells the drop lands between them', async () => {
     const tree: BlockTree = {
       version: 1,
       body: [
@@ -945,22 +961,28 @@ describe('unified shell palette drop', () => {
         }
       ]
     };
+    const f = fixture(() => []);
+    f.body.innerHTML = await markedRender(tree);
     const saved: BlockTree[] = [];
     const shell = mount(f, tree, async (t) => {
       saved.push(t);
     });
     shell.setMode('edit');
-    const flow = f.body.querySelector('.rkr-flow');
-    const [one, two] = f.body.querySelectorAll('p');
-    assert.ok(flow && one && two);
-    rectOf(flow, 0, 1000);
+    const grid = f.body.querySelector('.rkr-grid');
+    const [one, two] = f.body.querySelectorAll('.rkr-grid-cell');
+    assert.ok(grid && one && two);
+    rectOf(grid, 0, 1000);
     rectOf(one, 0, 100);
     rectOf(two, 600, 100);
     const over = { clientY: 560, dataTransfer: dragData('primitive:button') };
-    flow.dispatchEvent(Object.assign(new FakeEvent('dragover'), over));
-    assert.equal(two.getAttribute('data-drop'), 'before');
-    assert.equal(flow.getAttribute('data-drop'), null, 'the flow edge is not marked');
-    flow.dispatchEvent(Object.assign(new FakeEvent('drop'), over));
+    const ev = Object.assign(new FakeEvent('dragover'), over);
+    grid.dispatchEvent(ev);
+    assert.equal(ev.defaultPrevented, true);
+    assert.equal(one.getAttribute('data-drop'), 'after');
+    assert.equal(one.getAttribute('data-drop-axis'), 'horizontal');
+    assert.equal(grid.getAttribute('data-drop'), null, 'the grid edge is not marked');
+    grid.dispatchEvent(Object.assign(new FakeEvent('drop'), over));
+    assert.equal(one.getAttribute('data-drop'), null, 'the marker clears on drop');
     await tick();
     const kids = (saved.at(-1)?.body[0] as { children: BlockNode[] }).children;
     assert.deepEqual(
@@ -969,20 +991,7 @@ describe('unified shell palette drop', () => {
     );
   });
 
-  it('container refused at depth 3 with nudge', async () => {
-    const doc = new FakeDocument();
-    void doc;
-    const f = fixture((d) => {
-      const section = d.createElement('section');
-      const row = d.createElement('div');
-      row.className = 'rkr-row';
-      const col = d.createElement('div');
-      col.className = 'rkr-col';
-      col.append(marker(d, '0,0,0,0'), para(d, 'Deep'));
-      row.append(marker(d, '0,0,0'), col);
-      section.append(marker(d, '0,0'), row);
-      return [marker(d, '0'), section];
-    });
+  it('a grid is refused at depth 3: no drop slot, and a click nudges', async () => {
     const tree: BlockTree = {
       version: 1,
       body: [
@@ -999,29 +1008,36 @@ describe('unified shell palette drop', () => {
         }
       ]
     };
+    const f = fixture(() => []);
+    f.body.innerHTML = await markedRender(tree);
     let saves = 0;
     const shell = mount(f, tree, async () => {
       saves++;
     });
     shell.setMode('edit');
-    const col = f.body.querySelector('.rkr-col');
-    assert.ok(col);
-    rectOf(col, 0, 90);
-    col.dispatchEvent(
-      Object.assign(new FakeEvent('dragover'), {
-        clientY: 45,
-        dataTransfer: dragData('primitive:section')
-      })
-    );
-    col.dispatchEvent(
-      Object.assign(new FakeEvent('drop'), {
-        clientY: 45,
-        dataTransfer: dragData('primitive:section')
-      })
-    );
+    const deep = f.body.querySelectorAll('.rkr-grid')[2];
+    const cell = deep?.querySelector('.rkr-grid-cell');
+    assert.ok(deep && cell);
+    rectOf(cell, 0, 90);
+    const over = { clientY: 120, dataTransfer: dragData('primitive:row') };
+    const ev = Object.assign(new FakeEvent('dragover'), over);
+    deep.dispatchEvent(ev);
+    assert.equal(ev.defaultPrevented, false);
+    assert.equal(cell.getAttribute('data-drop'), null);
+    deep.dispatchEvent(Object.assign(new FakeEvent('drop'), over));
     await tick();
     assert.equal(saves, 0, 'refused insert saves nothing');
-    assert.match(f.shellEl.textContent ?? '', /save inner part as its own macro/);
+    f.body
+      .querySelectorAll('p')
+      .find((p) => p.textContent === 'Deep')
+      ?.click();
+    f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Row')
+      ?.click();
+    await tick();
+    assert.equal(saves, 0);
+    assert.match(f.shellEl.textContent ?? '', /grids nest at most 3 levels/);
   });
 
   it('click appends at the end of the focused container', async () => {

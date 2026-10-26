@@ -423,6 +423,15 @@ the editing chrome. View and Edit are two modes of the same page.
   the end of that grid; use Move to put a block after it. With
   nothing selected, insert lands at the end of the page. Section always
   lands in the page body, after the selected block's top-level block.
+- **Dragging** (a palette item or the toolbar's drag handle) targets the
+  innermost grid under the pointer, or the page body over none. The
+  nearest gap between its cells, or before the first or after the last,
+  takes the drop; over an empty grid the drop goes inside it. The marker
+  is a vertical bar between cells that sit side by side and a horizontal
+  line between stacked ones. A slot that breaks a rule (a block into
+  itself, a Section anywhere but the page body, a Column directly in a
+  one-column grid, a fourth grid level, or a move that changes nothing)
+  shows no marker and the cursor shows the drop refused.
 - **Layout presets** all insert a grid: Row `cols: 2`, Column `cols: 1`,
   Section `cols: 1, band: true` (light, straight edge). The toolbar
   label follows the slots: a band reads Section, one column reads
