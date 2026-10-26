@@ -305,10 +305,11 @@ One file per page under `content/blocks/`, pretty-printed:
 }
 ```
 
-`fields` holds title, slug, status (`draft` or `published`), date, tags
-and excerpt. The URL slug is `fields.slug`, not the file name, so dated
-names from the WordPress importer and plain names from `blocks-migrate`
-both work. The slug resolves to the first file, in sorted name order,
+`fields` holds title, subtitle, slug, status (`draft` or `published`),
+date, tags and excerpt; other frontmatter keys from a migrated post are
+kept as they were. The URL slug is `fields.slug`, not the file name, so
+dated names from the WordPress importer and plain names from
+`blocks-migrate` both work. The slug resolves to the first file, in sorted name order,
 whose `fields.slug` matches and whose tree parses; read, save and create
 all use that one rule. Corrupt files are skipped.
 
@@ -418,7 +419,7 @@ the editing chrome. View and Edit are two modes of the same page.
   Google Drive, OneDrive or Google Photos; reorder, remove, alt text,
   caption, edit image), layout. Video: one video from the same sources, with caption and layout.
   Button: label, link, style. Macro: the fields above. Page settings:
-  title, status, publish date (filled in when the status becomes published), tags,
+  title, subtitle, status, publish date (filled in when the status becomes published), tags,
   excerpt. Authors never see JSON, block ids or image ids.
 
 ### Saving
@@ -777,6 +778,9 @@ import-wp-comments <base-url>               import approved comments from a Word
 wp-dump <dump.sql> <out.db>                 convert a mysqldump file to SQLite
 import-wp … --from-dump <db> --uploads <d>  read a backup instead of a live WordPress site
 fix-wp-dates                                repair WP-imported post dates using the filename prefix as truth
+blocks-migrate --post <slug> [--out f]      print one markdown post as a JSON block tree
+blocks-migrate --all [--force] [--dry-run]  write a JSON twin per markdown post (§8a)
+blocks-migrate --archive [--dry-run]        move twinned markdown to content/posts-legacy/
 reset --to <target-url> --token TOKEN wipe all post + image runtime data on a remote rkr-blog
 user invite <email>     add to the allowlist (owner / editor role)
 user list / remove

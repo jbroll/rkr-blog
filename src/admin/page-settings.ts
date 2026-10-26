@@ -1,4 +1,4 @@
-// Page settings dialog: title, status, publish date, tags and excerpt,
+// Page settings dialog: title, subtitle, status, publish date, tags and excerpt,
 // committed to the tree's `fields` by the unified shell.
 //
 // Dates are stored as `YYYY-MM-DDT00:00:00Z`, the shape the post index and
@@ -16,9 +16,10 @@ export interface PageFields {
   date: string;
   tags: string[];
   excerpt?: string;
+  subtitle?: string;
 }
 
-type FieldName = 'title' | 'status' | 'date' | 'tags' | 'excerpt';
+type FieldName = 'title' | 'subtitle' | 'status' | 'date' | 'tags' | 'excerpt';
 
 const TITLE_REQUIRED = 'Enter a title for the page.';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,6 +34,7 @@ export function readPageFields(raw: Record<string, unknown> | undefined, slug: s
     tags: Array.isArray(f.tags) ? f.tags.filter((t): t is string => typeof t === 'string') : []
   };
   if (typeof f.excerpt === 'string' && f.excerpt !== '') fields.excerpt = f.excerpt;
+  if (typeof f.subtitle === 'string' && f.subtitle !== '') fields.subtitle = f.subtitle;
   return fields;
 }
 
@@ -53,6 +55,8 @@ export function validatePageFields(values: PageFields, today: string): Validated
   };
   const excerpt = values.excerpt?.trim();
   if (excerpt) fields.excerpt = excerpt;
+  const subtitle = values.subtitle?.trim();
+  if (subtitle) fields.subtitle = subtitle;
   return { ok: true, fields };
 }
 
@@ -77,6 +81,7 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
   const original = opts.fields.date;
   const values: Record<FieldName, string> = {
     title: opts.fields.title,
+    subtitle: opts.fields.subtitle ?? '',
     status: opts.fields.status,
     date: original.slice(0, 10),
     tags: opts.fields.tags.join(', '),
@@ -123,6 +128,10 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
   const title = doc.createElement('input');
   title.setAttribute('autocomplete', 'off');
   addField('title', 'Title', title);
+
+  const subtitle = doc.createElement('input');
+  subtitle.setAttribute('autocomplete', 'off');
+  addField('subtitle', 'Subtitle', subtitle, 'Optional. Shown under the title.');
 
   const status = doc.createElement('select');
   for (const [value, text] of [
@@ -183,7 +192,8 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
           status: values.status === 'published' ? 'published' : 'draft',
           date: day === original.slice(0, 10) ? original : day,
           tags: parseTagInput(values.tags),
-          excerpt: values.excerpt
+          excerpt: values.excerpt,
+          subtitle: values.subtitle
         },
         today
       );

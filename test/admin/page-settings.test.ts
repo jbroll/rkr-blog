@@ -27,11 +27,19 @@ describe('page settings fields', () => {
           status: 'published',
           date: '2026-05-06T14:00:00Z',
           tags: ['a', 3],
-          excerpt: 'E'
+          excerpt: 'E',
+          subtitle: 'S'
         },
         'x'
       ),
-      { title: 'T', status: 'published', date: '2026-05-06T14:00:00Z', tags: ['a'], excerpt: 'E' }
+      {
+        title: 'T',
+        status: 'published',
+        date: '2026-05-06T14:00:00Z',
+        tags: ['a'],
+        excerpt: 'E',
+        subtitle: 'S'
+      }
     );
   });
 
@@ -111,6 +119,16 @@ describe('page settings dialog', () => {
         excerpt: 'Big sale.'
       }
     ]);
+  });
+
+  it('shows and edits the subtitle', async () => {
+    const { root, dialog, commits } = open({ ...BASE, subtitle: 'Old line' });
+    const input = root.querySelector('[name="subtitle"]') as FakeElement & { value: string };
+    assert.equal(input.value, 'Old line');
+    dialog.setField('subtitle', '  New line ');
+    save(root);
+    await tick();
+    assert.equal(commits[0]?.subtitle, 'New line');
   });
 
   it('shows the slug read-only with a link to the public page', () => {

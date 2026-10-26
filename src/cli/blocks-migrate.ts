@@ -7,9 +7,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomicSync } from '../lib/atomic-write.ts';
+import { findBlockFile } from '../lib/block-pages.ts';
 import { paths } from '../lib/config.ts';
 import { type MigratedTree, migratePostToTree } from '../lib/markdown-migrate.ts';
 import { listPosts } from '../lib/posts.ts';
+import { RESERVED_SLUGS } from '../lib/reserved-slugs.ts';
 
 /** Read one post's markdown and convert it. Throws when no post file
  * carries the slug. */
@@ -24,23 +27,46 @@ export function runBlocksMigrate(siteRoot: string, slug: string): MigratedTree {
 
 function usage(): never {
   console.error(
-    'usage: site-admin blocks-migrate --post <slug> [--out <file>] | --all | --archive [--include-untwinned]'
+    'usage: site-admin blocks-migrate --post <slug> [--out <file>] | --all [--force] [--dry-run] | --archive [--include-untwinned] [--dry-run]'
   );
   process.exit(2);
 }
 
+export interface MigrateAllOpts {
+  /** Overwrite a page the slug already resolves to. */
+  force?: boolean;
+  /** Report what would be written; write nothing. */
+  dryRun?: boolean;
+  /** Skip and warning lines; defaults to stderr. */
+  log?: (line: string) => void;
+}
+
+// Seconds precision, the shape imported and editor-saved dates use.
+const isoSeconds = (ms: number): string => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
 /** Convert every markdown post to its JSON twin in content/blocks,
- * mirroring the markdown basename. Returns the written files. A post
- * that fails to parse is skipped and reported, never half-written. */
-export function runBlocksMigrateAll(siteRoot: string): { slug: string; file: string }[] {
+ * mirroring the markdown basename. Returns the files written (or, on a
+ * dry run, that would be). A slug that already resolves to a page is
+ * skipped unless forced, so a rerun never overwrites editor work; system
+ * (`_`) posts are never converted. A post that fails to parse is skipped
+ * and reported, never half-written. The twin keeps the markdown's mtime,
+ * and an undated published post gets that mtime as its date, so index
+ * order and dates do not move. */
+export function runBlocksMigrateAll(
+  siteRoot: string,
+  opts: MigrateAllOpts = {}
+): { slug: string; file: string }[] {
+  const log = opts.log ?? ((line: string) => console.error(line));
   const postsDir = path.join(siteRoot, 'content', 'posts');
   const blocksDir = path.join(siteRoot, 'content', 'blocks');
-  fs.mkdirSync(blocksDir, { recursive: true });
+  if (!opts.dryRun) fs.mkdirSync(blocksDir, { recursive: true });
   const written: { slug: string; file: string }[] = [];
   for (const post of listPosts(siteRoot)) {
+    if (post.slug.startsWith('_') || post.filename.startsWith('_')) continue;
+    const source = path.join(postsDir, post.filename);
     let raw: string;
     try {
-      raw = fs.readFileSync(path.join(postsDir, post.filename), 'utf8');
+      raw = fs.readFileSync(source, 'utf8');
     } catch {
       continue;
     }
@@ -48,11 +74,28 @@ export function runBlocksMigrateAll(siteRoot: string): { slug: string; file: str
     try {
       tree = migratePostToTree(raw);
     } catch (err) {
-      console.error(`blocks-migrate: skip ${post.slug}: ${(err as Error).message}`);
+      log(`blocks-migrate: skip ${post.slug}: ${(err as Error).message}`);
       continue;
     }
-    const dest = path.join(blocksDir, `${post.filename.replace(/\.md$/, '')}.json`);
-    fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
+    const existing = findBlockFile(siteRoot, tree.fields.slug);
+    if (existing && !opts.force) {
+      log(`blocks-migrate: skip ${tree.fields.slug}: ${path.basename(existing)} already exists`);
+      continue;
+    }
+    if (RESERVED_SLUGS.has(tree.fields.slug)) {
+      log(
+        `blocks-migrate: warning: "${tree.fields.slug}" is a reserved slug; a fixed route answers its URL, so the page is unreachable or unsavable`
+      );
+    }
+    const { mtime } = fs.statSync(source);
+    if (tree.fields.date === undefined && tree.fields.status !== 'draft') {
+      tree.fields.date = isoSeconds(mtime.getTime());
+    }
+    const dest = existing ?? path.join(blocksDir, `${post.filename.replace(/\.md$/, '')}.json`);
+    if (!opts.dryRun) {
+      writeFileAtomicSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
+      fs.utimesSync(dest, mtime, mtime);
+    }
     written.push({ slug: tree.fields.slug, file: dest });
   }
   return written.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
@@ -94,7 +137,7 @@ function listBlockSlugs(blocksDir: string): Set<string> {
  * copied or deleted. */
 export function runBlocksArchive(
   siteRoot: string,
-  opts: { includeUntwinned?: boolean } = {}
+  opts: { includeUntwinned?: boolean; dryRun?: boolean } = {}
 ): ArchivedPost[] {
   const postsDir = path.join(siteRoot, 'content', 'posts');
   const legacyDir = path.join(siteRoot, 'content', 'posts-legacy');
@@ -121,30 +164,36 @@ export function runBlocksArchive(
     );
   }
 
-  fs.mkdirSync(legacyDir, { recursive: true });
+  if (!opts.dryRun) fs.mkdirSync(legacyDir, { recursive: true });
   const moved: ArchivedPost[] = [];
   for (const post of posts) {
     const dest = path.join(legacyDir, post.filename);
-    fs.renameSync(path.join(postsDir, post.filename), dest);
+    if (!opts.dryRun) fs.renameSync(path.join(postsDir, post.filename), dest);
     moved.push({ slug: post.slug, file: dest });
   }
   return moved.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 
 export default async function blocksMigrateCmd(argv: string[]): Promise<void> {
+  const dryRun = argv.includes('--dry-run');
   if (argv.includes('--archive')) {
     const moved = runBlocksArchive(paths().root, {
-      includeUntwinned: argv.includes('--include-untwinned')
+      includeUntwinned: argv.includes('--include-untwinned'),
+      dryRun
     });
-    console.log(`blocks-migrate: moved ${moved.length} markdown file(s) to content/posts-legacy/`);
-    for (const m of moved) console.log(`  ${m.slug}`);
-    console.log('blocks-migrate: run `site-admin reindex` to refresh the index');
+    console.log(
+      `blocks-migrate: ${dryRun ? 'would move' : 'moved'} ${moved.length} markdown file(s) to content/posts-legacy/`
+    );
+    for (const m of moved) console.log(`  ${m.slug}  ${path.basename(m.file)}`);
+    if (!dryRun) console.log('blocks-migrate: run `site-admin reindex` to refresh the index');
     return;
   }
   if (argv.includes('--all')) {
-    const written = runBlocksMigrateAll(paths().root);
-    console.log(`blocks-migrate: wrote ${written.length} JSON twin(s) to content/blocks/`);
-    for (const w of written) console.log(`  ${w.slug}`);
+    const written = runBlocksMigrateAll(paths().root, { force: argv.includes('--force'), dryRun });
+    console.log(
+      `blocks-migrate: ${dryRun ? 'would write' : 'wrote'} ${written.length} JSON twin(s) to content/blocks/`
+    );
+    for (const w of written) console.log(`  ${w.slug}  ${path.basename(w.file)}`);
     return;
   }
   const postIdx = argv.indexOf('--post');

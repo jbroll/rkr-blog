@@ -1901,7 +1901,8 @@ describe('unified shell page settings', () => {
       tags: ['x'],
       status: 'draft',
       date: '',
-      excerpt: ''
+      excerpt: '',
+      subtitle: ''
     });
   });
 });

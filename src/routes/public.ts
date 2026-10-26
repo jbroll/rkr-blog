@@ -393,6 +393,9 @@ export default async function publicRoutes(
         });
         title = twin.title;
         date = row.published_at ?? undefined;
+        if (typeof twin.fields.subtitle === 'string' && twin.fields.subtitle.trim()) {
+          subtitle = twin.fields.subtitle;
+        }
       } else {
         const fullPath = path.join(siteRoot, row.path);
         const raw = await fs.promises.readFile(fullPath, 'utf8');

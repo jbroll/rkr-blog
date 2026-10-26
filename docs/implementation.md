@@ -574,7 +574,22 @@ listed and searchable.
 
 `site-admin blocks-migrate --all` writes a JSON twin per markdown post
 (`lib/markdown-migrate`); `--archive` moves the markdown to
-`content/posts-legacy/` (`RUNBOOK.md §5b`). System posts stay markdown.
+`content/posts-legacy/` (`RUNBOOK.md`, JSON cutover). System posts stay
+markdown and are never converted.
+
+- **Reruns never overwrite.** A slug that already resolves to a page is
+  skipped unless `--force`, so editor work survives a second `--all`.
+  `--force` replaces the file the slug resolves to, never a second file.
+- **Order and dates hold.** The twin takes the markdown file's mtime,
+  and an undated published post gets that mtime as `fields.date`; the
+  markdown index used the mtime for both, so neither moves.
+- **Nothing is dropped.** Reference links are rewritten inline before
+  the body splits into blocks, `subtitle` and unknown frontmatter keys
+  pass through into `fields`, and lists use `-` bullets so they pass the
+  editor's round-trip check.
+- **Reserved slugs** (`src/lib/reserved-slugs.ts`) are routes that answer
+  `/<slug>` or `/admin/blocks/<slug>`. `--all` warns on them; a test
+  derives the list from the registered routes.
 
 ### Editor page headers
 

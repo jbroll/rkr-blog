@@ -210,7 +210,12 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       onCommit: (fields) => {
         const next = {
           ...tree,
-          fields: { ...tree.fields, ...fields, excerpt: fields.excerpt ?? '' }
+          fields: {
+            ...tree.fields,
+            ...fields,
+            excerpt: fields.excerpt ?? '',
+            subtitle: fields.subtitle ?? ''
+          }
         };
         const titleEl = toolbar.querySelector('.rkr-unified-title');
         if (titleEl) titleEl.textContent = fields.title;

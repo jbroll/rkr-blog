@@ -255,4 +255,107 @@ describe('blocks-migrate', () => {
     );
     assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 'bad.json')), false);
   });
+
+  it('--all leaves an existing twin alone unless forced', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 'edited.json', 't', 'Edited in the editor');
+    const before = fs.readFileSync(path.join(root, 'content', 'blocks', 'edited.json'), 'utf8');
+
+    assert.deepEqual(runBlocksMigrateAll(root, { log: () => {} }), []);
+    assert.equal(
+      fs.readFileSync(path.join(root, 'content', 'blocks', 'edited.json'), 'utf8'),
+      before
+    );
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 't.json')), false);
+
+    const forced = runBlocksMigrateAll(root, { force: true, log: () => {} });
+    assert.deepEqual(
+      forced.map((w) => w.slug),
+      ['t']
+    );
+    const replaced = JSON.parse(
+      fs.readFileSync(path.join(root, 'content', 'blocks', 'edited.json'), 'utf8')
+    ) as { fields: { title: string } };
+    assert.equal(replaced.fields.title, 'T', 'force replaces the file the slug resolves to');
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 't.json')), false);
+  });
+
+  it('--all never writes _-prefixed system posts', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writePost(root, '_about.md', '---\ntitle: About\nslug: _about\n---\n\nAbout.\n');
+    writePost(root, '_site-banner.md', '---\ntitle: B\nslug: _site-banner\n---\n\nB.\n');
+    const written = runBlocksMigrateAll(root, { log: () => {} });
+    assert.deepEqual(
+      written.map((w) => w.slug),
+      ['t']
+    );
+    assert.deepEqual(fs.readdirSync(path.join(root, 'content', 'blocks')), ['t.json']);
+  });
+
+  it('--all --dry-run lists what it would write and writes nothing', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    const lines: string[] = [];
+    t.mock.method(console, 'log', (...a: unknown[]) => {
+      lines.push(a.map(String).join(' '));
+    });
+    await blocksMigrateCmd(['--all', '--dry-run']);
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 't.json')), false);
+    assert.match(lines.join('\n'), /would write 1 JSON twin/);
+    assert.match(lines.join('\n'), /t\.json/);
+  });
+
+  it('--all warns about slugs a fixed route answers', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 'search.md', POST.replace('slug: t', 'slug: search'));
+    writePost(root, 'new.md', POST.replace('slug: t', 'slug: new'));
+    const warnings: string[] = [];
+    runBlocksMigrateAll(root, { log: (m) => warnings.push(m) });
+    assert.match(warnings.join('\n'), /"new".*reserved/);
+    assert.match(warnings.join('\n'), /"search".*reserved/);
+  });
+
+  it('--all dates an undated post from its file and keeps its mtime', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 'u.md', '---\ntitle: U\nslug: u\nstatus: published\n---\n\nUndated.\n');
+    const mtime = new Date('2019-03-04T05:06:07.890Z');
+    fs.utimesSync(path.join(root, 'content', 'posts', 'u.md'), mtime, mtime);
+    runReindex(root);
+    const db = open(path.join(root, 'data', 'site.db'));
+    const before = readIndexedPostBySlug(db, 'u')?.published_at;
+    db.close();
+
+    runBlocksMigrateAll(root, { log: () => {} });
+    const twin = path.join(root, 'content', 'blocks', 'u.json');
+    const parsed = JSON.parse(fs.readFileSync(twin, 'utf8')) as { fields: { date?: string } };
+    assert.equal(parsed.fields.date, '2019-03-04T05:06:07Z');
+    assert.equal(fs.statSync(twin).mtimeMs, mtime.getTime());
+
+    runBlocksArchive(root);
+    runReindex(root);
+    const db2 = open(path.join(root, 'data', 'site.db'));
+    try {
+      const row = readIndexedPostBySlug(db2, 'u');
+      assert.equal(row?.published_at?.slice(0, 19), before?.slice(0, 19));
+      assert.equal(row?.updated_at, mtime.toISOString());
+    } finally {
+      db2.close();
+    }
+  });
+
+  it('--archive --dry-run moves nothing', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 't.md', POST);
+    writeTwin(root, 't.json', 't');
+    const lines: string[] = [];
+    t.mock.method(console, 'log', (...a: unknown[]) => {
+      lines.push(a.map(String).join(' '));
+    });
+    await blocksMigrateCmd(['--archive', '--dry-run']);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 't.md')));
+    assert.equal(fs.existsSync(path.join(root, 'content', 'posts-legacy')), false);
+    assert.match(lines.join('\n'), /would move 1 markdown file/);
+  });
 });
