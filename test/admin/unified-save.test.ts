@@ -4,8 +4,10 @@ import { describe, it } from 'node:test';
 import type { DraftRecord, DraftStore } from '../../src/admin/unified-draft.ts';
 import {
   createSavePipeline,
+  invalidFromReply,
   SaveConflict,
   SaveFailure,
+  SaveInvalid,
   SaveOffline,
   type SavePipelineDeps
 } from '../../src/admin/unified-save.ts';
@@ -376,5 +378,56 @@ describe('unified save pipeline', () => {
     assert.equal(h.pipeline.state(), 'unsaved');
     assert.equal(h.pill(), 'Not saved. Another page already uses this address.');
     assert.equal(h.root.querySelector('[data-rkr-dialog]'), null);
+  });
+
+  it('an invalid tree selects nothing itself, reports once and waits for a change', async () => {
+    let current: BlockTree = TREE;
+    let sends = 0;
+    const refused: unknown[] = [];
+    const h = harness({
+      getTree: () => current,
+      onRefused: (problem) => {
+        refused.push(problem);
+      },
+      onSave: async () => {
+        sends++;
+        throw new SaveInvalid("This block can't be saved.", [1]);
+      }
+    });
+    await h.pipeline.requestSave(TREE);
+    assert.equal(h.pipeline.state(), 'unsaved');
+    assert.equal(h.pill(), 'Not saved');
+    assert.deepEqual(refused, [{ path: [1], message: "This block can't be saved." }]);
+    h.pipeline.saveNow();
+    h.win.dispatchEvent(new Event('online'));
+    await tick();
+    assert.equal(sends, 1, 'no retry of the same tree');
+    current = { version: 1, body: [] };
+    h.pipeline.saveNow();
+    await tick();
+    assert.equal(sends, 2, 'a changed tree retries');
+    await h.pipeline.requestSave(current).catch(() => {});
+    assert.equal(refused[2], null, 'a new save clears the refusal first');
+  });
+
+  it('an invalid save without a path shows its message in the indicator', async () => {
+    const h = harness({
+      onSave: async () => {
+        throw new SaveInvalid('Body must be an array.');
+      }
+    });
+    await h.pipeline.requestSave(TREE);
+    assert.equal(h.pill(), 'Body must be an array.');
+  });
+
+  it('reads the 400 reply into a SaveInvalid', () => {
+    const full = invalidFromReply({ error: 'invalid', message: 'Bad cols.', path: [0, 2] });
+    assert.equal(full.message, 'Bad cols.');
+    assert.deepEqual(full.path, [0, 2]);
+    const bare = invalidFromReply({ error: 'Unknown block type.' });
+    assert.equal(bare.message, 'Unknown block type.');
+    assert.equal(bare.path, undefined);
+    assert.equal(invalidFromReply({ error: 'x', path: ['a'] }).path, undefined);
+    assert.equal(invalidFromReply(null).message, "This page can't be saved.");
   });
 });

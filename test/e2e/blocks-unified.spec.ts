@@ -93,9 +93,7 @@ test('unified flow: new page, type, image, hero, publish, reload, public', async
   await typed;
 
   // Image primitive: pick a local file, caption it, commit.
-  const dropped = saveResponse(page, slug);
   await dropBelow(page, 'Image', body.locator('p').first());
-  await dropped;
   const jpeg = await sharp({
     create: { width: 320, height: 240, channels: 3, background: { r: 90, g: 140, b: 200 } }
   })
@@ -224,9 +222,7 @@ test('add image to empty figure via local upload', async ({ page }) => {
   const para = page.locator('#rkr-blocks-page-body p').first();
   await expect(para).toHaveAttribute('contenteditable', 'true');
 
-  const dropped = saveResponse(page, slug);
   await dropBelow(page, 'Image', para);
-  await dropped;
   const seed = Date.now();
   await chooseLocal(page, [
     { name: 'one.png', mimeType: 'image/png', buffer: await makePng(seed) },
@@ -323,9 +319,7 @@ test('add video block', async ({ page }) => {
   const para = page.locator('#rkr-blocks-page-body p').first();
   await expect(para).toHaveAttribute('contenteditable', 'true');
 
-  const dropped = saveResponse(page, slug);
   await dropBelow(page, 'Video', para);
-  await dropped;
   await chooseLocal(page, [{ name: 'clip.mp4', mimeType: 'video/mp4', buffer: makeFixtureMp4() }]);
   const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save video' });
   await expect(dialog.locator('.rkr-media-row')).toHaveCount(1, { timeout: 60_000 });

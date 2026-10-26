@@ -13,7 +13,7 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
-import { getAtPath, type Path, setSlotAtPath } from './block-tree-ops.ts';
+import { getAtPath, type Path, removeAtPath, setSlotAtPath } from './block-tree-ops.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
 import { domToMarkdown } from './dom-markdown.ts';
 import type { MediaDialogDeps } from './figure-dialog-tree.ts';
@@ -24,7 +24,7 @@ import { createConfigurator } from './unified-configure.ts';
 import { type DraftStore, stableJson } from './unified-draft.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
-import { createSavePipeline, type SavePipelineDeps } from './unified-save.ts';
+import { createSavePipeline, type SavePipelineDeps, type SaveRefusal } from './unified-save.ts';
 import { mountAddSheet, mountPhonePreview } from './unified-sheet.ts';
 
 type Mode = 'view' | 'edit';
@@ -81,6 +81,12 @@ function mustFind(scope: Element, selector: string): Element {
   return el;
 }
 
+function isEmptyMedia(node: BlockNode | null): boolean {
+  return (
+    (node?.type === 'figure' || node?.type === 'video') && !(node as { slots?: Slots }).slots?.ids
+  );
+}
+
 /** Current markdown source of a text leaf (mirrors the renderer rule). */
 function textSource(node: BlockNode | null): string | null {
   if (node?.type !== 'text') return null;
@@ -116,6 +122,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   let releaseRender: ReleaseInert = () => {};
 
   let actions: { refresh(): void } | undefined;
+  // The last save the server refused, until the next save starts.
+  let refusal: SaveRefusal | null = null;
+  // A media block shown while its picker is open; never saved or drafted.
+  let pendingMedia: Path | null = null;
+  const savable = (): BlockTree => (pendingMedia ? removeAtPath(tree, pendingMedia) : tree);
 
   const select = (path: Path | null): void => {
     selected = path ? [...path] : null;
@@ -125,13 +136,18 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const save = createSavePipeline({
     onSave: deps.onSave,
     getTree: () => tree,
-    resave: () => applyTree(tree),
+    resave: () => (pendingMedia ? Promise.resolve() : applyTree(tree)),
     shellEl,
     toolbar,
     version: deps.version,
     drafts: deps.drafts,
     dialogRoot: root,
-    win: deps.win
+    win: deps.win,
+    onRefused: (next) => {
+      refusal = next;
+      if (next?.path && getAtPath(tree, next.path)) select(next.path);
+      else actions?.refresh();
+    }
   });
   // Dialog commits re-render, which needs the server.
   const refuseOffline = (): string | null => (offline() ? OFFLINE_DIALOG : null);
@@ -337,6 +353,23 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     refuse: refuseOffline
   });
 
+  /** Show the new block and open its picker; it saves only once the
+   * dialog commits ids, and leaves the page on Cancel. */
+  const insertMedia = (next: BlockTree, path: Path): void => {
+    const before = tree;
+    const previous = selected;
+    pendingMedia = path;
+    void applyTree(next, { select: path, renderOnly: true });
+    openMediaConfig(path, {
+      done: (kept) => {
+        pendingMedia = null;
+        if (kept || !isEmptyMedia(getAtPath(tree, path))) return;
+        const back = tree === next ? before : removeAtPath(tree, path);
+        void applyTree(back, { renderOnly: true, ...(previous ? { select: previous } : {}) });
+      }
+    });
+  };
+
   const insert = mountPaletteInsert({
     dock,
     body,
@@ -349,12 +382,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
         save.notice(OFFLINE_STRUCTURE);
         return;
       }
-      void applyTree(next, { select: path });
-      const node = getAtPath(next, path);
-      const ids = (node as { slots?: Slots } | null)?.slots?.ids;
-      if (inserted && (node?.type === 'figure' || node?.type === 'video') && !ids) {
-        openMediaConfig(path, true);
-      }
+      if (inserted && isEmptyMedia(getAtPath(next, path))) insertMedia(next, path);
+      else void applyTree(next, { select: path });
     },
     showNudge: (text) => {
       save.notice(text);
@@ -376,6 +405,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     isEditing: () => mode === 'edit',
     noteFor: (path) => {
       const key = path.join(',');
+      if (refusal?.path?.join(',') === key) return refusal.message;
       const unit = units.find((u) => u.path.join(',') === key);
       return unit?.node.type === 'text' && !editable.has(unit) ? NOT_EDITABLE : null;
     },
@@ -414,7 +444,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     'pagehide',
     () => {
       flushText();
-      if (save.state() !== 'clean') save.draft(tree);
+      if (save.state() !== 'clean') save.draft(savable());
     }
   );
 

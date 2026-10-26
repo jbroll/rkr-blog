@@ -5,6 +5,7 @@ import {
   depthLabel,
   duplicateOverrides,
   insertAllowed,
+  isLayoutPreset,
   isValidMacroName,
   MAX_MACRO_DEPTH,
   mountBlocksPalette,
@@ -27,19 +28,21 @@ const depth3Macro: BlockNode = {
 
 describe('blocks editor', () => {
   it('blocks a 4th container level inside one macro', () => {
-    assert.equal(insertAllowed(depth3Macro, 'row'), false);
-    assert.equal(insertAllowed(depth3Macro, 'col'), false);
+    assert.equal(insertAllowed(depth3Macro, 'primitive:row'), false);
+    assert.equal(insertAllowed(depth3Macro, 'primitive:col'), false);
+    assert.equal(insertAllowed(depth3Macro, 'primitive:section'), false);
   });
 
   it('allows leaves and macros at any depth', () => {
-    assert.equal(insertAllowed(depth3Macro, 'text'), true);
-    assert.equal(insertAllowed(depth3Macro, 'figure'), true);
-    assert.equal(insertAllowed(depth3Macro, 'macro'), true);
+    assert.equal(insertAllowed(depth3Macro, 'primitive:text'), true);
+    assert.equal(insertAllowed(depth3Macro, 'primitive:figure'), true);
+    assert.equal(insertAllowed(depth3Macro, 'hero'), true);
+    assert.equal(insertAllowed(depth3Macro, 'row'), true, 'node type names are not palette names');
   });
 
   it('allows containers below depth 3', () => {
     const shallow: BlockNode = { type: 'grid', children: [{ type: 'text' }] };
-    assert.equal(insertAllowed(shallow, 'row'), true);
+    assert.equal(insertAllowed(shallow, 'primitive:row'), true);
   });
 
   it('duplicate copies overrides only', () => {
@@ -123,7 +126,36 @@ describe('blocks editor', () => {
 
   it('builds primitive nodes from palette names', () => {
     assert.equal(primitiveNode('primitive:text').type, 'text');
-    assert.equal((primitiveNode('primitive:row') as { children: unknown[] }).children.length, 0);
     assert.throws(() => primitiveNode('hero'), /unknown primitive/);
+  });
+
+  it('layout presets insert grids', () => {
+    assert.deepEqual(primitiveNode('primitive:row'), {
+      type: 'grid',
+      slots: { cols: 2 },
+      children: []
+    });
+    assert.deepEqual(primitiveNode('primitive:col'), {
+      type: 'grid',
+      slots: { cols: 1 },
+      children: []
+    });
+    assert.deepEqual(primitiveNode('primitive:section'), {
+      type: 'grid',
+      slots: { cols: 1, band: true, theme: 'light', edge: 'straight' },
+      children: []
+    });
+    assert.equal(isLayoutPreset('primitive:section'), true);
+    assert.equal(isLayoutPreset('primitive:figure'), false);
+    assert.equal(isLayoutPreset('grid'), false);
+  });
+
+  it('keeps the palette labels Row, Column and Section', () => {
+    const dock = mount([], () => {});
+    const layout = dock.querySelectorAll('.rkr-palette-group')[2];
+    assert.deepEqual(
+      layout?.querySelectorAll('.rkr-palette-label').map((l) => l.textContent),
+      ['Section', 'Row', 'Column']
+    );
   });
 });

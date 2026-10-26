@@ -151,6 +151,28 @@ describe('block actions toolbar', () => {
     assert.ok(!h.bar().querySelector('[data-action="configure"]')?.hidden);
   });
 
+  it('labels grids by their slots', () => {
+    const grid = (slots?: Record<string, unknown>): BlockNode =>
+      slots ? { type: 'grid', slots, children: [] } : { type: 'grid', children: [] };
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        grid({ cols: 2 }),
+        grid({ cols: 1 }),
+        grid({ cols: 1, band: true, theme: 'light', edge: 'straight' }),
+        grid({ cols: 3, band: true }),
+        grid()
+      ]
+    };
+    const h = harness(tree, [0], ['0', '1', '2', '3', '4']);
+    const labels = [0, 1, 2, 3, 4].map((i) => {
+      h.state.selected = [i];
+      h.actions.refresh();
+      return h.bar().querySelector('.rkr-block-type')?.textContent;
+    });
+    assert.deepEqual(labels, ['Row (2 columns)', 'Column', 'Section', 'Section', 'Column']);
+  });
+
   it('marks the selected block and hides the bar in view mode', () => {
     const h = harness(AB, [1], ['0', '1']);
     assert.equal(h.body.querySelectorAll('[data-rkr-selected]').length, 1);

@@ -10,6 +10,7 @@
 // Browser-safe: no node:* imports.
 
 import type { BlockTree } from '../lib/blocks.ts';
+import type { Path } from './block-tree-ops.ts';
 import { openEditorDialog } from './editor-dialog.ts';
 import { type DraftRecord, type DraftStore, within } from './unified-draft.ts';
 
@@ -29,6 +30,34 @@ export class SaveFailure extends Error {}
 
 /** Thrown by `onSave` when the request never reached the server. */
 export class SaveOffline extends Error {}
+
+/** Thrown by `onSave` when the server refuses the tree itself (400). */
+export class SaveInvalid extends Error {
+  readonly path?: Path;
+  constructor(message: string, path?: Path) {
+    super(message);
+    this.path = path;
+  }
+}
+
+const INVALID_FALLBACK = "This page can't be saved.";
+
+/** The save route's 400 reply: `{error:'invalid', message, path}`, or
+ * `{error}` alone for a body it could not parse. */
+export function invalidFromReply(reply: unknown): SaveInvalid {
+  const r = (reply ?? {}) as { error?: unknown; message?: unknown; path?: unknown };
+  const text = [r.message, r.error].find((v) => typeof v === 'string' && v !== '');
+  const path =
+    Array.isArray(r.path) && r.path.every((i) => Number.isInteger(i) && i >= 0)
+      ? (r.path as Path)
+      : undefined;
+  return new SaveInvalid((text as string | undefined) ?? INVALID_FALLBACK, path);
+}
+
+export interface SaveRefusal {
+  path?: Path;
+  message: string;
+}
 
 export interface SavePipeline {
   /** Current state (mirrored to the shell's data-save-state). */
@@ -74,6 +103,8 @@ export interface SavePipelineDeps {
   /** How long one draft-store call may take before the save goes on
    * without it. */
   draftTimeoutMs?: number;
+  /** The server refused the tree (SaveInvalid); null once a new save starts. */
+  onRefused?(refusal: SaveRefusal | null): void;
 }
 
 const LABELS: Record<SaveState, string> = {
@@ -111,6 +142,8 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   let choosing = false;
   // savedAt of a restored draft not yet stored; its conflict is likely stale.
   let restored: number | null = null;
+  // The tree the server refused; retrying it unchanged would fail again.
+  let refusedTree: BlockTree | null = null;
   const timeoutMs = deps.draftTimeoutMs ?? 500;
 
   // The edit template ships both; the fallbacks keep bare toolbars working.
@@ -182,6 +215,11 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
           chooseVersion();
           return;
         }
+        if (err instanceof SaveInvalid) {
+          refusedTree = snapshot;
+          failure = err.path ? LABELS.unsaved : err.message;
+          deps.onRefused?.({ path: err.path, message: err.message });
+        }
         if (err instanceof SaveFailure) failure = err.message;
         setState(err instanceof SaveOffline || navigatorOffline() ? 'offline' : 'unsaved');
       }
@@ -241,7 +279,7 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   }
 
   const retry = (): void => {
-    if (saveState === 'clean' || inFlight) return;
+    if (saveState === 'clean' || inFlight || getTree() === refusedTree) return;
     if (saveState === 'conflict') chooseVersion();
     else resave();
   };
@@ -273,6 +311,10 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
     },
     requestSave: (next: BlockTree): Promise<void> => {
       failure = null;
+      if (refusedTree) {
+        refusedTree = null;
+        deps.onRefused?.(null);
+      }
       if (inFlight) {
         queued = next;
         void writeDraft(next);

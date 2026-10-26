@@ -10,8 +10,9 @@
 // Browser-safe: no node:* imports.
 
 import type { BlockNode, BlockTree } from '../lib/blocks.ts';
+import { gridLabel } from '../lib/grid.ts';
 import { moveBlock } from './block-move.ts';
-import { getAtPath, insertAtPath, type Path, removeAtPath } from './block-tree-ops.ts';
+import { childrenOf, getAtPath, insertAtPath, type Path, removeAtPath } from './block-tree-ops.ts';
 
 export interface BlockActionsEnv {
   body: Element;
@@ -35,11 +36,7 @@ export interface BlockActionsEnv {
 const TYPE_LABELS: Record<string, string> = {
   text: 'Text',
   figure: 'Image',
-  button: 'Button',
-  row: 'Row',
-  col: 'Column',
-  section: 'Section',
-  flow: 'Flow'
+  button: 'Button'
 };
 
 function capitalize(word: string): string {
@@ -48,6 +45,7 @@ function capitalize(word: string): string {
 
 function typeLabel(node: BlockNode): string {
   if (node.type === 'macro') return capitalize(node.macro);
+  if (node.type === 'grid') return gridLabel(node.slots);
   return TYPE_LABELS[node.type] ?? capitalize(node.type);
 }
 
@@ -75,16 +73,10 @@ function dragGhost(doc: Document, source: Element | null): HTMLElement | null {
   return ghost;
 }
 
-function kidsOf(node: BlockNode): BlockNode[] {
-  if (node.type === 'macro') return [];
-  const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-  return n.children ?? n.blocks ?? [];
-}
-
 function listAt(tree: BlockTree, parent: Path): BlockNode[] | null {
   if (parent.length === 0) return tree.body;
   const node = getAtPath(tree, parent);
-  return node ? kidsOf(node) : null;
+  return node ? childrenOf(node) : null;
 }
 
 /** Every path in render order, parents before their children. */
@@ -93,7 +85,7 @@ function flatten(tree: BlockTree): Path[] {
   const walk = (nodes: BlockNode[], base: Path): void => {
     nodes.forEach((node, i) => {
       out.push([...base, i]);
-      walk(kidsOf(node), [...base, i]);
+      walk(childrenOf(node), [...base, i]);
     });
   };
   walk(tree.body, []);

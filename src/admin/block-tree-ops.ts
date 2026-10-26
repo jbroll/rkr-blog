@@ -7,12 +7,9 @@ import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
 
 export type Path = number[];
 
-const CONTAINERS: ReadonlySet<string> = new Set(['grid']);
-
-function kids(node: BlockNode): BlockNode[] {
-  if (node.type === 'macro') return [];
-  const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-  return n.children ?? n.blocks ?? [];
+/** A grid's children; leaves and macro instances have none. */
+export function childrenOf(node: BlockNode): BlockNode[] {
+  return node.type === 'grid' ? node.children : [];
 }
 
 /** Node at `path` (indices from the page body). Null when missing. */
@@ -22,7 +19,7 @@ export function getAtPath(tree: BlockTree, path: Path): BlockNode | null {
   for (const i of path) {
     node = level[i] ?? null;
     if (!node) return null;
-    level = kids(node);
+    level = childrenOf(node);
   }
   return node;
 }
@@ -42,14 +39,8 @@ function updateList(
     return next;
   }
   const parent = getAtPath(next, parentPath);
-  if (!parent || !CONTAINERS.has(parent.type)) {
-    throw new Error('blocks editor: bad parent');
-  }
-  const n = parent as unknown as Record<string, BlockNode[] | undefined>;
-  const list = [...kids(parent)];
-  if (Array.isArray(n.children)) n.children = fn(list);
-  else if (Array.isArray(n.blocks)) n.blocks = fn(list);
-  else n.children = fn(list);
+  if (parent?.type !== 'grid') throw new Error('blocks editor: bad parent');
+  parent.children = fn([...parent.children]);
   return next;
 }
 
@@ -111,7 +102,7 @@ export type DropPosition = 'before' | 'after' | 'inside';
 
 /** Resolve a drop onto the card at `targetPath` to an insertion point.
  * before/after land in the target's parent; inside lands at the end of
- * the target, and only containers accept it — leaves and macro
+ * the target, and only grids accept it — leaves and macro
  * instances (whose internals are not editable here) return null. */
 export function resolveDrop(
   tree: BlockTree,
@@ -121,8 +112,8 @@ export function resolveDrop(
   const target = getAtPath(tree, targetPath);
   if (!target) return null;
   if (position === 'inside') {
-    if (!CONTAINERS.has(target.type)) return null;
-    return { parentPath: targetPath, index: kids(target).length };
+    if (target.type !== 'grid') return null;
+    return { parentPath: targetPath, index: target.children.length };
   }
   const parentPath = targetPath.slice(0, -1);
   const idx = targetPath[targetPath.length - 1] as number;

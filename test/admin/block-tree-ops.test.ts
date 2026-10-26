@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  childrenOf,
   getAtPath,
   insertAtPath,
   removeAtPath,
@@ -75,5 +76,25 @@ describe('block tree ops', () => {
       resolveDrop({ ...TREE, body: [{ type: 'macro', macro: 'hero' }] }, [0], 'inside'),
       null
     );
+  });
+
+  it('inserts into an empty grid and removes its last child', () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'grid', slots: { cols: 2 }, children: [] }]
+    };
+    const next = insertAtPath(tree, [0], 5, { type: 'text', markdown: 'In' });
+    assert.deepEqual(
+      childrenOf(next.body[0] as never).map((n) => n.type),
+      ['text']
+    );
+    assert.deepEqual(resolveDrop(next, [0], 'inside'), { parentPath: [0], index: 1 });
+    assert.deepEqual(childrenOf(removeAtPath(next, [0, 0]).body[0] as never), []);
+  });
+
+  it('refuses a leaf as a parent', () => {
+    assert.throws(() => insertAtPath(TREE, [0, 0], 0, { type: 'text' }), /bad parent/);
+    assert.deepEqual(childrenOf({ type: 'text' }), []);
+    assert.deepEqual(childrenOf({ type: 'macro', macro: 'hero' }), []);
   });
 });

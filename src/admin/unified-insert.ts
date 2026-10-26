@@ -7,6 +7,7 @@ import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts
 import { readGridSlots } from '../lib/grid.ts';
 import { moveBlock, movedPath } from './block-move.ts';
 import {
+  childrenOf,
   type DropPosition,
   getAtPath,
   insertAtPath,
@@ -15,6 +16,7 @@ import {
 } from './block-tree-ops.ts';
 import {
   depthLabel,
+  isLayoutPreset,
   MAX_MACRO_DEPTH,
   mountBlocksPalette,
   PALETTE_PRIMITIVES,
@@ -22,14 +24,12 @@ import {
   primitiveNode
 } from './blocks-editor.ts';
 
-const LAYOUT_PRIMITIVES: ReadonlySet<string> = new Set(['section', 'row', 'col']);
-
 function dropKind(name: string): string {
   return name.startsWith('primitive:') ? name.slice('primitive:'.length) : name;
 }
 
 function dropRefused(name: string, depth: number): boolean {
-  return LAYOUT_PRIMITIVES.has(dropKind(name)) && depth >= MAX_MACRO_DEPTH;
+  return isLayoutPreset(name) && depth >= MAX_MACRO_DEPTH;
 }
 
 /** Containers split the hovered card in thirds: top → before, bottom →
@@ -66,12 +66,7 @@ function isRow(node: BlockNode | null): boolean {
 }
 
 function isContainerPath(tree: BlockTree, path: Path): boolean {
-  const node = getAtPath(tree, path);
-  if (!node || node.type === 'macro') return false;
-  const kids =
-    (node as { children?: BlockNode[]; blocks?: BlockNode[] }).children ??
-    (node as { children?: BlockNode[]; blocks?: BlockNode[] }).blocks;
-  return Array.isArray(kids);
+  return getAtPath(tree, path)?.type === 'grid';
 }
 
 export interface PaletteInsert {
@@ -85,25 +80,24 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
   const { dock, body, macros } = env;
 
   const childCount = (at: Path): number => {
-    const list =
-      at.length === 0
-        ? env.getTree().body
-        : (getAtPath(env.getTree(), at) as { children?: BlockNode[]; blocks?: BlockNode[] });
-    const kids = Array.isArray(list) ? list : (list.children ?? list.blocks ?? []);
-    return kids.length;
+    const tree = env.getTree();
+    if (at.length === 0) return tree.body.length;
+    const node = getAtPath(tree, at);
+    return node ? childrenOf(node).length : 0;
   };
 
   /** Directly after the selected leaf; at the end of a selected container;
-   * at the end of the page when nothing is selected. */
-  const clickTarget = (): { at: Path; index: number } => {
+   * at the end of the page when nothing is selected. A Section only goes
+   * in the page body, after the selected block's top-level ancestor. */
+  const clickTarget = (name: string): { at: Path; index: number } => {
     const selected = env.getSelected();
-    if (selected && getAtPath(env.getTree(), selected)) {
-      if (isContainerPath(env.getTree(), selected)) {
-        return { at: selected, index: childCount(selected) };
-      }
-      return { at: selected.slice(0, -1), index: (selected[selected.length - 1] as number) + 1 };
+    const live = selected && getAtPath(env.getTree(), selected) ? selected : null;
+    if (name === 'primitive:section') {
+      return { at: [], index: live ? (live[0] as number) + 1 : childCount([]) };
     }
-    return { at: [], index: childCount([]) };
+    if (!live) return { at: [], index: childCount([]) };
+    if (isContainerPath(env.getTree(), live)) return { at: live, index: childCount(live) };
+    return { at: live.slice(0, -1), index: (live[live.length - 1] as number) + 1 };
   };
 
   const nudge = (kind: string): void => {
@@ -126,7 +120,7 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
 
   mountBlocksPalette(dock, macros, (name) => {
     env.flushText();
-    const { at, index } = clickTarget();
+    const { at, index } = clickTarget(name);
     insertNode(name, at, index);
   });
 

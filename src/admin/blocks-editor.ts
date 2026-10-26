@@ -1,20 +1,29 @@
 // Blocks palette + inline-field helpers for the JSON-pages editor.
 // Browser-safe: no node:* imports (bundled into the admin bundle).
 // Depth guidance lives here, not in the build: a macro definition holds
-// at most 3 container levels, and the palette refuses a 4th level with
+// at most 3 grid levels, and the palette refuses a 4th level with
 // a "save inner part as its own macro" nudge.
 
 import { type BlockNode, containerDepth, type Slots } from '../lib/blocks.ts';
 import { groupPalette, paletteIcon } from './palette-groups.ts';
 
-const CONTAINER_KINDS: ReadonlySet<string> = new Set(['grid', 'section', 'row', 'col']);
+const LAYOUT_PRESETS: ReadonlySet<string> = new Set([
+  'primitive:section',
+  'primitive:row',
+  'primitive:col'
+]);
 
 export const MAX_MACRO_DEPTH = 3;
 
-/** Whether `kind` may be inserted into `tree`. Containers are refused
- * at depth 3; leaves and macro instances are always allowed. */
-export function insertAllowed(tree: BlockNode, kind: string): boolean {
-  if (!CONTAINER_KINDS.has(kind)) return true;
+/** Palette names that insert a grid. */
+export function isLayoutPreset(name: string): boolean {
+  return LAYOUT_PRESETS.has(name);
+}
+
+/** Whether palette entry `name` may be inserted into `tree`. Layout
+ * presets are refused at depth 3; leaves and macros are always allowed. */
+export function insertAllowed(tree: BlockNode, name: string): boolean {
+  if (!isLayoutPreset(name)) return true;
   return containerDepth(tree) < MAX_MACRO_DEPTH;
 }
 
@@ -105,7 +114,11 @@ export function primitiveNode(name: string): BlockNode {
     case 'primitive:col':
       return { type: 'grid', slots: { cols: 1 }, children: [] };
     case 'primitive:section':
-      return { type: 'grid', slots: { cols: 1, band: true }, children: [] };
+      return {
+        type: 'grid',
+        slots: { cols: 1, band: true, theme: 'light', edge: 'straight' },
+        children: []
+      };
     default:
       throw new Error(`blocks editor: unknown primitive ${name}`);
   }

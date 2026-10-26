@@ -7,7 +7,7 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree } from '../lib/blocks.ts';
-import { getAtPath, type Path } from './block-tree-ops.ts';
+import { childrenOf, getAtPath, type Path } from './block-tree-ops.ts';
 
 export interface HydratedUnit {
   path: Path;
@@ -19,12 +19,6 @@ export interface HydratedUnit {
 
 const MARKER = /^rkr:path=([0-9,]+)$/;
 
-function kidsOf(node: BlockNode): BlockNode[] {
-  if (node.type === 'macro') return [];
-  const n = node as { children?: BlockNode[]; blocks?: BlockNode[] };
-  return n.children ?? n.blocks ?? [];
-}
-
 /** Tree nodes in the server's render order. */
 function serverOrder(tree: BlockTree): { path: Path; node: BlockNode }[] {
   const out: { path: Path; node: BlockNode }[] = [];
@@ -32,7 +26,7 @@ function serverOrder(tree: BlockTree): { path: Path; node: BlockNode }[] {
     nodes.forEach((node, i) => {
       const path = [...base, i];
       out.push({ path, node });
-      walk(kidsOf(node), path);
+      walk(childrenOf(node), path);
     });
   };
   walk(tree.body, []);

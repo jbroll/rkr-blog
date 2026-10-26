@@ -21,9 +21,15 @@ export interface ConfigureDeps {
   refuse(): string | null;
 }
 
+/** A media block inserted but not yet saved: the dialog decides
+ * whether it stays (something was picked) or goes. */
+interface FreshMedia {
+  done(kept: boolean): void;
+}
+
 export interface Configurator {
   configure(path: Path): void;
-  openMediaConfig(path: Path, fresh?: boolean): void;
+  openMediaConfig(path: Path, fresh?: FreshMedia): void;
   canConfigure(node: BlockNode): boolean;
 }
 
@@ -57,19 +63,25 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
     void deps.applyTree(next, { select: path });
   };
 
-  const openMediaConfig = (path: Path, fresh = false): void => {
+  const openMediaConfig = (path: Path, fresh?: FreshMedia): void => {
     const node = getAtPath(deps.getTree(), path);
     if (node?.type !== 'figure' && node?.type !== 'video') return;
     openMediaDialog(root, {
       kind: node.type,
       slots: (node as { slots?: Slots }).slots ?? {},
-      fresh,
+      fresh: Boolean(fresh),
       media,
       refuse,
       onCommit: (slots) => {
+        fresh?.done(Boolean(slots.ids));
+        if (fresh && !slots.ids) return;
         commitSlots(path, (current) => ({ ...current, ...slots }));
       },
       onCancel: (edited) => {
+        if (fresh) {
+          fresh.done(false);
+          return;
+        }
         if (!edited) return;
         // Applied image edits changed the derivatives the page shows. A
         // pending text edit saves itself through flushText.

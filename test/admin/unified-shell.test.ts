@@ -14,7 +14,7 @@ import { describe, it } from 'node:test';
 
 import { PALETTE_PRIMITIVES } from '../../src/admin/blocks-editor.ts';
 import type { DraftRecord } from '../../src/admin/unified-draft.ts';
-import { SaveConflict } from '../../src/admin/unified-save.ts';
+import { SaveConflict, SaveInvalid } from '../../src/admin/unified-save.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
 import type { BlockNode, BlockTree } from '../../src/lib/blocks.ts';
 import { renderBlockTree } from '../../src/lib/blocks-render.ts';
@@ -383,14 +383,14 @@ describe('unified editor shell', () => {
 
     const image = f.dock
       .querySelectorAll('.rkr-blocks-palette-item')
-      .find((btn) => btn.dataset.macro === 'primitive:figure');
+      .find((btn) => btn.dataset.macro === 'primitive:button');
     image?.click();
     for (let i = 0; i < 10; i++) await new Promise<void>((r) => setTimeout(r, 0));
 
     assert.equal(saved.length, 1, 'one save per insert');
     assert.deepEqual(
       saved[0]?.body.map((n) => n.type),
-      ['text', 'figure']
+      ['text', 'button']
     );
     assert.deepEqual(
       tree.body.map((n) => n.type),
@@ -529,7 +529,7 @@ describe('unified shell saving', () => {
     // A structural save carries the whole tree: the text leaves are untouched.
     f.dock
       .querySelectorAll('.rkr-blocks-palette-item')
-      .find((btn) => btn.dataset.macro === 'primitive:figure')
+      .find((btn) => btn.dataset.macro === 'primitive:button')
       ?.click();
     await tick();
     assert.equal(saved.length, 1);
@@ -815,30 +815,30 @@ describe('unified shell palette drop', () => {
     rectOf(target, 0, 90);
     const btn = f.dock
       .querySelectorAll('button')
-      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Image');
-    assert.ok(btn, 'palette has the Image primitive');
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Button');
+    assert.ok(btn, 'palette has the Button primitive');
     btn.dispatchEvent(
       Object.assign(new FakeEvent('dragstart'), {
-        dataTransfer: { ...dragData('primitive:figure'), setData: () => {} }
+        dataTransfer: { ...dragData('primitive:button'), setData: () => {} }
       })
     );
     target.dispatchEvent(
       Object.assign(new FakeEvent('dragover'), {
         clientY: 80,
-        dataTransfer: dragData('primitive:figure')
+        dataTransfer: dragData('primitive:button')
       })
     );
     target.dispatchEvent(
       Object.assign(new FakeEvent('drop'), {
         clientY: 80,
-        dataTransfer: dragData('primitive:figure')
+        dataTransfer: dragData('primitive:button')
       })
     );
     await tick();
     assert.equal(saved.length, 1);
     assert.deepEqual(
       saved[0]?.body.map((n) => n.type),
-      ['text', 'figure', 'text'],
+      ['text', 'button', 'text'],
       'figure lands after the first text leaf'
     );
   });
@@ -956,7 +956,7 @@ describe('unified shell palette drop', () => {
     rectOf(flow, 0, 1000);
     rectOf(one, 0, 100);
     rectOf(two, 600, 100);
-    const over = { clientY: 560, dataTransfer: dragData('primitive:figure') };
+    const over = { clientY: 560, dataTransfer: dragData('primitive:button') };
     flow.dispatchEvent(Object.assign(new FakeEvent('dragover'), over));
     assert.equal(two.getAttribute('data-drop'), 'before');
     assert.equal(flow.getAttribute('data-drop'), null, 'the flow edge is not marked');
@@ -965,7 +965,7 @@ describe('unified shell palette drop', () => {
     const kids = (saved.at(-1)?.body[0] as { children: BlockNode[] }).children;
     assert.deepEqual(
       kids.map((n) => n.type),
-      ['text', 'figure', 'text']
+      ['text', 'button', 'text']
     );
   });
 
@@ -1415,7 +1415,7 @@ describe('unified shell live re-render', () => {
     shell.setMode('edit');
     paletteButton(f, 'Text').click();
     await tick(2);
-    paletteButton(f, 'Image').click();
+    paletteButton(f, 'Button').click();
     await tick(2);
     gates[0]?.();
     await tick();
@@ -1426,14 +1426,14 @@ describe('unified shell live re-render', () => {
 
     assert.deepEqual(
       renders[1]?.body.map((n) => n.type),
-      ['text', 'text', 'figure']
+      ['text', 'text', 'button']
     );
     assert.equal(f.body.querySelectorAll('[data-rkr-blank]').length, 1);
-    assert.equal(f.body.querySelector('.rkr-unified-empty')?.getAttribute('data-rkr-path'), '2');
+    assert.ok(f.body.querySelector('[data-rkr-path="2"]'), 'the button is hydrated');
     assert.equal(saved.length, 1, 'one save, of the latest tree');
     assert.deepEqual(
       saved[0]?.body.map((n) => n.type),
-      ['text', 'text', 'figure']
+      ['text', 'text', 'button']
     );
   });
 
@@ -2093,5 +2093,219 @@ describe('unified shell add-block sheet', () => {
     assert.equal(f.body.hasAttribute('inert'), true, 'sheet still holds it');
     close.click();
     assert.equal(f.body.hasAttribute('inert'), false);
+  });
+});
+
+describe('unified shell media-first insert and refused saves', () => {
+  const IDS = 'cd'.repeat(32);
+  const tick = async (n = 10): Promise<void> => {
+    for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));
+  };
+  const button = (f: Fixture, label: string): FakeElement | undefined =>
+    f.root.querySelectorAll('button').find((b) => b.textContent === label);
+  const palette = (f: Fixture, label: string): FakeElement => {
+    const btn = f.dock
+      .querySelectorAll('button')
+      .find((b) => b.querySelector('.rkr-palette-label')?.textContent === label);
+    assert.ok(btn, `palette has ${label}`);
+    return btn;
+  };
+
+  function mediaShell(picked: string[]) {
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'Kept')]);
+    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Kept' }] };
+    const saved: BlockTree[] = [];
+    const renders: BlockTree[] = [];
+    const puts: DraftRecord[] = [];
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      onSave: async (t) => {
+        saved.push(t);
+      },
+      render: async (t) => {
+        renders.push(t);
+        return markedRender(t);
+      },
+      drafts: {
+        load: async () => null,
+        put: async (r) => {
+          puts.push(r);
+        },
+        clear: async () => {}
+      },
+      media: { pick: async () => picked, thumbUrl: () => null }
+    });
+    shell.setMode('edit');
+    return { f, shell, saved, renders, puts };
+  }
+
+  it('Image then Cancel saves nothing and removes the block', async () => {
+    const h = mediaShell([]);
+    palette(h.f, 'Image').click();
+    await tick();
+    assert.deepEqual(
+      h.renders[0]?.body.map((n) => n.type),
+      ['text', 'figure'],
+      'the block renders while the picker is open'
+    );
+    assert.ok(h.f.root.querySelector('[data-rkr-dialog]'));
+    button(h.f, 'Cancel')?.click();
+    await tick();
+    assert.equal(h.saved.length, 0);
+    assert.equal(h.puts.length, 0, 'no draft either');
+    assert.deepEqual(
+      h.renders.at(-1)?.body.map((n) => n.type),
+      ['text']
+    );
+    assert.equal(h.f.shellEl.getAttribute('data-save-state'), 'clean');
+    const p = h.f.body.querySelector('p');
+    assert.ok(p);
+    typeInto(p, 'Kept edited');
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.deepEqual(
+      h.saved.at(-1)?.body.map((n) => n.type),
+      ['text'],
+      'the cancelled block never reaches a later save'
+    );
+  });
+
+  it('Image then a pick saves once with the ids', async () => {
+    const h = mediaShell([IDS]);
+    palette(h.f, 'Image').click();
+    await tick();
+    assert.equal(h.saved.length, 0, 'nothing saves before the dialog commits');
+    button(h.f, 'Save figure')?.click();
+    await tick();
+    assert.equal(h.saved.length, 1);
+    assert.equal((h.saved[0]?.body[1] as { slots?: { ids?: string } }).slots?.ids, IDS);
+    assert.deepEqual(h.shell.selectedPath, [1]);
+  });
+
+  it('committing the dialog with nothing picked inserts nothing', async () => {
+    const h = mediaShell([]);
+    palette(h.f, 'Video').click();
+    await tick();
+    button(h.f, 'Save video')?.click();
+    await tick();
+    assert.equal(h.saved.length, 0);
+    assert.deepEqual(
+      h.renders.at(-1)?.body.map((n) => n.type),
+      ['text']
+    );
+  });
+
+  it('a dropped Image opens the picker before anything saves', async () => {
+    const h = mediaShell([]);
+    const p = h.f.body.querySelector('p');
+    assert.ok(p);
+    const data = { getData: () => 'primitive:figure', setData: () => {} };
+    p.dispatchEvent(Object.assign(new FakeEvent('drop'), { clientY: 0, dataTransfer: data }));
+    await tick();
+    assert.ok(h.f.root.querySelector('[data-rkr-dialog]'));
+    assert.equal(h.saved.length, 0);
+    button(h.f, 'Cancel')?.click();
+    await tick();
+    assert.equal(h.saved.length, 0);
+  });
+
+  it('a refused save selects and notes the block until the tree changes', async () => {
+    const message =
+      "This block can't be saved: the macro ghost no longer exists. Delete it to save.";
+    const f = fixture((doc) => [
+      marker(doc, '0'),
+      para(doc, 'A'),
+      marker(doc, '1'),
+      doc.createElement('section')
+    ]);
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'A' },
+        { type: 'macro', macro: 'ghost' }
+      ]
+    };
+    let sends = 0;
+    const shell = mount(f, tree, async () => {
+      sends++;
+      if (sends === 1) throw new SaveInvalid(message, [1]);
+    });
+    shell.setMode('edit');
+    const p = f.body.querySelector('p');
+    assert.ok(p);
+    typeInto(p, 'A edited');
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.deepEqual(shell.selectedPath, [1]);
+    const note = f.root.querySelector('.rkr-block-note');
+    assert.equal(note?.hidden, false);
+    assert.equal(note?.textContent, message);
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'unsaved');
+    f.root.querySelector('.rkr-unified-save')?.click();
+    await tick();
+    assert.equal(sends, 1, 'no retry until the tree changes');
+    p.click();
+    typeInto(p, 'A again');
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.equal(sends, 2);
+    f.body.querySelector('section')?.click();
+    assert.equal(f.root.querySelector('.rkr-block-note')?.hidden, true, 'the note is cleared');
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('Section inserts at page level after the selected block in a grid', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'grid', slots: { cols: 2 }, children: [{ type: 'text', markdown: 'In' }] },
+        { type: 'text', markdown: 'After' }
+      ]
+    };
+    const f = fixture((doc) => {
+      const grid = doc.createElement('div');
+      grid.className = 'rkr-grid';
+      grid.append(marker(doc, '0,0'), para(doc, 'In'));
+      return [marker(doc, '0'), grid, marker(doc, '1'), para(doc, 'After')];
+    });
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    f.body.querySelector('p')?.click();
+    assert.deepEqual(shell.selectedPath, [0, 0]);
+    palette(f, 'Section').click();
+    await tick();
+    const body = saved.at(-1)?.body ?? [];
+    assert.deepEqual(
+      body.map((n) => n.type),
+      ['grid', 'grid', 'text']
+    );
+    assert.equal((body[1] as { slots?: { band?: boolean } }).slots?.band, true);
+    assert.equal((body[0] as { children: unknown[] }).children.length, 1);
+    assert.deepEqual(shell.selectedPath, [1]);
+  });
+
+  it('a selected band grid reads Section in the toolbar', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        {
+          type: 'grid',
+          slots: { cols: 1, band: true, theme: 'light', edge: 'straight' },
+          children: [{ type: 'text', markdown: 'Inside' }]
+        }
+      ]
+    };
+    const f = fixture(() => []);
+    f.body.innerHTML = await markedRender(tree);
+    const shell = mount(f, tree);
+    shell.setMode('edit');
+    const band = f.body.querySelector('section');
+    assert.equal(band?.getAttribute('data-rkr-path'), '0');
+    band?.click();
+    assert.equal(f.root.querySelector('.rkr-block-type')?.textContent, 'Section');
   });
 });

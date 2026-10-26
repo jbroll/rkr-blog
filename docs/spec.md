@@ -419,9 +419,17 @@ the editing chrome. View and Edit are two modes of the same page.
 - **Palette** groups: Basics (Text, Button), Media (Image, Video),
   Layout (Section, Row, Column), Sections (site macros). Drag an item
   onto the page, or focus it and press Enter. Insert lands after the
-  selected block. If the selected block is a container, insert lands at
-  the end of that container; use Move to put a block after it. With
-  nothing selected, insert lands at the end of the page.
+  selected block. If the selected block is a grid, insert lands at
+  the end of that grid; use Move to put a block after it. With
+  nothing selected, insert lands at the end of the page. Section always
+  lands in the page body, after the selected block's top-level block.
+- **Layout presets** all insert a grid: Row `cols: 2`, Column `cols: 1`,
+  Section `cols: 1, band: true` (light, straight edge). The toolbar
+  label follows the slots: a band reads Section, one column reads
+  Column, otherwise Row (N columns).
+- **Image and Video** show the new block and open its picker. Nothing
+  saves or drafts until the dialog saves with something picked; Cancel,
+  or saving with nothing picked, removes the block.
 - **Phones**: the palette becomes an Add block bottom sheet.
   Phone preview narrows the page body to phone width. It does not make
   the site's viewport media queries fire, so rules keyed on the screen
@@ -445,7 +453,10 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
 - A save that would create a file whose name another page already uses
   gets `409`. An invalid tree, a title, subtitle, status, date or
   excerpt that is not a string, or tags that are not a list of strings
-  get `400` and are never stored.
+  get `400` and are never stored. A tree that breaks a hard rule gets
+  `400 { error: "invalid", message, path }`: the editor selects the
+  block at `path`, shows `message` in its toolbar, shows Not saved, and
+  does not retry until the tree changes.
 - A save from an editor bundle older than the running server (its
   `X-Rkr-Build` differs) gets `426`; the editor asks for a reload.
 - New page refuses a slug that a fixed route answers (`about`, `search`,

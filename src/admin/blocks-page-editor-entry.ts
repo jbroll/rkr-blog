@@ -28,7 +28,7 @@ import {
 import { initOpfsForUnifiedEditor } from './opfs-init-unified.ts';
 import { awaitDrainSettled } from './sync.ts';
 import { indexedDbDraftStore } from './unified-draft.ts';
-import { SaveConflict, SaveFailure, SaveOffline } from './unified-save.ts';
+import { invalidFromReply, SaveConflict, SaveFailure, SaveOffline } from './unified-save.ts';
 import { mountUnifiedShell } from './unified-shell.ts';
 import { uploadImage } from './upload.ts';
 import { uploadVideo } from './video-upload.ts';
@@ -193,6 +193,7 @@ if (root && slug && tree) {
       throw new SaveConflict(version);
     if (res.status === 409) throw new SaveFailure(SLUG_TAKEN);
     if (res.status === STALE_CLIENT_STATUS) throw new SaveFailure(STALE_EDITOR);
+    if (res.status === 400) throw invalidFromReply(reply);
     if (!res.ok) throw new Error(`save page ${res.status}`);
     recache.request();
     return version;
