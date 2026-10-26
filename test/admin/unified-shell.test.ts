@@ -16,7 +16,7 @@ import { PALETTE_PRIMITIVES } from '../../src/admin/blocks-editor.ts';
 import type { DraftRecord } from '../../src/admin/unified-draft.ts';
 import { SaveConflict, SaveInvalid } from '../../src/admin/unified-save.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
-import type { BlockNode, BlockTree } from '../../src/lib/blocks.ts';
+import { type BlockNode, type BlockTree, parseBlockTree } from '../../src/lib/blocks.ts';
 import { renderBlockTree } from '../../src/lib/blocks-render.ts';
 import type { ImageMap } from '../../src/lib/image-map.ts';
 import { type VideoMapView, WidgetRegistry } from '../../src/lib/widgets.ts';
@@ -1713,6 +1713,109 @@ describe('unified shell drafts and offline', () => {
     assert.equal(store.cleared, 1);
   });
 
+  const legacyFlow = (second: string): BlockTree =>
+    ({
+      version: 1,
+      body: [
+        {
+          type: 'flow',
+          blocks: [
+            { type: 'text', markdown: 'First' },
+            { type: 'text', markdown: second }
+          ]
+        }
+      ],
+      fields: { title: 'Kept title' }
+    }) as unknown as BlockTree;
+
+  it('a legacy flow draft restores as a grid whose blocks still edit and save', async () => {
+    const { f, tree } = hello();
+    const store = drafts({ tree: legacyFlow('Second'), baseVersion: 'v1', savedAt: 5 });
+    const saves: BlockTree[] = [];
+    const shell = mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v1',
+      drafts: store,
+      onSave: async (t) => {
+        saves.push(t);
+        return 'v2';
+      },
+      render: markedRender
+    });
+    await tick();
+    assert.deepEqual(
+      f.body.querySelectorAll('p').map((p) => p.textContent),
+      ['First', 'Second']
+    );
+    shell.setMode('edit');
+    const second = f.body.querySelectorAll('p')[1] as FakeElement;
+    second.click();
+    typeInto(second, 'Second edited');
+    second.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    const last = JSON.parse(JSON.stringify(saves.at(-1)));
+    assert.deepEqual(last, {
+      version: 1,
+      fields: { title: 'Kept title' },
+      body: [
+        {
+          type: 'grid',
+          slots: { cols: 1 },
+          children: [
+            { type: 'text', markdown: 'First' },
+            { type: 'text', markdown: 'Second edited' }
+          ]
+        }
+      ]
+    });
+  });
+
+  it('a legacy draft equal to the page is not unsaved work', async () => {
+    const f = fixture(() => []);
+    const tree = {
+      ...parseBlockTree(legacyFlow('Second')),
+      fields: { title: 'Kept title' }
+    };
+    f.body.innerHTML = await markedRender(tree);
+    const store = drafts({ tree: legacyFlow('Second'), baseVersion: 'v0', savedAt: 5 });
+    let saves = 0;
+    mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v1',
+      drafts: store,
+      onSave: async () => {
+        saves++;
+      },
+      render: markedRender
+    });
+    await tick();
+    assert.equal(saves, 0);
+    assert.equal(store.cleared, 1);
+    assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('a draft that no longer parses is dropped', async () => {
+    const { f, tree } = hello();
+    const bad = { version: 1, body: [{ type: 'nope' }] } as unknown as BlockTree;
+    const store = drafts({ tree: bad, baseVersion: 'v0', savedAt: 5 });
+    let saves = 0;
+    mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      drafts: store,
+      onSave: async () => {
+        saves++;
+      },
+      render: markedRender
+    });
+    await tick();
+    assert.equal(saves, 0);
+    assert.equal(store.cleared, 1);
+    assert.equal(f.body.querySelector('p')?.textContent, 'Hello');
+  });
+
   it('structural edits are refused offline; text edits still save', async (t) => {
     const nav = globalThis.navigator as { onLine?: boolean };
     Object.defineProperty(nav, 'onLine', { value: false, configurable: true });
@@ -2387,6 +2490,35 @@ describe('unified shell media-first insert and refused saves', () => {
     f.body.querySelector('section')?.click();
     assert.equal(f.root.querySelector('.rkr-block-note')?.hidden, true, 'the note is cleared');
     assert.equal(f.shellEl.getAttribute('data-save-state'), 'clean');
+  });
+
+  it('a refused save scrolls to the block and, in View mode, names it in the save status', async (t) => {
+    const message = 'An image block has no images.';
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'A' },
+        { type: 'text', markdown: 'B' }
+      ]
+    };
+    const f = fixture(() => []);
+    f.body.innerHTML = await markedRender(tree);
+    const proto = Object.getPrototypeOf(f.body) as { scrollIntoView?: unknown };
+    const scrolled: [string | null, unknown][] = [];
+    proto.scrollIntoView = function (this: FakeElement, o: unknown) {
+      scrolled.push([this.textContent, o]);
+    };
+    t.after(() => {
+      delete proto.scrollIntoView;
+    });
+    const shell = mount(f, tree, async () => {
+      throw new SaveInvalid(message, [1]);
+    });
+    await shell.applyTree({ ...tree, fields: { title: 'T' } });
+    await tick();
+    assert.deepEqual(shell.selectedPath, [1]);
+    assert.equal(f.toolbar.querySelector('.rkr-unified-save-state')?.textContent, message);
+    assert.deepEqual(scrolled, [['B', { block: 'nearest' }]]);
   });
 
   it('Section inserts at page level after the selected block in a grid', async () => {

@@ -50,12 +50,14 @@ export function readGridFields(slots: Slots | undefined): GridFields {
 export type ValidatedGridFields = { ok: true; slots: Slots } | { ok: false; error: string };
 
 /** Slots for the dialog's values. Defaults are left out, and `theme`,
- * `edge` and `widths` only appear where they apply. */
-export function validateGridFields(values: GridFields): ValidatedGridFields {
+ * `edge` and `widths` only appear where they apply. Stored widths the
+ * dialog does not offer (5 or 6 columns) survive while Columns is unchanged. */
+export function validateGridFields(values: GridFields, initial?: GridFields): ValidatedGridFields {
   const slots: Slots = { cols: Number(values.cols) };
   if (values.min !== 'medium') slots.min = values.min;
-  const widths = values.widths.trim();
-  if (widthsOffered(values.cols) && widths !== '') slots.widths = widths.split(/\s+/).join(' ');
+  const kept = initial?.cols === values.cols ? initial.widths : '';
+  const widths = (widthsOffered(values.cols) ? values.widths : kept).trim();
+  if (widths !== '') slots.widths = widths.split(/\s+/).join(' ');
   if (values.band) {
     slots.band = true;
     slots.theme = values.theme;
@@ -181,7 +183,7 @@ export function openGridDialog(root: Element, opts: GridDialogOpts): GridDialog 
     body: form,
     primaryLabel: 'Save',
     onPrimary: () => {
-      const result = validateGridFields(values);
+      const result = validateGridFields(values, opts.initial);
       if (!result.ok) {
         dialog.setError(result.error);
         return false;

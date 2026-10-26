@@ -146,6 +146,8 @@ describe('findDropSlot', () => {
     assert.equal(slot?.anchor, c);
     const above = find(root, 50, 110, grid, TEXT)(tree);
     assert.deepEqual(above && [above.index, above.axis], [2, 'horizontal']);
+    const deep = find(root, 210, 190, grid, TEXT)(tree);
+    assert.deepEqual(deep && [deep.index, deep.axis], [3, 'vertical']);
   });
 
   it('page-body slots are always horizontal', async () => {

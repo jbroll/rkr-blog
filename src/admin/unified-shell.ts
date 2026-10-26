@@ -21,7 +21,7 @@ import { createInertHolds, type ReleaseInert } from './inert-holds.ts';
 import { openPageSettings, readPageFields } from './page-settings.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
 import { createConfigurator } from './unified-configure.ts';
-import { type DraftStore, stableJson } from './unified-draft.ts';
+import { type DraftStore, restoreDraft } from './unified-draft.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
 import { createSavePipeline, type SavePipelineDeps, type SaveRefusal } from './unified-save.ts';
@@ -146,12 +146,21 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     win: deps.win,
     onRefused: (next) => {
       refusal = next;
-      if (next?.path && getAtPath(tree, next.path)) select(next.path);
-      else actions?.refresh();
+      if (!next?.path || !getAtPath(tree, next.path)) {
+        actions?.refresh();
+        return;
+      }
+      select(next.path);
+      unitFor(next.path)?.elements[0]?.scrollIntoView?.({ block: 'nearest' });
+      // View mode shows no block toolbar to carry the note.
+      if (mode !== 'edit') save.fail(next.message);
     }
   });
   // Dialog commits re-render, which needs the server.
   const refuseOffline = (): string | null => (offline() ? OFFLINE_DIALOG : null);
+
+  const unitFor = (path: Path): HydratedUnit | undefined =>
+    units.find((u) => u.path.join(',') === path.join(','));
 
   const unitAt = (target: unknown): HydratedUnit | null => {
     const card = (target as Element | null)?.closest?.('[data-rkr-path]');
@@ -288,8 +297,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     releaseRender();
     setMode(mode);
     if (opts.select && mode === 'edit') {
-      const key = opts.select.join(',');
-      const unit = units.find((u) => u.path.join(',') === key);
+      const unit = unitFor(opts.select);
       if (unit?.node.type === 'text') (unit.elements[0] as HTMLElement | undefined)?.focus();
       unit?.elements[0]?.scrollIntoView?.({ block: 'nearest' });
     }
@@ -428,9 +436,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     flushText,
     isEditing: () => mode === 'edit',
     noteFor: (path) => {
-      const key = path.join(',');
-      if (refusal?.path?.join(',') === key) return refusal.message;
-      const unit = units.find((u) => u.path.join(',') === key);
+      if (refusal?.path?.join(',') === path.join(',')) return refusal.message;
+      const unit = unitFor(path);
       return unit?.node.type === 'text' && !editable.has(unit) ? NOT_EDITABLE : null;
     },
     drag: { start: (path) => insert.beginMove(path), end: () => insert.endMove() }
@@ -447,20 +454,13 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
 
   setMode('view');
 
-  // A draft equal to the page is a save whose clear never ran; any other
-  // draft is unsynced work, saved against the version it was edited from.
-  const restoreDraft = async (store: DraftStore): Promise<void> => {
-    const draft = await store.load().catch(() => null);
-    if (!draft || tree !== deps.tree) return;
-    if (stableJson(draft.tree) === stableJson(tree)) {
-      await store.clear().catch(() => {});
-      return;
-    }
-    if (draft.baseVersion) save.rebase(draft.baseVersion, draft.savedAt);
-    await applyTree(draft.tree);
-    if (save.state() === 'clean') save.notice('Restored unsaved changes');
-  };
-  if (deps.drafts) void restoreDraft(deps.drafts);
+  if (deps.drafts) {
+    void restoreDraft(deps.drafts, {
+      pristine: () => (tree === deps.tree ? tree : null),
+      save,
+      applyTree: (next) => applyTree(next)
+    });
+  }
 
   // Last chance for a focused, unblurred edit; IndexedDB writes started
   // here usually complete.

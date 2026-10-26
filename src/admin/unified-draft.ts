@@ -6,7 +6,7 @@
 //
 // Browser-safe: no node:* imports.
 
-import type { BlockTree } from '../lib/blocks.ts';
+import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
 
 export interface DraftRecord {
   tree: BlockTree;
@@ -49,6 +49,47 @@ export function stableJson(value: unknown): string {
       ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
       : v
   );
+}
+
+/** A stored draft's tree in the current shape, or null when there is
+ * nothing to restore: it fails to parse or equals `current`. Drafts from
+ * before the grid change hold flow, section, row and col containers. */
+function draftToRestore(saved: BlockTree, current: BlockTree): BlockTree | null {
+  let tree: BlockTree;
+  try {
+    tree = { ...saved, ...parseBlockTree(saved) };
+  } catch {
+    return null;
+  }
+  return stableJson(tree) === stableJson(current) ? null : tree;
+}
+
+interface RestoreDeps {
+  /** The page tree while nothing has changed it; null once something has. */
+  pristine(): BlockTree | null;
+  save: {
+    rebase(version: string, restoredAt?: number): void;
+    state(): string;
+    notice(text: string): void;
+  };
+  applyTree(tree: BlockTree): Promise<void>;
+}
+
+/** Re-apply the stored draft on mount. A draft equal to the page is a save
+ * whose clear never ran; any other draft is unsynced work, saved against
+ * the version it was edited from. */
+export async function restoreDraft(store: DraftStore, deps: RestoreDeps): Promise<void> {
+  const draft = await store.load().catch(() => null);
+  const current = deps.pristine();
+  if (!draft || !current) return;
+  const restored = draftToRestore(draft.tree, current);
+  if (!restored) {
+    await store.clear().catch(() => {});
+    return;
+  }
+  if (draft.baseVersion) deps.save.rebase(draft.baseVersion, draft.savedAt);
+  await deps.applyTree(restored);
+  if (deps.save.state() === 'clean') deps.save.notice('Restored unsaved changes');
 }
 
 const OP_TIMEOUT_MS = 500;

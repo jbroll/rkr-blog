@@ -88,6 +88,17 @@ describe('grid dialog', () => {
     assert.deepEqual(commits[0], { cols: 5 });
   });
 
+  it('keeps stored widths on a 5 or 6 column grid until Columns changes', async () => {
+    const kept = open({ cols: 5, widths: '2 1 1 1 1', min: 'narrow' });
+    kept.dialog.setField('min', 'wide');
+    await kept.save();
+    assert.deepEqual(kept.commits[0], { cols: 5, min: 'wide', widths: '2 1 1 1 1' });
+    const changed = open({ cols: 6, widths: '1 1 1 1 1 2' });
+    changed.dialog.setField('cols', '5');
+    await changed.save();
+    assert.deepEqual(changed.commits[0], { cols: 5 });
+  });
+
   it('commits theme and edge only with the band on', async () => {
     const on = open({ cols: 1, band: true, theme: 'dark', edge: 'wave' });
     await on.save();

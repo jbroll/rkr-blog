@@ -597,6 +597,12 @@ before every request and clears it after the server has the tree
   draft has to exist before the first request. Every storage call is
   wrapped in a timeout (`within`) so a blocked open cannot hold up a
   save.
+- **Drafts are parsed on restore.** `restoreDraft` runs the stored tree
+  through `parseBlockTree` (keeping `fields`) before comparing and
+  applying it. A draft written before the grid change holds
+  `flow{blocks}` and `section`/`row`/`col`; the client's tree ops read
+  only `grid.children`, so an unparsed one would hydrate with every
+  nested block missing. A draft that fails to parse is dropped.
 - **Drafts survive the logout landing.** `?_rkr=logout` is a GET any
   link can reach, so `sw-unregister.ts` only drops the `rkr-admin-*`
   caches and the worker (`site/admin-caches.ts`). Draft deletion lives

@@ -554,7 +554,8 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   block when there is one: an unknown type (even one with `children`),
   `children` on a leaf or macro instance, a container whose
   `children`/`blocks` is not a list, and every hard rule. When `path` is
-  present the editor selects that block, shows `message` in its toolbar,
+  present the editor selects that block, scrolls it into view, shows
+  `message` in its toolbar (in View mode, in the save status instead),
   shows Not saved, and does not retry until the tree changes. A page
   that already breaks a rule still opens and renders. The editor marks
   the block ("This block can't be saved: the macro hero no longer
@@ -570,8 +571,11 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   queues derivative renders for its media.
 - The tree is written to an IndexedDB draft before each request and
   cleared once the server has it. After a failed or offline save the
-  draft restores on reload. The indicator shows clean, editing, saving,
-  unsaved, offline or conflict.
+  draft restores on reload. A draft is parsed like a page file before it
+  is restored, so one written before the grid change (`flow`, `section`,
+  `row`, `col`) comes back as grids. A draft equal to the page, or one
+  that no longer parses, is dropped. The indicator shows clean, editing,
+  saving, unsaved, offline or conflict.
 - Leaving with unsaved work asks for confirmation.
 - **Logout** with drafts the server lacks (compared page by page) shows
   "N pages have changes that never reached the server. Signing out
