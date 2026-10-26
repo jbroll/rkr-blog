@@ -116,6 +116,8 @@ const BLOCKS = `
 .rkr-block-action[hidden]{display:none}
 .rkr-block-action:disabled{opacity:.4;cursor:default}
 .rkr-block-drag{cursor:grab}
+.rkr-block-note{flex-basis:100%;padding:.15rem .4rem;color:var(--rkr-edit-muted)}
+.rkr-block-note[hidden]{display:none}
 `;
 
 const DIALOG = `

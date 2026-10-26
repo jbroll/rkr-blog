@@ -27,7 +27,8 @@ import {
   FakeEvent,
   type FakeNode,
   marker,
-  para
+  para,
+  typeInto
 } from './fake-dom.ts';
 
 interface Fixture {
@@ -419,7 +420,7 @@ describe('unified shell saving', () => {
       saved.push(t);
     });
     shell.setMode('edit');
-    p.textContent = 'Hello edited';
+    typeInto(p, 'Hello edited');
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick();
     assert.equal(saved.length, 1);
@@ -446,6 +447,93 @@ describe('unified shell saving', () => {
     assert.equal(saved.length, 0);
   });
 
+  it('focus then blur with no input never saves, even when the DOM differs', async () => {
+    const { f, p, tree } = textOnly();
+    const saved: BlockTree[] = [];
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    shell.setMode('edit');
+    p.textContent = 'Changed without an input event';
+    p.focus();
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.equal(saved.length, 0);
+  });
+
+  const mountRendered = async (
+    tree: BlockTree,
+    saved: BlockTree[] = []
+  ): Promise<{ f: Fixture; shell: ReturnType<typeof mount> }> => {
+    const html = await markedRender(tree);
+    const f = fixture((doc) => {
+      const holder = doc.createElement('div');
+      holder.innerHTML = html;
+      return [...holder.childNodes];
+    });
+    const shell = mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    return { f, shell };
+  };
+
+  it('a text block that fails the markdown round trip is not editable in place', async () => {
+    const { f, shell } = await mountRendered({
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'Look ![pic](/img/x.jpg) here' },
+        { type: 'text', markdown: 'Plain words' }
+      ]
+    });
+    shell.setMode('edit');
+    const [rich, plain] = f.body.querySelectorAll('p');
+    assert.equal(rich?.getAttribute('contenteditable'), null);
+    assert.equal(plain?.getAttribute('contenteditable'), 'true');
+
+    rich?.click();
+    assert.deepEqual(shell.selectedPath, [0]);
+    const note = f.root.querySelector('.rkr-block-note') as FakeElement;
+    assert.equal(note.hidden, false);
+    assert.equal(note.textContent, "This block has formatting the editor can't edit in place.");
+    plain?.click();
+    assert.equal(note.hidden, true);
+  });
+
+  it('images, quoted links and embeds stay byte-identical through focus and blur', async () => {
+    const source = [
+      'Look ![pic](/img/x.jpg) here',
+      '> Quote with [a link](https://example.com)',
+      '<iframe src="https://www.youtube.com/embed/x"></iframe>'
+    ];
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'flow', blocks: source.map((markdown) => ({ type: 'text', markdown })) }]
+    };
+    const saved: BlockTree[] = [];
+    const { f, shell } = await mountRendered(tree, saved);
+    shell.setMode('edit');
+    const leaves = f.body.querySelectorAll('[data-rkr-path]').filter((el) => {
+      return el.getAttribute('data-rkr-path') !== '0';
+    });
+    assert.equal(leaves.length, 3);
+    for (const el of leaves) {
+      assert.equal(el.getAttribute('contenteditable'), null, el.tagName);
+      el.focus();
+      el.dispatchEvent(new FakeEvent('focusout'));
+    }
+    await tick();
+    assert.equal(saved.length, 0);
+
+    // A structural save carries the whole tree: the text leaves are untouched.
+    f.dock
+      .querySelectorAll('.rkr-blocks-palette-item')
+      .find((btn) => btn.dataset.macro === 'primitive:figure')
+      ?.click();
+    await tick();
+    assert.equal(saved.length, 1);
+    assert.equal(JSON.stringify(saved[0]?.body[0]), JSON.stringify(tree.body[0]));
+  });
+
   it('blur during in-flight save: second save wins, ends clean', async () => {
     const { f, p, tree } = textOnly();
     const snapshots: BlockTree[] = [];
@@ -458,10 +546,10 @@ describe('unified shell saving', () => {
       await gate;
     });
     shell.setMode('edit');
-    p.textContent = 'First edit';
+    typeInto(p, 'First edit');
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick(2);
-    p.textContent = 'Second edit';
+    typeInto(p, 'Second edit');
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick(2);
     release();
@@ -481,7 +569,7 @@ describe('unified shell saving', () => {
       saved.push(t);
     });
     shell.setMode('edit');
-    p.textContent = 'Offline edit';
+    typeInto(p, 'Offline edit');
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick();
     assert.equal(saved.length, 0);
@@ -613,7 +701,7 @@ describe('unified shell figure dialog', () => {
     const h = editedFigure((f) => {
       const p = f.body.querySelectorAll('p').find((el) => el.textContent === 'Kept');
       assert.ok(p);
-      p.textContent = 'Kept edited';
+      typeInto(p, 'Kept edited');
       f.doc.activeElement = p;
     });
     await h.run();
@@ -1171,7 +1259,7 @@ describe('unified shell live re-render', () => {
     assert.equal(moved.textContent, 'Hello');
     assert.equal(moved.getAttribute('contenteditable'), 'true', 'edit mode is re-applied');
 
-    moved.textContent = 'Hello edited';
+    typeInto(moved, 'Hello edited');
     moved.dispatchEvent(new FakeEvent('focusout'));
     await tick();
     assert.deepEqual(saved.at(-1)?.body, [
@@ -1294,7 +1382,7 @@ describe('unified shell live re-render', () => {
     shell.setMode('edit');
     const p = f.body.querySelector('p');
     assert.ok(p);
-    p.textContent = 'Hello edited';
+    typeInto(p, 'Hello edited');
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick(2);
     paletteButton(f, 'Text').click();
@@ -1329,7 +1417,7 @@ describe('unified shell live re-render', () => {
     await tick();
     const blank = f.body.querySelector('[data-rkr-blank]');
     assert.ok(blank);
-    blank.textContent = 'New words';
+    typeInto(blank, 'New words');
     blank.dispatchEvent(new FakeEvent('focusout'));
     await tick();
     shell.setMode('view');
@@ -1562,7 +1650,7 @@ describe('unified shell drafts and offline', () => {
     );
 
     const p = f.body.querySelector('p') as FakeElement;
-    p.textContent = 'Typed offline';
+    typeInto(p, 'Typed offline');
     p.dispatchEvent(new FakeEvent('focusout'));
     await tick();
     assert.deepEqual(saved.at(-1)?.body, [{ type: 'text', markdown: 'Typed offline' }]);
@@ -1642,7 +1730,7 @@ describe('unified shell drafts and offline', () => {
     });
     shell.setMode('edit');
     const p = f.body.querySelector('p') as FakeElement;
-    p.textContent = 'Typed before closing';
+    typeInto(p, 'Typed before closing');
     f.doc.activeElement = p;
     win.dispatchEvent(new Event('pagehide'));
     assert.deepEqual(store.record?.tree.body, [{ type: 'text', markdown: 'Typed before closing' }]);
@@ -1760,7 +1848,7 @@ describe('unified shell drafts and offline', () => {
     await tick();
     const p = f.body.querySelectorAll('p').find((el) => el.textContent === 'Kept');
     assert.ok(p);
-    p.textContent = 'Kept offline';
+    typeInto(p, 'Kept offline');
     f.doc.activeElement = p;
     button('Cancel')?.click();
     await tick();

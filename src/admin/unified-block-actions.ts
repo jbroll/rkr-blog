@@ -26,6 +26,8 @@ export interface BlockActionsEnv {
   flushText?(): void;
   /** Toolbar and shortcuts only act in edit mode. Defaults to true. */
   isEditing?(): boolean;
+  /** A note shown in the toolbar for the selected block, or null. */
+  noteFor?(path: Path): string | null;
   /** Drag-handle hooks; the drop itself is handled by the insert module. */
   drag?: { start(path: Path): void; end(): void };
 }
@@ -205,6 +207,10 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   button('duplicate', 'Duplicate', 'Duplicate', duplicate);
   const config = button('configure', 'Configure', 'Configure', configure);
   button('delete', 'Delete', 'Delete', remove);
+  const note = doc.createElement('span');
+  note.className = 'rkr-block-note';
+  note.hidden = true;
+  bar.append(note);
   host.append(bar);
 
   const setDisabled = (el: Element, off: boolean): void => {
@@ -262,6 +268,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     setDisabled(up, idx === 0);
     setDisabled(down, idx >= size - 1);
     config.hidden = !env.canConfigure(node);
+    const text = env.noteFor?.(path) ?? null;
+    note.textContent = text ?? '';
+    note.hidden = !text;
     bar.hidden = false;
     outline.hidden = false;
     position();

@@ -503,8 +503,13 @@ in place:
   node renders something (blank text renders a placeholder), so no path
   is skipped and paths never depend on DOM shape.
 - Text blur serializes the DOM back to markdown (`dom-markdown.ts`) and
-  edits the tree in place. Anything outside the supported subset is
-  escaped as literal text, never dropped.
+  edits the tree in place. The serializer covers paragraphs, emphasis,
+  links, lists, headings and code; it loses images, quote formatting
+  and raw HTML. So at hydrate a text unit is contenteditable only when
+  `domToMarkdown` of its rendered elements equals its stored markdown,
+  and blur commits only units that received an `input` event since
+  their last commit. A unit that fails the round trip can never be
+  rewritten by a blur.
 - A structural change (insert, move, duplicate, delete, dialog commit)
   computes the next tree with the pure ops in `block-tree-ops.ts` and
   `block-move.ts`, posts it to `POST /admin/blocks/_render`, and swaps in

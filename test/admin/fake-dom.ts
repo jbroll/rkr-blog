@@ -421,3 +421,9 @@ export function el(
   }
   return element;
 }
+
+/** What a keystroke does to a contenteditable leaf: new text, then `input`. */
+export function typeInto(target: FakeElement, value: string): void {
+  target.textContent = value;
+  target.dispatchEvent(new FakeEvent('input'));
+}

@@ -394,7 +394,11 @@ the editing chrome. View and Edit are two modes of the same page.
 - **Edit** makes text editable in place, shows the block palette, and
   outlines blocks on hover and selection. Ctrl/Cmd+E switches modes.
   Ctrl/Cmd+S saves now.
-- **Text** saves on blur. Typing never shows markdown syntax.
+- **Text** saves on blur after typing; focusing and leaving a block
+  never saves. Typing never shows markdown syntax. A text block whose
+  formatting the editor cannot reproduce (an image inside text, a quote,
+  raw HTML, an embed) is not editable in place. Selecting it says so,
+  and it can still be moved, duplicated and deleted.
 - **Selecting** a block shows a toolbar: drag handle, Up, Down,
   Duplicate, Configure, Delete. With a block selected: Alt+Up/Down move
   it, Ctrl/Cmd+D duplicates, Delete or Backspace deletes, Enter

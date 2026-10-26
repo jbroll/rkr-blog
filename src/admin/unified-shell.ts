@@ -64,6 +64,7 @@ export interface UnifiedShell {
 }
 
 const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
+const NOT_EDITABLE = "This block has formatting the editor can't edit in place.";
 const OFFLINE_STRUCTURE = 'Reconnect to add or move blocks';
 const OFFLINE_DIALOG = "You're offline. Keep this open and save when you reconnect.";
 
@@ -107,6 +108,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   let selected: Path | null = null;
   let units: HydratedUnit[] = [];
   let unitOf = new Map<Element, HydratedUnit>();
+  // Text units whose DOM serializes back to their stored markdown. Any
+  // other unit would lose content on save, so it is never contenteditable.
+  let editable = new Set<HydratedUnit>();
+  // Units typed into since their last commit; only these ever save.
+  const dirty = new Set<HydratedUnit>();
   let generation = 0;
   let latest: Promise<void> = Promise.resolve();
 
@@ -144,7 +150,8 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const commitText = (target: unknown): void => {
     if (shown !== tree) return;
     const unit = unitAt(target);
-    if (!unit) return;
+    if (!unit || !dirty.has(unit)) return;
+    dirty.delete(unit);
     const before = textSource(getAtPath(tree, unit.path));
     if (before === null) return;
     const after = domToMarkdown(unit.elements);
@@ -168,7 +175,9 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     commitText(ev.target);
   });
 
-  body.addEventListener('input', () => {
+  body.addEventListener('input', (ev: Event) => {
+    const unit = unitAt(ev.target);
+    if (unit && editable.has(unit)) dirty.add(unit);
     save.markEditing();
   });
 
@@ -182,6 +191,13 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   const reindex = (): void => {
     units = hydrate(shown, body);
     unitOf = new Map(units.flatMap((u) => u.elements.map((el) => [el, u] as const)));
+    editable = new Set(
+      units.filter((u) => {
+        const source = textSource(u.node);
+        return source !== null && domToMarkdown(u.elements) === source;
+      })
+    );
+    dirty.clear();
   };
 
   const openSettings = (): void => {
@@ -225,7 +241,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     if (next === 'edit') doc.documentElement.setAttribute('data-rkr-editing', '');
     else doc.documentElement.removeAttribute('data-rkr-editing');
     for (const unit of units) {
-      if (unit.node.type !== 'text') continue;
+      if (!editable.has(unit)) continue;
       for (const el of unit.elements) {
         if (next === 'edit') el.setAttribute('contenteditable', 'true');
         else el.removeAttribute('contenteditable');
@@ -345,6 +361,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     canConfigure,
     flushText,
     isEditing: () => mode === 'edit',
+    noteFor: (path) => {
+      const key = path.join(',');
+      const unit = units.find((u) => u.path.join(',') === key);
+      return unit?.node.type === 'text' && !editable.has(unit) ? NOT_EDITABLE : null;
+    },
     drag: { start: (path) => insert.beginMove(path), end: () => insert.endMove() }
   });
 
