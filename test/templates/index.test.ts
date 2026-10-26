@@ -386,7 +386,7 @@ test('renderIndexPage: sort toggle preserves ?tag= param', () => {
   assert.match(html, /href="\/\?tag=travel"/);
 });
 
-test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, no text label', () => {
+test('renderIndexPage: admin sort toggle is the same ?sort= link visitors get', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },
     assets,
@@ -395,9 +395,9 @@ test('renderIndexPage: admin sort toggle is a button with data-sort-toggle, no t
     isAdmin: true,
     posts: []
   });
-  assert.match(html, /<button[^>]*data-sort-toggle/);
-  assert.doesNotMatch(html, /oldest first|newest first/);
-  assert.doesNotMatch(html, /href="\/\?sort=asc"/);
+  assert.match(html, /<a class="rkr-sort-toggle" href="\/\?sort=asc"/);
+  assert.doesNotMatch(html, /data-sort-toggle/);
+  assert.doesNotMatch(html, /<button[^>]*rkr-sort-toggle/);
 });
 
 test('renderIndexPage: pager preserves ?sort= when asc', () => {

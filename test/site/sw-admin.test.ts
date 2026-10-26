@@ -145,12 +145,15 @@ test('editor navigation: offline serves the last render of the same page', async
   assert.equal(await (res as Response).text(), 'network:https://x.test/admin/blocks/edit/hello');
 });
 
-test('editor navigation: the query string does not split the cached copy', async () => {
+test('editor navigation: offline, a query-string request falls back to the path copy', async () => {
   const e = env(okPrecache);
   await precacheInstall(e);
-  await handleFetch(e, navRequest('https://x.test/admin/blocks/edit/hello?e2e=1'));
-  const res = await handleFetch(offline(e), navRequest('https://x.test/admin/blocks/edit/hello'));
-  assert.equal((res as Response).status, 200);
+  await handleFetch(e, navRequest('https://x.test/admin/blocks/edit/hello'));
+  const res = await handleFetch(
+    offline(e),
+    navRequest('https://x.test/admin/blocks/edit/hello?e2e=1')
+  );
+  assert.equal(await (res as Response).text(), 'network:https://x.test/admin/blocks/edit/hello');
 });
 
 test('editor navigation: offline, a page never opened yields 503, not a throw', async () => {
@@ -165,6 +168,16 @@ test('pages list navigation: network-first with a cached fallback', async () => 
   const e = env(okPrecache);
   await precacheInstall(e);
   await handleFetch(e, navRequest('https://x.test/admin/blocks'));
+  const res = await handleFetch(offline(e), navRequest('https://x.test/admin/blocks'));
+  assert.equal(await (res as Response).text(), 'network:https://x.test/admin/blocks');
+});
+
+test('pages list: a filtered render never replaces the cached full list', async () => {
+  const e = env(okPrecache);
+  await precacheInstall(e);
+  await handleFetch(e, navRequest('https://x.test/admin/blocks'));
+  const filtered = await handleFetch(e, navRequest('https://x.test/admin/blocks?q=trip'));
+  assert.equal(await (filtered as Response).text(), 'network:https://x.test/admin/blocks?q=trip');
   const res = await handleFetch(offline(e), navRequest('https://x.test/admin/blocks'));
   assert.equal(await (res as Response).text(), 'network:https://x.test/admin/blocks');
 });

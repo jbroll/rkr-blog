@@ -12,6 +12,7 @@ import type { BlockTree } from '../lib/blocks.ts';
 import { EDITOR_SAVED } from '../site/sw-admin-core.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
 import { getPreviewUrl, hasWebglSupport } from './canvas-loaders.ts';
+import { createRecache, guardUnload, shouldWarnOnLeave } from './editor-leave.ts';
 import type { ImageEditorHost, MediaDialogDeps } from './figure-dialog-tree.ts';
 import { imageEditPipeline } from './image-edit.ts';
 import { type ImageEditPanel, wireImageEditPanel } from './image-edit-panel.ts';
@@ -114,10 +115,11 @@ function imageEditorHost(): ImageEditorHost {
 
 /** Media deps for the shell. The shell mounts before OPFS is ready, so
  * uploads and the image editor check `opfs()` when they are used. */
+let imageEditor: ImageEditorHost | undefined;
+
 function pageMedia(opfs: () => boolean): MediaDialogDeps {
   const posters = new Map<string, string>();
   const localThumbs = new Map<string, string>();
-  let editor: ImageEditorHost | undefined;
   const io: Pick<MediaSourceDeps, 'upload' | 'settle'> = {
     upload: async (kind, file) => {
       if (kind === 'image') return opfs() ? (await uploadImage(file)).id : uploadImageDirect(file);
@@ -147,25 +149,25 @@ function pageMedia(opfs: () => boolean): MediaDialogDeps {
       return url;
     },
     get imageEditor() {
-      if (opfs()) editor ??= imageEditorHost();
-      return editor;
+      if (opfs()) imageEditor ??= imageEditorHost();
+      return imageEditor;
     }
   };
 }
 
-let recacheTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** Ask the service worker to re-cache this page once saves settle, so an
- * offline reload opens the saved tree rather than the one first loaded. */
-function recacheAfterSave(): void {
-  clearTimeout(recacheTimer);
-  recacheTimer = setTimeout(() => {
+// The service worker re-caches this page after saves, so an offline
+// reload opens the saved tree rather than the one first loaded.
+const recache = createRecache({
+  win: window,
+  doc: document,
+  timers: window,
+  post: () => {
     navigator.serviceWorker?.controller?.postMessage({
       type: EDITOR_SAVED,
       path: location.pathname
     });
-  }, 1000);
-}
+  }
+});
 
 const tree = embeddedTree();
 
@@ -188,7 +190,7 @@ if (root && slug && tree) {
       throw new SaveConflict(version);
     if (res.status === 409) throw new SaveFailure(SLUG_TAKEN);
     if (!res.ok) throw new Error(`save page ${res.status}`);
-    recacheAfterSave();
+    recache.request();
     return version;
   };
 
@@ -217,6 +219,13 @@ if (root && slug && tree) {
         render,
         media: pageMedia(() => opfsReady)
       });
+      guardUnload(window, () =>
+        shouldWarnOnLeave({
+          saveState:
+            root.querySelector('#rkr-unified-shell')?.getAttribute('data-save-state') ?? null,
+          imageDirty: imageEditor?.dirty() ?? false
+        })
+      );
       opfsReady = await initOpfsForUnifiedEditor();
     } catch (err: unknown) {
       root.innerHTML = `<p role="alert">Editor failed to load: ${err instanceof Error ? err.message : String(err)}</p>`;

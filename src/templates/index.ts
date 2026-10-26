@@ -90,7 +90,7 @@ export function renderIndexPage(data: IndexPageData): string {
   ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
 </nav>`
       : '';
-  const sortToggle = renderSortToggle(isAsc, activeTags, data.isAdmin);
+  const sortToggle = renderSortToggle(isAsc, activeTags);
   const tagRail = renderTagRail(data.tagCounts, activeTags, `${sortToggle}${renderSearchForm()}`);
   const head = siteHead(data.site, {
     isAdmin: data.isAdmin,
@@ -257,23 +257,10 @@ function renderTagRail(
 </aside>`;
 }
 
-/** Sort toggle.
- * Admin view: a client-side button (posts-list.js sorts the table without a reload).
- * Anonymous view: a link that adds/removes ?sort=asc via server-side requery. */
-function renderSortToggle(
-  isAsc: boolean,
-  activeTags: string[],
-  isAdmin: boolean | undefined
-): string {
+/** Sort toggle: a link that adds/removes ?sort=asc via server-side
+ * requery, for admins and visitors alike. */
+function renderSortToggle(isAsc: boolean, activeTags: string[]): string {
   const sortIcon = icon('arrowUpDown', 14);
-  if (isAdmin) {
-    // Button sorts the table client-side without a reload.
-    // data-sort-dir reflects the current server-rendered order so the
-    // first click always flips to the opposite direction.
-    const dir = isAsc ? 'asc' : 'desc';
-    const title = isAsc ? 'Newest first' : 'Oldest first';
-    return `<button class="rkr-sort-toggle" data-sort-toggle data-sort-dir="${dir}" title="${title}" aria-label="${title}">${sortIcon}</button>\n`;
-  }
   const tagQS = activeTags.length
     ? activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')
     : '';

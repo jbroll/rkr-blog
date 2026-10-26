@@ -72,3 +72,39 @@ test('a previously opened page loads offline, edit-capable, with its last saved 
 
   await context.setOffline(false);
 });
+
+test('leaving right after a save still re-caches the saved page', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-offline-leave-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Leave fast', markdown: 'Before the save.' });
+
+  await page.goto('/admin/blocks');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await expect
+    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+    .toBe(true);
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const para = page.locator('#rkr-blocks-page-body p').first();
+  await expect(para).toHaveAttribute('contenteditable', 'true');
+  const saved = page.waitForResponse(
+    (r) => r.url().endsWith(`/admin/blocks/${slug}`) && r.request().method() === 'POST'
+  );
+  await para.click();
+  await para.fill('Saved, then left.');
+  await page.keyboard.press('Tab');
+  expect((await saved).status()).toBe(200);
+  await page.goto('/admin/blocks');
+
+  await expect
+    .poll(() =>
+      page.evaluate(async (path) => {
+        const hit = await caches.match(path, { ignoreSearch: true });
+        return hit ? hit.text() : null;
+      }, `/admin/blocks/edit/${slug}`)
+    )
+    .toContain('Saved, then left.');
+});

@@ -55,12 +55,15 @@ function isNetworkFirst(url: URL, req: Request): boolean {
   return url.pathname === '/admin/blocks' || EDIT_PAGE.test(url.pathname);
 }
 
-/** Network-first, keyed by path: the query never changes the render. */
+/** Network-first, keyed by path; offline, any query falls back to it. */
 async function networkFirst(env: SwEnv, req: Request, key: string): Promise<Response> {
   try {
     const res = await env.fetch(req);
+    // A query render (a filtered pages list) must not replace the full copy.
     // Awaited so respondWith keeps the worker alive until the write lands.
-    if (res.ok) await putCurrent(env, key, res.clone()).catch(() => {});
+    if (res.ok && !new URL(req.url).search) {
+      await putCurrent(env, key, res.clone()).catch(() => {});
+    }
     return res;
   } catch {
     const hit = await env.caches.match(key, { ignoreSearch: true });
