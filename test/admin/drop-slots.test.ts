@@ -132,6 +132,30 @@ describe('findDropSlot', () => {
     ]);
   });
 
+  it('the free cell after the last item of a wrapped grid takes a vertical slot after it', async () => {
+    const { tree, root } = await page([
+      { type: 'grid', slots: { cols: 2 }, children: [text('A'), text('B'), text('C')] }
+    ]);
+    const grid = root.querySelector('.rkr-grid');
+    const [a, b, c] = root.querySelectorAll('.rkr-grid-cell');
+    rect(a, 0, 0, 100, 100);
+    rect(b, 120, 0, 100, 100);
+    rect(c, 0, 120, 100, 100);
+    const slot = find(root, 170, 170, grid, TEXT)(tree);
+    assert.deepEqual(slot && [slot.index, slot.side, slot.axis], [3, 'after', 'vertical']);
+    assert.equal(slot?.anchor, c);
+    const above = find(root, 50, 110, grid, TEXT)(tree);
+    assert.deepEqual(above && [above.index, above.axis], [2, 'horizontal']);
+  });
+
+  it('page-body slots are always horizontal', async () => {
+    const { tree, root } = await page([text('Only')]);
+    const [p] = root.querySelectorAll('p');
+    rect(p, 0, 0, 300, 100);
+    const slot = find(root, 450, 70, root, TEXT)(tree);
+    assert.deepEqual(slot && [slot.parentPath, slot.index, slot.axis], [[], 1, 'horizontal']);
+  });
+
   it('a lone cell beside free space takes a vertical slot after it', async () => {
     const { tree, root } = await page([
       { type: 'grid', slots: { cols: 2 }, children: [text('Left')] }

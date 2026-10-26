@@ -1041,12 +1041,6 @@ describe('unified shell palette drop', () => {
   });
 
   it('click appends at the end of the focused container', async () => {
-    const f = fixture((doc) => {
-      const section = doc.createElement('section');
-      section.className = 'rkr-section';
-      section.append(marker(doc, '0,0'), para(doc, 'In'));
-      return [marker(doc, '0'), section, marker(doc, '1'), para(doc, 'After')];
-    });
     const tree: BlockTree = {
       version: 1,
       body: [
@@ -1058,12 +1052,15 @@ describe('unified shell palette drop', () => {
         { type: 'text', markdown: 'After' }
       ]
     };
+    const f = fixture(() => []);
+    f.body.innerHTML = await markedRender(tree);
     const saved: BlockTree[] = [];
     const shell = mount(f, tree, async (t) => {
       saved.push(t);
     });
     shell.setMode('edit');
     f.body.querySelector('section')?.click();
+    assert.deepEqual(shell.selectedPath, [0]);
     const btn = f.dock
       .querySelectorAll('button')
       .find((b) => b.querySelector('.rkr-palette-label')?.textContent === 'Text');

@@ -145,18 +145,7 @@ function edge(box: Box, axis: Axis, end: 'start' | 'end'): Box {
   return { top: y, bottom: y, left: box.left, right: box.right };
 }
 
-/** A lone item has no neighbour to read the axis from, so its end gap
- * takes whichever edge the pointer is nearest. */
-function endGap(
-  item: Item,
-  neighbour: Item | undefined,
-  end: 'start' | 'end',
-  x: number,
-  y: number
-): Gap {
-  const axes: Axis[] = neighbour
-    ? [sideBySide(item.box, neighbour.box) ? 'vertical' : 'horizontal']
-    : ['horizontal', 'vertical'];
+function endGap(item: Item, axes: Axis[], end: 'start' | 'end', x: number, y: number): Gap {
   const [axis, dist] = axes
     .map((a): [Axis, number] => [a, distance(x, y, edge(item.box, a, end))])
     .reduce((best, next) => (next[1] < best[1] ? next : best));
@@ -165,18 +154,36 @@ function endGap(
     : { index: item.index + 1, anchor: item.last, side: 'after', axis, dist };
 }
 
-function nearestGap(items: Item[], x: number, y: number): Gap {
-  const gaps: Gap[] = [endGap(items[0] as Item, items[1], 'start', x, y)];
+/** Axes an end gap may take. A lone item has no neighbour to read the
+ * axis from, and the last item of a wrapped row has free cells to its
+ * right, so both offer the side edge as well. */
+function endAxes(items: Item[], end: 'start' | 'end', rowRight: number): Axis[] {
+  const item = (end === 'start' ? items[0] : items[items.length - 1]) as Item;
+  const neighbour = end === 'start' ? items[1] : items[items.length - 2];
+  if (!neighbour) return ['horizontal', 'vertical'];
+  if (sideBySide(item.box, neighbour.box)) return ['vertical'];
+  return end === 'end' && rowRight > item.box.right ? ['horizontal', 'vertical'] : ['horizontal'];
+}
+
+/** `rowRight` is the rightmost cell edge, which a padded grid box would
+ * overstate; null for the page body, which always stacks. */
+function nearestGap(items: Item[], x: number, y: number, rowRight: number | null): Gap {
+  const stack = rowRight === null;
+  const axesAt = (end: 'start' | 'end'): Axis[] =>
+    rowRight === null ? ['horizontal'] : endAxes(items, end, rowRight);
+  const gaps: Gap[] = [endGap(items[0] as Item, axesAt('start'), 'start', x, y)];
   for (let k = 1; k < items.length; k++) {
     const a = items[k - 1] as Item;
     const b = items[k] as Item;
+    const vertical = !stack && sideBySide(a.box, b.box);
+    // A row break's gap sits over the next row's first cell, not across
+    // the whole grid, so the free cells beside the last row stay free.
     const span = {
       top: Math.min(a.box.top, b.box.top),
       bottom: Math.max(a.box.bottom, b.box.bottom),
-      left: Math.min(a.box.left, b.box.left),
-      right: Math.max(a.box.right, b.box.right)
+      left: vertical ? Math.min(a.box.left, b.box.left) : b.box.left,
+      right: vertical ? Math.max(a.box.right, b.box.right) : b.box.right
     };
-    const vertical = sideBySide(a.box, b.box);
     const [from, to] = vertical ? [a.box.right, b.box.left] : [a.box.bottom, b.box.top];
     const lo = Math.min(from, to);
     const hi = Math.max(from, to);
@@ -189,7 +196,7 @@ function nearestGap(items: Item[], x: number, y: number): Gap {
       dist: distance(x, y, seg)
     });
   }
-  gaps.push(endGap(items[items.length - 1] as Item, items[items.length - 2], 'end', x, y));
+  gaps.push(endGap(items[items.length - 1] as Item, axesAt('end'), 'end', x, y));
   return gaps.reduce((best, next) => (next.dist < best.dist ? next : best));
 }
 
@@ -241,7 +248,8 @@ export function findDropSlot(
       axis: 'horizontal'
     };
   } else {
-    const { dist: _dist, ...gap } = nearestGap(items, x, y);
+    const rowRight = gridEl ? Math.max(...items.map((i) => i.box.right)) : null;
+    const { dist: _dist, ...gap } = nearestGap(items, x, y, rowRight);
     slot = { parentPath, ...gap };
   }
   return legal(tree, slot, dragged, from) ? slot : null;
