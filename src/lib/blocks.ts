@@ -151,6 +151,36 @@ export function parseBlockTree(json: unknown): BlockTree {
   return { version: 1, body: json.body.map(parseNode) };
 }
 
+const CONTAINER_TYPES = new Set(['grid', 'section', 'row', 'col', 'flow']);
+
+/** Hard rule 4 on the raw request body, because `parseBlockTree` drops
+ * children from leaves and macros and empties a non-array container.
+ * Paths are raw paths. */
+export function rawChildrenProblem(body: unknown): { path: number[]; message: string } | null {
+  const visit = (raw: unknown, path: number[]): { path: number[]; message: string } | null => {
+    if (!isRecord(raw) || typeof raw.type !== 'string') return null;
+    if (!CONTAINER_TYPES.has(raw.type)) {
+      return 'children' in raw
+        ? { path, message: `A ${raw.type} block can't hold other blocks.` }
+        : null;
+    }
+    const kids = 'children' in raw ? raw.children : raw.blocks;
+    if (kids === undefined) return null;
+    if (!Array.isArray(kids)) return { path, message: 'A grid needs a list of blocks.' };
+    for (const [i, kid] of kids.entries()) {
+      const found = visit(kid, [...path, i]);
+      if (found) return found;
+    }
+    return null;
+  };
+  if (!Array.isArray(body)) return null;
+  for (const [i, node] of body.entries()) {
+    const found = visit(node, [i]);
+    if (found) return found;
+  }
+  return null;
+}
+
 const MAX_GRID_LEVELS = 3;
 
 function hasIds(slots: Slots | undefined): boolean {

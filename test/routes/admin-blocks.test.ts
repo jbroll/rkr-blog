@@ -299,6 +299,104 @@ describe('admin blocks save', () => {
     assert.equal(slug.statusCode, 404);
   });
 
+  describe('hard rules on save', () => {
+    const save = (app: Awaited<ReturnType<typeof setup>>['app'], body: unknown[]) =>
+      app.inject({
+        method: 'POST',
+        url: '/admin/blocks/rules',
+        payload: { tree: { version: 1, body } }
+      });
+    const rulesFile = (root: string) => path.join(root, 'content', 'blocks', 'rules.json');
+
+    it('a missing macro is 400 with its path and nothing is written', async (t) => {
+      const { root, app } = await setup(t);
+      const res = await save(app, [{ type: 'macro', macro: 'gone' }]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json(), {
+        error: 'invalid',
+        path: [0],
+        message: "This block can't be saved: the macro gone no longer exists. Delete it to save."
+      });
+      assert.equal(fs.existsSync(rulesFile(root)), false);
+    });
+
+    it('an empty figure is 400', async (t) => {
+      const { app } = await setup(t);
+      const res = await save(app, [{ type: 'figure', slots: {} }]);
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.json().error, 'invalid');
+    });
+
+    it('a grid nested four deep is 400', async (t) => {
+      const { app } = await setup(t);
+      const deep = {
+        type: 'grid',
+        children: [{ type: 'grid', children: [{ type: 'grid', children: [{ type: 'grid' }] }] }]
+      };
+      const res = await save(app, [deep]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json().path, [0, 0, 0, 0]);
+    });
+
+    it('a text node with children is 400 at its raw path', async (t) => {
+      const { root, app } = await setup(t);
+      const res = await save(app, [
+        {
+          type: 'row',
+          blocks: [
+            { type: 'text', markdown: 'a' },
+            { type: 'text', children: [] }
+          ]
+        }
+      ]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json(), {
+        error: 'invalid',
+        path: [0, 1],
+        message: "A text block can't hold other blocks."
+      });
+      assert.equal(fs.existsSync(rulesFile(root)), false);
+    });
+
+    it('a grid whose children is not a list is 400', async (t) => {
+      const { app } = await setup(t);
+      const res = await save(app, [{ type: 'grid', children: 'x' }]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json().path, [0]);
+    });
+
+    it('shorthand saves as an expanded grid', async (t) => {
+      const { root, app } = await setup(t);
+      const res = await save(app, [
+        {
+          type: 'row',
+          children: [
+            { type: 'text', markdown: 'a' },
+            { type: 'text', markdown: 'b' }
+          ]
+        }
+      ]);
+      assert.equal(res.statusCode, 200);
+      const stored = fs.readFileSync(rulesFile(root), 'utf8');
+      assert.match(stored, /"type": "grid"/);
+      assert.doesNotMatch(stored, /"row"/);
+    });
+
+    it('a stored page with an unknown macro still opens', async (t) => {
+      const { root, app } = await setup(t);
+      fs.writeFileSync(
+        rulesFile(root),
+        JSON.stringify({
+          version: 1,
+          body: [{ type: 'macro', macro: 'gone' }],
+          fields: { title: 'Rules', slug: 'rules' }
+        })
+      );
+      const res = await app.inject({ method: 'GET', url: '/admin/blocks/edit/rules' });
+      assert.equal(res.statusCode, 200);
+    });
+  });
+
   it('GET /admin/blocks/:slug returns the stored tree as JSON', async (t) => {
     const { root, app } = await setup(t);
     fs.writeFileSync(

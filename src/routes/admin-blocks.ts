@@ -18,7 +18,12 @@ import {
   listBlockPages,
   readBlockPage
 } from '../lib/block-pages.ts';
-import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
+import {
+  type BlockTree,
+  parseBlockTree,
+  rawChildrenProblem,
+  validateForSave
+} from '../lib/blocks.ts';
 import { renderEditBody } from '../lib/blocks-edit-render.ts';
 import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
 import { staleClientRejection } from '../lib/client-build.ts';
@@ -310,10 +315,16 @@ export function registerAdminBlockRoutes(
         const raw = (body as { tree: unknown }).tree;
         if (!raw || typeof raw !== 'object') throw new Error('missing tree');
         const rec = raw as { version?: unknown; body?: unknown; fields?: unknown };
+        const childless = rawChildrenProblem(rec.body);
+        if (childless) return reply.code(400).send({ error: 'invalid', ...childless });
+        const parsed = parseBlockTree({ version: 1, body: rec.body });
+        const macroNames = new Set(loadMacroLibrary(`${siteRoot}/macros`, req.log).keys());
+        const problem = validateForSave(parsed, macroNames);
+        if (problem) return reply.code(400).send({ error: 'invalid', ...problem });
         existing = findBlockFile(siteRoot, slug);
         const existingFields = readStoredFields(existing);
         tree = {
-          ...parseBlockTree({ version: 1, body: rec.body }),
+          ...parsed,
           fields: {
             ...existingFields,
             ...checkFields(rec.fields),
