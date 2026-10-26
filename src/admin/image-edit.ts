@@ -229,27 +229,6 @@ async function renderBakeBlob(id: string, ops: readonly SidecarOp[]): Promise<Bl
   return webpOrJpeg(canvas);
 }
 
-export function dirtyImageStates(): Array<[string, LocalEditState]> {
-  const out: Array<[string, LocalEditState]> = [];
-  for (const [id, s] of localEditState) {
-    if (isDirty(s)) out.push([id, s]);
-  }
-  return out;
-}
-
-export async function flushDirtyImageEdits(): Promise<{ ok: number; failed: number }> {
-  const dirty = dirtyImageStates();
-  if (dirty.length === 0) return { ok: 0, failed: 0 };
-  const results = await Promise.allSettled(dirty.map(([id, s]) => saveImageEdits(id, s)));
-  let ok = 0;
-  let failed = 0;
-  for (const r of results) {
-    if (r.status === 'fulfilled') ok++;
-    else failed++;
-  }
-  return { ok, failed };
-}
-
 /** Where edit state lives and how previews, sources and commits are
  * produced, as the image edit panel needs them. */
 export interface ImageEditPipeline {

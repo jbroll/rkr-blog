@@ -37,9 +37,8 @@ export async function append(
 ): Promise<number> {
   /* v8 ignore start -- exercised by phase 1f offline-flow specs */
   // Web Lock around the read-modify-write of nextSeq + the per-
-  // entry writes. Without it, parallel appends (e.g. handleSave
-  // queueing savePost while flushDirtyImageEdits queues setOps)
-  // can both observe the same nextSeq and produce colliding
+  // entry writes. Without it, parallel appends (e.g. two uploads
+  // queued at once, or two tabs) can both observe the same nextSeq and produce colliding
   // entries — outbox/<seq>.<op>.json names differ but the seq
   // ordering breaks and remove() targets the wrong file.
   return withAppendLock(async () => {
@@ -237,10 +236,6 @@ export async function gcUnderAppendLock(): Promise<void> {
     // Leaked atomic-write temps across every OPFS dir.
     await gcAtomicWriteTemps();
   }).catch(() => {});
-}
-
-export async function pendingCount(): Promise<number> {
-  return (await list()).length;
 }
 
 /* v8 ignore start -- consumed by append/remove */

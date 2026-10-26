@@ -4,8 +4,8 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
+import { getAtPath, type Path, updateSlotsAtPath } from './block-tree-ops.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
-import { getAtPath, type Path, updateSlotsAtPath } from './blocks-page-editor.ts';
 import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
 import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';

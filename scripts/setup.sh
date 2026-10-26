@@ -6,7 +6,7 @@
 #
 #   1. npm install              (node_modules — sharp prebuilds, all
 #                                tooling: biome, knip, dpdm, c8, esbuild,
-#                                tiptap, cropperjs, @playwright/test)
+#                                cropperjs, @playwright/test)
 #   2. playwright install       (chromium binary for the e2e suite —
 #                                ~110 MB, downloads once into the
 #                                Playwright cache)

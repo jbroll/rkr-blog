@@ -1,13 +1,7 @@
-// Pure helpers for the comma-separated `ids` field on a figure node /
-// directive. Lives in src/lib (rather than alongside FigureNode in
-// src/admin/figure-node.ts) so c8 can measure it under the standard
-// coverage gate — admin/figure-node.ts itself imports @tiptap/core and
-// stays admin-side.
-//
-// The wire format is "id1,id2,id3" (whitespace tolerated). Both the
-// editor (admin/main.ts: activeImageId, attribute panel population)
-// and the renderer parse the same shape, so a parsing inconsistency
-// between them is a real bug surface — hence the unit-test gate.
+// Pure helpers for the comma-separated `ids` field on a figure block /
+// directive. The wire format is "id1,id2,id3" (whitespace tolerated).
+// The admin side and the renderer parse the same shape, so they share
+// these helpers.
 
 import { extractImageIdsAndAlts } from './widget-helpers.ts';
 

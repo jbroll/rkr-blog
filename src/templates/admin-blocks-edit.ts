@@ -9,7 +9,15 @@ import { escapeAttr, escapeText } from '../lib/content.ts';
 import { EDITOR_CSS } from './admin-editor-styles.ts';
 import { ADMIN_CSS_CORE } from './admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from './admin-styles-dialogs.ts';
-import { headIcons, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from './layout.ts';
+import {
+  adminPwaHead,
+  headIcons,
+  type SiteChrome,
+  siteFoot,
+  siteHead,
+  stylesheetLinks
+} from './layout.ts';
+import { buildMetaTag } from './version-tag.ts';
 
 export interface BlocksEditPageData extends SiteChrome {
   slug: string;
@@ -104,6 +112,8 @@ export function renderBlocksEditPage(data: BlocksEditPageData): string {
 <title>Edit ${escapeText(data.slug)} — ${escapeText(data.site.title)}</title>
 ${stylesheetLinks(a)}
 ${headIcons(a)}
+${buildMetaTag(a.hash)}
+${adminPwaHead(a)}
 <style>${ADMIN_CSS_CORE}</style>
 <style>${ADMIN_CSS_DIALOGS}</style>
 <link rel="stylesheet" href="${escapeAttr(data.bundleUrl.replace(/\.js(?=\?|$)/, '.css'))}"/>

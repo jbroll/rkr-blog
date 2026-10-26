@@ -4,14 +4,11 @@ import { describe, it } from 'node:test';
 import {
   getAtPath,
   insertAtPath,
-  labelFor,
-  moveNode,
   removeAtPath,
-  renderCard,
   resolveDrop,
   setSlotAtPath,
   updateSlotsAtPath
-} from '../../src/admin/blocks-page-editor.ts';
+} from '../../src/admin/block-tree-ops.ts';
 import type { BlockTree, Slots } from '../../src/lib/blocks.ts';
 
 const TREE: BlockTree = {
@@ -27,7 +24,7 @@ const TREE: BlockTree = {
   ]
 };
 
-describe('blocks page editor ops', () => {
+describe('block tree ops', () => {
   it('updates slots with merge and delete semantics', () => {
     const tree: BlockTree = {
       version: 1,
@@ -62,29 +59,6 @@ describe('blocks page editor ops', () => {
     assert.equal((next.body[0] as { children: unknown[] }).children.length, 3);
     const back = removeAtPath(next, [0, 1]);
     assert.equal((back.body[0] as { children: unknown[] }).children.length, 2);
-  });
-
-  it('moves a node across containers', () => {
-    const next = moveNode(TREE, [0, 1, 0], [0], 0);
-    const section = next.body[0] as { children: { type: string; markdown?: string }[] };
-    assert.equal(section.children[0]?.markdown, 'Card');
-    assert.equal(section.children.length, 3);
-  });
-
-  it('refuses moves into their own descendants', () => {
-    assert.throws(() => moveNode(TREE, [0], [0, 1], 0), /descendant/);
-  });
-
-  it('labels nodes for card headers', () => {
-    assert.equal(labelFor({ type: 'section' }), 'Section');
-    assert.equal(labelFor({ type: 'text', markdown: 'Hi' }), 'Text');
-    assert.equal(labelFor({ type: 'macro', macro: 'hero' }), 'Macro: hero');
-  });
-
-  it('renders cards with escaped content and data paths', () => {
-    const html = renderCard({ type: 'text', markdown: '<b>Hi</b>' }, [0]);
-    assert.match(html, /data-path="0"/);
-    assert.match(html, /&lt;b&gt;/);
   });
 
   it('resolves drops before and after a card to its parent', () => {

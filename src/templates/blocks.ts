@@ -1,6 +1,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { icon } from './icons.ts';
 import {
+  adminPwaHead,
   bundleVersion,
   headIcons,
   type SiteChrome,
@@ -19,6 +20,8 @@ export interface BlocksPageData extends SiteChrome {
   isAdmin?: boolean;
   /** Extra CSS appended to the head (admin list pages). */
   css?: string;
+  /** Admin pages served in the admin scope register its service worker. */
+  adminPwa?: boolean;
 }
 
 /** Index of stored JSON pages: title links in slug order, with an
@@ -63,6 +66,7 @@ export function renderBlocksPage(data: BlocksPageData): string {
 ${stylesheetLinks(a)}
 ${headIcons(a)}
 ${buildMetaTag(a.hash)}
+${data.adminPwa ? adminPwaHead(a) : ''}
 ${data.css ? `<style>${data.css}</style>` : ''}
 </head>
 <body>
@@ -72,7 +76,6 @@ ${data.bodyHtml}</main>
 ${data.isAdmin && data.slug ? blocksAdminFab(data.slug) : ''}
 ${siteFoot(data.site, { isAdmin: data.isAdmin })}
 <script type="module" src="${a.base}/site/carousel.js${bundleVersion(a)}" defer></script>
-<script type="module" src="${a.base}/site/version-check.js${bundleVersion(a)}" defer></script>
 <script type="module" src="${a.base}/site/version-check.js${bundleVersion(a)}" defer></script>
 </body>
 </html>

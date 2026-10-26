@@ -1,5 +1,6 @@
-// The build this page was rendered from, stamped into the admin shell
-// by src/templates/admin.ts.
+// The build this page was rendered from, stamped into the editor page
+// by templates/version-tag.ts. An offline launch boots the cached page,
+// so it carries the build of the bundle actually running.
 //
 // Read at drain time, never baked into an outbox entry: the bug this
 // guards against is a stale RUNNING bundle, and an entry can outlive

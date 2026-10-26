@@ -226,10 +226,10 @@ test('legacy markdown write routes are gone', async (t) => {
   assert.equal(editor.statusCode, 404);
   assert.match(editor.body, /href="\/admin\/blocks"/);
 
-  // Preview still reuses /admin/view/:slug (spec decided-6).
+  // The old preview URL lands in the block editor's View mode.
   const preview = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  assert.equal(preview.statusCode, 200);
-  assert.match(preview.body, /<div id="rkroll-admin-root">/);
+  assert.equal(preview.statusCode, 302);
+  assert.equal(preview.headers.location, '/admin/blocks/edit/hello');
 });
 
 test('/admin/static and /static serve identical bytes', async (t) => {
@@ -240,26 +240,6 @@ test('/admin/static and /static serve identical bytes', async (t) => {
   const viaPublic = await app.inject({ method: 'GET', url: '/static/base.css' });
   assert.equal(viaAdmin.statusCode, 200);
   assert.equal(viaAdmin.body, viaPublic.body);
-});
-
-test('/admin/view/:slug references only /admin/static assets', async (t) => {
-  const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-  const res = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  assert.equal(res.statusCode, 200);
-  const srcs = [...res.body.matchAll(/(?:src|href)="(\/[^"]+)"/g)].map((m) => m[1] as string);
-  const staticRefs = srcs.filter((u) => u.startsWith('/static/'));
-  assert.deepEqual(staticRefs, [], `unexpected /static refs: ${staticRefs.join(', ')}`);
-});
-
-test('/admin/view/:slug serves the admin preview shell', async (t) => {
-  const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-  const view = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  assert.equal(view.statusCode, 200);
-  assert.match(view.body, /<div id="rkroll-admin-root">/);
 });
 
 test('sw-admin.js under /admin/static carries Service-Worker-Allowed', async (t) => {

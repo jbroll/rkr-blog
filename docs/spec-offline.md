@@ -3,8 +3,9 @@
 > **Status as of 2026-08-03: shipped.** Phase 0 (PWA shell + SW),
 > Phase 1 (OPFS + outbox + drain), Phase 2 (pin existing posts),
 > and Phase 3 (eviction + storage panel) have all landed, plus the
-> admin shell offline launch and published-form preview at
-> `/admin/view/:slug` (§3, §1 goals). This document is the behavioral
+> admin shell offline launch. The TipTap editor and its
+> `/admin/view/:slug` preview are retired; the block editor opens
+> offline instead (§3). This document is the behavioral
 > spec; for the as-built code map see `implementation.md §11 Steps
 > 13–15`.
 
@@ -84,21 +85,26 @@ Two independent layers:
 - **Admin-side (Phases 1-3, plus the offline shell launch below)**: the
   editor reads + writes through an OPFS-backed VFS. Server API calls
   become outbox entries when offline; the outbox drains on reconnect.
-  The admin shell **is** service-worker-cached, in a cache keyed by the
-  build hash: one cache holds exactly one build, so new HTML can never
-  pair with old chunks. The shell's assets are served under
-  `/admin/static/` so they sit inside the worker's scope. Navigations
-  are network-first (online the author gets the fresh server render);
-  `/admin/static/*` is cache-first; everything else under `/admin/` —
-  `/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`,
-  `/admin/post-bundle`, `/admin/original` — is not intercepted at all,
-  since the outbox owns its offline behavior.
+  The block editor (`/admin/blocks/edit/:slug`) **is** service-worker-
+  cached, in a cache keyed by the build hash: one cache holds exactly
+  one build, so new HTML can never pair with old chunks. The editor's
+  assets are served under `/admin/static/` so they sit inside the
+  worker's scope, and the install precaches them (`precache.json`).
+  Editor pages, the pages list (`/admin/blocks`) and the macro list
+  (`/admin/blocks/macros`) are network-first: online the author gets
+  the fresh server render, and each 2xx render is cached under its path.
+  Offline, a page opened before loads from that copy with its embedded
+  tree, and the IndexedDB draft restores on top. A page never opened
+  online answers 503. After a successful save the editor asks the
+  worker to re-cache the page, so an offline reload shows the saved
+  tree, not the one first loaded. `/admin/static/*` is cache-first;
+  everything else under `/admin/` (saves, `/admin/upload`,
+  `/admin/sidecar/:id/commit`, `/admin/original`) is not intercepted,
+  since the outbox and the draft store own its offline behavior.
 
-  The shell itself is cached separately from the manifest, because it is
-  auth-gated: `cache.add()` rejects on a 401 and would atomically discard
-  every public asset queued alongside it. Install tries it and tolerates
-  failure; each successful online navigation re-caches the render, so a
-  shell missed at install time is repaired on the next visit.
+  Pages are auth-gated renders, so they are never precached: install
+  would fetch them without a session. `/admin/view/:slug`, the retired
+  TipTap preview, redirects to the block editor.
 
 The server's filesystem-of-record is unchanged. SQLite remains the
 index. The browser's OPFS is a write-through cache that becomes a

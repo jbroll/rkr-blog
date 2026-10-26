@@ -11,7 +11,7 @@
 
 import type { BlockNode, BlockTree } from '../lib/blocks.ts';
 import { moveBlock } from './block-move.ts';
-import { getAtPath, insertAtPath, type Path, removeAtPath } from './blocks-page-editor.ts';
+import { getAtPath, insertAtPath, type Path, removeAtPath } from './block-tree-ops.ts';
 
 export interface BlockActionsEnv {
   body: Element;

@@ -1,12 +1,11 @@
-// Tree move that stays correct across nesting levels. `moveNode` in
-// blocks-page-editor.ts only adjusts the target index for same-list
-// moves; moving a block into a later sibling's container leaves the
-// parent path pointing at the wrong node once the source is removed.
+// Tree move that stays correct across nesting levels: moving a block
+// into a later sibling's container must re-aim the parent path once the
+// source is removed, not just shift the index within one list.
 //
 // Browser-safe: no node:* imports.
 
 import type { BlockTree } from '../lib/blocks.ts';
-import { getAtPath, insertAtPath, type Path, removeAtPath } from './blocks-page-editor.ts';
+import { getAtPath, insertAtPath, type Path, removeAtPath } from './block-tree-ops.ts';
 
 /** Where a node lands after moving `from` into `toParent` at `index`
  * (both expressed against the tree before the move). */

@@ -7,7 +7,7 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree } from '../lib/blocks.ts';
-import { getAtPath, type Path } from './blocks-page-editor.ts';
+import { getAtPath, type Path } from './block-tree-ops.ts';
 
 export interface HydratedUnit {
   path: Path;

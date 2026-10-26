@@ -242,6 +242,39 @@ test('rotate refreshes the row thumbnail', async ({ page }) => {
   expect(consoleErrors.filter((m) => /Content Security Policy|decode failed/i.test(m))).toEqual([]);
 });
 
+test('an image edit applied offline syncs on reconnect', async ({ page, context }) => {
+  await login(page);
+  const slug = `e2e-figure-offline-edit-${Date.now()}`;
+  const imageId = await uploadJpeg(page);
+  await seedBlockPage(page, { slug, title: 'Offline edit', body: [figureBlock(imageId)] });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.locator('#rkr-blocks-page-body figure').first().click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
+  await dialog.getByRole('button', { name: 'Edit image' }).click();
+  await expect(page.locator('[data-rkr-dialog] #rkr-image-edit')).toHaveAttribute(
+    'data-ready',
+    'true'
+  );
+
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Rotate right' }).click();
+  await page.getByRole('button', { name: 'Apply edits' }).click();
+  await expect(page.getByRole('button', { name: 'Back to figure' })).toHaveCount(0);
+
+  const commit = page.waitForResponse(
+    (r) => r.url().endsWith(`/admin/sidecar/${imageId}/commit`) && r.request().method() === 'POST'
+  );
+  await context.setOffline(false);
+  expect((await commit).status()).toBe(200);
+  const meta = await page.request.get(`/admin/sidecar/${imageId}/meta`);
+  expect(((await meta.json()) as { ops: { type: string }[] }).ops.map((o) => o.type)).toEqual([
+    'rotate'
+  ]);
+});
+
 test('add video block', async ({ page }) => {
   test.setTimeout(120_000);
   await login(page);

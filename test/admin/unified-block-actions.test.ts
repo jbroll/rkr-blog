@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { Path } from '../../src/admin/blocks-page-editor.ts';
+import type { Path } from '../../src/admin/block-tree-ops.ts';
 import { mountBlockActions } from '../../src/admin/unified-block-actions.ts';
 import type { BlockNode, BlockTree } from '../../src/lib/blocks.ts';
 

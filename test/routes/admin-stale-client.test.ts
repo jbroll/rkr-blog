@@ -20,7 +20,7 @@ import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
 import { serverAssets } from '../../src/lib/site-assets.ts';
 import { buildApp } from '../../src/server.ts';
-import { renderAdminPage } from '../../src/templates/admin.ts';
+import { renderBlocksEditPage } from '../../src/templates/admin-blocks-edit.ts';
 import { buildMultipart, buildMultipartParts } from '../helpers/multipart.ts';
 
 const BUILD = 'deadbeefcafe';
@@ -175,13 +175,13 @@ test('POST /admin/sidecar/:id/commit: the current build writes', async (t) => {
 
 // ---- the shell stamp --------------------------------------------
 
-test('the admin shell stamps the build the guard checks against', () => {
+test('the editor page stamps the build the guard checks against', () => {
   const hash = 'abcdef012345';
-  const html = renderAdminPage({
+  const html = renderBlocksEditPage({
     site: { title: 'Test Site' },
     assets: { theme: 'default', hash, base: '/admin/static' },
-    bundleUrl: `/admin/static/admin/main.js?v=${hash}`,
-    cspNonce: 'n'
+    slug: 'a-page',
+    bundleUrl: `/admin/static/admin/blocks-page-editor-entry.js?v=${hash}`
   });
   // The client reads exactly this name to build the header; a rename
   // or a dropped tag disables the guard with every route test still

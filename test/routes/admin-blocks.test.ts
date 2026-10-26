@@ -328,6 +328,20 @@ describe('admin blocks save', () => {
     }
   });
 
+  it('GET /admin/blocks/edit/:slug references only /admin/static assets and registers the admin SW', async (t) => {
+    const { root, app } = await setup(t);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'saved.json'),
+      JSON.stringify({ version: 1, body: [], fields: { title: 'Saved', slug: 'saved' } })
+    );
+    const res = await app.inject({ method: 'GET', url: '/admin/blocks/edit/saved' });
+    assert.equal(res.statusCode, 200);
+    const refs = [...res.body.matchAll(/(?:src|href)="(\/[^"]+)"/g)].map((m) => m[1] as string);
+    const publicRefs = refs.filter((u) => u.startsWith('/static/'));
+    assert.deepEqual(publicRefs, [], `unexpected /static refs: ${publicRefs.join(', ')}`);
+    assert.ok(refs.some((u) => u.startsWith('/admin/static/site/sw-admin-register.js')));
+  });
+
   it('GET /admin/blocks/edit/:slug renders the page body with path markers and the tree', async (t) => {
     const { root, app } = await setup(t);
     fs.writeFileSync(

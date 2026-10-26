@@ -52,15 +52,9 @@ export function mountAddSheet(dock: HTMLElement, holdInert: () => ReleaseInert):
   });
   scrim.addEventListener('click', close);
   closeBtn.addEventListener('click', close);
-  // Capture: close before the item's own handler, so the render-pending
-  // inert it sets on the page body is not cleared by this close.
-  dock.addEventListener(
-    'click',
-    (ev: Event) => {
-      if ((ev.target as Element | null)?.closest?.('.rkr-blocks-palette-item')) close();
-    },
-    true
-  );
+  dock.addEventListener('click', (ev: Event) => {
+    if ((ev.target as Element | null)?.closest?.('.rkr-blocks-palette-item')) close();
+  });
   dock.addEventListener('keydown', (ev: Event) => {
     if ((ev as KeyboardEvent).key !== 'Escape') return;
     ev.preventDefault();

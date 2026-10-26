@@ -9,8 +9,9 @@
 import 'cropperjs/dist/cropper.css';
 
 import type { BlockTree } from '../lib/blocks.ts';
+import { EDITOR_SAVED } from '../site/sw-admin-core.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
-import { getPreviewUrl } from './canvas-loaders.ts';
+import { getPreviewUrl, hasWebglSupport } from './canvas-loaders.ts';
 import type { ImageEditorHost, MediaDialogDeps } from './figure-dialog-tree.ts';
 import { imageEditPipeline } from './image-edit.ts';
 import { type ImageEditPanel, wireImageEditPanel } from './image-edit-panel.ts';
@@ -52,6 +53,12 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 function wirePanel(onPreview: (id: string, url: string) => void, active: () => string | null) {
+  // Straighten is a homography; Canvas2D can't draw one.
+  const straighten = byId<HTMLButtonElement>('rkr-image-perspective-btn');
+  if (!hasWebglSupport()) {
+    straighten.disabled = true;
+    straighten.title = 'Straighten needs WebGL, which this browser does not support.';
+  }
   return wireImageEditPanel({
     onPreview,
     section: byId<HTMLDivElement>('rkr-image-edit'),
@@ -61,7 +68,7 @@ function wirePanel(onPreview: (id: string, url: string) => void, active: () => s
       rotateR: byId('rkr-image-rotate-r-btn'),
       flipH: byId('rkr-image-flip-h-btn'),
       flipV: byId('rkr-image-flip-v-btn'),
-      perspective: byId('rkr-image-perspective-btn'),
+      perspective: straighten,
       undo: byId('rkr-image-undo-btn'),
       redo: byId('rkr-image-redo-btn'),
       reset: byId('rkr-image-reset-btn'),
@@ -146,6 +153,20 @@ function pageMedia(opfs: () => boolean): MediaDialogDeps {
   };
 }
 
+let recacheTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Ask the service worker to re-cache this page once saves settle, so an
+ * offline reload opens the saved tree rather than the one first loaded. */
+function recacheAfterSave(): void {
+  clearTimeout(recacheTimer);
+  recacheTimer = setTimeout(() => {
+    navigator.serviceWorker?.controller?.postMessage({
+      type: EDITOR_SAVED,
+      path: location.pathname
+    });
+  }, 1000);
+}
+
 const tree = embeddedTree();
 
 if (root && slug && tree) {
@@ -167,6 +188,7 @@ if (root && slug && tree) {
       throw new SaveConflict(version);
     if (res.status === 409) throw new SaveFailure(SLUG_TAKEN);
     if (!res.ok) throw new Error(`save page ${res.status}`);
+    recacheAfterSave();
     return version;
   };
 

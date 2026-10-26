@@ -38,6 +38,11 @@ ffmpeg at test time — **ffmpeg + ffprobe must be installed** or the spec
 fails at fixture generation (see developer-quickstart.md §1). Everything
 else in the suite runs without them.
 
+Build with `npm run build` before the suite, not `build:admin` alone:
+only the full build writes `static/admin/precache.json`, and without it
+the admin service worker never installs, so `blocks-offline-open.spec.ts`
+fails.
+
 ---
 
 ## 1. Upstream fundamentals (per Playwright docs)
@@ -96,34 +101,10 @@ Slugs follow the same logic: `e2e-rotate-${Date.now()}` everywhere. Two specs th
 
 ## 4. Driving paths the UI doesn't expose
 
-Some editor flows can't be driven through the UI alone:
-
-- **Multi-image figure construction**: `Gallery` button uses a transient `<input type="file" multiple>` Playwright can't target by selector.
-- **Programmatic node manipulation**: deleting a figure at a known position, calling `chain().updateAttributes(...)`, etc.
-
-We expose `window.__rkrEditor` only when the URL is `/admin/view/:slug?e2e=1`:
-
-```ts
-// src/admin/startup.ts
-if (new URLSearchParams(location.search).get('e2e') === '1') {
-  (window as unknown as { __rkrEditor?: Editor }).__rkrEditor = editor;
-}
-```
-
-Specs use it via `page.evaluate`:
-
-```ts
-await page.goto('/admin/view/my-post?e2e=1');
-// ...two single-image figures inserted via the file input above ...
-await page.evaluate(({ a, b }) => {
-  const ed = (window as unknown as { __rkrEditor?: import('@tiptap/core').Editor }).__rkrEditor;
-  if (!ed) throw new Error('window.__rkrEditor not exposed; ?e2e=1 missing');
-  // delete fig 2, merge ids into fig 1
-  // ...
-}, { a: idA, b: idB });
-```
-
-**Rule**: if you're tempted to add a NEW debug surface, prefer extending `__rkrEditor`'s context (it's a TipTap Editor, you have full editor commands available) over inventing a new global. Any debug API has to be query-string-gated like this one — it's never on in production.
+The block editor exposes no debug global. Set up state the UI can't
+reach directly through the live save API instead: `test/e2e/seed-blocks.ts`
+posts a whole tree to `/admin/blocks/:slug` (text, figures, videos), and
+`page.request.post('/admin/upload', …)` puts an image on disk first.
 
 ---
 
@@ -220,7 +201,7 @@ Things to wire on day one:
 1. Import `test` + `expect` from `./coverage-fixtures.ts` (not `@playwright/test`). Without this the spec runs but contributes nothing to coverage.
 2. Generate a unique PNG. Reuse one of the existing colors only if your spec doesn't save edits to the sidecar (so it can tolerate prior state).
 3. Pick a slug pattern: `e2e-<name>-${Date.now()}`.
-4. If the flow needs editor manipulation Playwright can't reach, navigate to `/admin/view/:slug?e2e=1` and use `window.__rkrEditor`.
+4. If the flow needs state Playwright can't reach through the UI, seed it with `test/e2e/seed-blocks.ts`.
 
 ---
 
@@ -247,7 +228,7 @@ Two design notes:
 
 `global-teardown.ts` calls `mcr.generate()` once at the end of the run; the report lands at `coverage/e2e/index.html` (HTML) and `coverage/e2e/lcov.info` (lcov for the ratchet).
 
-Source-map resolution maps the bundled URLs (`/static/admin/main.js`) back to source paths (`src/admin/main.ts`). `entryFilter` + `sourceFilter` in `coverage-config.ts` limit the report to OUR code — without them, every TipTap / ProseMirror / PhotoSwipe file appears. The filter also keeps `packages/image-edit/src/canvas/**`, which is bundled into the admin SPA and cannot be reached by the c8 unit gate because it needs a DOM.
+Source-map resolution maps the bundled URLs (`/static/admin/blocks-page-editor-entry.js`) back to source paths (`src/admin/*.ts`). `entryFilter` + `sourceFilter` in `coverage-config.ts` limit the report to OUR code — without them, every Cropper.js / PhotoSwipe file appears. The filter also keeps `packages/image-edit/src/canvas/**`, which is bundled into the admin SPA and cannot be reached by the c8 unit gate because it needs a DOM.
 
 `sourcePath` there anchors the dist dir on the last `static/` segment of the bundle's path. The admin shell loads `main.js` both as `/static/admin/main.js` and as `/admin/static/admin/main.js`; slicing the host off the front instead maps the two URLs to different paths, and every file lands in the report twice with different counts. (The ratchet's own `normalisePath` collapses both forms, so this is a report-legibility fix, not a gating one.)
 
@@ -283,8 +264,7 @@ up to 5 pp without tripping either.
 To rebuild the baseline after a legitimate change in what's measured:
 
 ```bash
-npm run test:coverage && npm run build:packages && npm run build:admin && \
-  npm run build:site && npm run build:pwa && npm run test:e2e
+npm run test:coverage && npm run build && npm run test:e2e
 node "$ORG_HOOKS/scripts/coverage-union-merge.mjs" \
   --unit coverage/lcov.info --e2e coverage/e2e/lcov.info \
   --out coverage/union/lcov.info --src-root src
@@ -347,7 +327,6 @@ is still testable in Node with fakes: the service worker entry
 | Test fails with a 429 from `/admin/auth/token-login` | Multiple test runs in 5 min hit the rate limit | `CI=1 npm run test:e2e` for a fresh server, or wait |
 | Test fails with "post already exists" on save | Slug literal reused | `${Date.now()}` suffix |
 | Image-edit panel snapshots show unexpected ops | Shared sidecar from a prior test using the same PNG bytes | Generate a unique PNG color |
-| `window.__rkrEditor` is undefined | Loaded `/admin/view/:slug` without `?e2e=1` | Add the query string |
 | Coverage report shows lots of node_modules | `entryFilter` / `sourceFilter` too loose | Tighten in `coverage-config.ts` |
 | Commit POST returns 409 | Stale `X-Rkr-Sidecar-Base` — another write landed since the edit started | Re-fetch `GET /admin/sidecar/:id/meta`, echo its `updatedAt`, retry |
 | Selector for a button or input doesn't exist | Bundle wasn't rebuilt after a template/SPA change | `npm run build:admin && npm run build:site` |

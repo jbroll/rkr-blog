@@ -6,19 +6,19 @@
 import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
 import { moveBlock, movedPath } from './block-move.ts';
 import {
+  type DropPosition,
+  getAtPath,
+  insertAtPath,
+  type Path,
+  resolveDrop
+} from './block-tree-ops.ts';
+import {
   depthLabel,
   MAX_MACRO_DEPTH,
   mountBlocksPalette,
   type PaletteMacro,
   primitiveNode
 } from './blocks-editor.ts';
-import {
-  type DropPosition,
-  getAtPath,
-  insertAtPath,
-  type Path,
-  resolveDrop
-} from './blocks-page-editor.ts';
 
 const PAGE_CONTAINERS: ReadonlySet<string> = new Set(['section', 'row', 'col', 'flow']);
 

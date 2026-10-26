@@ -37,7 +37,7 @@ SITE_ROOT=$HOME/site bin/site-admin init
 1. **`npm install`** — pulls every Node dep, including the binary
    ones: `sharp` (libvips bindings; ships prebuilds for
    Debian / Ubuntu / macOS / glibc + ARM), and the dev tooling
-   (biome, knip, dpdm, c8, esbuild, tiptap, cropperjs, @playwright/test).
+   (biome, knip, dpdm, c8, esbuild, cropperjs, @playwright/test).
 2. **`npx playwright install chromium`** — downloads Chrome Headless
    Shell (~110 MB) into the Playwright cache. Required for
    `npm run test:e2e`. Skipped on second run.
@@ -223,7 +223,7 @@ The size hook (per-file 500-line ceiling for `src/`/`bin/`; tests
 exempt) runs in the same fast local tier. After both local tiers
 pass, the gate dispatches `ci/test` (unit tests, bundle build, the
 bundle-size ratchet) and `ci/e2e` (Playwright, driven off
-`build:packages`/`build:admin`/`build:site`/`build:pwa`) in parallel,
+`npm run build`, which also writes the SW precache list) in parallel,
 then runs one coverage ratchet over their combined lcov.
 
 The dispatch goes through simple-ci (`sci`).
@@ -268,7 +268,7 @@ gitignored, so `ci/simple-ci.conf` force-includes them in the rsync.
 
 ```bash
 npm run build:packages       # esbuild → packages/image-edit/dist
-npm run build:admin          # esbuild → static/admin/ (main, posts-list, settings-page)
+npm run build:admin          # esbuild → static/admin/ (blocks-page-editor-entry, settings-page, new-page, opfs-worker)
 npm run build:site           # esbuild → static/site/ (lightbox, carousel, img-retry, copy-link, comment-form, sw-unregister, sw-admin, sw-admin-register)
 npm run build:pwa            # esbuild → apps/image-pwa/dist
 npm run build                # all four, plus the service-worker precache manifest
@@ -303,7 +303,7 @@ SITE_ROOT=$HOME/site PORT=3000 npm start  # with explicit env
 
 # bundles
 npm run build:packages                    # esbuild → packages/image-edit/dist
-npm run build:admin                       # esbuild → static/admin/ (main, posts-list, settings-page)
+npm run build:admin                       # esbuild → static/admin/ (blocks-page-editor-entry, settings-page, new-page, opfs-worker)
 npm run build:site                        # esbuild → static/site/*.js
 npm run build:pwa                         # esbuild → apps/image-pwa/dist
 npm run build                             # all four, plus precache manifest

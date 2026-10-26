@@ -54,104 +54,24 @@ function freshSiteRoot(t: TestContext): string {
 
 function writeBundle(t: TestContext): string {
   // Returns a directory laid out like the repo's static/: contains an
-  // admin/main.js subpath that maps to /static/admin/main.js.
+  // admin/blocks-page-editor-entry.js subpath that maps to /static/admin/blocks-page-editor-entry.js.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-editor-bundle-'));
   fs.mkdirSync(path.join(dir, 'admin'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'admin', 'main.js'), 'console.log("test bundle");');
+  fs.writeFileSync(
+    path.join(dir, 'admin', 'blocks-page-editor-entry.js'),
+    'console.log("test bundle");'
+  );
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return path.join(dir, 'admin');
 }
 
-test('GET /admin/view/:slug returns the SPA shell HTML pointing at /admin/static/admin/main.js', async (t) => {
-  const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  assert.equal(res.statusCode, 200);
-  assert.match(res.headers['content-type'] as string, /text\/html/);
-  assert.match(res.body, /<div id="rkroll-admin-root">/);
-  assert.match(res.body, /<article id="rkroll-admin-article"><\/article>/);
-  assert.match(
-    res.body,
-    /<script type="module" src="\/admin\/static\/admin\/main\.js[^"]*"><\/script>/
-  );
-
-  // Public theme stylesheets (base + the active theme) are loaded so
-  // the editor preview matches the rendered post; served from inside
-  // the admin service worker's scope.
-  assert.match(res.body, /<link rel="stylesheet" href="\/admin\/static\/base\.css(\?v=[^"]+)?"\/>/);
-  assert.match(
-    res.body,
-    /<link rel="stylesheet" href="\/admin\/static\/themes\/[a-z][a-z0-9-]*\.css(\?v=[^"]+)?"\/>/
-  );
-
-  // Security headers: TipTap is bundled into the admin entry, so
-  // script-src does NOT include esm.sh or any 'unsafe-inline'. The
-  // single third-party allowance is apis.google.com, the Drive
-  // picker SDK loaded dynamically by the gdrive integration — same
-  // trust we already extend to Google for OAuth.
-  const csp = res.headers['content-security-policy'] as string;
-  assert.equal(csp.includes('esm.sh'), false);
-  // script-src carries NO 'unsafe-inline' at all (Task 19): the
-  // editor's only script is the external self-hosted bundle.
-  const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src '));
-  assert.ok(scriptSrc, 'script-src directive present');
-  assert.equal((scriptSrc as string).includes("'unsafe-inline'"), false);
-  assert.match(csp, /script-src 'self' https:\/\/apis\.google\.com/);
-  assert.match(csp, /frame-ancestors 'none'/);
-  assert.equal(res.headers['x-content-type-options'], 'nosniff');
-
-  // No inline import map — TipTap is bundled.
-  assert.equal(res.body.includes('importmap'), false);
-  assert.equal(res.body.includes('esm.sh'), false);
-});
-
-test('GET /admin/view/:slug binds a per-response CSP nonce to the inline <style>', async (t) => {
-  const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res1 = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  assert.equal(res1.statusCode, 200);
-  const csp1 = res1.headers['content-security-policy'] as string;
-
-  // script-src: NO 'unsafe-inline', NO nonce (the only script is the
-  // external self-hosted bundle, covered by 'self').
-  const scriptSrc1 = csp1.split('; ').find((d) => d.startsWith('script-src '));
-  assert.ok(scriptSrc1);
-  assert.equal((scriptSrc1 as string).includes("'unsafe-inline'"), false);
-  assert.equal((scriptSrc1 as string).includes('nonce-'), false);
-
-  // style-src carries a 'nonce-<value>' AND the SAME value appears as
-  // nonce="..." on the emitted inline <style>.
-  const styleSrc1 = csp1.split('; ').find((d) => d.startsWith('style-src '));
-  assert.ok(styleSrc1);
-  const m1 = /'nonce-([^']+)'/.exec(styleSrc1 as string);
-  assert.ok(m1, `style-src has a nonce: ${styleSrc1}`);
-  const nonce1 = (m1 as RegExpExecArray)[1];
-  assert.ok(res1.body.includes(`<style nonce="${nonce1}">`));
-
-  // Per-RESPONSE, not static: a second request gets a different nonce,
-  // and the body's <style> nonce tracks the header.
-  const res2 = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  const csp2 = res2.headers['content-security-policy'] as string;
-  const styleSrc2 = csp2.split('; ').find((d) => d.startsWith('style-src '));
-  const m2 = /'nonce-([^']+)'/.exec(styleSrc2 as string);
-  assert.ok(m2);
-  const nonce2 = (m2 as RegExpExecArray)[1];
-  assert.notEqual(nonce1, nonce2, 'nonce differs across requests');
-  assert.ok(res2.body.includes(`<style nonce="${nonce2}">`));
-  assert.equal(res2.body.includes(`<style nonce="${nonce1}">`), false);
-});
-
-test('GET /static/admin/main.js serves the compiled bundle when present', async (t) => {
+test('GET /static/admin/blocks-page-editor-entry.js serves the compiled bundle when present', async (t) => {
   const root = freshSiteRoot(t);
   const bundleDir = writeBundle(t);
   const app = await buildApp({ siteRoot: root, adminBundleDir: bundleDir });
   t.after(() => app.close());
 
-  const res = await app.inject({ method: 'GET', url: '/static/admin/main.js' });
+  const res = await app.inject({ method: 'GET', url: '/static/admin/blocks-page-editor-entry.js' });
   assert.equal(res.statusCode, 200);
   assert.match(
     res.headers['content-type'] as string,
@@ -160,13 +80,13 @@ test('GET /static/admin/main.js serves the compiled bundle when present', async 
   assert.match(res.body, /test bundle/);
 });
 
-test('GET /static/admin/main.js 404s when the bundle directory does not exist', async (t) => {
+test('GET /static/admin/blocks-page-editor-entry.js 404s when the bundle directory does not exist', async (t) => {
   const root = freshSiteRoot(t);
   const missing = path.join(root, 'no-such-bundle-dir');
   const app = await buildApp({ siteRoot: root, adminBundleDir: missing });
   t.after(() => app.close());
 
-  const res = await app.inject({ method: 'GET', url: '/static/admin/main.js' });
+  const res = await app.inject({ method: 'GET', url: '/static/admin/blocks-page-editor-entry.js' });
   assert.equal(res.statusCode, 404);
 });
 
@@ -1097,36 +1017,4 @@ test('POST /commit 400s on malformed JSON in the `ops` field', async (t) => {
   });
   assert.equal(res.statusCode, 400);
   assert.match(res.json<{ error: string }>().error, /valid JSON/);
-});
-
-test('GET /admin/view/:slug CSP has exactly one form-action directive including OneDrive allowance', async (t) => {
-  // Regression: admin-csp.ts previously emitted form-action TWICE.
-  // Browsers apply the LAST occurrence, so the plain `form-action 'self'`
-  // silently shadowed and dropped the OneDrive/SharePoint allowance needed
-  // for the OneDrive picker integration. This test verifies:
-  //   1. Exactly one form-action directive appears in the CSP.
-  //   2. That directive includes both https://onedrive.live.com and
-  //      https://*.sharepoint.com — i.e. the allowance is actually effective.
-  const root = freshSiteRoot(t);
-  const app = await buildApp({ siteRoot: root });
-  t.after(() => app.close());
-
-  const res = await app.inject({ method: 'GET', url: '/admin/view/hello' });
-  assert.equal(res.statusCode, 200);
-  const csp = res.headers['content-security-policy'] as string;
-  const formActionDirectives = csp.split('; ').filter((d) => d.startsWith('form-action '));
-  assert.equal(
-    formActionDirectives.length,
-    1,
-    `Expected exactly 1 form-action directive, got ${formActionDirectives.length}: ${JSON.stringify(formActionDirectives)}`
-  );
-  const formAction = formActionDirectives[0] as string;
-  assert.ok(
-    formAction.includes('https://onedrive.live.com'),
-    `form-action must include https://onedrive.live.com; got: ${formAction}`
-  );
-  assert.ok(
-    formAction.includes('https://*.sharepoint.com'),
-    `form-action must include https://*.sharepoint.com; got: ${formAction}`
-  );
 });

@@ -1,8 +1,7 @@
-// Minimal OPFS init for the unified editor: schema, drainers, and
-// draining the upload queue on reconnect.
-// The full startOfflineInfrastructure (drafts, sync, online state) is
-// TipTap-coupled and not needed here — image editing uses OPFS directly
-// through canvas-loaders and image-edit.
+// OPFS init for the unified editor: schema, drainers, and draining the
+// upload queue on reconnect. Image editing uses OPFS directly through
+// canvas-loaders and image-edit; page drafts live in IndexedDB
+// (unified-draft.ts).
 
 import { drainCommitImageEdit, drainUpload } from './drainers.ts';
 import { onChange as onOnlineChange, start as startOnlineState } from './online-state.ts';

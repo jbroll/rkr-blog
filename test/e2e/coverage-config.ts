@@ -10,7 +10,7 @@ import path from 'node:path';
 // Read source maps directly from disk instead of fetching via HTTP.
 // The default resolver issues HTTP GETs to the running test server;
 // in global-teardown the server is already stopped, and during tests
-// the version query string on main.js and site bundles may confuse
+// the version query string on the admin and site bundles may confuse
 // URL matching. Disk reads are reliable in both phases.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sourceMapResolver = async (url: string, defaultResolver: any): Promise<unknown> => {
@@ -45,13 +45,13 @@ const hasOwnSources = (url: string): boolean => {
 };
 
 // Source filtering: keep only OUR code. Without this the report
-// includes node_modules (TipTap, ProseMirror, PhotoSwipe).
+// includes node_modules (Cropper.js, PhotoSwipe).
 // entryFilter narrows the V8 entries (bundle URLs); sourceFilter
 // narrows source paths after sourcemap unpacking. src/lib/ files
 // imported into the admin/site bundle are tracked too — server-only
 // lib files (db.ts, migrate.ts, etc.) never reach the bundle so the
 // V8 data won't include them. The workspace canvas layer is bundled
-// into static/admin/main.js and is unreachable from the c8 unit gate
+// into the admin bundle and is unreachable from the c8 unit gate
 // (it needs a DOM), so e2e is the only place it can be measured.
 const SOURCE_PREFIXES = ['src/admin/', 'src/site/', 'src/lib/', 'packages/image-edit/src/canvas/'];
 
@@ -66,12 +66,12 @@ export const coverageOptions = {
     !sourcePath.includes('node_modules/') && SOURCE_PREFIXES.some((p) => sourcePath.includes(p)),
   sourceMapResolver,
   // esbuild stores source paths relative to the bundle (e.g.
-  // '../../src/admin/toast.ts' relative to static/admin/main.js).
+  // '../../src/admin/toast.ts' relative to static/admin/<entry>.js).
   // monocart resolves these from process.cwd(), producing '../admin/toast.ts'
   // which fails the sourceFilter. Re-resolve against the dist dir instead.
   // The dist dir has to be anchored on the last 'static/' segment: the
-  // admin shell loads main.js both as /static/admin/main.js and as
-  // /admin/static/admin/main.js, and any host-relative slicing maps the
+  // same bundle can load as /static/admin/x.js and as
+  // /admin/static/admin/x.js, and any host-relative slicing maps the
   // two URLs to different paths, splitting one file across two rows.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sourcePath: (sp: string, info: { distFile?: string; [key: string]: any }) => {

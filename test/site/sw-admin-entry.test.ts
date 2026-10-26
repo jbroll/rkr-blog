@@ -10,6 +10,7 @@ type Listener = (event: FakeEvent) => void;
 
 interface FakeEvent {
   request?: Request;
+  data?: unknown;
   waitUntil(p: Promise<unknown>): void;
   respondWith(p: Promise<Response>): void;
 }
@@ -50,12 +51,16 @@ const fire = async (type: string, event: Partial<FakeEvent> = {}): Promise<unkno
 before(async () => {
   const self = {
     addEventListener: (type: string, fn: Listener) => listeners.set(type, fn),
+    location: { origin: 'https://x.test' },
     skipWaiting: () => calls.push('skipWaiting'),
     clients: { claim: () => calls.push('claim') },
     fetch: async (input: RequestInfo | URL) => {
       const url = String(input instanceof Request ? input.url : input);
       if (url.includes('precache.json')) {
-        return Response.json({ hash: 'abc123', assets: ['/admin/static/admin/main.js'] });
+        return Response.json({
+          hash: 'abc123',
+          assets: ['/admin/static/admin/blocks-page-editor-entry.js']
+        });
       }
       return new Response('shell', { status: 200 });
     },
@@ -80,8 +85,7 @@ describe('service worker entry', () => {
     await fire('install');
     const cache = caches.get(`${CACHE_PREFIX}abc123`);
     assert.ok(cache, 'install did not open the build-hash cache');
-    assert.ok(cache.entries.has('/admin/static/admin/main.js'));
-    assert.ok(cache.entries.has('/admin/editor'), 'shell not cached');
+    assert.ok(cache.entries.has('/admin/static/admin/blocks-page-editor-entry.js'));
     assert.ok(calls.includes('skipWaiting'));
   });
 
@@ -95,13 +99,23 @@ describe('service worker entry', () => {
     assert.ok(calls.includes('claim'));
   });
 
-  it('answers a shell navigation from the fetch handler', async () => {
+  it('answers an editor page navigation from the fetch handler', async () => {
     // The Fetch spec forbids constructing a Request with mode 'navigate';
     // it only ever arrives that way on a real fetch event.
-    const request = new Request('https://x.test/admin/editor');
+    const request = new Request('https://x.test/admin/blocks/edit/hello');
     Object.defineProperty(request, 'mode', { value: 'navigate' });
     const res = (await fire('fetch', { request })) as Response;
     assert.equal(await res.text(), 'shell');
+  });
+
+  it('re-caches an editor page when a client reports a save', async () => {
+    const cache = caches.get(`${CACHE_PREFIX}abc123`);
+    assert.ok(cache);
+    cache.entries.clear();
+    await fire('message', {
+      data: { type: 'rkr-editor-saved', path: '/admin/blocks/edit/hello' }
+    } as Partial<FakeEvent>);
+    assert.ok(cache.entries.has('https://x.test/admin/blocks/edit/hello'));
   });
 
   it('leaves a request the handler declines to the network', async () => {

@@ -1,7 +1,7 @@
 // Playwright fixtures that capture V8 JS+CSS coverage per test and
 // hand the raw data to monocart-coverage-reports (mcr). mcr resolves
 // source maps to map the coverage from bundled URLs (e.g.
-// /static/admin/main.js) back to source files (src/admin/main.ts).
+// /static/admin/blocks-page-editor-entry.js) back to source files.
 //
 // Per-process state: ONE mcr instance shared across all tests in a
 // worker. Each test fixture runs add() with that test's data; mcr

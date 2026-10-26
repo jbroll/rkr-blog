@@ -138,7 +138,8 @@ export function registerAdminBlockRoutes(
           title: 'Pages',
           bodyHtml: renderAdminPagesIndex(rows, { q, total: all.length }),
           css: PAGES_LIST_CSS,
-          isAdmin: true
+          isAdmin: true,
+          adminPwa: true
         })
       );
     }

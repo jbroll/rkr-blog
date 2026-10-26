@@ -19,7 +19,6 @@ Format: **item** — _revisit when:_ trigger.
 ## Editor & figures
 
 - **No blocks-editor support for system pages (`_about`, `_site-banner`)** — they stay markdown in `content/posts/` because `/about` and the index banner read them directly; `blocks-migrate --archive` deliberately leaves them live. _Revisit when:_ system pages need JSON twins / editing in the blocks editor.
-- **Block edit page doesn't load offline** — it never registers the admin service worker, so an offline reload fails; the IndexedDB draft restores once the page loads online. _Revisit when:_ authors need to open or reload the block editor with no connection.
 - **Per-instance crops in multi-image directives** — crops are
   per-sidecar (global to every post using the image). _Revisit when:_
   an author wants the same image cropped differently in two posts.

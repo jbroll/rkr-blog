@@ -26,8 +26,8 @@ if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; 
   exit 1
 fi
 
-npm run --silent build:packages
-npm run --silent build:admin
-npm run --silent build:site
-npm run --silent build:pwa
+# The full build: it also writes static/admin/precache.json, without
+# which the admin service worker never installs and the offline-open
+# spec fails.
+npm run --silent build
 npm run test:e2e

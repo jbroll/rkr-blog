@@ -51,6 +51,14 @@ export function headIcons(a: AssetCtx): string {
 <link rel="apple-touch-icon" sizes="180x180" href="${a.base}/apple-touch-icon.png${v}"/>`;
 }
 
+/** Admin PWA hooks: the install manifest and the service worker that
+ * lets the block editor open offline. Admin pages only. */
+export function adminPwaHead(a: AssetCtx): string {
+  const v = bundleVersion(a);
+  return `<link rel="manifest" href="${a.base}/admin-manifest.webmanifest${v}"/>
+<script type="module" src="${a.base}/site/sw-admin-register.js${v}" defer></script>`;
+}
+
 export function stylesheetLinks(a: AssetCtx): string {
   const v = bundleVersion(a);
   const base = `<meta name="color-scheme" content="light dark"/>

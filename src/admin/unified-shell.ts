@@ -13,8 +13,8 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
+import { getAtPath, type Path, setSlotAtPath } from './block-tree-ops.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
-import { getAtPath, type Path, setSlotAtPath } from './blocks-page-editor.ts';
 import { domToMarkdown } from './dom-markdown.ts';
 import type { MediaDialogDeps } from './figure-dialog-tree.ts';
 import { createInertHolds, type ReleaseInert } from './inert-holds.ts';

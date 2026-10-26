@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { renderAdminPage } from '../../src/templates/admin.ts';
 import { ADMIN_CSS_CORE } from '../../src/templates/admin-styles-core.ts';
 import { ADMIN_CSS_DIALOGS } from '../../src/templates/admin-styles-dialogs.ts';
 
@@ -27,18 +26,4 @@ const ORIGINAL_CSS = fixtureRaw.startsWith(DO_NOT_EDIT_PREFIX)
 
 test('admin CSS split: core + "\\n" + dialogs is byte-identical to the pre-split string', () => {
   assert.equal(`${ADMIN_CSS_CORE}\n${ADMIN_CSS_DIALOGS}`, ORIGINAL_CSS);
-});
-
-test('renderAdminPage embeds the full admin CSS verbatim inside the inline <style>', () => {
-  const html = renderAdminPage({
-    site: { title: 'rkroll' },
-    assets: { theme: 'default', hash: 'abcdef012345', base: '/static' },
-    bundleUrl: '/static/admin/main.js',
-    cspNonce: 'test-nonce'
-  });
-  // The page still ships the CSS inline (not as a linked asset), so
-  // caching is unchanged. The inline <style> now carries the
-  // per-response CSP nonce (Task 19); the exact original CSS text must
-  // still be present verbatim between the <style> tags.
-  assert.ok(html.includes(`<style nonce="test-nonce">\n${ORIGINAL_CSS}\n</style>`));
 });

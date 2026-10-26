@@ -3,7 +3,7 @@
 // them — client-build.ts, which resolves the server's own hash,
 // cannot cross that line.
 
-/** The shell's `<meta>` name, emitted by src/templates/admin.ts and
+/** The page's `<meta>` name, emitted by templates/version-tag.ts and
  * read by src/admin/build-id.ts. A rename in one place alone would
  * silently disable the staleness guard. */
 export const BUILD_META_NAME = 'rkr-build';

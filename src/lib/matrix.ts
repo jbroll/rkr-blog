@@ -24,7 +24,7 @@ export interface MatrixFlow {
 export type MatrixSpec = MatrixGrid | MatrixFlow;
 
 const MAX_GRID_DIM = 12;
-export const FLOW_DEFAULTS = { justified: 180, masonry: 3 } as const;
+const FLOW_DEFAULTS = { justified: 180, masonry: 3 } as const;
 const MATRIX_DEFAULT: MatrixGrid = { kind: 'grid', rows: 1, cols: 1 };
 
 export function parseMatrix(raw: unknown): MatrixSpec {
@@ -56,7 +56,7 @@ export function serializeMatrix(spec: MatrixSpec): string {
   return `${spec.kind}:${spec.param}`;
 }
 
-export function clampDim(n: number): number {
+function clampDim(n: number): number {
   if (!Number.isFinite(n) || n < 1) return 1;
   return Math.min(MAX_GRID_DIM, Math.floor(n));
 }

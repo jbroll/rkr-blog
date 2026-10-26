@@ -1,10 +1,9 @@
-// Server-only helpers that stamp the deployed commit. Kept free of
-// node-dependent imports so the browser bundle (which type-checks
-// templates via preview-page.ts) never pulls build-info.ts into its
-// type program. Callers pass the hash (serverAssets().hash).
+// Stamps the deployed commit into a page. Callers pass the hash
+// (serverAssets().hash), so this stays free of node-dependent imports.
 
+import { BUILD_META_NAME } from '../lib/build-contract.ts';
 import { escapeAttr } from '../lib/content.ts';
 
 export function buildMetaTag(hash: string): string {
-  return `<meta name="rkr-build" content="${escapeAttr(hash)}"/>`;
+  return `<meta name="${BUILD_META_NAME}" content="${escapeAttr(hash)}"/>`;
 }

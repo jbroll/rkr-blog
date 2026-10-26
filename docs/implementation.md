@@ -19,8 +19,8 @@ For developer setup (lint, test, hooks, dev commands), see
 | Image pipeline (server) | Sharp (libvips) | Releases the libuv thread pool; AVIF/WebP/EXIF/ICC handling. |
 | Image pipeline (client) | HTMLCanvasElement + WebGL (perspective only) | No external library; 4-corner perspective uses a tiny fragment shader. |
 | Markdown | `remark` + `remark-directive` + `remark-frontmatter` | Stable AST; the directive syntax fits widget blocks. |
-| Editor | TipTap (ProseMirror) | Custom node types map cleanly to widget blocks; markdown round-trip via the `remark` plugin family runs in the browser, so `POST /admin/posts` is a markdown-only endpoint. |
-| Editor bundle | esbuild | TipTap bundled into a single browser file so the admin SPA has zero CDN dependencies and a tight CSP. |
+| Editor | Unified block editor (`/admin/blocks/edit/:slug`) | The server renders the page body with `renderBlockTree` plus path markers; the client hydrates it in place, so there is one render path and no client-side renderer. |
+| Editor bundle | esbuild | The editor is bundled with Cropper.js into `/admin/static/admin/`, so the admin pages have zero CDN dependencies and a tight CSP. |
 | Auth | OAuth (Google) via `arctic` | No password to store; provider handles MFA / recovery. |
 | Front proxy | Apache 2.4 (`mod_rewrite` + `mod_proxy_http` + `mod_headers` + `mod_expires`) | Static cache hits never reach Node. |
 
@@ -259,7 +259,7 @@ change; only the multiple-of-90 check went.
 so the tilt control never grows the op list; `describeOp` shows angles
 over 180° as negative.
 
-### Editor state machine: `src/admin/main.ts`
+### Image edit state: `src/admin/image-edit.ts`
 
 - `LocalEditState` per image id: `{ ops, redoStack, baseline,
   sourceWidth, sourceHeight }`. `baseline` is the last-saved-from-server
@@ -269,12 +269,9 @@ over 180° as negative.
 - `saveImageEdits(id, s)` — POSTs a single multipart `commit` with
   ops + redoStack and (when ops is non-empty) the WebP bake in one
   atomic request; updates `baseline` only after the call lands.
-- `flushDirtyImageEdits()` — saves every dirty image in parallel
-  via `Promise.allSettled`; called by both the per-image **Save
-  edits** button and the post-Save flow (so saving the post auto-
-  commits any dirty image edits first; partial-failure aborts the
-  post save).
-- `beforeunload` listener blocks reload while any image is dirty.
+- The figure dialog lends the image-edit section to one image at a
+  time; applying the dialog commits that image's edits, discarding
+  drops them.
 - Per-image caches (`originalCache`, `pipelineCaches`,
   `previewBlobUrls`) live in `src/admin/canvas-loaders.ts` and are
   bounded by a 16-entry LRU. Eviction revokes Blob URLs so the
@@ -362,9 +359,7 @@ mixes into `figure.ts`/`ImageMap`/`lightbox`.
 - **Admin** (`src/routes/admin-video.ts`): `POST /admin/upload/video`
   (ingest → eager transcode → URLs; 413 on cap, 422 on probe failure),
   `POST /admin/video/:id/trim` (validates, rewrites sidecar ops/poster,
-  clears redoStack). TipTap `video` node (`src/admin/video-node.ts`)
-  renders a preview + trim/poster/caption popover that persists to the
-  sidecar via the trim endpoint. `::video` round-trip lives in
+  clears redoStack). `::video` round-trip lives in
   `src/lib/prose-markdown-video.ts`.
 - **OPFS preview map** (`src/admin/video-map-opfs.ts`): client-side copy
   of `video-map-fs.ts` computing the same ophashes from the OPFS
@@ -427,94 +422,36 @@ files the bundle uses are reached transitively. Anything `src/admin`
 imports has to be free of node builtins — that is why the build
 identity the shell and the drain routes share lives in
 `src/lib/build-contract.ts`, apart from `client-build.ts`, which
-resolves the server's own hash. The admin bundle is built with esbuild (TipTap +
-ProseMirror + Cropper.js), ESM format with code-splitting:
+resolves the server's own hash. The admin bundle is built with esbuild
+(with Cropper.js), ESM format with code-splitting:
 
-- `static/admin/main.js` — editor SPA (TipTap, image ops, offline sync)
-- `static/admin/posts-list.js` — post list page
+- `static/admin/blocks-page-editor-entry.js` (+ `.css`) — the unified block editor (hydration, dialogs, image ops, uploads, drafts)
+- `static/admin/new-page.js` — new-page form
 - `static/admin/settings-page.js` — settings page
+- `static/admin/opfs-worker.js` — OPFS write worker
 - `static/site/lightbox.js` — public-page lightbox
 - `static/site/carousel.js` — public-page carousel runtime
 - `static/site/comment-form.js`, `copy-link.js`, `img-retry.js`, `video-retry.js` — lightweight public-page helpers
 - `static/site/sw-unregister.js` — loaded on all public pages; actively unregisters any prior SW at scope `/`
 - `static/site/sw-admin.js` (thin event wiring; the cache logic lives in `src/site/sw-admin-core.ts`, unit-tested directly in Node) + `sw-admin-register.js` — admin PWA service worker and registration script
-- `static/admin/precache.json` — the list of URLs `sw-admin.js` precaches, keyed by build hash; written by `scripts/gen-precache.ts` at the end of the top-level `build` script, not inside `build:admin` — it walks `static/site/` and `static/themes/` output, so `build:site` must already have run. Running `build:admin` alone leaves no `precache.json`. Each file is listed under the URL it is requested at: `static/admin/**` bare, because esbuild's chunks reach each other (and `preview-page`, `prose-markdown`) through relative imports, and relative resolution drops the `?v=` query; everything else with the `?v=<hash>` the templates stamp. `admin/main.js` and `admin/main.css` are stamped-only: the import direction is main → chunks, so nothing reaches them relatively and a bare entry would be a cache key nothing requests. The OPFS write worker is constructed from `/admin/static/admin/opfs-worker.js` for the same reason a stylesheet is: outside the worker's `/admin/` scope it is never intercepted, so it would not load offline.
+- `static/admin/precache.json` — the list of URLs `sw-admin.js` precaches, keyed by build hash; written by `scripts/gen-precache.ts` at the end of the top-level `build` script, not inside `build:admin` — it walks `static/site/` and `static/themes/` output, so `build:site` must already have run. Running `build:admin` alone leaves no `precache.json`. Each file is listed under the URL it is requested at: `static/admin/**` bare, because esbuild's chunks reach each other through relative imports, and relative resolution drops the `?v=` query; everything else with the `?v=<hash>` the templates stamp. `admin/blocks-page-editor-entry.js` and `.css` are stamped-only: the import direction is entry → chunks, so nothing reaches them relatively and a bare entry would be a cache key nothing requests. The OPFS write worker is constructed from `/admin/static/admin/opfs-worker.js` for the same reason a stylesheet is: outside the worker's `/admin/` scope it is never intercepted, so it would not load offline.
 
-The shell stamps the build it was rendered from into `<meta
+The editor page stamps the build it was rendered from into `<meta
 name="rkr-build">`, and the bundle sends it back on every write that
-carries queued offline work. An offline launch boots the cached shell,
+carries queued offline work. An offline launch boots the cached page,
 so that meta is the stale bundle's build — which is what lets the
 drain routes refuse it (`spec-offline.md §6`).
 
-The editor converts ProseMirror → markdown locally before POSTing to
-`/admin/posts`. The server only receives markdown (validated via
-`parsePost`), so it never loads `prose-markdown.ts` at runtime. Note:
-only `proseToMarkdown` is reachable from `src/admin/main.ts`, so the
-remark/remark-directive/remark-frontmatter stack used by `markdownToProse`
-is tree-shaken away — adding the import added ~3 KB to the bundle, not
-the full ~70 KB the dependency tree would suggest.
+The editor page registers `sw-admin.js`, which serves editor pages,
+`/admin/blocks` and `/admin/blocks/macros` network-first and caches
+each 2xx render under its path, so a page opened online reopens
+offline with its embedded tree (`spec-offline.md §3`). After a save the
+editor posts `rkr-editor-saved` to the worker, which re-fetches and
+re-caches that page.
 
 All served at `/static/*` by `@fastify/static` in dev (Apache in
-prod). The editor bundle has zero CDN runtime dependency; the only
-third-party script-src is `apis.google.com` (the Google Drive picker
-SDK, loaded dynamically by the gdrive integration).
-
-## 8a. Figure image reorder
-
-`src/admin/figure-reorder.ts`. A figure node carries three parallel
-strings, `ids` (comma), `alts` (comma) and `captions` (pipe); a
-reorder is one permutation applied to all three. `reorderFigureCells`
-pads `alts` and `captions` to the `ids` length before moving, since
-older posts have shorter arrays, and returns its input object on a
-no-op (`from === to`, out of range, single image) so the caller can
-skip the transaction on reference equality.
-
-The figure is a plain node with no NodeView, so `wireFigureReorder`
-installs delegated `pointerdown` and `keydown` listeners on the editor
-root, the same attach point as the tap-to-edit `click` handler in
-`main.ts`. It lives outside `main.ts` because that file sits at the
-500-line cap.
-
-- **Click vs. drag.** A press on `img[data-cell-index]` becomes a drag
-  once the pointer moves `DRAG_THRESHOLD_PX = 8` (loose enough for a
-  finger, tight enough that a tap never trips it); pointer capture
-  then keeps the stream on the thumb. A capture-phase `click`
-  listener swallows the synthetic click that follows a drag, so edit
-  never co-fires. `pointermove`/`pointerup`/`pointercancel` are
-  attached to `window` in the capture phase because ProseMirror's own
-  handlers may stop propagation on the root.
-- **Native drag.** Both `<img>` drag-and-drop and ProseMirror's node
-  drag (the figure is `draggable`) fire `dragstart` on the placeholder
-  and would take the pointer stream. `dragstart` is cancelled only
-  between a thumb `pointerdown` and its `pointerup`, so a press
-  elsewhere on the figure still moves the whole figure.
-- **Drop slot.** `dropIndexFor2D` takes every thumb's rect, anchors on
-  the one nearest the pointer, and decides before/after in reading
-  order (row above → before, row below → after, same row → by the
-  centre's x). A one-axis midpoint scan only worked for the first row
-  of a wrapped grid. A vertical indicator bar sits at the slot; a
-  clone of the thumb follows the pointer; within `EDGE_AUTOSCROLL_PX
-  = 48` of the editor's top or bottom the container scrolls 12 px per
-  frame. `.rkr-multi-thumbs` has `touch-action: none` so a finger drag
-  on a thumb is not eaten by page scroll.
-- **Commit.** The node is found by walking `doc.descendants` and
-  matching `view.nodeDOM(pos)` to the placeholder (the same lookup the
-  delete path uses; `posAtDOM` is ambiguous on atoms). One
-  `setNodeMarkup` transaction per reorder, so one undo step.
-- **Keyboard.** Thumbs render with `tabindex="0"`, `role="button"` and
-  an `aria-label` naming their position. Arrows move one step;
-  Enter/Space synthesise a click, which is the tap-to-edit path.
-  After the transaction ProseMirror replaces the figure's DOM, so the
-  figure position is captured before the commit and the moved thumb
-  is re-resolved through `nodeDOM` on the next frame to restore focus.
-- **Announcement.** The `aria-live` region is a single element on
-  `<body>`, not a node inside the figure: the figure's `renderHTML`
-  re-runs on every transaction and would wipe any text written into
-  it. `data-reorder-status` is the hook the e2e asserts on.
-
-Cross-figure moves would need a two-node transaction, deletion of an
-emptied source figure and a slot-count rule for diptych/triptych
-targets; they stay in `DEFERRED.md`.
+prod). The editor bundle has zero CDN runtime dependency and no
+third-party script-src.
 
 ## 8b. `@rkr/image-edit` and the standalone image editor
 

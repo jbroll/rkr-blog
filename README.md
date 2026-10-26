@@ -8,7 +8,7 @@ Authoring entirely from the browser. Runs on any Node 22 host — no other servi
 
 ## Works offline
 
-Authors can write, import and edit images without a connection. Changes sync automatically when connectivity returns. A status indicator shows what is pending. Pinned posts are available locally at any time.
+Authors can write, import and edit images without a connection. Changes sync automatically when connectivity returns. A page opened once online reopens in the editor with no connection.
 
 ## Comments
 

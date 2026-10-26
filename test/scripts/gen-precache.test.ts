@@ -5,8 +5,7 @@ import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 
 import { buildPrecache } from '../../scripts/gen-precache.ts';
-import { renderAdminPage } from '../../src/templates/admin.ts';
-import { renderPostPage } from '../../src/templates/post.ts';
+import { renderBlocksEditPage } from '../../src/templates/admin-blocks-edit.ts';
 
 function fixtureRepo(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-precache-'));
@@ -14,9 +13,9 @@ function fixtureRepo(t: TestContext): string {
   fs.mkdirSync(path.join(root, 'static', 'admin'), { recursive: true });
   fs.mkdirSync(path.join(root, 'static', 'themes'), { recursive: true });
   fs.mkdirSync(path.join(root, 'static', 'site'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'static', 'admin', 'main.js'), '//');
-  fs.writeFileSync(path.join(root, 'static', 'admin', 'main.js.map'), '{}');
-  fs.writeFileSync(path.join(root, 'static', 'admin', 'main.css'), '/* */');
+  fs.writeFileSync(path.join(root, 'static', 'admin', 'blocks-page-editor-entry.js'), '//');
+  fs.writeFileSync(path.join(root, 'static', 'admin', 'blocks-page-editor-entry.js.map'), '{}');
+  fs.writeFileSync(path.join(root, 'static', 'admin', 'blocks-page-editor-entry.css'), '/* */');
   fs.writeFileSync(path.join(root, 'static', 'admin', 'chunk-ABC123.js'), '//');
   fs.writeFileSync(path.join(root, 'static', 'admin', 'opfs-worker.js'), '//');
   for (const name of ['default', 'tufte', 'dracula']) {
@@ -36,9 +35,9 @@ function fixtureRepo(t: TestContext): string {
 
 test('buildPrecache: lists every emitted file under static/admin, sourcemaps excluded', (t) => {
   const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
-  assert.ok(assets.includes('/admin/static/admin/main.js?v=abcdef012345'));
+  assert.ok(assets.includes('/admin/static/admin/blocks-page-editor-entry.js?v=abcdef012345'));
   assert.ok(assets.includes('/admin/static/admin/chunk-ABC123.js'));
-  assert.ok(assets.includes('/admin/static/admin/main.css?v=abcdef012345'));
+  assert.ok(assets.includes('/admin/static/admin/blocks-page-editor-entry.css?v=abcdef012345'));
   assert.ok(!assets.some((a) => a.includes('.map')), 'sourcemaps excluded');
 });
 
@@ -56,9 +55,9 @@ test('buildPrecache: split chunks are cached bare — a relative import drops th
   assert.ok(assets.includes('/admin/static/admin/opfs-worker.js'));
 });
 
-test('buildPrecache: the files the shell stamps by name are cached stamped only', (t) => {
+test('buildPrecache: the files the editor page stamps by name are cached stamped only', (t) => {
   const { assets } = buildPrecache(fixtureRepo(t), 'abcdef012345');
-  for (const rel of ['admin/main.js', 'admin/main.css']) {
+  for (const rel of ['admin/blocks-page-editor-entry.js', 'admin/blocks-page-editor-entry.css']) {
     assert.ok(assets.includes(`/admin/static/${rel}?v=abcdef012345`), `${rel} versioned missing`);
     assert.ok(
       !assets.includes(`/admin/static/${rel}`),
@@ -69,8 +68,8 @@ test('buildPrecache: the files the shell stamps by name are cached stamped only'
 
 test('buildPrecache: a missing stamped file throws instead of being silently skipped', (t) => {
   const root = fixtureRepo(t);
-  fs.rmSync(path.join(root, 'static', 'admin', 'main.css'));
-  assert.throws(() => buildPrecache(root, 'abcdef012345'), /main\.css/);
+  fs.rmSync(path.join(root, 'static', 'admin', 'blocks-page-editor-entry.css'));
+  assert.throws(() => buildPrecache(root, 'abcdef012345'), /blocks-page-editor-entry\.css/);
 });
 
 test('buildPrecache: every theme sheet is listed', (t) => {
@@ -157,33 +156,20 @@ function extractAssetUrls(html: string): string[] {
   return urls;
 }
 
-test('buildPrecache: every asset URL the admin + preview templates render is in the manifest', (t) => {
+test('buildPrecache: every asset URL the editor page renders is in the manifest', (t) => {
   const hash = 'abcdef012345';
-  const theme = 'default';
-  const assets = { theme, hash, base: '/admin/static' };
-  const site = { title: 'Test Site' };
-
-  const adminHtml = renderAdminPage({
-    site,
+  const assets = { theme: 'default', hash, base: '/admin/static' };
+  const html = renderBlocksEditPage({
+    site: { title: 'Test Site' },
     assets,
-    bundleUrl: '/admin/static/admin/main.js?v=abcdef012345',
-    cspNonce: 'n'
-  });
-  // scripts: false matches what the preview actually requests
-  // (renderPreviewDocument in src/admin/preview-page.ts).
-  const previewHtml = renderPostPage({
-    site,
-    assets,
-    title: 'A post',
-    slug: 'a-post',
-    bodyHtml: '<p>body</p>',
+    slug: 'a-page',
+    bundleUrl: `/admin/static/admin/blocks-page-editor-entry.js?v=${hash}`,
     isAdmin: true,
-    showComments: false,
-    scripts: false
+    bodyHtml: '<p>body</p>',
+    treeJson: '{"version":1,"body":[]}'
   });
-
-  const requested = new Set([...extractAssetUrls(adminHtml), ...extractAssetUrls(previewHtml)]);
-  assert.ok(requested.size > 0, 'sanity: templates emit at least one /admin/static/ URL');
+  const requested = extractAssetUrls(html);
+  assert.ok(requested.length > 0, 'sanity: the page emits at least one /admin/static/ URL');
 
   const { assets: manifest } = buildPrecache(fixtureRepo(t), hash);
   for (const url of requested) {

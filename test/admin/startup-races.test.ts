@@ -13,7 +13,7 @@
 // write gate + the navigator.locks mock — no arbitrary sleeps.
 
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { beforeEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -273,17 +273,19 @@ test('a currentDraftId write cannot clobber an in-flight append’s nextSeq bump
   assert.equal(root?.currentDraftId, 'draft-X', 'the currentDraftId write also landed');
 });
 
-test('no bare _root.json write escapes ROOT_LOCK in the currentDraftId writers + ensureSchema', async () => {
-  // Structural backstop for the behavioral races above: assert no
-  // module bypasses the lock by calling writeRoot(...) or
-  // writeJson(ROOT_PATH, ...) directly. draft/pin/startup must not
-  // import writeRoot/writeJson-to-root at all (every _root mutation
-  // goes through mutateRoot); opfs-schema's only raw writes are inside
-  // mutateRoot / a withRootLock callback.
+test('no bare _root.json write escapes ROOT_LOCK in the admin modules + ensureSchema', async () => {
+  // Structural backstop for the behavioral races above: no admin module
+  // bypasses the lock by calling writeRoot(...) or writeJson(ROOT_PATH,
+  // ...) directly. opfs-schema's only raw writes are inside mutateRoot /
+  // a withRootLock callback.
   const here = fileURLToPath(import.meta.url);
   const adminDir = here.replace(/test\/admin\/startup-races\.test\.ts$/, 'src/admin/');
 
-  for (const f of ['draft.ts', 'pin.ts', 'startup.ts']) {
+  // outbox.append writes _root itself while holding ROOT_LOCK (the
+  // append lock), which the behavioral tests above cover.
+  const lockOwners = new Set(['opfs-schema.ts', 'outbox.ts']);
+  const modules = (await readdir(adminDir)).filter((f) => f.endsWith('.ts') && !lockOwners.has(f));
+  for (const f of modules) {
     const src = await readFile(`${adminDir}${f}`, 'utf8');
     assert.equal(
       /\bwriteRoot\s*\(/.test(src),

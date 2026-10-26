@@ -45,7 +45,7 @@ export interface AdminRoutesOpts {
   /**
    * Where the public/admin static assets live on disk. Defaults to
    * <repo>/static, which contains both:
-   *   - admin/main.js (compiled by build:admin)
+   *   - admin/*.js (compiled by build:admin)
    *   - site.css (committed source)
    * Served at /static/* by Apache (production) or fastify-static (dev).
    */
@@ -67,7 +67,7 @@ export default async function adminRoutes(
   const siteRoot = opts.siteRoot ?? paths().root;
   // Tests can still override just the admin bundle by passing
   // adminBundleDir; in that case we point /static at its parent so
-  // /static/admin/main.js resolves correctly.
+  // /static/admin/<bundle>.js resolves correctly.
   const staticDir =
     opts.staticDir ?? (opts.adminBundleDir ? path.dirname(opts.adminBundleDir) : REPO_STATIC_DIR);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
@@ -75,7 +75,7 @@ export default async function adminRoutes(
   const urlFetcher: UrlFetcher = opts.urlFetcher ?? safeFetch;
 
   // One static handler at /static/. Public CSS lives at /static/site.css;
-  // the admin bundle at /static/admin/main.js. Apache vhost (implementation.md §7)
+  // the admin bundles under /static/admin/. Apache vhost (implementation.md §7)
   // already serves /static/* directly with cache headers in production.
   // Service-Worker-Allowed lets sw-admin.js claim scope `/admin/`
   // rather than only the directory it is served from.
@@ -93,7 +93,7 @@ export default async function adminRoutes(
       setHeaders
     });
     // Same bytes, second mount: a service worker scoped to /admin/
-    // never sees a fetch for /static/*, so the shell's assets have to
+    // never sees a fetch for /static/*, so the editor's assets have to
     // be reachable inside the scope.
     await fastify.register(fastifyStatic, {
       root: staticDir,
@@ -103,9 +103,8 @@ export default async function adminRoutes(
     });
   }
 
-  // /admin/view/:slug (preview shell; see admin-shell.ts). The legacy
-  // /admin/editor entry point is retired and answers 404 with a pointer
-  // to the blocks editor.
+  // Retired editor URLs: /admin/view/:slug redirects to the block
+  // editor; /admin/editor answers 404 with a pointer to it.
   registerShellRoutes(fastify, { guard });
 
   // /admin/posts is a 301 → / for old bookmarks. Every markdown write

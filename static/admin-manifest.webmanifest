@@ -2,7 +2,7 @@
   "name": "rkroll Editor",
   "short_name": "rkroll",
   "description": "rkroll blog editor.",
-  "start_url": "/admin/editor",
+  "start_url": "/admin/blocks",
   "scope": "/admin/",
   "display": "standalone",
   "background_color": "#ffffff",

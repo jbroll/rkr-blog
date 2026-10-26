@@ -20,13 +20,8 @@
 // width / height attributes; viewBox stays fixed so the geometry
 // stays proportional.
 //
-// Two output forms share the same path data:
-//   - icon(name, size) → an HTML string for server-rendered
-//     templates (post.ts, layout.ts, etc.).
-//   - iconSpec(name, size) → a ProseMirror DOMOutputSpec tuple for
-//     TipTap renderHTML callsites (figure-node.ts). The tag is
-//     namespaced ("http://www.w3.org/2000/svg svg") so ProseMirror's
-//     DOMSerializer creates the element via createElementNS.
+// icon(name, size) returns an HTML string for server-rendered
+// templates and the admin bundle.
 
 type ChildSpec = readonly [string, Record<string, string>];
 
@@ -144,8 +139,6 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
 function svgAttrs(size: number): Record<string, string> {
   return {
     viewBox: '0 0 24 24',
@@ -175,16 +168,4 @@ export function icon(name: IconName, size = 24): string {
   const root = serializeAttrs(svgAttrs(size));
   const children = PATHS[name].map(([tag, attrs]) => `<${tag} ${serializeAttrs(attrs)}/>`).join('');
   return `<svg ${root}>${children}</svg>`;
-}
-
-/** Build a ProseMirror DOMOutputSpec tuple for the same icon — used
- * by TipTap renderHTML callers (figure-node.ts) where the eventual
- * DOM is constructed by prosemirror-model's DOMSerializer. The tag
- * is namespaced so the serializer reaches for createElementNS rather
- * than createElement, which would otherwise drop into the HTML
- * namespace and break SVG rendering. */
-export type IconSpec = readonly [string, Record<string, string>, ...ChildSpec[]];
-
-export function iconSpec(name: IconName, size = 24): IconSpec {
-  return [`${SVG_NS} svg`, svgAttrs(size), ...PATHS[name]];
 }

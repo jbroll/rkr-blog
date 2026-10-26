@@ -7,14 +7,14 @@
 //
 //   static/admin/**  bare. esbuild's chunks reach each other through
 //     relative imports, and relative resolution drops the query — from
-//     /admin/static/admin/main.js?v=h, './chunk-A.js' is requested with
-//     no query at all. Those names are content-hashed already.
+//     /admin/static/admin/blocks-page-editor-entry.js?v=h, './chunk-A.js'
+//     is requested with no query at all. Those names are content-hashed.
 //   everything else  ?v=<hash>, the form the templates stamp.
 //
-// A file the shell stamps is listed ONLY stamped: nothing relatively
-// imports admin/main.js or admin/main.css (the import direction is
-// main -> chunks), so a bare entry for them is 475 KB of cache key
-// nothing ever requests.
+// A file the editor page stamps is listed ONLY stamped: nothing
+// relatively imports the entry or its CSS (the import direction is
+// entry -> chunks), so a bare entry for them is a cache key nothing
+// ever requests.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,7 +26,7 @@ export interface Precache {
   assets: string[];
 }
 
-/** Files the shell references by a fixed name. Theme sheets and the
+/** Files the admin pages reference by a fixed name. Theme sheets and the
  * static/admin/* build output are enumerated from disk instead.
  *
  * The webmanifest's own icon-192/icon-512 entries are deliberately
@@ -55,9 +55,9 @@ function walk(dir: string, rel: string, out: string[]): void {
   }
 }
 
-/** Build output the shell references by name, so it is only ever
- * requested with the stamp. Excluded from the bare walk below. */
-const STAMPED = ['admin/main.js', 'admin/main.css'];
+/** Build output the editor page references by name, so it is only
+ * ever requested with the stamp. Excluded from the bare walk below. */
+const STAMPED = ['admin/blocks-page-editor-entry.js', 'admin/blocks-page-editor-entry.css'];
 
 export function buildPrecache(repoRoot: string, hash: string): Precache {
   const staticDir = path.join(repoRoot, 'static');
@@ -69,7 +69,7 @@ export function buildPrecache(repoRoot: string, hash: string): Precache {
   // A missing file here means the build ran out of order (e.g.
   // build:admin's precache step ran before build:site emitted the file
   // it's referencing) — fail the build rather than ship a manifest
-  // silently missing an entry the shell requests.
+  // silently missing an entry the editor page requests.
   const versioned: string[] = [];
   for (const f of STAMPED) {
     const abs = path.join(staticDir, f);
