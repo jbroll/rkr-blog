@@ -21,9 +21,10 @@ import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
 import { openPageSettings, readPageFields } from './page-settings.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
+import type { DraftStore } from './unified-draft.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
-import { createSavePipeline } from './unified-save.ts';
+import { createSavePipeline, type SavePipelineDeps } from './unified-save.ts';
 
 type Mode = 'view' | 'edit';
 
@@ -32,8 +33,12 @@ export interface UnifiedShellDeps {
   tree: BlockTree;
   /** Palette entries from `GET /admin/blocks/macros`. */
   macros: PaletteMacro[];
-  /** Persist the whole tree (`POST /admin/blocks/:slug`). */
-  onSave(tree: BlockTree): Promise<void>;
+  /** Persist the whole tree (`POST /admin/blocks/:slug`); see SavePipelineDeps. */
+  onSave: SavePipelineDeps['onSave'];
+  /** Stored version the page was rendered from (`data-version`). */
+  version?: string;
+  /** Durable unsaved tree; a differing draft is restored on mount. */
+  drafts?: DraftStore;
   /** Marked edit-page body for `tree` (`POST /admin/blocks/_render`). */
   render(tree: BlockTree): Promise<string>;
   /** Pickers and the image editor for media dialogs. Without it, media
@@ -64,6 +69,18 @@ const NO_MEDIA: MediaDialogDeps = {
 };
 
 const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
+const OFFLINE_STRUCTURE = 'Reconnect to add or move blocks';
+
+/** JSON with sorted keys, so equal trees compare equal whatever built them. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v
+  );
+}
+
+const offline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false;
 
 function mustFind(scope: Element, selector: string): Element {
   const el = scope.querySelector(selector);
@@ -120,7 +137,10 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     getTree: () => tree,
     resave: () => applyTree(tree),
     shellEl,
-    toolbar
+    toolbar,
+    version: deps.version,
+    drafts: deps.drafts,
+    dialogRoot: root
   });
 
   const unitAt = (target: unknown): HydratedUnit | null => {
@@ -305,6 +325,11 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
    * calls resolve when it settles. A failed render keeps `next` as the
    * tree, leaves the DOM untouched, and reports in the save indicator. */
   const applyLatest = async (next: BlockTree, opts: ApplyOpts): Promise<void> => {
+    // Structure needs the server render; text blurs never come through here.
+    if (shown !== next && offline()) {
+      save.notice(OFFLINE_STRUCTURE);
+      return;
+    }
     const mine = ++generation;
     tree = next;
     // Set now, not at swap: a palette click before the render lands
@@ -346,6 +371,10 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     getSelected: () => selected,
     flushText,
     commitInsert: (next, path, inserted) => {
+      if (offline()) {
+        save.notice(OFFLINE_STRUCTURE);
+        return;
+      }
       void applyTree(next, { select: path });
       const node = getAtPath(next, path);
       const ids = (node as { slots?: Slots } | null)?.slots?.ids;
@@ -381,6 +410,21 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
   toolbar.querySelector('.rkr-unified-settings')?.addEventListener('click', openSettings);
 
   setMode('view');
+
+  // A draft equal to the page is a save whose clear never ran; any other
+  // draft is unsynced work, saved against the version it was edited from.
+  const restoreDraft = async (store: DraftStore): Promise<void> => {
+    const draft = await store.load().catch(() => null);
+    if (!draft || tree !== deps.tree) return;
+    if (stableJson(draft.tree) === stableJson(tree)) {
+      await store.clear().catch(() => {});
+      return;
+    }
+    if (draft.baseVersion) save.rebase(draft.baseVersion);
+    await applyTree(draft.tree);
+    if (save.state() === 'clean') save.notice('Restored unsaved changes');
+  };
+  if (deps.drafts) void restoreDraft(deps.drafts);
 
   doc.addEventListener('keydown', (raw: Event) => {
     const ev = raw as KeyboardEvent;

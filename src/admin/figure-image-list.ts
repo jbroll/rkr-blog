@@ -116,6 +116,9 @@ export interface ImageListOpts {
   /** Thumbnail for a row, read on every render so it is never a stale
    * (revoked) preview URL; null shows a placeholder. */
   thumbUrl(id: string): string | null;
+  /** Fallback when the thumbnail fails to load: the browser's own copy
+   * of an upload that has not reached the server (offline). */
+  localThumbUrl?(id: string): Promise<string | null>;
   onChange(rows: FigureImageRow[]): void;
   /** Present only where the image editor is available. */
   onEdit?(index: number): void;
@@ -181,9 +184,18 @@ export function mountImageList(doc: Document, opts: ImageListOpts): ImageList {
       img.setAttribute('height', '72');
       // A discard repaint can revoke the URL just after this render;
       // the getter then holds its replacement.
+      let triedLocal = false;
       img.addEventListener('error', () => {
         const next = opts.thumbUrl(id);
-        if (next && next !== img.getAttribute('src')) img.setAttribute('src', next);
+        if (next && next !== img.getAttribute('src')) {
+          img.setAttribute('src', next);
+          return;
+        }
+        if (triedLocal || !opts.localThumbUrl) return;
+        triedLocal = true;
+        void opts.localThumbUrl(id).then((local) => {
+          if (local) img.setAttribute('src', local);
+        });
       });
       box.append(img);
     } else {

@@ -14,6 +14,7 @@ import { getPreviewUrl } from './canvas-loaders.ts';
 import type { ImageEditorHost, MediaDialogDeps } from './figure-dialog-tree.ts';
 import { imageEditPipeline } from './image-edit.ts';
 import { type ImageEditPanel, wireImageEditPanel } from './image-edit-panel.ts';
+import { readLocalOriginal } from './local-thumb.ts';
 import {
   browserMediaDeps,
   type MediaSourceDeps,
@@ -22,9 +23,13 @@ import {
 } from './media-source.ts';
 import { initOpfsForUnifiedEditor } from './opfs-init-unified.ts';
 import { awaitDrainSettled } from './sync.ts';
+import { indexedDbDraftStore } from './unified-draft.ts';
+import { SaveConflict, SaveFailure } from './unified-save.ts';
 import { mountUnifiedShell } from './unified-shell.ts';
 import { uploadImage } from './upload.ts';
 import { uploadVideo } from './video-upload.ts';
+
+const SLUG_TAKEN = 'Not saved. Another page already uses this address.';
 
 const root = document.getElementById('rkr-blocks-edit-root');
 const slug = root?.dataset.slug ?? '';
@@ -104,6 +109,7 @@ function imageEditorHost(): ImageEditorHost {
  * uploads and the image editor check `opfs()` when they are used. */
 function pageMedia(opfs: () => boolean): MediaDialogDeps {
   const posters = new Map<string, string>();
+  const localThumbs = new Map<string, string>();
   let editor: ImageEditorHost | undefined;
   const io: Pick<MediaSourceDeps, 'upload' | 'settle'> = {
     upload: async (kind, file) => {
@@ -123,6 +129,16 @@ function pageMedia(opfs: () => boolean): MediaDialogDeps {
       const rendered = document.querySelector(`video[poster*="${CSS.escape(id)}"]`);
       return posters.get(id) ?? rendered?.getAttribute('poster') ?? null;
     },
+    localThumbUrl: async (id) => {
+      if (!opfs()) return null;
+      const cached = localThumbs.get(id);
+      if (cached) return cached;
+      const blob = await readLocalOriginal(id);
+      if (!blob) return null;
+      const url = URL.createObjectURL(blob);
+      localThumbs.set(id, url);
+      return url;
+    },
     get imageEditor() {
       if (opfs()) editor ??= imageEditorHost();
       return editor;
@@ -133,13 +149,20 @@ function pageMedia(opfs: () => boolean): MediaDialogDeps {
 const tree = embeddedTree();
 
 if (root && slug && tree) {
-  const save = async (next: BlockTree): Promise<void> => {
+  // fetch rejects with a TypeError when offline; the pipeline keys on it.
+  const save = async (next: BlockTree, baseVersion?: string): Promise<string | undefined> => {
     const res = await fetch(`/admin/blocks/${encodeURIComponent(slug)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tree: next })
+      body: JSON.stringify({ tree: next, baseVersion })
     });
+    const reply = (await res.json().catch(() => ({}))) as { error?: unknown; version?: unknown };
+    const version = typeof reply.version === 'string' ? reply.version : undefined;
+    if (res.status === 409 && reply.error === 'conflict' && version)
+      throw new SaveConflict(version);
+    if (res.status === 409) throw new SaveFailure(SLUG_TAKEN);
     if (!res.ok) throw new Error(`save page ${res.status}`);
+    return version;
   };
 
   const render = async (next: BlockTree): Promise<string> => {
@@ -161,6 +184,8 @@ if (root && slug && tree) {
       mountUnifiedShell(root, {
         tree,
         macros,
+        version: root.dataset.version,
+        drafts: indexedDbDraftStore(slug),
         onSave: save,
         render,
         media: pageMedia(() => opfsReady)

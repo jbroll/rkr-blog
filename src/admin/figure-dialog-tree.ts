@@ -78,6 +78,8 @@ export interface ImageEditorHost {
 
 export interface MediaDialogDeps extends MediaPicker {
   imageEditor?: ImageEditorHost;
+  /** Local copy of an image whose upload has not synced yet. */
+  localThumbUrl?(id: string): Promise<string | null>;
 }
 
 interface MediaDialogOpts {
@@ -248,6 +250,7 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
     rows,
     kind,
     thumbUrl: (id) => editor?.previewUrl(id) ?? opts.media.thumbUrl(kind, id),
+    localThumbUrl: video ? undefined : opts.media.localThumbUrl,
     onChange: (next) => {
       rows = next;
       refresh();

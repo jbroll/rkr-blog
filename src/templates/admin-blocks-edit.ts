@@ -13,6 +13,8 @@ import { headIcons, type SiteChrome, siteFoot, siteHead, stylesheetLinks } from 
 
 export interface BlocksEditPageData extends SiteChrome {
   slug: string;
+  /** Stored file version; the editor sends it back as `baseVersion`. */
+  version?: string;
   /** Page title shown in the toolbar; falls back to the slug. */
   title?: string;
   /** Full versioned URL of the editor bundle (admin static scope). */
@@ -111,7 +113,7 @@ ${headIcons(a)}
 ${siteHead(data.site, { isAdmin: data.isAdmin })}
 <main id="main" tabindex="-1">
 <div id="rkroll-admin-status" role="status" aria-live="polite"></div>
-<div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}">${treeScript}
+<div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}"${data.version ? ` data-version="${escapeAttr(data.version)}"` : ''}>${treeScript}
 <div id="rkr-unified-shell" class="rkr-unified-shell is-view" data-mode="view">
 <div id="rkr-unified-toolbar" class="rkr-unified-toolbar">
 <span class="rkr-unified-title">${escapeText(data.title || data.slug)}</span>

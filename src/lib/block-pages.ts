@@ -15,6 +15,14 @@ export interface BlockPage {
   title: string;
   tree: BlockTree;
   fields: Record<string, unknown>;
+  /** Changes whenever the file is rewritten; the editor's save sends it
+   * back so a stale save is refused. */
+  version: string;
+}
+
+/** Version of a stored page file (its mtime, as a string). */
+export function blockFileVersion(file: string): string {
+  return String(fs.statSync(file).mtimeMs);
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -87,7 +95,7 @@ function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
       continue;
     }
     const title = typeof parsed.fields.title === 'string' ? parsed.fields.title : slug;
-    return { title, tree, fields: parsed.fields, file };
+    return { title, tree, fields: parsed.fields, file, version: blockFileVersion(file) };
   }
   return null;
 }
@@ -96,7 +104,7 @@ function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
  * path-traversal slugs — a bad file on disk is a 404, not a 500. */
 export function readBlockPage(siteRoot: string, slug: string): BlockPage | null {
   const page = resolveBlockPage(siteRoot, slug);
-  return page && { title: page.title, tree: page.tree, fields: page.fields };
+  return page && { title: page.title, tree: page.tree, fields: page.fields, version: page.version };
 }
 
 /** Path of the file `readBlockPage` serves for `slug`, so a save lands on it. */

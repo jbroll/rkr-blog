@@ -1,5 +1,6 @@
 // Experimental JSON-blocks editor save:
-//   POST /admin/blocks/:slug { tree } — validate and store one page.
+//   POST /admin/blocks/:slug { tree, baseVersion? } — validate and store
+//   one page; a baseVersion that no longer matches the file is a 409.
 //
 // The URL slug wins: it names the file and overwrites fields.slug, so a
 // rename is a save under a new slug plus a delete of the old file (the
@@ -10,7 +11,12 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
-import { findBlockFile, listBlockPages, readBlockPage } from '../lib/block-pages.ts';
+import {
+  blockFileVersion,
+  findBlockFile,
+  listBlockPages,
+  readBlockPage
+} from '../lib/block-pages.ts';
 import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
 import { renderEditBody } from '../lib/blocks-edit-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
@@ -178,6 +184,7 @@ export function registerAdminBlockRoutes(
           site: getSite(),
           assets,
           slug,
+          version: page.version,
           bundleUrl: `/admin/static/admin/blocks-page-editor-entry.js?v=${assets.hash}`,
           isAdmin: true,
           title: page.title,
@@ -232,9 +239,16 @@ export function registerAdminBlockRoutes(
       if (!existing && fs.existsSync(dest)) {
         return reply.code(409).send({ error: 'slug collides with an existing file' });
       }
+      // Scripted clients (wp-push) send no baseVersion and always overwrite.
+      const base = body.baseVersion;
+      if (typeof base === 'string' && existing) {
+        const current = blockFileVersion(existing);
+        if (current !== base) return reply.code(409).send({ error: 'conflict', version: current });
+      }
       const inserted = !existing;
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
+      const version = blockFileVersion(dest);
 
       // Public / and /:slug read the DB index, not the JSON files, so a
       // save must reindex before the page is reachable (mirrors the
@@ -254,7 +268,7 @@ export function registerAdminBlockRoutes(
         }
       }
 
-      return { slug, inserted };
+      return { slug, inserted, version };
     }
   );
 }

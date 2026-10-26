@@ -21,8 +21,9 @@ export interface EditorDialogOpts {
   cancelLabel?: string;
   /** Resolve true to close, false to stay open. */
   onPrimary(): boolean | Promise<boolean>;
-  /** Escape, close button, Cancel or backdrop. Not called after a successful primary. */
-  onCancel?(): void;
+  /** Escape, close button, Cancel or backdrop. Not called after a
+   * successful primary. `how` tells the Cancel button from a dismissal. */
+  onCancel?(how: 'button' | 'dismiss'): void;
   wide?: boolean;
   /** Where the dialog mounts. Defaults to `document.body`. */
   root?: Element;
@@ -136,14 +137,14 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
     leaving.onLeave?.(cancelled);
   };
 
-  const finish = (cancelled: boolean): void => {
+  const finish = (cancelled: boolean, how: 'button' | 'dismiss' = 'dismiss'): void => {
     if (closed) return;
     popView(true);
     closed = true;
     if (pausedPage) html?.removeAttribute(EDITING_ATTR);
     if (dialog.open) dialog.close?.();
     dialog.remove();
-    if (cancelled) opts.onCancel?.();
+    if (cancelled) opts.onCancel?.(how);
   };
 
   const submit = async (): Promise<void> => {
@@ -190,10 +191,10 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
     });
   };
 
-  const cancel = (): void => {
+  const cancel = (how: 'button' | 'dismiss' = 'dismiss'): void => {
     guardLeave(() => {
       if (view) popView(true);
-      else finish(true);
+      else finish(true, how);
     });
   };
 
@@ -221,7 +222,7 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
   };
 
   closeBtn.addEventListener('click', () => guardLeave(() => finish(true)));
-  cancelBtn.addEventListener('click', cancel);
+  cancelBtn.addEventListener('click', () => cancel('button'));
   primaryBtn.addEventListener('click', () => {
     void submit();
   });

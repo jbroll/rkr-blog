@@ -1,0 +1,99 @@
+// Durable copy of the unified editor's unsaved tree, one record per slug
+// in IndexedDB, so a failed save survives a reload. IndexedDB rather than
+// OPFS: OPFS writes go through a worker that starts only after the schema
+// is ready, and some iOS builds lack it; a draft must exist before the
+// first request.
+//
+// Browser-safe: no node:* imports.
+
+import type { BlockTree } from '../lib/blocks.ts';
+
+export interface DraftRecord {
+  tree: BlockTree;
+  /** The stored version the tree was edited from. */
+  baseVersion: string;
+  savedAt: number;
+}
+
+export interface DraftStore {
+  load(): Promise<DraftRecord | null>;
+  put(record: DraftRecord): Promise<void>;
+  /** Remove the draft; with `savedAt`, only if it is still that record,
+   * so one tab's successful save can't drop another tab's newer draft. */
+  clear(savedAt?: number): Promise<void>;
+}
+
+const DB_NAME = 'rkr-blocks-editor';
+const STORE = 'drafts';
+
+/* v8 ignore start -- IndexedDB needs a real browser; covered by the blocks e2e */
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function transact<T>(
+  db: IDBDatabase,
+  mode: IDBTransactionMode,
+  op: (store: IDBObjectStore) => T
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, mode);
+    const result = op(tx.objectStore(STORE));
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+function isDraft(value: unknown): value is DraftRecord {
+  const rec = value as Partial<DraftRecord> | null;
+  return (
+    !!rec &&
+    typeof rec.baseVersion === 'string' &&
+    typeof rec.savedAt === 'number' &&
+    Array.isArray((rec.tree as { body?: unknown } | undefined)?.body)
+  );
+}
+
+export function indexedDbDraftStore(slug: string): DraftStore {
+  let db: Promise<IDBDatabase> | null = null;
+  // Chained so a clear issued after a put can never land before it.
+  let chain: Promise<unknown> = Promise.resolve();
+  const run = <T>(mode: IDBTransactionMode, op: (store: IDBObjectStore) => T): Promise<T> => {
+    const next = chain.then(async () => {
+      db ??= openDb();
+      return transact(await db, mode, op);
+    });
+    chain = next.catch(() => {});
+    return next;
+  };
+  return {
+    load: async () => {
+      const req = await run('readonly', (store) => store.get(slug));
+      return isDraft(req.result) ? req.result : null;
+    },
+    put: async (record) => {
+      await run('readwrite', (store) => store.put(record, slug));
+    },
+    clear: async (savedAt) => {
+      await run('readwrite', (store) => {
+        if (savedAt === undefined) {
+          store.delete(slug);
+          return;
+        }
+        const req = store.get(slug);
+        req.onsuccess = () => {
+          if ((req.result as DraftRecord | undefined)?.savedAt === savedAt) store.delete(slug);
+        };
+      });
+    }
+  };
+}
+/* v8 ignore stop */

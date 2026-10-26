@@ -1,17 +1,31 @@
 // Whole-tree save pipeline for the unified editor: dirty indicator,
-// coalesced saves, retry, and offline handling.
+// coalesced saves, retry, durable drafts, offline sync and conflicts.
 //
-// Extracted from unified-shell.ts to keep that file under the 500-line
-// cap. Behavior is pinned by the shell tests (blur save, in-flight
-// coalescing, unsaved retry); this module holds no tree state itself —
-// the shell owns the tree and passes snapshots in.
+// The shell owns the tree and passes snapshots in. Every request is
+// preceded by a draft write (unified-draft.ts) that is cleared once the
+// server has the tree, so a reload never loses an unsynced edit. Each
+// save sends the version it was edited from; a 409 opens the conflict
+// dialog instead of overwriting another tab's or device's changes.
 //
 // Browser-safe: no node:* imports.
 
 import type { BlockTree } from '../lib/blocks.ts';
+import { openEditorDialog } from './editor-dialog.ts';
+import type { DraftRecord, DraftStore } from './unified-draft.ts';
 
-/** Save states surfaced on the shell for tests and the indicator. */
-type SaveState = 'clean' | 'editing' | 'saving' | 'unsaved';
+type SaveState = 'clean' | 'editing' | 'saving' | 'unsaved' | 'offline' | 'conflict';
+
+/** Thrown by `onSave` when the page changed since `baseVersion`. */
+export class SaveConflict extends Error {
+  readonly version: string;
+  constructor(version: string) {
+    super('conflict');
+    this.version = version;
+  }
+}
+
+/** Thrown by `onSave` for a refusal the author should read as is. */
+export class SaveFailure extends Error {}
 
 export interface SavePipeline {
   /** Current state (mirrored to the shell's data-save-state). */
@@ -30,30 +44,59 @@ export interface SavePipeline {
    * tree always wins because immutable updates compose. Resolves when
    * the save (and any coalesced follow-up) settles. */
   requestSave(next: BlockTree): Promise<void>;
+  /** Send the next save against `version` (a restored draft's base). */
+  rebase(version: string): void;
 }
 
 export interface SavePipelineDeps {
-  onSave(tree: BlockTree): Promise<void>;
+  /** Store `tree`; a string result is the new stored version. */
+  onSave(tree: BlockTree, baseVersion?: string): Promise<unknown>;
   getTree(): BlockTree;
   /** Retry path for Save and online; defaults to saving `getTree()`. */
   resave?(): Promise<void>;
   shellEl: Element;
   toolbar: Element;
+  /** Stored version the editor loaded (`data-version`). */
+  version?: string;
+  drafts?: DraftStore;
+  /** Where the conflict dialog mounts. */
+  dialogRoot?: Element;
+  /** Source of `online` events; defaults to `window`. */
+  win?: EventTarget;
+  /** "Load latest"; defaults to reloading the page. */
+  reload?(): void;
 }
 
-const docOf = (el: Element): Document => el.ownerDocument;
+const LABELS: Record<SaveState, string> = {
+  clean: 'Saved',
+  editing: 'Editing',
+  saving: 'Saving',
+  unsaved: 'Not saved',
+  offline: 'Offline, will sync',
+  conflict: 'Changed somewhere else'
+};
+
+const CONFLICT_TITLE = 'This page changed somewhere else.';
+const CONFLICT_TEXT =
+  'Load latest discards your changes here. Keep mine saves your version over the other one.';
+
+const navigatorOffline = (): boolean =>
+  typeof navigator !== 'undefined' && navigator.onLine === false;
 
 /** Build the pipeline and its toolbar UI (Save button + indicator). */
 export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
-  const { onSave, getTree, shellEl, toolbar } = deps;
-  const doc = docOf(shellEl);
+  const { onSave, getTree, shellEl, toolbar, drafts } = deps;
+  const doc = shellEl.ownerDocument;
 
   let saveState: SaveState = 'clean';
   let inFlight: Promise<void> | null = null;
   let queued: BlockTree | null = null;
-  // Set by fail(); holds the state at unsaved until the next requestSave,
-  // so an older save resolving can't report "Saved" over it.
+  let version = deps.version;
+  // Set by fail() or a SaveFailure; holds the state at unsaved until the
+  // next requestSave, so an older save resolving can't report "Saved".
   let failure: string | null = null;
+  let latest: string | null = null;
+  let choosing = false;
 
   // The edit template ships both; the fallbacks keep bare toolbars working.
   const mountPoint = (selector: string, tag: string): HTMLElement => {
@@ -69,31 +112,39 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
   saveBtn.type = 'button';
   saveBtn.className = 'rkr-unified-save rkr-edit-btn is-primary';
 
-  const offline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false;
-
   const setState = (next: SaveState): void => {
     saveState = failure === null ? next : 'unsaved';
     shellEl.setAttribute('data-save-state', saveState);
     indicator.textContent =
       failure ??
-      (saveState === 'clean'
-        ? 'Saved'
-        : saveState === 'editing'
-          ? 'Editing'
-          : saveState === 'saving'
-            ? 'Saving'
-            : offline()
-              ? 'Offline, will sync'
-              : 'Not saved');
-    saveBtn.textContent = saveState === 'unsaved' ? 'Retry' : 'Save';
+      (saveState === 'unsaved' && navigatorOffline() ? LABELS.offline : LABELS[saveState]);
+    const stuck = saveState === 'unsaved' || saveState === 'offline' || saveState === 'conflict';
+    saveBtn.textContent = stuck ? 'Retry' : 'Save';
     if (saveState === 'clean') saveBtn.setAttribute('disabled', '');
     else saveBtn.removeAttribute('disabled');
   };
   setState('clean');
 
+  // A draft write must never block or fail the save itself.
+  const writeDraft = async (tree: BlockTree): Promise<DraftRecord | null> => {
+    if (!drafts) return null;
+    const record = { tree, baseVersion: version ?? '', savedAt: Date.now() };
+    try {
+      await drafts.put(record);
+      return record;
+    } catch {
+      return null;
+    }
+  };
+
   const runSave = (snapshot: BlockTree): Promise<void> => {
     setState('saving');
-    const done = onSave(snapshot).then(
+    let draft: DraftRecord | null = null;
+    const done = (async () => {
+      draft = await writeDraft(snapshot);
+      const next = await onSave(snapshot, version);
+      if (typeof next === 'string') version = next;
+    })().then(
       () => {
         if (queued && queued !== snapshot) {
           const next = queued;
@@ -102,30 +153,71 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
         }
         queued = null;
         inFlight = null;
+        if (draft) void drafts?.clear(draft.savedAt).catch(() => {});
         setState('clean');
       },
-      () => {
-        // Offline or server error: keep the tree, mark unsaved, retry
-        // on the next blur, Save click, or browser online event.
-        // Reload-before-reconnect loses the edit; durable offline
-        // queueing is tracked follow-up work, not silent behavior.
+      (err: unknown) => {
+        // The draft stays: Save, online, or the next load retries it. A
+        // retry sends the current tree, so a queued one is now stale.
         inFlight = null;
-        setState('unsaved');
+        queued = null;
+        if (err instanceof SaveConflict) {
+          latest = err.version;
+          setState('conflict');
+          chooseVersion();
+          return;
+        }
+        if (err instanceof SaveFailure) failure = err.message;
+        setState(err instanceof TypeError || navigatorOffline() ? 'offline' : 'unsaved');
       }
     );
     inFlight = done;
     return done;
   };
 
-  const retry = (): void => {
-    if (saveState === 'clean') return;
-    if (inFlight) return;
+  const resave = (): void => {
     void (deps.resave ? deps.resave() : runSave(getTree()));
   };
-  saveBtn.addEventListener('click', retry);
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', retry);
+
+  function chooseVersion(): void {
+    if (choosing) return;
+    choosing = true;
+    const body = doc.createElement('p');
+    body.className = 'rkr-confirm-text';
+    body.textContent = CONFLICT_TEXT;
+    openEditorDialog({
+      root: deps.dialogRoot,
+      title: CONFLICT_TITLE,
+      body,
+      primaryLabel: 'Keep mine',
+      cancelLabel: 'Load latest',
+      onPrimary: () => {
+        choosing = false;
+        if (latest !== null) version = latest;
+        resave();
+        return true;
+      },
+      onCancel: (how) => {
+        choosing = false;
+        if (how !== 'button') return;
+        void (async () => {
+          await drafts?.clear().catch(() => {});
+          (deps.reload ?? (() => location.reload()))();
+        })();
+      }
+    });
   }
+
+  const retry = (): void => {
+    if (saveState === 'clean' || inFlight) return;
+    if (saveState === 'conflict') chooseVersion();
+    else resave();
+  };
+  saveBtn.addEventListener('click', retry);
+  const win = deps.win ?? (typeof window !== 'undefined' ? window : undefined);
+  win?.addEventListener('online', () => {
+    if (saveState !== 'conflict') retry();
+  });
 
   return {
     state: () => saveState,
@@ -140,10 +232,14 @@ export function createSavePipeline(deps: SavePipelineDeps): SavePipeline {
       failure = text;
       setState('unsaved');
     },
+    rebase: (next: string) => {
+      version = next;
+    },
     requestSave: (next: BlockTree): Promise<void> => {
       failure = null;
       if (inFlight) {
         queued = next;
+        void writeDraft(next);
         setState('editing');
         return inFlight;
       }

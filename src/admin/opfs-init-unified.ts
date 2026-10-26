@@ -1,11 +1,13 @@
-// Minimal OPFS init for the unified editor: schema + drainers only.
+// Minimal OPFS init for the unified editor: schema, drainers, and
+// draining the upload queue on reconnect.
 // The full startOfflineInfrastructure (drafts, sync, online state) is
 // TipTap-coupled and not needed here — image editing uses OPFS directly
 // through canvas-loaders and image-edit.
 
 import { drainCommitImageEdit, drainUpload } from './drainers.ts';
+import { onChange as onOnlineChange, start as startOnlineState } from './online-state.ts';
 import { ensureSchema } from './opfs-schema.ts';
-import { registerDrainer } from './sync.ts';
+import { registerDrainer, tryDrain } from './sync.ts';
 
 export async function initOpfsForUnifiedEditor(): Promise<boolean> {
   try {
@@ -13,6 +15,13 @@ export async function initOpfsForUnifiedEditor(): Promise<boolean> {
     if (schema.status === 'unsupported') return false;
     registerDrainer('upload', drainUpload);
     registerDrainer('commitImageEdit', drainCommitImageEdit);
+    // The drain loop reads online-state to stop retrying while offline.
+    // Uploads queued offline, in this session or an earlier one, sync here.
+    startOnlineState();
+    onOnlineChange((state) => {
+      if (state === 'online') void tryDrain();
+    });
+    void tryDrain();
     return true;
   } catch {
     return false;

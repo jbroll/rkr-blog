@@ -470,7 +470,9 @@ describe('admin blocks save', () => {
       payload: { tree: { ...TREE, fields: { title: 'Render', slug: 'render' } } }
     });
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(JSON.parse(res.body), { slug: 'render', inserted: true });
+    const { version, ...rest } = JSON.parse(res.body);
+    assert.deepEqual(rest, { slug: 'render', inserted: true });
+    assert.equal(typeof version, 'string');
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'render.json')));
   });
 
@@ -671,5 +673,58 @@ describe('admin blocks page fields', () => {
     assert.equal(res.statusCode, 409);
     assert.equal(res.json().error, 'slug collides with an existing file');
     assert.equal(fs.readFileSync(file, 'utf8'), original);
+  });
+});
+
+describe('admin blocks save versions', () => {
+  const tree = (markdown: string) => ({
+    version: 1,
+    body: [{ type: 'text', markdown }],
+    fields: { title: 'Versioned', slug: 'versioned' }
+  });
+  const post = (app: Awaited<ReturnType<typeof buildApp>>, payload: Record<string, unknown>) =>
+    app.inject({ method: 'POST', url: '/admin/blocks/versioned', payload });
+
+  it('stale baseVersion returns 409', async (t) => {
+    const { root, app } = await setup(t);
+    const first = await post(app, { tree: tree('One') });
+    assert.equal(first.statusCode, 200);
+    const v1 = first.json().version as string;
+    assert.equal(typeof v1, 'string');
+
+    const second = await post(app, { tree: tree('Two'), baseVersion: v1 });
+    assert.equal(second.statusCode, 200);
+    const v2 = second.json().version as string;
+    assert.notEqual(v2, v1);
+
+    const file = path.join(root, 'content', 'blocks', 'versioned.json');
+    const before = fs.readFileSync(file, 'utf8');
+    const stale = await post(app, { tree: tree('Three'), baseVersion: v1 });
+    assert.equal(stale.statusCode, 409);
+    assert.deepEqual(stale.json(), { error: 'conflict', version: v2 });
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
+
+  it('missing baseVersion still saves', async (t) => {
+    const { app } = await setup(t);
+    await post(app, { tree: tree('One') });
+    await post(app, { tree: tree('Two') });
+    const res = await post(app, { tree: tree('Three') });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().inserted, false);
+    const stored = await app.inject({ method: 'GET', url: '/admin/blocks/versioned' });
+    assert.equal(stored.json().tree.body[0].markdown, 'Three');
+  });
+
+  it('the edit page embeds the version of the file it rendered', async (t) => {
+    const { root, app } = await setup(t);
+    const dir = path.join(root, 'content', 'blocks');
+    fs.writeFileSync(path.join(dir, '2020-01-02-versioned.json'), JSON.stringify(tree('Dated')));
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/versioned' });
+    const version = /data-version="([^"]+)"/.exec(edit.body)?.[1];
+    assert.ok(version, 'edit root carries data-version');
+    const saved = await post(app, { tree: tree('Again'), baseVersion: version });
+    assert.equal(saved.statusCode, 200);
+    assert.equal(fs.existsSync(path.join(dir, 'versioned.json')), false);
   });
 });

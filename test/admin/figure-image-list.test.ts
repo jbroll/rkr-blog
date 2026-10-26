@@ -213,6 +213,29 @@ describe('figure image list rows', () => {
     assert.equal(img.getAttribute('src'), 'blob:current');
   });
 
+  it('a server thumbnail that fails falls back to the local copy once', async () => {
+    const doc = new FakeDocument();
+    const asked: string[] = [];
+    const list = mountImageList(doc as unknown as Document, {
+      rows: ROWS.slice(0, 1),
+      kind: 'image',
+      thumbUrl: (id) => `/admin/preview/${id}`,
+      localThumbUrl: async (id) => {
+        asked.push(id);
+        return 'blob:local';
+      },
+      onChange: () => {}
+    });
+    const img = (list.element as unknown as FakeElement).querySelector('img');
+    assert.ok(img);
+    img.dispatchEvent(new FakeEvent('error'));
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.equal(img.getAttribute('src'), 'blob:local');
+    img.dispatchEvent(new FakeEvent('error'));
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.equal(asked.length, 1, 'a failing local copy is not retried in a loop');
+  });
+
   it('no input ever holds an id', () => {
     const { el } = mount();
     for (const input of el.querySelectorAll('input')) {

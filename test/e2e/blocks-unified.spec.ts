@@ -371,6 +371,119 @@ test('macro field edit renders', async ({ page }) => {
   await expect(page.locator('main')).not.toContainText('Fresh food, owned by neighbors');
 });
 
+const savePill = (page: Page) => page.locator('.rkr-unified-save-state');
+
+test('offline text edit survives reload', async ({ page, context }) => {
+  await login(page);
+  const slug = `e2e-offline-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Offline', markdown: 'Before going offline.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const para = page.locator('#rkr-blocks-page-body p').first();
+  await expect(para).toHaveAttribute('contenteditable', 'true');
+
+  await context.setOffline(true);
+  await para.click();
+  await para.fill('Written while offline.');
+  await page.keyboard.press('Tab');
+  await expect(savePill(page)).toHaveText('Offline, will sync');
+
+  await dragTextAbove(page, para);
+  await expect(savePill(page)).toHaveText('Reconnect to add or move blocks');
+  await expect(page.locator('#rkr-blocks-page-body [data-rkr-blank]')).toHaveCount(0);
+
+  // Keep saves failing while reconnecting, so only the reload can sync.
+  const isSave = (url: URL) => url.pathname === `/admin/blocks/${slug}`;
+  await page.route(isSave, (route) =>
+    route.request().method() === 'POST' ? route.abort() : route.continue()
+  );
+  const retried = page.waitForEvent('requestfailed', (r) => isSave(new URL(r.url())));
+  await context.setOffline(false);
+  await retried;
+  await page.unroute(isSave);
+
+  const synced = saveResponse(page, slug);
+  await page.reload();
+  expect((await synced).status()).toBe(200);
+  await expect(page.locator('#rkr-blocks-page-body p').first()).toHaveText(
+    'Written while offline.'
+  );
+  await expect(savePill(page)).toHaveText('Restored unsaved changes');
+
+  await page.goto(`/${slug}`);
+  await expect(page.locator('article')).toContainText('Written while offline.');
+});
+
+test('offline upload shows its local thumbnail and syncs on reconnect', async ({
+  page,
+  context
+}) => {
+  await login(page);
+  const slug = `e2e-offline-upload-${Date.now()}`;
+  const imageId = await uploadJpeg(page);
+  await seedBlockPage(page, { slug, title: 'Offline upload', body: [figureBlock(imageId)] });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.locator('#rkr-blocks-page-body figure').first().click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
+  await expect(dialog.locator('.rkr-media-row')).toHaveCount(1);
+
+  await context.setOffline(true);
+  await dialog.getByRole('button', { name: 'Add images' }).click();
+  await chooseLocal(page, [
+    { name: 'offline.png', mimeType: 'image/png', buffer: await makePng(Date.now()) }
+  ]);
+  await expect(dialog.locator('.rkr-media-row')).toHaveCount(2);
+  await expect(dialog.locator('.rkr-media-row img').nth(1)).toHaveAttribute('src', /^blob:/);
+
+  const synced = page.waitForResponse(
+    (r) => r.url().endsWith('/admin/upload') && r.request().method() === 'POST'
+  );
+  await context.setOffline(false);
+  expect((await synced).status()).toBe(200);
+  const committed = saveResponse(page, slug);
+  await dialog.getByRole('button', { name: 'Save figure' }).click();
+  expect((await committed).status()).toBe(200);
+  await expect(page.locator('#rkr-blocks-page-body figure img')).toHaveCount(2);
+});
+
+test('conflict dialog on concurrent edit', async ({ page, context }) => {
+  await login(page);
+  const slug = `e2e-conflict-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Conflict', markdown: 'Shared start.' });
+  const other = await context.newPage();
+  for (const tab of [page, other]) {
+    await tab.goto(`/admin/blocks/edit/${slug}`);
+    await tab.getByRole('button', { name: 'Edit', exact: true }).click();
+  }
+
+  const edit = async (tab: Page, text: string) => {
+    const para = tab.locator('#rkr-blocks-page-body p').first();
+    await para.click();
+    await para.fill(text);
+    const saved = saveResponse(tab, slug);
+    await tab.keyboard.press('Tab');
+    return (await saved).status();
+  };
+  expect(await edit(page, 'From the first tab.')).toBe(200);
+  expect(await edit(other, 'From the second tab.')).toBe(409);
+
+  const dialog = other
+    .locator('[data-rkr-dialog]')
+    .filter({ hasText: 'This page changed somewhere else.' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Load latest' })).toBeVisible();
+  const kept = saveResponse(other, slug);
+  await dialog.getByRole('button', { name: 'Keep mine' }).click();
+  expect((await kept).status()).toBe(200);
+  await expect(savePill(other)).toHaveText('Saved');
+
+  const res = await page.request.get(`/admin/blocks/${slug}`);
+  const { tree } = (await res.json()) as { tree: { body: { markdown?: string }[] } };
+  expect(tree.body[0]?.markdown).toBe('From the second tab.');
+});
+
 test('publish a new page', async ({ page }) => {
   await login(page);
   const name = `Spring Sale ${Date.now()}`;

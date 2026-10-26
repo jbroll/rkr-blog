@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { PRIMITIVE_MACROS } from '../../src/admin/blocks-editor.ts';
+import type { DraftRecord } from '../../src/admin/unified-draft.ts';
 import { mountUnifiedShell } from '../../src/admin/unified-shell.ts';
 import type { BlockNode, BlockTree } from '../../src/lib/blocks.ts';
 import { renderBlockTree } from '../../src/lib/blocks-render.ts';
@@ -1398,6 +1399,117 @@ function anchor(doc: FakeDocument, label: string): FakeElement {
   a.textContent = label;
   return a;
 }
+
+describe('unified shell drafts and offline', () => {
+  const tick = async (n = 10): Promise<void> => {
+    for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0));
+  };
+  const hello = (): { f: Fixture; tree: BlockTree } => ({
+    f: fixture((doc) => [marker(doc, '0'), para(doc, 'Hello')]),
+    tree: { version: 1, body: [{ type: 'text', markdown: 'Hello' }] }
+  });
+
+  function drafts(record: DraftRecord | null) {
+    const store = {
+      record,
+      cleared: 0,
+      load: async () => store.record,
+      put: async (r: DraftRecord) => {
+        store.record = r;
+      },
+      clear: async () => {
+        store.cleared++;
+        store.record = null;
+      }
+    };
+    return store;
+  }
+
+  it('a stored draft that differs is restored, saved against its base, and noted', async () => {
+    const { f, tree } = hello();
+    const restored: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'Offline words' }] };
+    const store = drafts({ tree: restored, baseVersion: 'v1', savedAt: 5 });
+    const saves: { tree: BlockTree; base?: string }[] = [];
+    mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v1',
+      drafts: store,
+      onSave: async (t, base) => {
+        saves.push({ tree: t, base });
+        return 'v2';
+      },
+      render: markedRender
+    });
+    await tick();
+    assert.equal(f.body.querySelector('p')?.textContent, 'Offline words');
+    assert.equal(saves.length, 1);
+    assert.equal(saves[0]?.base, 'v1');
+    assert.equal(
+      f.toolbar.querySelector('.rkr-unified-save-state')?.textContent,
+      'Restored unsaved changes'
+    );
+    assert.equal(store.record, null);
+  });
+
+  it('a draft equal to the page is dropped without saving', async () => {
+    const { f, tree } = hello();
+    const store = drafts({ tree: structuredClone(tree), baseVersion: 'v0', savedAt: 5 });
+    let saves = 0;
+    mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      version: 'v1',
+      drafts: store,
+      onSave: async () => {
+        saves++;
+      },
+      render: markedRender
+    });
+    await tick();
+    assert.equal(saves, 0);
+    assert.equal(store.cleared, 1);
+  });
+
+  it('structural edits are refused offline; text edits still save', async (t) => {
+    const nav = globalThis.navigator as { onLine?: boolean };
+    Object.defineProperty(nav, 'onLine', { value: false, configurable: true });
+    t.after(() => {
+      delete nav.onLine;
+    });
+    const { f, tree } = hello();
+    const saved: BlockTree[] = [];
+    let renders = 0;
+    const shell = mount(
+      f,
+      tree,
+      async (next) => {
+        saved.push(next);
+      },
+      undefined,
+      async (next) => {
+        renders++;
+        return markedRender(next);
+      }
+    );
+    shell.setMode('edit');
+    const before = f.body.innerHTML;
+    await shell.applyTree({ version: 1, body: [...tree.body, { type: 'text', markdown: '' }] });
+    assert.equal(renders, 0);
+    assert.equal(f.body.innerHTML, before);
+    assert.equal(f.body.getAttribute('inert'), null);
+    assert.equal(
+      f.toolbar.querySelector('.rkr-unified-save-state')?.textContent,
+      'Reconnect to add or move blocks'
+    );
+
+    const p = f.body.querySelector('p') as FakeElement;
+    p.textContent = 'Typed offline';
+    p.dispatchEvent(new FakeEvent('focusout'));
+    await tick();
+    assert.deepEqual(saved.at(-1)?.body, [{ type: 'text', markdown: 'Typed offline' }]);
+  });
+});
 
 describe('unified shell page settings', () => {
   const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
