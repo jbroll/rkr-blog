@@ -7,16 +7,16 @@
 //    controller, if any).
 // 2. Unregister any SW from a previous deploy so casual readers
 //    don't retain offline caching they no longer need.
-// 3. After a logout, clear the editor's caches and drafts (clearAdminState).
+// 3. On the logout landing, drop the editor's cached pages. Drafts stay:
+//    only a confirmed sign-out deletes them (admin-signout.ts).
 
-import { clearAdminState } from './admin-signout.ts';
+import { clearAdminCaches } from './admin-caches.ts';
 
 {
   const url = new URL(location.href);
   if (url.searchParams.get('_rkr') === 'logout') {
-    void clearAdminState({
+    void clearAdminCaches({
       caches: globalThis.caches,
-      indexedDB: globalThis.indexedDB,
       serviceWorker: navigator.serviceWorker
     }).catch(() => {});
   }

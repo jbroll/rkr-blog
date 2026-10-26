@@ -93,6 +93,7 @@ export function renderIndexPage(data: IndexPageData): string {
   const sortToggle = renderSortToggle(isAsc, activeTags);
   const tagRail = renderTagRail(data.tagCounts, activeTags, `${sortToggle}${renderSearchForm()}`);
   const head = siteHead(data.site, {
+    assets: a,
     isAdmin: data.isAdmin,
     hideHomeLink: true,
     buildHash: a.hash

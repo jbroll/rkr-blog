@@ -21,7 +21,7 @@ import { createInertHolds, type ReleaseInert } from './inert-holds.ts';
 import { openPageSettings, readPageFields } from './page-settings.ts';
 import { mountBlockActions } from './unified-block-actions.ts';
 import { createConfigurator } from './unified-configure.ts';
-import type { DraftStore } from './unified-draft.ts';
+import { type DraftStore, stableJson } from './unified-draft.ts';
 import { type HydratedUnit, hydrate } from './unified-hydrate.ts';
 import { mountPaletteInsert } from './unified-insert.ts';
 import { createSavePipeline, type SavePipelineDeps } from './unified-save.ts';
@@ -72,15 +72,6 @@ const DELETE_FAILED = "Couldn't delete the page. Check your connection and try a
 const DELETE_WHILE_SAVING = 'Wait for the save to finish, then delete the page.';
 const OFFLINE_STRUCTURE = 'Reconnect to add or move blocks';
 const OFFLINE_DIALOG = "You're offline. Keep this open and save when you reconnect.";
-
-/** JSON with sorted keys, so equal trees compare equal whatever built them. */
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v
-  );
-}
 
 const offline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false;
 

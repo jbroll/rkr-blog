@@ -109,9 +109,56 @@ test('leaving right after a save still re-caches the saved page', async ({ page 
     .toContain('Saved, then left.');
 });
 
-test('signing out drops the cached editor pages and the editor drafts', async ({ page }) => {
-  await login(page);
-  const slug = `e2e-signout-${Date.now()}`;
+/** Store a draft for `slug` the way the editor does, with a body the server lacks. */
+function putDraft(page: Page, slug: string): Promise<void> {
+  return page.evaluate(
+    (key) =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('rkr-blocks-editor', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('drafts');
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const tx = req.result.transaction('drafts', 'readwrite');
+          tx.objectStore('drafts').put(
+            {
+              tree: {
+                version: 1,
+                body: [{ type: 'text', markdown: 'Never sent.' }],
+                fields: { title: 'Unsent page', slug: key }
+              },
+              baseVersion: 'stale',
+              savedAt: Date.now()
+            },
+            key
+          );
+          tx.oncomplete = () => {
+            req.result.close();
+            resolve();
+          };
+        };
+      }),
+    slug
+  );
+}
+
+function draftSlugs(page: Page): Promise<string[]> {
+  return page.evaluate(
+    () =>
+      new Promise<string[]>((resolve) => {
+        const req = indexedDB.open('rkr-blocks-editor', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('drafts');
+        req.onsuccess = () => {
+          const keys = req.result.transaction('drafts').objectStore('drafts').getAllKeys();
+          keys.onsuccess = () => {
+            req.result.close();
+            resolve(keys.result.map(String));
+          };
+        };
+      })
+  );
+}
+
+async function openEditorOnce(page: Page, slug: string): Promise<void> {
   await seedBlockPage(page, { slug, title: 'Sign out', markdown: 'Cached page.' });
   await page.goto('/admin/blocks');
   await page.evaluate(async () => {
@@ -119,21 +166,45 @@ test('signing out drops the cached editor pages and the editor drafts', async ({
   });
   await page.goto(`/admin/blocks/edit/${slug}`);
   await expect.poll(() => cachedPage(page)).toContain('Cached page.');
-  const hasDrafts = () =>
-    page.evaluate(async () =>
-      (await indexedDB.databases()).map((d) => d.name).includes('rkr-blocks-editor')
-    );
-  await expect.poll(hasDrafts).toBe(true);
+}
 
-  await page.goto('/');
-  await Promise.all([
-    page.waitForURL((url: URL) => url.pathname === '/'),
-    page.getByRole('button', { name: 'Logout' }).click()
-  ]);
+test('the logout landing drops cached editor pages but keeps drafts', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-landing-${Date.now()}`;
+  await openEditorOnce(page, slug);
+  await putDraft(page, slug);
+
+  await page.goto('/?_rkr=logout');
   await expect
     .poll(() =>
       page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('rkr-admin-')))
     )
     .toEqual([]);
-  await expect.poll(hasDrafts).toBe(false);
+  expect(await draftSlugs(page)).toContain(slug);
+});
+
+test('signing out with an unsynced draft asks before deleting it', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-signout-${Date.now()}`;
+  await openEditorOnce(page, slug);
+  await putDraft(page, slug);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Logout' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(
+    '1 page has changes that never reached the server. Signing out deletes them.'
+  );
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+  expect(await draftSlugs(page)).toContain(slug);
+
+  await page.getByRole('button', { name: 'Logout' }).click();
+  await Promise.all([
+    page.waitForURL((url: URL) => url.pathname === '/' && !url.search.includes('_rkr')),
+    page.getByRole('dialog').getByRole('button', { name: 'Sign out and delete' }).click()
+  ]);
+  await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
+  expect(await draftSlugs(page)).not.toContain(slug);
 });

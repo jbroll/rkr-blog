@@ -25,6 +25,9 @@ export interface EditorDialogOpts {
    * successful primary. `how` tells the Cancel button from a dismissal. */
   onCancel?(how: 'button' | 'dismiss'): void;
   wide?: boolean;
+  /** Start on Cancel instead of the first field or the primary button,
+   * for a destructive primary. */
+  focusCancel?: boolean;
   /** Where the dialog mounts. Defaults to `document.body`. */
   root?: Element;
 }
@@ -260,6 +263,6 @@ export function openEditorDialog(opts: EditorDialogOpts): EditorDialog {
   if (typeof dialog.showModal === 'function') openModal(dialog);
   else dialog.setAttribute('open', '');
   const first = bodyWrap.querySelector('input,select,textarea') as HTMLElement | null;
-  (first ?? primaryBtn).focus?.();
+  (opts.focusCancel ? cancelBtn : (first ?? primaryBtn)).focus?.();
   return handle;
 }

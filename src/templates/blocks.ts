@@ -50,7 +50,7 @@ ${data.adminPwa ? adminPwaHead(a) : ''}
 ${data.css ? `<style>${data.css}</style>` : ''}
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash })}
+${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash, assets: a })}
 <main id="main" tabindex="-1">
 ${data.bodyHtml}</main>
 ${data.isAdmin && data.slug ? blocksAdminFab(data.slug) : ''}

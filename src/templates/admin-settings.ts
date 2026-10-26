@@ -101,7 +101,7 @@ ${headIcons(a)}
 </style>
 </head>
 <body>
-${siteHead(data.site, { isAdmin: true })}
+${siteHead(data.site, { isAdmin: true, assets: a })}
 <main id="main" tabindex="-1">
 ${flash}
 <form method="post" action="/admin/settings" class="rkr-admin-settings">

@@ -29,6 +29,7 @@ function fixtureRepo(t: TestContext): string {
   fs.writeFileSync(path.join(root, 'static', 'icon-512.png'), '');
   fs.writeFileSync(path.join(root, 'static', 'apple-touch-icon.png'), '');
   fs.writeFileSync(path.join(root, 'static', 'site', 'sw-admin-register.js'), '//');
+  fs.writeFileSync(path.join(root, 'static', 'site', 'signout.js'), '//');
   fs.writeFileSync(path.join(root, 'static', 'site', 'lightbox.css'), '/* */');
   return root;
 }
@@ -102,6 +103,7 @@ test('buildPrecache: assets the shell requests by a fixed name stay versioned', 
     'icon-32.png',
     'admin-manifest.webmanifest',
     'site/sw-admin-register.js',
+    'site/signout.js',
     'site/lightbox.css'
   ]) {
     assert.ok(assets.includes(`/admin/static/${rel}?v=abcdef012345`), `${rel} missing`);
@@ -118,6 +120,7 @@ test('buildPrecache: fixed assets the shell references are listed', (t) => {
     'icon-32.png',
     'apple-touch-icon.png',
     'site/sw-admin-register.js',
+    'site/signout.js',
     'site/lightbox.css'
   ]) {
     assert.ok(assets.includes(`/admin/static/${rel}?v=abcdef012345`), `${rel} missing`);

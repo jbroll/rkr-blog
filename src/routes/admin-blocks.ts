@@ -145,7 +145,7 @@ export function registerAdminBlockRoutes(
       const { slug } = req.params;
       const page = readBlockPage(siteRoot, slug);
       if (!page) return reply.code(404).send({ error: 'not found' });
-      return { slug, title: page.title, tree: page.tree };
+      return { slug, title: page.title, tree: { ...page.tree, fields: page.fields } };
     }
   );
 

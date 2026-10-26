@@ -37,7 +37,7 @@ export function renderAdminCommentsPage(rows: ModerationRow[], chrome: SiteChrom
 ${stylesheetLinks(assets)}
 ${headIcons(assets)}
 </head><body>
-${siteHead(site, { isAdmin: true })}
+${siteHead(site, { isAdmin: true, assets })}
 <main class="amc-wrap" id="main">
 <h1>Comment moderation</h1>
 ${list}

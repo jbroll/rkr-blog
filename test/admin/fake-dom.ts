@@ -274,6 +274,7 @@ export class FakeElement extends FakeNode {
   }
 
   focus(): void {
+    this.ownerDocument.activeElement = this;
     this.dispatchEvent(new FakeEvent('focus'));
   }
 

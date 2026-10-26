@@ -120,7 +120,7 @@ ${adminPwaHead(a)}
 <style>${EDITOR_CSS}</style>
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin })}
+${siteHead(data.site, { isAdmin: data.isAdmin, assets: a })}
 <main id="main" tabindex="-1">
 <div id="rkroll-admin-status" role="status" aria-live="polite"></div>
 <div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}"${data.version ? ` data-version="${escapeAttr(data.version)}"` : ''}>${treeScript}

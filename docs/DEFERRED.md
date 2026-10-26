@@ -20,6 +20,7 @@ Format: **item** — _revisit when:_ trigger.
 
 - **No blocks-editor support for system pages (`_about`, `_site-banner`)** — they stay markdown in `content/posts/` because `/about` and the index banner read them directly; `blocks-migrate --archive` deliberately leaves them live. _Revisit when:_ system pages need JSON twins / editing in the blocks editor.
 - **`embed` blocks cannot load on public pages** — the CSP has no `frame-src` and nothing creates the type (`spec.md §8a`). _Revisit when:_ an author needs a video or map embed; add `frame-src` for the allowed hosts and an editor dialog.
+- **Round-trip normalization for text blocks** — a text block whose markdown the editor would re-serialize differently (links with `&`, hard breaks, autolinks) falls back to read-only. _Revisit when:_ authors report read-only migrated paragraphs.
 - **Per-instance crops** — crops are per-sidecar (global to every page using the image). _Revisit when:_ an author wants the same image cropped differently on two pages.
 - **Cross-figure image move** — an image moves between figures by removing it from one and adding it in the other's dialog. _Revisit when:_ an author asks for a one-step move.
 - **No video trim or poster control in the editor** — `POST /admin/video/:id/trim` works, but the video dialog sets only the video, caption and layout. _Revisit when:_ an author needs a trimmed clip.

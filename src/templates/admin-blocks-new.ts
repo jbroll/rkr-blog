@@ -32,7 +32,7 @@ ${headIcons(a)}
 <style>.rkr-new-page{display:grid;gap:.5rem;max-width:32rem}.rkr-new-page input{box-sizing:border-box;width:100%;font:inherit;padding:.4rem .6rem}.rkr-new-page p{margin:0;font-size:.875rem}.rkr-new-page button{justify-self:start;font:inherit;padding:.4rem 1rem}.rkr-form-error{color:#b3261e;max-width:32rem}</style>
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin })}
+${siteHead(data.site, { isAdmin: data.isAdmin, assets: a })}
 <main id="main" tabindex="-1">
 <h1>New page</h1>
 ${data.error ? `<p class="rkr-form-error" role="alert">${escapeText(data.error)}</p>` : ''}

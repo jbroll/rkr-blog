@@ -547,6 +547,15 @@ before every request and clears it after the server has the tree
   draft has to exist before the first request. Every storage call is
   wrapped in a timeout (`within`) so a blocked open cannot hold up a
   save.
+- **Drafts survive the logout landing.** `?_rkr=logout` is a GET any
+  link can reach, so `sw-unregister.ts` only drops the `rkr-admin-*`
+  caches and the worker (`site/admin-caches.ts`). Draft deletion lives
+  in the Logout form's submit handler (`site/admin-signout.ts`, loaded
+  by `site/signout.js` from `siteHead`): it lists drafts
+  (`listAllDrafts`), compares each with `GET /admin/blocks/:slug`, and
+  clears the store only after the author confirms. `admin-caches.ts`
+  is a separate module so the reader-facing `sw-unregister.js` does not
+  pull in the dialog code.
 - **Whole-tree save.** One request carries the full tree and the version
   it was edited from. This keeps the server a validator and writer, with
   no patch protocol.

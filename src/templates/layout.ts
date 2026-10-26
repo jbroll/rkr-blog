@@ -83,6 +83,9 @@ export interface HeadOpts {
   hideHomeLink?: boolean;
   /** Deployed commit hash to display in the header. Omitted → no badge. */
   buildHash?: string;
+  /** Where the sign-out script loads from; admin pages pass the
+   * /admin/static base so it stays inside the worker's scope. */
+  assets?: AssetCtx;
 }
 
 /** No-JS site search form for the header nav (post-listing pages).
@@ -98,10 +101,12 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
   const versionSpan = opts.buildHash
     ? `<span class="rkr-site-head-version" title="Deployed commit">${escapeText(opts.buildHash)}</span>`
     : '';
+  // signout.js asks before a sign-out deletes unsynced page drafts.
   const auth = opts.isAdmin
     ? `<form method="post" action="/admin/logout" class="rkr-site-head-auth-form">
     <button type="submit" class="rkr-site-head-auth-btn">Logout</button>
-  </form>`
+  </form>
+  <script type="module" src="${opts.assets ? `${opts.assets.base}/site/signout.js${bundleVersion(opts.assets)}` : '/static/site/signout.js'}"></script>`
     : `<a class="rkr-site-head-auth-btn" href="/login" rel="nofollow">Login</a>`;
   return `<a class="rkr-skip" href="#main">Skip to content</a>
 <header class="rkr-site-head">

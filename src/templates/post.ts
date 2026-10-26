@@ -80,7 +80,7 @@ export function renderPostPage(post: PostPageData): string {
   const showComments = post.showComments !== false;
   const a = post.assets;
   const v = bundleVersion(a);
-  const head = siteHead(post.site, { isAdmin: post.isAdmin, buildHash: a.hash });
+  const head = siteHead(post.site, { isAdmin: post.isAdmin, buildHash: a.hash, assets: a });
   const banner = post.bannerHtml ?? '';
   const siteChrome = post.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   const scriptTags =

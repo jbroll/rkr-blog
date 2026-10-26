@@ -40,6 +40,7 @@ const FIXED = [
   'icon-32.png',
   'apple-touch-icon.png',
   'site/sw-admin-register.js',
+  'site/signout.js',
   'site/lightbox.css'
 ];
 

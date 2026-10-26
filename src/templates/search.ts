@@ -31,7 +31,7 @@ export interface SearchPageData extends SiteChrome {
 export function renderSearchPage(data: SearchPageData): string {
   const a = data.assets;
   const v = bundleVersion(a);
-  const head = siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash });
+  const head = siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash, assets: a });
   const trimmed = data.q.trim();
 
   let bodyHtml: string;

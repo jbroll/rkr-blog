@@ -184,9 +184,10 @@ After the cutover, `content/blocks/` is what makes posts readable, and
    The archived markdown is no longer in `content/posts/`, so the import
    writes it back, merges comments (new ones stay) and rebuilds the
    index. Page edits made since the export stay only in
-   `content/blocks.rolled-back`. `--replace` would instead discard
-   everything since the export, and refuses an archive with no owner
-   user.
+   `content/blocks.rolled-back`. Pages created after the cutover have no
+   markdown source, so the reindex drops their index rows and, with
+   them, their comments. `--replace` would instead discard everything
+   since the export, and refuses an archive with no owner user.
 
 ### First deploy of a new site
 
@@ -592,8 +593,10 @@ Deploying a site.
   `{ "tree": ... }` overwrites the page. Adding `baseVersion` makes the
   write conflict-checked.
 - **Unsaved work.** Each browser keeps its unsent tree in IndexedDB until
-  the server has it. Clearing site data discards it, and so does signing
-  out, which also drops the cached editor pages. An edit page opens
+  the server has it. Clearing site data discards it. Logout drops the
+  cached editor pages; when this browser holds drafts the server lacks,
+  it lists them and deletes them only if the author picks Sign out and
+  delete. An edit page opens
   offline only if an earlier online visit cached it; otherwise it
   answers 503.
 - **Old URLs.** `/admin/editor` answers 404, `/admin/view/:slug`

@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { DRAFTS_DB } from '../../src/admin/unified-draft.ts';
-import { ADMIN_CACHE_PREFIX, clearAdminState } from '../../src/site/admin-signout.ts';
+import { ADMIN_CACHE_PREFIX } from '../../src/site/admin-caches.ts';
 import {
   CACHE_PREFIX,
   evictOldCaches,
@@ -294,39 +293,6 @@ test('a POST under /admin/ is never intercepted', () => {
     handleFetch(e, new Request('https://x.test/admin/blocks/edit/a', { method: 'POST' })),
     null
   );
-});
-
-test('clearAdminState: drops admin caches, the drafts database and the admin worker', async () => {
-  const caches = new FakeCaches();
-  await caches.open(`${CACHE_PREFIX}abc`);
-  await caches.open(`${CACHE_PREFIX}def`);
-  await caches.open('other-app');
-  const deleted: string[] = [];
-  const scopes: string[] = [];
-  let unregistered = 0;
-  await clearAdminState({
-    caches: caches as unknown as CacheStorage,
-    indexedDB: { deleteDatabase: (name: string) => deleted.push(name) },
-    serviceWorker: {
-      getRegistration: async (scope: string) => {
-        scopes.push(scope);
-        return {
-          unregister: async () => {
-            unregistered++;
-            return true;
-          }
-        };
-      }
-    }
-  });
-  assert.deepEqual(await caches.keys(), ['other-app']);
-  assert.deepEqual(deleted, [DRAFTS_DB]);
-  assert.deepEqual(scopes, ['/admin/']);
-  assert.equal(unregistered, 1);
-});
-
-test('clearAdminState: tolerates a browser without these APIs', async () => {
-  await clearAdminState({});
 });
 
 test('sign-out and the admin worker agree on the cache prefix', () => {

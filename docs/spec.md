@@ -458,6 +458,14 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   draft restores on reload. The indicator shows clean, editing, saving,
   unsaved, offline or conflict.
 - Leaving with unsaved work asks for confirmation.
+- **Logout** with drafts the server lacks (compared page by page) shows
+  "N pages have changes that never reached the server. Signing out
+  deletes them." with the page titles. Cancel, which has focus, keeps
+  the drafts and the session; Sign out and delete clears them, then
+  signs out. With none, or when the drafts cannot be counted within 3
+  seconds, Logout signs out at once and keeps any drafts. The page the
+  logout lands on drops the cached editor pages and the admin worker,
+  never drafts.
 - **Delete page** (Page settings) asks for confirmation naming the page,
   then removes its file and index entry and returns to the pages list.
   Its comments go with it, as a deleted markdown post's did. If a
