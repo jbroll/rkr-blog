@@ -9,10 +9,19 @@
 //
 // Browser-safe: no node:* imports.
 
-import type { BlockNode, BlockTree } from '../lib/blocks.ts';
-import { gridLabel } from '../lib/grid.ts';
+import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
+import { gridLabel, readGridSlots } from '../lib/grid.ts';
 import { moveBlock } from './block-move.ts';
-import { childrenOf, getAtPath, insertAtPath, type Path, removeAtPath } from './block-tree-ops.ts';
+import {
+  childrenOf,
+  getAtPath,
+  insertAtPath,
+  type Path,
+  removeAtPath,
+  unwrapAtPath,
+  wrapAtPath
+} from './block-tree-ops.ts';
+import { MAX_MACRO_DEPTH } from './blocks-editor.ts';
 
 export interface BlockActionsEnv {
   body: Element;
@@ -47,6 +56,19 @@ function typeLabel(node: BlockNode): string {
   if (node.type === 'macro') return capitalize(node.macro);
   if (node.type === 'grid') return gridLabel(node.slots);
   return TYPE_LABELS[node.type] ?? capitalize(node.type);
+}
+
+const isGrid = (node: BlockNode | null | undefined): node is Extract<BlockNode, { type: 'grid' }> =>
+  node?.type === 'grid';
+
+function wrapAllowed(tree: BlockTree, path: Path, cols: 1 | 2): boolean {
+  const node = getAtPath(tree, path);
+  if (!node) return false;
+  if (isGrid(node) && readGridSlots(node.slots).band) return false;
+  if (cols === 2) return true;
+  if (isGrid(node) && readGridSlots(node.slots).cols === 1) return false;
+  const parent = path.length > 1 ? getAtPath(tree, path.slice(0, -1)) : null;
+  return !(isGrid(parent) && readGridSlots(parent.slots).cols === 1);
 }
 
 const GHOST_WIDTH = 320;
@@ -171,6 +193,32 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
       void env.applyTree(next, target ? { select: target } : undefined);
     });
 
+  const wrap = (cols: 1 | 2): void =>
+    act((tree, path) => {
+      if (!wrapAllowed(tree, path, cols)) return;
+      const grid: BlockNode = {
+        type: 'grid',
+        slots: { cols },
+        children: [getAtPath(tree, path) as BlockNode]
+      };
+      if (path.length - 1 + containerDepth(grid) > MAX_MACRO_DEPTH) {
+        note.textContent = `${gridLabel(grid.slots)} can't go here: grids nest at most ${MAX_MACRO_DEPTH} levels. Save the inner part as its own macro.`;
+        note.hidden = false;
+        return;
+      }
+      void env.applyTree(wrapAtPath(tree, path, cols), { select: path });
+    });
+
+  const unwrap = (): void =>
+    act((tree, path) => {
+      const node = getAtPath(tree, path);
+      if (!isGrid(node)) return;
+      const next = unwrapAtPath(tree, path);
+      const target = node.children.length > 0 ? path : null;
+      env.select(target);
+      void env.applyTree(next, target ? { select: target } : undefined);
+    });
+
   const configure = (): void =>
     act((tree, path) => {
       const node = getAtPath(tree, path);
@@ -232,6 +280,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   const up = button('move-up', 'Move up', 'Up', () => move(-1));
   const down = button('move-down', 'Move down', 'Down', () => move(1));
   button('duplicate', 'Duplicate', 'Duplicate', duplicate);
+  const wrapRow = button('wrap-row', 'Wrap in row', 'Wrap in row', () => wrap(2));
+  const wrapColumn = button('wrap-column', 'Wrap in column', 'Wrap in column', () => wrap(1));
+  const unwrapButton = button('unwrap', 'Unwrap', 'Unwrap', unwrap);
   const config = button('configure', 'Configure', 'Configure', configure);
   button('delete', 'Delete', 'Delete', remove);
   const note = doc.createElement('span');
@@ -294,6 +345,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     const size = listAt(tree, path.slice(0, -1))?.length ?? 0;
     setDisabled(up, idx === 0);
     setDisabled(down, idx >= size - 1);
+    wrapRow.hidden = !wrapAllowed(tree, path, 2);
+    wrapColumn.hidden = !wrapAllowed(tree, path, 1);
+    unwrapButton.hidden = !isGrid(node);
     config.hidden = !env.canConfigure(node);
     const text = env.noteFor?.(path) ?? null;
     note.textContent = text ?? '';

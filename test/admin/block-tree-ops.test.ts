@@ -8,7 +8,9 @@ import {
   removeAtPath,
   resolveDrop,
   setSlotAtPath,
-  updateSlotsAtPath
+  unwrapAtPath,
+  updateSlotsAtPath,
+  wrapAtPath
 } from '../../src/admin/block-tree-ops.ts';
 import type { BlockTree, Slots } from '../../src/lib/blocks.ts';
 
@@ -96,5 +98,59 @@ describe('block tree ops', () => {
     assert.throws(() => insertAtPath(TREE, [0, 0], 0, { type: 'text' }), /bad parent/);
     assert.deepEqual(childrenOf({ type: 'text' }), []);
     assert.deepEqual(childrenOf({ type: 'macro', macro: 'hero' }), []);
+  });
+
+  it('wraps a block in a grid and unwraps it back', () => {
+    const tree: BlockTree = { version: 1, body: [{ type: 'text', markdown: 'A' }] };
+    const wrapped = wrapAtPath(tree, [0], 2);
+    assert.deepEqual(wrapped.body[0], {
+      type: 'grid',
+      slots: { cols: 2 },
+      children: [{ type: 'text', markdown: 'A' }]
+    });
+    assert.deepEqual(unwrapAtPath(wrapped, [0]), tree);
+  });
+
+  it('unwrap lifts every child into the parent at the grid index', () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        {
+          type: 'grid',
+          children: [
+            { type: 'text', markdown: 'a' },
+            {
+              type: 'grid',
+              slots: { cols: 2 },
+              children: [
+                { type: 'text', markdown: 'b' },
+                { type: 'text', markdown: 'c' }
+              ]
+            },
+            { type: 'text', markdown: 'd' }
+          ]
+        }
+      ]
+    };
+    const next = unwrapAtPath(tree, [0, 1]);
+    assert.deepEqual(
+      childrenOf(next.body[0] as never).map((n) => (n as { markdown: string }).markdown),
+      ['a', 'b', 'c', 'd']
+    );
+  });
+
+  it('unwrap of an empty grid removes it', () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'text', markdown: 'a' },
+        { type: 'grid', children: [] }
+      ]
+    };
+    assert.deepEqual(unwrapAtPath(tree, [1]).body, [{ type: 'text', markdown: 'a' }]);
+  });
+
+  it('unwrap refuses a leaf', () => {
+    assert.throws(() => unwrapAtPath({ version: 1, body: [{ type: 'text' }] }, [0]), /not a grid/);
   });
 });

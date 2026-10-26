@@ -8,6 +8,7 @@ import { getAtPath, type Path, updateSlotsAtPath } from './block-tree-ops.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
 import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
 import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
+import { applyGridSlots, openGridDialog, readGridFields } from './grid-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
 
 export interface ConfigureDeps {
@@ -34,7 +35,7 @@ export interface Configurator {
 }
 
 /** Types `configure` opens a dialog for. */
-const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'macro', 'button']);
+const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'macro', 'button', 'grid']);
 
 const NO_MEDIA: MediaDialogDeps = {
   pick: async () => [],
@@ -103,6 +104,18 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
     });
   };
 
+  const openGridConfig = (path: Path): void => {
+    const node = getAtPath(deps.getTree(), path);
+    if (node?.type !== 'grid') return;
+    openGridDialog(root, {
+      initial: readGridFields(node.slots),
+      refuse,
+      onCommit: (slots) => {
+        commitSlots(path, (current) => applyGridSlots(current, slots));
+      }
+    });
+  };
+
   const openMacroConfig = (path: Path): void => {
     const node = getAtPath(deps.getTree(), path);
     if (node?.type !== 'macro') return;
@@ -127,6 +140,7 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
       if (type === 'figure' || type === 'video') openMediaConfig(path);
       else if (type === 'macro') openMacroConfig(path);
       else if (type === 'button') openButtonConfig(path);
+      else if (type === 'grid') openGridConfig(path);
     }
   };
 }

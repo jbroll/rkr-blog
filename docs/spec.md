@@ -412,7 +412,7 @@ the editing chrome. View and Edit are two modes of the same page.
   raw HTML, an embed) is not editable in place. Selecting it says so,
   and it can still be moved, duplicated and deleted.
 - **Selecting** a block shows a toolbar: drag handle, Up, Down,
-  Duplicate, Configure, Delete. With a block selected: Alt+Up/Down move
+  Duplicate, Wrap in row, Wrap in column, Unwrap, Configure, Delete. With a block selected: Alt+Up/Down move
   it, Ctrl/Cmd+D duplicates, Delete or Backspace deletes, Enter
   configures, Up/Down select the neighbour, Escape deselects. Escape in
   a text block leaves the text and selects the block.
@@ -436,6 +436,18 @@ the editing chrome. View and Edit are two modes of the same page.
   Section `cols: 1, band: true` (light, straight edge). The toolbar
   label follows the slots: a band reads Section, one column reads
   Column, otherwise Row (N columns).
+- **Wrap and unwrap**: Wrap in row and Wrap in column put the selected
+  block in a new two-column or one-column grid and select the grid.
+  Both are hidden on a Section, and Wrap in column is hidden when the
+  block's parent, or the block itself, is a one-column grid. A wrap
+  that would make a fourth grid level changes nothing and says grids
+  nest at most 3 levels. Unwrap (grids only) lifts the grid's blocks
+  into its parent and selects the first; an empty grid is removed.
+- **Configure a grid** opens a dialog: Columns (1 to 6), Narrowest cell
+  (Narrow, Medium, Wide), Column widths (blank for equal, or one number
+  per column, offered for 2 to 4 columns), Full-width band, and with
+  the band on, Background and Bottom edge. Changing Columns so the
+  widths no longer match keeps the dialog open with the message.
 - **Image and Video** show the new block and open its picker. Nothing
   saves or drafts until the dialog saves with something picked; Cancel,
   or saving with nothing picked, removes the block. Configure on an

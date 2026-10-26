@@ -372,3 +372,66 @@ describe('block actions flush and guards', () => {
     assert.equal(h.layout.querySelector('.rkr-block-toolbar'), null);
   });
 });
+
+describe('wrap and unwrap', () => {
+  const grid = (slots: Record<string, unknown>, children: BlockNode[]): BlockNode => ({
+    type: 'grid',
+    slots,
+    children
+  });
+  const shown = (h: Harness, action: string): boolean =>
+    h.bar().querySelector(`[data-action="${action}"]`)?.hidden === false;
+
+  it('wrap in row and in column select the new grid', () => {
+    const row = harness(AB, [1], ['0', '1']);
+    row.click('wrap-row');
+    assert.deepEqual((row.applied[0]?.tree.body[1] as { slots: unknown }).slots, { cols: 2 });
+    assert.deepEqual(row.applied[0]?.select, [1]);
+    const col = harness(AB, [0], ['0', '1']);
+    col.click('wrap-column');
+    assert.deepEqual((col.applied[0]?.tree.body[0] as { slots: unknown }).slots, { cols: 1 });
+  });
+
+  it('wrap past three levels changes nothing and shows the nudge', () => {
+    const deep = grid({ cols: 2 }, [grid({ cols: 2 }, [grid({ cols: 2 }, [text('x')])])]);
+    const h = harness({ version: 1, body: [deep] }, [0, 0, 0, 0], ['0,0,0,0']);
+    h.click('wrap-row');
+    assert.equal(h.applied.length, 0);
+    assert.match(
+      h.bar().querySelector('.rkr-block-note')?.textContent ?? '',
+      /nest at most 3 levels/
+    );
+  });
+
+  it('hides Wrap in column under a one-column grid, but not at page level', () => {
+    const under = harness({ version: 1, body: [grid({ cols: 1 }, [text('x')])] }, [0, 0], ['0,0']);
+    assert.equal(shown(under, 'wrap-column'), false);
+    assert.equal(shown(under, 'wrap-row'), true);
+    const top = harness(AB, [0], ['0', '1']);
+    assert.equal(shown(top, 'wrap-column'), true);
+  });
+
+  it('hides both wraps on a band grid', () => {
+    const h = harness({ version: 1, body: [grid({ band: true }, [])] }, [0], ['0']);
+    assert.equal(shown(h, 'wrap-row'), false);
+    assert.equal(shown(h, 'wrap-column'), false);
+    assert.equal(shown(h, 'unwrap'), true);
+  });
+
+  it('unwrap is for grids and selects the first lifted child', () => {
+    assert.equal(shown(harness(AB, [0], ['0', '1']), 'unwrap'), false);
+    const tree: BlockTree = { version: 1, body: [grid({ cols: 2 }, [text('a'), text('b')])] };
+    const h = harness(tree, [0], ['0']);
+    h.click('unwrap');
+    assert.deepEqual(md(h.applied[0]?.tree as BlockTree), ['a', 'b']);
+    assert.deepEqual(h.applied[0]?.select, [0]);
+  });
+
+  it('unwrap of an empty grid selects nothing', () => {
+    const h = harness({ version: 1, body: [grid({ cols: 2 }, [])] }, [0], ['0']);
+    h.click('unwrap');
+    assert.deepEqual(h.applied[0]?.tree.body, []);
+    assert.equal(h.state.selected, null);
+    assert.equal(h.applied[0]?.select, undefined);
+  });
+});

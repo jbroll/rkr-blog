@@ -98,6 +98,29 @@ export function removeAtPath(tree: BlockTree, path: Path): BlockTree {
   return updateList(tree, path.slice(0, -1), (list) => list.filter((_, i) => i !== idx));
 }
 
+/** Copy of the tree with the node at `path` replaced by a grid of `cols`
+ * columns that holds it. */
+export function wrapAtPath(tree: BlockTree, path: Path, cols: 1 | 2): BlockTree {
+  const node = getAtPath(tree, path);
+  if (!node) throw new Error('blocks editor: path not found');
+  const idx = path[path.length - 1] as number;
+  return updateList(tree, path.slice(0, -1), (list) =>
+    list.map((n, i) => (i === idx ? { type: 'grid', slots: { cols }, children: [n] } : n))
+  );
+}
+
+/** Copy of the tree with the grid at `path` replaced by its children. */
+export function unwrapAtPath(tree: BlockTree, path: Path): BlockTree {
+  const node = getAtPath(tree, path);
+  if (node?.type !== 'grid') throw new Error('blocks editor: not a grid');
+  const idx = path[path.length - 1] as number;
+  return updateList(tree, path.slice(0, -1), (list) => [
+    ...list.slice(0, idx),
+    ...clone(node.children),
+    ...list.slice(idx + 1)
+  ]);
+}
+
 export type DropPosition = 'before' | 'after' | 'inside';
 
 /** Resolve a drop onto the card at `targetPath` to an insertion point.

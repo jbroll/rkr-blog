@@ -154,7 +154,7 @@ async function dragTextAbove(
   await page
     .locator('.rkr-blocks-palette-item')
     .filter({ has: page.getByText('Text', { exact: true }) })
-    .dragTo(target, { targetPosition: { x: box!.width / 2, y: 2 } });
+    .dragTo(target, { targetPosition: { x: box!.width - 8, y: 2 } });
 }
 
 test('edit after insert writes the right block', async ({ page }) => {
