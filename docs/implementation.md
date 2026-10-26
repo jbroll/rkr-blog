@@ -453,6 +453,131 @@ All served at `/static/*` by `@fastify/static` in dev (Apache in
 prod). The editor bundle has zero CDN runtime dependency and no
 third-party script-src.
 
+## 8a. Block pages and the unified editor
+
+Behavior is in `spec.md §8a`. This section records how it is built and why.
+
+### Model
+
+A page is a JSON tree (`src/lib/blocks.ts`): containers, leaves and
+macro instances. `parseBlockTree` validates unknown JSON into a tree and
+throws rather than return a partial one, so nothing invalid reaches disk.
+
+- **Markdown only in `text`.** A text block holds one markdown string.
+  The editor shows it rich and stores markdown; the renderer runs the
+  string through the existing post pipeline. Images beside prose are
+  sibling `figure` blocks, so a text block never needs widget syntax and
+  an article is an ordered array of mixed blocks.
+- **Defaults plus overrides, not linked and detached.** An unset slot
+  follows the macro default and a set slot stays local. This gives
+  linked behavior without a link concept, badges or link management.
+  `expandMacro` (`src/lib/macro-library.ts`) applies the precedence;
+  `resolveSlots` treats only `undefined` as unset, so an empty string is
+  a real override.
+- **Placeholders substitute after expansion.** `fillPlaceholders`
+  (`src/lib/blocks-render.ts`) walks the expanded macro tree and replaces
+  `{{name}}` in every string with the resolved slot, empty when absent.
+  Filling the whole tree, not selected fields, lets a macro put a slot
+  anywhere: button links, markdown, nested instances. It runs once, so
+  a slot value cannot inject another placeholder.
+- **Depth is guidance, not a build error.** `containerDepth` counts
+  levels in one definition and the editor refuses a drop past three.
+  The renderer enforces only cycle safety (`detectCycle`), and prints a
+  comment for a cycle. A build never fails because an author nested too
+  deep.
+- **Responsive by construction.** Containers are divs, styled by the
+  theme with flexbox. There are no per-device settings.
+
+### One render path
+
+The edit route renders the page through `renderBlockTree` with a `mark`
+option that prepends `<!--rkr:path=i,j-->` to every node
+(`src/lib/blocks-edit-render.ts`). Without `mark` the output is the
+public page, so View mode is the public DOM, and no client-side renderer
+exists to drift from it. The embedded tree JSON rides in the page.
+
+The client (`blocks-page-editor-entry.ts`, `unified-shell.ts`) hydrates
+in place:
+
+- `unified-hydrate.ts` zips markers to tree paths in render order. Every
+  node renders something (blank text renders a placeholder), so no path
+  is skipped and paths never depend on DOM shape.
+- Text blur serializes the DOM back to markdown (`dom-markdown.ts`) and
+  edits the tree in place. Anything outside the supported subset is
+  escaped as literal text, never dropped.
+- A structural change (insert, move, duplicate, delete, dialog commit)
+  computes the next tree with the pure ops in `block-tree-ops.ts` and
+  `block-move.ts`, posts it to `POST /admin/blocks/_render`, and swaps in
+  the returned markup. The page body is inert while a render is pending
+  (`inert-holds.ts` counts holds, so a pending render and an open sheet
+  do not clear each other).
+- Insert placement is decided in `unified-insert.ts`: after a selected
+  leaf, at the end of a selected container, else at the end of the page.
+  Container-end keeps drops into empty rows and columns possible; moving
+  a block after a container is the toolbar's Move.
+- Phone preview sets a narrow width on the page body. An iframe at phone
+  width would trigger the site's media queries, but public pages send
+  `frame-ancestors 'none'`, so the preview stays in the same document and
+  the media queries, which key on the real viewport, do not fire.
+
+### Dialogs
+
+Every dialog (figure, video, button, macro, page settings, conflict,
+discard) uses `editor-dialog.ts`: one `<dialog>.showModal()` with a
+primary and a Cancel button, so the browser traps focus and inerts the
+page. A dialog can push a sub-view; the figure dialog uses that to host
+the image editor. Figure and video rows keep the stored `ids`, `alts`,
+`captions` encoding (`figure-image-list.ts`) and show thumbnails in place
+of ids. Media comes from `media-source.ts`, which resolves every source
+(local, Drive, OneDrive, Photos) to stored sidecar ids.
+
+### Saving
+
+`unified-save.ts` is the save pipeline. It writes a draft to IndexedDB
+before every request and clears it after the server has the tree
+(`unified-draft.ts`).
+
+- **IndexedDB, not OPFS, for drafts.** OPFS writes go through a worker
+  that starts after the schema is ready, and some iOS builds lack it. A
+  draft has to exist before the first request. Every storage call is
+  wrapped in a timeout (`within`) so a blocked open cannot hold up a
+  save.
+- **Whole-tree save.** One request carries the full tree and the version
+  it was edited from. This keeps the server a validator and writer, with
+  no patch protocol.
+- **Content-hash version.** `blockFileVersion` hashes the file's bytes.
+  A modification time would let two writes inside one tick share a
+  version and pass a stale save.
+- **One slug-to-file resolver.** `resolveBlockPage` in
+  `src/lib/block-pages.ts` serves read, save and create, so a save
+  always lands on the file that was read, and a slug whose file name is
+  taken by another page's file is refused with 409.
+- **Offline.** A request that never reaches the server throws
+  `SaveOffline`; the tree stays a draft, the indicator says offline, and
+  the save retries on reconnect. `editor-leave.ts` warns on leave while
+  work is unsaved and, on `pagehide`, tells the service worker to re-cache
+  the edit page so an offline reload holds the last saved tree.
+
+### Index and migration
+
+`runReindex` (`src/lib/post-index.ts`) reads `content/blocks/*.json` and
+`content/posts/*.md` and pairs them by slug, so comment threads and
+permalinks survive. A JSON page wins over a markdown post with the same
+slug and the pair renders once. A corrupt JSON file is skipped, and the
+markdown post, if any, stays indexed. A JSON-only page is indexed,
+listed and searchable.
+
+`site-admin blocks-migrate --all` writes a JSON twin per markdown post
+(`lib/markdown-migrate`); `--archive` moves the markdown to
+`content/posts-legacy/` (`RUNBOOK.md §5b`). System posts stay markdown.
+
+### Editor page headers
+
+Public pages keep `frame-ancestors 'none'` and their tight CSP. Only the
+editor page (`setAdminEditorSecurityHeaders`) adds `blob:` and the
+Drive, Photos and OneDrive thumbnail hosts to `img-src`, for local
+upload previews and picker thumbnails.
+
 ## 8b. `@rkr/image-edit` and the standalone image editor
 
 `packages/image-edit` holds the image-edit code both the blog and
@@ -616,12 +741,12 @@ step N's signal is green.
 - [x] `GET /` returns a paginated index.
 - [x] `site-admin reindex` populates the posts table from `content/posts/`.
 
-### Step 6 — TipTap editor
+### Step 6 — Block editor
 
-- [x] TipTap bundled into the admin entry by esbuild.
-- [x] Admin SPA loads at `/admin/editor`.
-- [x] Image block: upload, displays a preview, edits alt text, crop UI, saves a post that round-trips through markdown.
-- [x] No markdown syntax visible in the editor at any point.
+- [x] The editor is bundled into the admin entry by esbuild.
+- [x] It loads at `/admin/blocks/edit/:slug`. `/admin/editor` answers 404 and `/admin/view/:slug` redirects to the editor.
+- [x] Figure dialog: upload, thumbnail, alt text, caption, crop UI, and a saved page whose figure resolves on the public page.
+- [x] No markdown or JSON syntax visible in the editor at any point.
 
 ### Step 7 — Remote import
 
@@ -680,14 +805,14 @@ step N's signal is green.
       never pair with old chunks, and `evictOldCaches` drops every
       other `rkr-admin-` cache on activate.
 - [x] `handleFetch` handles two kinds of GET and lets the rest reach
-      the network untouched. A `navigate` to `/admin/editor` or
-      `/admin/view/*` is network-first, writing each ok response back
-      and falling back to the shell (cached under `/admin/editor`
-      whatever the path was, since the shell is slug-independent), then
-      to a 503. `/admin/static/*` is cache-first — immutable for a
-      given hash — with a network fallback. `/admin/api`,
-      `/admin/posts` and `/admin/post-bundle` are among the untouched:
-      the outbox owns their offline behavior.
+      the network untouched. A `navigate` to an editor page
+      (`/admin/blocks/edit/:slug`) or the pages list (`/admin/blocks`),
+      and the macro list (`/admin/blocks/macros`), are network-first:
+      each 2xx response is cached under its path, and offline the cached
+      copy answers, else a 503. `/admin/static/*` is cache-first —
+      immutable for a given hash — with a network fallback. Saves,
+      uploads and sync drains are among the untouched: the draft store
+      and the outbox own their offline behavior.
 - [x] `src/site/sw-admin-register.ts` registers the admin SW at scope
       `/admin/`. Loaded only from the admin SPA template.
 - [x] `src/site/sw-unregister.ts` loaded on all **public (anon) pages**
@@ -695,9 +820,8 @@ step N's signal is green.
       installed SW at scope `/` so casual readers don't retain stale
       offline caching. Also strips the `?_rkr` cache-bust param and
       posts `rkr-pages-flush` to any still-active SW controller before
-      unregistering. `src/admin/save.ts` posts the same message. No
-      worker listens for it — it is a leftover from the public-page SW
-      that no longer ships.
+      unregistering. No worker listens for it — it is a leftover from the
+      public-page SW that no longer ships.
 - [x] Content-hashed bundles via esbuild; bundle-size ratchet
       via `scripts/bundle-size-baseline.json`.
 
@@ -720,15 +844,10 @@ step N's signal is green.
       covers replayed `(device,seq)` idempotency. The old editor-level
       multi-op e2e was retired with the markdown editor.
 
-### Step 15 — Pin existing posts + eviction
+### Step 15 — Eviction
 
-- [x] `GET /admin/post-bundle/:slug` returns the full post JSON
-      (markdown + frontmatter + sidecar refs) for offline load.
-- [x] `pin.ts` toggles pinned vs cached state in OPFS.
 - [x] `eviction.ts` 7-day TTL + reference-counted original
       reclamation; runs on editor mount + after drain-empty.
-- [x] `storage-panel.ts` shows usage, pinned/cached lists, pending
-      sync queue, manual controls.
 
 ## 12. Comments
 
@@ -912,15 +1031,9 @@ edit `_about` unchanged.
 
 `GET /admin/about/edit` (`admin-settings.ts`) writes a stub
 (`slug: _about`, `title: About`, `status: published`) if the file is
-absent and redirects to `/admin/editor?slug=_about`; the settings page
-shows `Create About` or `Edit About →` by file presence, mirroring the
-banner link.
-
-`postViewUrl` in `src/lib/post-view-url.ts` centralises the public URL
-mapping so `POST /admin/posts` returns a `viewUrl`, the editor navigates
-there after **Save & view**, and the editor heading's **View →** link
-points at the right public URL (`/about` for `_about`, `/` for
-`_site-banner`).
+absent and returns to the settings page, which shows `Create About` or
+`Edit About →` by file presence, mirroring the banner link. The block
+editor does not edit system pages.
 
 `import-wp about` used to call `pushPage` (`src/lib/wp-push.ts`),
 which fetched a WordPress page (`wp/v2/pages?slug=`) and set
@@ -977,15 +1090,13 @@ could not be used to fetch the post.
 
 Pinned implementation calls; revisit if real-world data contradicts.
 
-1. **Markdown directive serializer**: TipTap output → markdown
-   round-trip via a small custom plugin atop `remark-stringify`.
-2. **Sync vs async render budget on miss**: 8 s default. Long enough
+1. **Sync vs async render budget on miss**: 8 s default. Long enough
    that the 202+placeholder fallback only fires for genuinely slow
    variants. Retune once production timings exist.
-3. **AVIF cost/benefit**: encoding is ~10× slower than WebP. Currently
+2. **AVIF cost/benefit**: encoding is ~10× slower than WebP. Currently
    eager (rendered ahead of time via `site-admin render`); can shift to
    on-demand if publish latency hurts.
-4. **Bundling vs vendoring TipTap**: bundled via esbuild. CDN-with-SRI
+3. **Bundling vs CDN**: the editor is bundled via esbuild. CDN-with-SRI
    was rejected in favor of an offline-capable, CSP-tight bundle.
 
 ## 14. Markdown → HTML rendering: the image map

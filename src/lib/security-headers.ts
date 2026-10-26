@@ -34,7 +34,7 @@ function buildCsp(imgSrc: string): string {
 
 const PUBLIC_CSP = buildCsp("'self' data:");
 // Cloud picker thumbnails (Drive and Photos from googleusercontent,
-// OneDrive from 1drv / svc.ms): the same hosts routes/admin-csp.ts allows.
+// OneDrive from 1drv / svc.ms). Only the editor page gets these.
 const ADMIN_EDITOR_CSP = buildCsp(
   "'self' data: blob: https://*.googleusercontent.com https://*.1drv.com https://*.onedrive.live.com https://*.svc.ms"
 );

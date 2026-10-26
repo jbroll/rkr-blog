@@ -2,7 +2,7 @@
 
 Source: full codebase review at `main` 33b77b5. Every item below was either flagged by the review or already in `DEFERRED.md` and re-surfaced. Grouped by area, ordered by urgency inside each group. Check off when shipped. For one-line deferred format with revisit triggers see `DEFERRED.md`.
 
-Build hygiene, security, video, the WordPress permalink redirect and the dump converter's binary literals are done, along with group 4's sync and PWA items. What remains is the three editor/figure features in group 4 and the long-tail items in groups 5-9.
+Build hygiene, security, video, the WordPress permalink redirect and the dump converter's binary literals are done, along with group 4's sync and PWA items. What remains is per-instance crops and cross-figure image move in group 4, and the long-tail items in groups 5-9.
 
 ## 0. Build hygiene — quick wins (no spec needed)
 
@@ -39,9 +39,9 @@ Build hygiene, security, video, the WordPress permalink redirect and the dump co
 - [x] **`admin/main.js` + `main.css` double-cached (bare and `?v=`)** — ~475 KB duplicate in precache from `scripts/gen-precache.ts` relative imports vs shell stamping. (`DEFERRED.md: Local-first`)
 - [x] **`forceConflictedSave` re-POST sends no `x-rkr-last-synced-at`** — concurrent other-device edit between conflict and force can be overwritten. (`DEFERRED.md: Local-first`)
 - [x] **Offline-launched client can drain stale bundle to newer server** — network-first narrows window; fix is build-hash check at drain time in `/admin/posts`, `/admin/upload`, `/admin/sidecar/:id/commit`. (`DEFERRED.md: Local-first`)
-- [ ] **parseHTML doesn't recover attrs** — rendered-HTML/clipboard round-trip drops figure attrs. (`DEFERRED.md: Editor`)
-- [ ] **Per-instance crops in multi-image directives** — crops per-sidecar globally; same image cannot be cropped differently in two posts. (`DEFERRED.md: Editor`)
-- [ ] **Container directive for galleries, cross-figure image move** — leaf `::figure` can't carry per-image captions; drag between figures needs two-node PM transaction. (`DEFERRED.md: Editor` — 2 items)
+- [x] **parseHTML doesn't recover attrs** — moot: it was a TipTap clipboard round-trip, and the TipTap editor is gone. The block editor edits the server-rendered DOM in place and stores figure slots in the tree.
+- [ ] **Per-instance crops** — crops per-sidecar globally; same image cannot be cropped differently on two pages. Still open; the figure dialog edits the shared sidecar. (`DEFERRED.md: Editor`)
+- [ ] **Cross-figure image move** — the figure dialog reorders and removes within one figure; moving an image between figures is remove then add. Still open. The container-directive half shipped: the figure dialog carries per-image captions and alt text. (`DEFERRED.md: Editor`)
 - [x] **Tilt slider delta-from-last semantics** — `appendRotate(newVal - prevVal)` diverges from absolute after 90° buttons. Track dedicated tilt op. (`DEFERRED.md: image-pwa`)
 - [x] **Package canvas layer not c8-gated** — `packages/image-edit/src/canvas/**` excluded like `src/admin`; only `src/core` gated. Now measured by the e2e report and held by the seeded union ratchet baseline. (`DEFERRED.md: image-pwa`)
 - [x] **PWA installability (SW scope + icons)** — `sw.js` scope is `dist/`, manifest has no icons due to `eof-ws` hook rejecting PNGs. (`DEFERRED.md: image-pwa`)

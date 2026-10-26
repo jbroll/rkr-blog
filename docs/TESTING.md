@@ -106,6 +106,13 @@ reach directly through the live save API instead: `test/e2e/seed-blocks.ts`
 posts a whole tree to `/admin/blocks/:slug` (text, figures, videos), and
 `page.request.post('/admin/upload', …)` puts an image on disk first.
 
+`blocks-unified.spec.ts` holds the editor specs and their helpers
+(`saveResponse` waits for the page save, `dropBelow` drags a palette item,
+`chooseLocal` answers the source picker). Its `unified flow` test walks
+the whole author path: new page, typing, image upload and caption, a Hero
+macro with an overridden heading, publish, reload, and a logged-out visit.
+Start a new editor spec from those helpers.
+
 ---
 
 ## 5. The local server: rate limits and shared state
@@ -230,7 +237,7 @@ Two design notes:
 
 Source-map resolution maps the bundled URLs (`/static/admin/blocks-page-editor-entry.js`) back to source paths (`src/admin/*.ts`). `entryFilter` + `sourceFilter` in `coverage-config.ts` limit the report to OUR code — without them, every Cropper.js / PhotoSwipe file appears. The filter also keeps `packages/image-edit/src/canvas/**`, which is bundled into the admin SPA and cannot be reached by the c8 unit gate because it needs a DOM.
 
-`sourcePath` there anchors the dist dir on the last `static/` segment of the bundle's path. The admin shell loads `main.js` both as `/static/admin/main.js` and as `/admin/static/admin/main.js`; slicing the host off the front instead maps the two URLs to different paths, and every file lands in the report twice with different counts. (The ratchet's own `normalisePath` collapses both forms, so this is a report-legibility fix, not a gating one.)
+`sourcePath` there anchors the dist dir on the last `static/` segment of the bundle's path. The admin shell loads a bundle both as `/static/admin/<name>.js` and as `/admin/static/admin/<name>.js`; slicing the host off the front instead maps the two URLs to different paths, and every file lands in the report twice with different counts. (The ratchet's own `normalisePath` collapses both forms, so this is a report-legibility fix, not a gating one.)
 
 ---
 

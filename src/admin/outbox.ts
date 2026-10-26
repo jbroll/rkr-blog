@@ -36,11 +36,10 @@ export async function append(
   blob?: Blob
 ): Promise<number> {
   /* v8 ignore start -- exercised by phase 1f offline-flow specs */
-  // Web Lock around the read-modify-write of nextSeq + the per-
-  // entry writes. Without it, parallel appends (e.g. two uploads
-  // queued at once, or two tabs) can both observe the same nextSeq and produce colliding
-  // entries — outbox/<seq>.<op>.json names differ but the seq
-  // ordering breaks and remove() targets the wrong file.
+  // Web Lock around the read-modify-write of nextSeq and the entry
+  // writes. Without it, parallel appends (two uploads, or two tabs)
+  // read the same nextSeq, so seq ordering breaks and remove()
+  // targets the wrong file.
   return withAppendLock(async () => {
     const root = await readRoot();
     if (!root) {

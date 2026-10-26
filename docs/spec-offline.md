@@ -3,11 +3,9 @@
 > **Status as of 2026-08-03: shipped.** Phase 0 (PWA shell + SW),
 > Phase 1 (OPFS + outbox + drain), Phase 2 (pin existing posts),
 > and Phase 3 (eviction + storage panel) have all landed, plus the
-> admin shell offline launch. The TipTap editor and its
-> `/admin/view/:slug` preview are retired; the block editor opens
-> offline instead (§3). This document is the behavioral
-> spec; for the as-built code map see `implementation.md §11 Steps
-> 13–15`.
+> admin shell offline launch. The block editor opens offline (§3).
+> This document is the behavioral spec; for the as-built code map see
+> `implementation.md §11 Steps 13–15`.
 
 What the application does when the network is gone, and how it recovers
 when the network returns. Implementation-agnostic — an alternate stack
@@ -35,9 +33,9 @@ the base spec.
 - **Predictable storage.** Cached (auto-pulled) posts time out and
   evict; pinned (explicit) posts persist until the author unpins.
   Storage usage is visible and bounded.
-- **Offline viewing of the published form.** A pinned or locally
-  composed post renders as the published page at `/admin/view/:slug`,
-  with no network and no server render.
+- **Offline viewing of the published form.** The block editor's View
+  mode shows the page as readers see it, from the cached edit page, with
+  no network.
 - **Last-writer-wins conflict policy.** When two devices edit the
   same post offline, the loser sees a warning and chooses to discard
   or force-overwrite. **No CRDT.** This is a deliberate v2 choice
@@ -103,8 +101,7 @@ Two independent layers:
   since the outbox and the draft store own its offline behavior.
 
   Pages are auth-gated renders, so they are never precached: install
-  would fetch them without a session. `/admin/view/:slug`, the retired
-  TipTap preview, redirects to the block editor.
+  would fetch them without a session.
 
 The server's filesystem-of-record is unchanged. SQLite remains the
 index. The browser's OPFS is a write-through cache that becomes a
@@ -126,7 +123,7 @@ data/site.db                              # index over the above
 ### Browser OPFS (new)
 
 ```
-opfs://drafts/<draftId>.json              # in-progress TipTap doc + frontmatter
+opfs://drafts/<draftId>.json              # in-progress post doc + frontmatter
 opfs://drafts/<draftId>.lock              # heartbeat: "this draft is in active use"
 opfs://originals/<id>.<ext>               # content-addressed bytes (matches server id)
 opfs://image-state/<id>.json              # full LocalEditState (current ops, redo, baseline)
@@ -232,7 +229,7 @@ re-fetches from the JSON.
 
 ### 5.1. Multi-tab coordination
 
-Two tabs of `/admin/editor` share one OPFS. To keep the outbox seq
+Two editor tabs share one OPFS. To keep the outbox seq
 monotonic and avoid two parallel drains, the SPA elects a single
 **leader** via the Web Locks API:
 
@@ -509,7 +506,7 @@ unpinning marks `mode = "cached"`, eligible for the 7-day timer.
 
 ### Draft persistence frequency
 
-The TipTap document is written to OPFS on:
+The draft document is written to OPFS on:
 
 - 500ms of typing inactivity (debounced), AND
 - editor blur.
@@ -649,7 +646,7 @@ Single tabular summary of every reconciliation point.
 | Two outbox entries `commitImageEdit` for the same `id` | Same coalescing as above. |
 | Image format the browser can't preview-decode (e.g. HEIC on a non-Safari) | Upload outbox entry succeeds (server has sharp); preview shows a placeholder; no failure. |
 | OPFS handle invalidated by long backgrounding | Some browsers expire handles. SPA re-acquires the root handle on every editor mount; doesn't rely on cross-load handle stability. |
-| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Online, `/admin/view/:slug` is network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached shell. Unsynced work is not lost — a drain against `/admin/posts`, `/admin/upload`, or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
+| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Cached edit pages stay readable offline after sign-out. Online, edit pages are network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached copy. Unsynced work is not lost — a drain against `/admin/posts`, `/admin/upload`, or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
 
 ## 13. HTTP routes added or changed
 
@@ -701,7 +698,7 @@ diagnosing a sync problem.
 | Drain re-check passes per lock hold | 8 | `MAX_DRAIN_PASSES` in `src/admin/sync.ts` |
 | Public /img cache-miss backoff | 0.5s / 1.5s / 3s / 6s / 10s ±20%, capped at 10s | build-time constant in `src/site/img-retry.ts` |
 | Draft-write debounce | 500ms | build-time constant |
-| Draft in-use heartbeat / stale | 30s / 60s | `HEARTBEAT_MS` in `src/admin/draft.ts`, `LOCK_GRACE_MS` in `src/lib/eviction-pure.ts` |
+| Draft lock stale window | 60s | `LOCK_GRACE_MS` in `src/lib/eviction-pure.ts` |
 | Drain leader election | `navigator.locks.request('rkr-sync-leader', …)` | browser-managed (no heartbeat — held for the callback's lifetime, released on tab close) |
 
 ## 17. Out of scope (v2)

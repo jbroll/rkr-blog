@@ -109,7 +109,7 @@ Per surface:
 - **Login** (`/admin/login`): `<section class="rkr-login">` inside
   `<main>`. Contains the Google button + token form.
 
-The editor (`/admin/editor`) has its own UI shell separate from this
+The block editor (`/admin/blocks/edit/:slug`) has its own UI shell separate from this
 contract; themes do **not** style the editor.
 
 ## CSS custom properties (themable)
@@ -282,7 +282,7 @@ just the variable surface.
 ## What themes should NOT touch
 
 - Templates (`src/templates/**`) — adding markup is a contract change.
-- Editor shell (`/admin/editor`) — own UI, not part of the public
+- Editor shell (`/admin/blocks/edit/:slug`) — own UI, not part of the public
   surface.
 - Service worker behaviour, build outputs, JS files.
 - Figure widget geometry (grid / flow / carousel) — restyle the frame

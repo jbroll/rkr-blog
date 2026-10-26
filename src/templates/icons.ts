@@ -8,9 +8,8 @@
 //      a tree-shaking story is far more weight than the inlined
 //      paths cost on their own.
 //   2. The renders happen in server templates (post.ts, layout.ts,
-//      admin.ts via toolbar.ts) — they must produce HTML strings,
-//      not React/Vue components. The npm package's surface is
-//      component-shaped.
+//      blocks.ts) — they must produce HTML strings, not React/Vue
+//      components. The npm package's surface is component-shaped.
 //   3. Pasting the paths means we never have to think about icon
 //      bundling, tree-shaking config, or SSR-only entry points.
 //

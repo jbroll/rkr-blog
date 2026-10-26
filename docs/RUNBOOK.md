@@ -538,6 +538,34 @@ file). The other writable subtrees — `content/posts`, `originals`,
 This is local-dev only: on the deployed VPS the site root is owned by
 the service user and managed via deploy, not by an interactive wipe.
 
+## Block pages and macros
+
+Pages live in `<SITE_ROOT>/content/blocks/*.json` and macros in
+`<SITE_ROOT>/macros/*.json`. `site-admin export` archives both.
+
+- **Authoring.** `/admin/blocks` lists pages. New page creates a draft
+  and opens it in the editor. A draft stays off the public site until
+  Page settings sets its status to published.
+- **Macros.** `site-admin init` copies the repo's `macros/` seeds into
+  `<SITE_ROOT>/macros/` and never overwrites an existing file. To add or
+  change a macro, edit its JSON file. The palette (Sections group) and
+  the public render read the file on each request. A new seed in the repo
+  reaches an existing site only if you copy the file. Format and
+  placeholder syntax: `spec.md §8a`.
+- **Hand edits.** A page file can be edited on disk. An open editor sees
+  the change as a conflict on its next save and offers Load latest or
+  Keep mine. Run `site-admin reindex` afterward so the public index
+  follows.
+- **Scripted writes.** `POST /admin/blocks/:slug` with a bearer token and
+  `{ "tree": ... }` overwrites the page. Adding `baseVersion` makes the
+  write conflict-checked.
+- **Unsaved work.** Each browser keeps its unsent tree in IndexedDB until
+  the server has it. Clearing site data discards it. An edit page opens
+  offline only if an earlier online visit cached it; otherwise it
+  answers 503.
+- **Old URLs.** `/admin/editor` answers 404, `/admin/view/:slug`
+  redirects to the editor, and `/admin` redirects to `/admin/blocks`.
+
 ## Comments
 
 ### Spam classifier

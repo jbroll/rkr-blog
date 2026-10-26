@@ -32,8 +32,8 @@ export interface EvictionInput {
 
 const DEFAULT_TTL_DAYS = 7;
 /** Heartbeat freshness window. A lock newer than now-LOCK_GRACE_MS
- * blocks eviction. Must stay >= 2 × draft.ts:HEARTBEAT_MS so a
- * single missed beat doesn't booby-trap a live draft.
+ * blocks eviction. Must stay >= 2 × the lock heartbeat interval
+ * so a single missed beat doesn't booby-trap a live draft.
  * @public */
 export const LOCK_GRACE_MS = 60_000;
 

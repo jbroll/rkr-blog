@@ -99,8 +99,7 @@ export const ADMIN_CSS_DIALOGS = `  .rkr-meta { display: grid; grid-template-col
   /* Per-figure action stack: the "Add image" and "Configure" icon
      buttons sit in a narrow column to the right of the thumbs grid
      (NOT below it) so the figure's vertical real estate keeps belonging
-     to the images themselves. Wired via data attributes that main.ts's
-     delegated handler routes (data-add-image, data-figure-config). */
+     to the images themselves. */
   .rkr-multi-actions {
     display: flex; flex-direction: column;
     gap: .35rem; align-self: start;

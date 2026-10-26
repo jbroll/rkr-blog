@@ -1,13 +1,11 @@
-// Bidirectional ProseMirror JSON ↔ markdown converter for the admin editor.
-// Lives under src/lib/ but is bundled into the admin browser bundle (via
-// tsconfig.browser.json) — the editor calls `proseToMarkdown` locally on
-// save and POSTs markdown to /admin/posts, so the server never loads this
-// module at runtime. Imports must stay browser-safe (no node:* APIs).
+// ProseMirror-shaped JSON ↔ markdown converter. Bundled into the admin
+// browser bundle (via tsconfig.browser.json), so imports must stay
+// browser-safe (no node:* APIs).
 //
-// Scope: only the node + mark types our TipTap editor declares (paragraph,
+// Scope: only the node + mark types the converter declares (paragraph,
 // heading, hard_break, text, bold, italic, link, code, our custom `image`,
 // blockquote, code block, lists, thematic break). Unknown nodes/marks fall
-// through silently (the editor schema prevents them from being authored).
+// through silently.
 
 import type {
   Blockquote,
@@ -340,12 +338,8 @@ function mdBlockToProse(node: RootContent): ProseNode | null {
 
 /**
  * Parse a `::figure{...}` directive's attributes into the unified
- * `figure` ProseMirror node. The editor's UI surface (toolbar buttons,
- * attribute panel) discriminates between image / gallery / carousel /
- * diptych / triptych modes by inspecting the figure's `matrix` + `ids`
- * count at the UI layer (see src/admin/main.ts figureKind helper) —
- * the prose document keeps a single node type so the wire format and
- * the editor model stay aligned.
+ * `figure` node. Image / gallery / carousel is a property of `matrix`
+ * and the `ids` count, not a separate node type.
  */
 function parseFigureToEditorNode(attrs: Record<string, string | null | undefined>): ProseNode {
   // Decode the four attributes that emitFigure serializes via quote()

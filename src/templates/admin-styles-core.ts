@@ -136,9 +136,8 @@ export const ADMIN_CSS_CORE = `
     box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
     z-index: 2147483647;
   }
-  /* Visually-hidden reorder status (announced via aria-live).
-     figure-reorder.ts appends this to <body>, NOT inside
-     #rkroll-admin-article, so the selector must be unscoped. */
+  /* Visually-hidden reorder status (announced via aria-live). It
+     lives on <body>, outside the article, so the selector is unscoped. */
   .rkr-multi-status {
     position: absolute; width: 1px; height: 1px;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
@@ -203,8 +202,8 @@ export const ADMIN_CSS_CORE = `
     border: 1px solid var(--rkr-rule); border-radius: 4px;
     transition: border-color .1s, background .1s;
   }
-  /* Visual cue while the user is dragging files over the editor.
-     CSS-only via a JS-toggled class; see admin/main.ts mount(). */
+  /* Visual cue while files are dragged over the editor; the class is
+     toggled by script. */
   #rkroll-admin-root.is-drag-over {
     border-color: var(--rkr-link);
     background: color-mix(in srgb, var(--rkr-link) 5%, var(--rkr-bg));

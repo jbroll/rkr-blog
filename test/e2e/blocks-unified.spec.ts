@@ -1,7 +1,6 @@
-// E2E coverage for the unified block editor (plan 2026-10-24, Task 7):
-// type in place, figure dialog commit, palette drag-drop insert, save,
-// reload, and a phone-width smoke check. Seeds through the live blocks
-// API (seed-blocks.ts) and uploads one real JPEG so the figure resolves.
+// E2E coverage for the unified block editor: the full author flow, type in
+// place, figure dialog, palette insert, save, reload, offline and phone
+// width. Seeds through the live blocks API (seed-blocks.ts).
 
 import sharp from 'sharp';
 
@@ -55,6 +54,9 @@ async function dropBelow(page: Page, label: string, target: import('@playwright/
     .dragTo(target, { targetPosition: { x: box!.width / 2, y: box!.height - 5 } });
 }
 
+const paletteItem = (page: Page, label: string) =>
+  page.locator('.rkr-blocks-palette-item').filter({ has: page.getByText(label, { exact: true }) });
+
 const HEX_INPUT = /^[0-9a-f]{6,64}$/;
 
 /** The page save, not the render preview that precedes it. */
@@ -64,31 +66,35 @@ function saveResponse(page: import('@playwright/test').Page, slug: string) {
   );
 }
 
-test('unified flow: type, figure dialog, palette drop, save, reload', async ({ page }) => {
+test('unified flow: new page, type, image, hero, publish, reload, public', async ({
+  page,
+  browser
+}) => {
   await login(page);
-  const slug = `e2e-unified-${Date.now()}`;
-  await seedBlockPage(page, {
-    slug,
-    title: 'Unified E2E',
-    markdown: 'Hello unified.',
-    status: 'published'
-  });
-
-  await page.goto(`/admin/blocks/edit/${slug}`);
+  const name = `Full Flow ${Date.now()}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  await page.goto('/admin/blocks/new');
+  await page.getByLabel('Title').fill(name);
+  await page.getByRole('button', { name: 'Create and edit' }).click();
+  await page.waitForURL(`**/admin/blocks/edit/${slug}`);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
-  const para = page.locator('#rkr-blocks-page-body p').first();
-  await expect(para).toHaveAttribute('contenteditable', 'true');
 
-  // Type in place; blur saves.
+  // Insert a text block from the palette, then type in place; blur saves.
+  const body = page.locator('#rkr-blocks-page-body');
+  const inserted = saveResponse(page, slug);
+  await paletteItem(page, 'Text').focus();
+  await page.keyboard.press('Enter');
+  await inserted;
+  const para = body.locator('[data-rkr-blank]').first();
   await para.click();
-  await para.fill('Hello unified edited.');
+  await para.fill('Hello full flow.');
   const typed = saveResponse(page, slug);
   await page.keyboard.press('Tab');
   await typed;
 
-  // Dropping the Image primitive opens the figure dialog and the picker.
+  // Image primitive: pick a local file, caption it, commit.
   const dropped = saveResponse(page, slug);
-  await dropBelow(page, 'Image', para);
+  await dropBelow(page, 'Image', body.locator('p').first());
   await dropped;
   const jpeg = await sharp({
     create: { width: 320, height: 240, channels: 3, background: { r: 90, g: 140, b: 200 } }
@@ -96,17 +102,49 @@ test('unified flow: type, figure dialog, palette drop, save, reload', async ({ p
     .jpeg({ quality: 80 })
     .toBuffer();
   await chooseLocal(page, [{ name: 'marina.jpg', mimeType: 'image/jpeg', buffer: jpeg }]);
-  const dialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
-  await expect(dialog.locator('.rkr-media-row')).toHaveCount(1);
-  await dialog.getByLabel('Caption').fill('Marina at dusk');
+  const figureDialog = page.locator('[data-rkr-dialog]').filter({ hasText: 'Save figure' });
+  await expect(figureDialog.locator('.rkr-media-row')).toHaveCount(1);
+  await figureDialog.getByLabel('Caption').fill('Marina at dusk');
   const committed = saveResponse(page, slug);
-  await dialog.getByRole('button', { name: 'Save figure' }).click();
+  await figureDialog.getByRole('button', { name: 'Save figure' }).click();
   await committed;
 
-  // Public page shows the typed text and the captioned figure.
-  await page.goto(`/${slug}`);
-  await expect(page.locator('article')).toContainText('Hello unified edited.');
-  await expect(page.locator('article')).toContainText('Marina at dusk');
+  // Hero macro from the palette, with its heading overridden.
+  const heroInserted = saveResponse(page, slug);
+  await dropBelow(page, 'Hero', body.locator('p').first());
+  await heroInserted;
+  await expect(body).toContainText('Fresh food, owned by neighbors');
+  await body.locator('.rkr-section').click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  await page.getByLabel('Heading').fill('Full flow hero');
+  const heroSaved = saveResponse(page, slug);
+  await page.getByLabel('Edit Hero').getByRole('button', { name: 'Save' }).click();
+  await heroSaved;
+
+  // Publish through page settings.
+  await page.getByRole('button', { name: 'Page settings' }).click();
+  const settings = page.locator('[data-rkr-dialog]').filter({ hasText: 'Page settings' });
+  await settings.getByLabel('Status').selectOption('published');
+  const published = saveResponse(page, slug);
+  await settings.getByRole('button', { name: 'Save', exact: true }).click();
+  await published;
+
+  // Reload keeps everything.
+  await page.reload();
+  const reloaded = page.locator('#rkr-blocks-page-body');
+  await expect(reloaded).toContainText('Hello full flow.');
+  await expect(reloaded).toContainText('Marina at dusk');
+  await expect(reloaded).toContainText('Full flow hero');
+
+  // A logged-out visitor sees the published page.
+  const visitor = await browser.newContext();
+  const pub = await visitor.newPage();
+  const res = await pub.goto(`/${slug}`);
+  expect(res?.status()).toBe(200);
+  await expect(pub.locator('main')).toContainText('Hello full flow.');
+  await expect(pub.locator('main')).toContainText('Marina at dusk');
+  await expect(pub.locator('main')).toContainText('Full flow hero');
+  await visitor.close();
 });
 
 async function dragTextAbove(
@@ -542,9 +580,6 @@ test('publish a new page', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('link', { name })).toBeVisible();
 });
-
-const paletteItem = (page: Page, label: string) =>
-  page.locator('.rkr-blocks-palette-item').filter({ has: page.getByText(label, { exact: true }) });
 
 test('phone width add block via sheet', async ({ page }) => {
   await login(page);

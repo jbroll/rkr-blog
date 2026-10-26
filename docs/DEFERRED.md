@@ -19,18 +19,26 @@ Format: **item** — _revisit when:_ trigger.
 ## Editor & figures
 
 - **No blocks-editor support for system pages (`_about`, `_site-banner`)** — they stay markdown in `content/posts/` because `/about` and the index banner read them directly; `blocks-migrate --archive` deliberately leaves them live. _Revisit when:_ system pages need JSON twins / editing in the blocks editor.
-- **Per-instance crops in multi-image directives** — crops are
-  per-sidecar (global to every post using the image). _Revisit when:_
-  an author wants the same image cropped differently in two posts.
-- **Cross-figure image move** — drag an image from one figure into
-  another (two-node PM transaction, per-frame target hit-test; ~100
-  lines on a file near the size cap). Two-step path exists: remove
-  from one figure, add via the other's + picker. _Revisit when:_ an
-  author asks for the one-step move.
+- **Per-instance crops** — crops are per-sidecar (global to every page using the image). _Revisit when:_ an author wants the same image cropped differently on two pages.
+- **Cross-figure image move** — an image moves between figures by removing it from one and adding it in the other's dialog. _Revisit when:_ an author asks for a one-step move.
+- **No video trim or poster control in the editor** — `POST /admin/video/:id/trim` works, but the video dialog sets only the video, caption and layout. _Revisit when:_ an author needs a trimmed clip.
+- **Delete on a non-empty container has no confirm and no undo.** _Revisit when:_ an author loses a section to a stray Delete.
+- **Underscore escaping in `dom-markdown.ts` treats non-ASCII letters as word edges**, so `_` beside an accented letter is escaped. _Revisit when:_ a non-English page shows stray backslashes.
+- **A multi-line slot value in a `# {{title}}` macro line breaks out of the heading.** Author-only and sanitized. _Revisit when:_ a macro puts a multi-line field in a heading.
+- **The figure dialog does not de-duplicate repeated image ids** (the renderer does). _Revisit when:_ a page shows a repeated image the author did not intend.
+- **Page settings writes an empty `excerpt` and `date` key to every file it saves, and the toolbar title changes before the save completes.** _Revisit when:_ a diff or a failed save makes either visible.
+- **Drafts carry no tree schema version.** A draft from an older bundle loads unchecked. _Revisit when:_ the block tree format changes.
+- **Failed draft writes (private mode, quota) are not surfaced**, and edits made before the draft finishes loading can be overwritten by it. _Revisit when:_ authors report a lost edit in private browsing.
+- **A conflict that follows a render failure or `pagehide` during an in-flight save defaults to Load latest**, which discards the author's own newest edit. A restored draft's `savedAt` also drifts across reloads. _Revisit when:_ an author reports this.
+- **No `beforeunload` warning for an open image dialog with unapplied edits.** _Revisit when:_ an author loses an unapplied crop or rotate.
+- **The pages list filters by title on the server only.** _Revisit when:_ the page count makes a round trip per keystroke worth avoiding.
+- **Unit tests for the shell wait with fixed tick loops** instead of awaiting `applyTree`; `selected` is not cleared during a pending render when `opts.select` is absent. _Revisit when:_ either causes a flaky test.
+- **No test for an unparseable `<slug>.json` colliding with a new page's file name** (same code path as a mismatched slug). _Revisit when:_ touching the collision check in `admin-blocks.ts`.
 
 ## Image pipeline
 
 - **`buildImageMapFromOpfs` blob: URLs are never revoked** — every URL it makes reaches the rendered document and must outlive it, and the preview renders once per page load, so there is nothing to revoke yet. _Revisit when:_ the preview starts re-rendering without a full page reload.
+- **Local-thumbnail blob URLs in the unified editor are never revoked, and HEIC originals show no local thumbnail** (the browser cannot decode them until the upload drains). _Revisit when:_ a long editing session grows memory, or HEIC uploads are common.
 
 ## UI / UX
 
@@ -44,10 +52,13 @@ Format: **item** — _revisit when:_ trigger.
 - **Module-level mutable singletons** — `liveInflight` + `events` emitter in `src/lib/jobs.ts`, resolved-theme cache in `config.ts` are process-singletons (fine for single-instance deploy). _Revisit when:_ moving to multi-process/multi-instance.
 - **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` are per-process; `listSidecars`/`listPosts` do O(n) full-scans per call. _Revisit when:_ horizontal scaling or corpus grows to thousands.
 - **SW `networkFirst` (admin bundle) doesn't fall back to cache on non-200** — only on thrown/offline error; a deploy momentarily 5xx-ing won't degrade to cached copy (deliberate, mirrors `cacheFirst`). _Revisit when:_ admin-bundle deploy resilience matters.
+- **An edit page can be cached into the previous build's cache during a deploy's install/activate window.** _Revisit when:_ an author sees a stale editor right after a deploy.
+- **The outbox `savePost` drain path still posts to the retired `POST /admin/posts`** (`src/admin/drainers.ts`, `src/admin/sync.ts`). _Revisit when:_ the outbox is next edited.
 
 
 ## Test coverage
 
+- **The coverage-union baseline entry for `src/admin/drainers.ts` is stale and fails the ratchet on the next edit to the file.** _Revisit when:_ next edit to `drainers.ts`; re-seed the entry in the same commit.
 - **Flaky: `about-page.spec.ts:46`** — timed out once during this branch's e2e runs. _Revisit when:_ it fails twice in a row or fails on a first attempt in CI.
 - **Playwright: perspective-rectify + Google OAuth callback** —
   _revisit when:_ fixture infra grows, or a UI bug ships uncaught.

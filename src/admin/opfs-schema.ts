@@ -29,8 +29,8 @@ export const OPFS_DIRS = {
 
 /** True for a filename in meta/ that holds a draft's own meta —
  * false for meta-of-meta files (`_root.json`, `_site.json`, and any
- * future `_`-prefixed addition). Every meta/ scanner (eviction,
- * storage-panel, pin, preview) must filter through this one rule so
+ * future `_`-prefixed addition). Every meta/ scanner (eviction and
+ * any future scanner) must filter through this one rule so
  * a new `_`-prefixed file can't silently reappear as a phantom
  * draft. */
 export function isDraftMetaFile(fname: string): boolean {

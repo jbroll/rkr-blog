@@ -1,6 +1,6 @@
-// Retired editor URLs. /admin/editor (the markdown editor) answers 404
-// with a pointer to the blocks editor; /admin/view/:slug (the TipTap
-// preview) redirects to the block editor, whose View mode replaced it.
+// Retired editor URLs. /admin/editor answers 404 with a pointer to the
+// blocks editor; /admin/view/:slug redirects to it, and its View mode
+// replaced the old preview.
 
 import type { FastifyInstance, FastifyReply, RouteShorthandOptions } from 'fastify';
 

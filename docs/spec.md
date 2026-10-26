@@ -10,10 +10,10 @@ For local development setup, see [developer-quickstart.md](./developer-quickstar
 
 ## 1. Goals
 
-- Static markdown is the canonical content format. Custom widget blocks
-  (images, multi-image layouts, carousels) are markdown directives
-  (`::figure`), not HTML.
-- The editor never exposes markdown syntax to the author.
+- Pages are JSON block trees (§8a). Markdown is the value language
+  inside text blocks and the format of system posts.
+- The editor never exposes markdown syntax, JSON, block ids or image
+  ids to the author.
 - Image pipeline retains the unmodified master forever, records edits
   declaratively, and serves cached derivatives.
 - Imports from local upload, plain URL, Google Drive, OneDrive.
@@ -245,7 +245,9 @@ against new ops. On commit:
 
 ### Post storage
 
-Posts are markdown files with YAML frontmatter:
+Pages the editor creates are JSON block pages (§8a). Markdown posts with
+YAML frontmatter remain the format of system posts and of posts archived
+by `blocks-migrate`:
 
 ```markdown
 ---
@@ -270,7 +272,7 @@ syntax (`::name{attrs}`).
 ### System posts
 
 A post whose slug starts with `_` is a system post: it lives in
-`content/posts/` and is edited with the normal editor, but it is never
+`content/posts/` as markdown, but it is never
 indexed, never listed, never searchable, and `GET /_<slug>` is always
 404. Two exist:
 
@@ -280,36 +282,157 @@ indexed, never listed, never searchable, and `GET /_<slug>` is always
 | `_about` | `GET /about`, a standalone page | none |
 
 Both are created on demand from the settings page (`Create About` /
-`Create banner`), which writes a stub file and opens it in the editor.
+`Create banner`), which writes a stub file and returns to settings. The
+block editor does not edit them (`DEFERRED.md`).
 `/about` with no `_about.md` on disk is a 404, as is a malformed one.
 `import-wp about` seeds `_about` from a WordPress page.
 
-Because `GET /:slug` is always 404 for system posts, the editor's
-**Save & view** button (and the `view →` links) redirects to the real
-public URL: `/about` for `_about` and `/` for `_site-banner`.
+## 8a. Block pages and the editor
 
-### Editor
+Pages are JSON block trees, not markdown files. Markdown survives only
+as the value language inside `text` blocks. System posts (§8) and
+archived legacy posts stay markdown.
 
-A single `figure` node type — the author sees image / gallery /
-carousel layouts (discriminated by the figure's `matrix` + `ids`
-count via the `figureKind` adapter), never the directive syntax.
-Round-trips through markdown on save and reload. The TipTap ⇄
-markdown conversion happens in the browser; `POST /admin/posts`
-accepts markdown directly so the same endpoint can be driven by other
-tools (e.g. the WordPress importer).
+### Storage
 
-#### Reordering images within a figure
+One file per page under `content/blocks/`, pretty-printed:
 
-A multi-image figure shows its images as a thumb grid. Dragging a
-thumb (touch, pen or mouse) to another slot reorders the figure; a tap
-or click without movement still opens that cell's edit panel. Each
-thumb is also focusable, and Left/Up moves it one position earlier,
-Right/Down one later (the order is linear whatever the layout, so all
-four arrows map to earlier/later); Enter or Space opens the cell edit.
-Alt text and caption travel with their image. A reorder is one undo
-step, and a screen reader hears "Moved to position K of M". Dragging
-near the top or bottom edge of the editor scrolls it. Moving an image
-between two figures is not supported (`DEFERRED.md`).
+```json
+{
+  "version": 1,
+  "body": [ { "type": "text", "markdown": "Hello." } ],
+  "fields": { "title": "Hello", "slug": "hello", "status": "draft" }
+}
+```
+
+`fields` holds title, slug, status (`draft` or `published`), date, tags
+and excerpt. The URL slug is `fields.slug`, not the file name, so dated
+names from the WordPress importer and plain names from `blocks-migrate`
+both work. The slug resolves to the first file, in sorted name order,
+whose `fields.slug` matches and whose tree parses; read, save and create
+all use that one rule. Corrupt files are skipped.
+
+### Blocks
+
+| Kind | Types |
+|---|---|
+| Containers | `section` (`theme`, `edge`), `row`, `col`, `flow` |
+| Leaves | `text` (`markdown`), `figure`, `video`, `button` (`label`, `href`, `variant`), `list`, `marquee`, `accordion`, `progress`, `embed` |
+| Macro instance | `{ "type": "macro", "macro": "hero", "slots": { ... } }` |
+
+`text` markdown allows inline formatting, links, lists, headings and
+code. It never carries image or widget syntax; images beside prose are
+sibling `figure` blocks. `figure` and `video` slots keep the attribute
+names of §9 and §10a (`ids`, `alts`, `captions`, `justify`, `matrix`,
+`trim`, `poster`). `embed` accepts only youtube.com, youtu.be, vimeo.com,
+docs.google.com and maps.google.com URLs.
+
+Rows and columns are flexbox and stack on narrow screens. There is no
+free positioning and no per-page CSS; themes own the tokens.
+
+### Macros
+
+A macro is `<site>/macros/<name>.json`: `description`, `defaults`, an
+optional `fieldSchema` and a `tree`. The repo's `macros/` directory seeds
+a new site and never overwrites an edited file. A page instance sets
+only the slots it overrides.
+
+- An unset slot follows the macro default and changes when the default
+  does. A set slot, including an empty string, stays local.
+- Precedence, lowest first: macro defaults, slots written inline in the
+  macro's tree, instance slots.
+- A macro whose tree is another macro instance fixes some of that
+  macro's slots and leaves the rest open.
+- A macro that reaches itself, directly or through others, renders a
+  comment instead of looping.
+- The `page` macro holds site-wide defaults (site title, menu,
+  announcement, footer). It is not placeable.
+- A definition holds at most three container levels. The editor refuses
+  a drop that would pass that and nudges the author to split it. The
+  renderer does not enforce depth.
+
+#### Placeholders
+
+`{{name}}` inside any string of a macro's `tree` is replaced by the
+resolved slot `name`: text markdown, button labels and links, any other
+slot value, at any depth, including inside a nested macro instance's
+slots. Whitespace inside the braces is allowed and names use letters,
+digits, `_` and `-`.
+
+- A slot that is missing, or not a string or number, renders empty.
+  There is no error and no literal `{{name}}` in the output.
+- A substituted value is not scanned again.
+- Page-body blocks that are not part of a macro tree do not expand
+  placeholders.
+
+#### Field types in the dialog
+
+The macro dialog lists one field per key in `defaults`, in that order.
+`fieldSchema[key]` supplies the label (the key itself when absent) and
+the type:
+
+| `type` | Control |
+|---|---|
+| `text`, `link` | single-line input |
+| `markdown` | multi-line input |
+| `select` | dropdown of `options`, first entry "Default (value)" |
+| `image` | thumbnail with Choose image and Remove, via the media picker |
+| none | single-line input; multi-line when the value or default has a newline |
+
+Each field starts empty with the default as its placeholder. Typing sets
+the override; clearing a touched field removes it, so the default flows
+through again.
+
+### The editor
+
+`GET /admin/blocks/edit/:slug` renders the page as readers see it, plus
+the editing chrome. View and Edit are two modes of the same page.
+
+- **View** shows the public page: no palette, nothing editable.
+- **Edit** makes text editable in place, shows the block palette, and
+  outlines blocks on hover and selection. Ctrl/Cmd+E switches modes.
+  Ctrl/Cmd+S saves now.
+- **Text** saves on blur. Typing never shows markdown syntax.
+- **Selecting** a block shows a toolbar: drag handle, Up, Down,
+  Duplicate, Configure, Delete. With a block selected: Alt+Up/Down move
+  it, Ctrl/Cmd+D duplicates, Delete or Backspace deletes, Enter
+  configures, Up/Down select the neighbour, Escape deselects. Escape in
+  a text block leaves the text and selects the block.
+- **Palette** groups: Basics (Text, Button), Media (Image, Video),
+  Layout (Section, Row, Column), Sections (site macros). Drag an item
+  onto the page, or focus it and press Enter. Insert lands after the
+  selected block. If the selected block is a container, insert lands at
+  the end of that container; use Move to put a block after it. With
+  nothing selected, insert lands at the end of the page.
+- **Phones**: the palette becomes an Add block bottom sheet.
+  Phone preview narrows the page body to phone width. It does not make
+  the site's viewport media queries fire, so rules keyed on the screen
+  width stay in their desktop state.
+- **Dialogs** use one modal. Figure: image list (add from this computer,
+  Google Drive, OneDrive or Google Photos; reorder, remove, alt text,
+  caption, edit image), layout. Video: one video from the same sources, with caption and layout.
+  Button: label, link, style. Macro: the fields above. Page settings:
+  title, status, publish date (filled in when the status becomes published), tags,
+  excerpt. Authors never see JSON, block ids or image ids.
+
+### Saving
+
+Every change saves the whole tree: `POST /admin/blocks/:slug` with
+`{ tree, baseVersion }`. The URL slug wins over `fields.slug`.
+
+- `version` is a hash of the file's bytes. A save whose `baseVersion` no
+  longer matches the file gets `409 { error: "conflict", version }`, and
+  the editor offers Load latest (discard local changes) or Keep mine (save over the newer version). A request
+  without `baseVersion` (scripted clients) overwrites.
+- A save that would create a file whose name another page already uses
+  gets `409`. An invalid tree gets `400` and is never stored.
+- A save reindexes and queues derivative renders for the page's media.
+- The tree is written to an IndexedDB draft before each request and
+  cleared once the server has it. After a failed or offline save the
+  draft restores on reload. The indicator shows clean, editing, saving,
+  unsaved, offline or conflict.
+- Leaving with unsaved work asks for confirmation.
+- Editor pages open offline after one online visit (`spec-offline.md §3`).
 
 ## 9. Image widgets
 
@@ -456,8 +579,8 @@ The legacy directives (`::image`, `::diptych`, `::triptych`,
 3. **Migrate the WP importer** to emit `::figure` for all imported
    posts. Existing imported posts on disk keep working via legacy
    widgets. ✅
-4. **Editor (TipTap) round-trip plumbing**: figure node with full
-   attribute set + markdown ⇄ figure conversion in prose-markdown. ✅
+4. **Markdown ⇄ figure conversion** of the full attribute set in
+   prose-markdown. ✅
 5. **One-shot migration tool** (`site-admin migrate-figures`) was
    shipped to rewrite legacy directives in `content/posts/*.md`. After
    the editor unification + reseed, no legacy directives remain in any
@@ -467,18 +590,12 @@ The legacy directives (`::image`, `::diptych`, `::triptych`,
    their CSS, and the WidgetRegistry registrations. The figure widget
    becomes the only image directive the public renderer recognises.
    Constants-alignment test shrinks to one widget × one fallback. ✅
-7. **Editor unification**: legacy ProseMirror node types
-   (ImageNode/GalleryNode/CarouselNode/DiptychNode/TriptychNode) are
-   removed. The editor uses a single `figure` node; the toolbar /
-   attribute-panel UI discriminates between image / gallery / carousel
-   / diptych / triptych modes by inspecting the figure's `matrix` +
-   `ids` count via the `figureKind` adapter (src/admin/main.ts). All
-   prose-markdown emit / parse goes through one path. ✅
+7. **Single figure type**: image, gallery and carousel are one `figure`
+   whose layout follows from `matrix` and the `ids` count. All
+   prose-markdown emit and parse goes through one path. ✅
 
-The unification is fully complete: every directive on disk is
-`::figure`, the public renderer has only one image widget, and the
-editor save/load flow round-trips through `::figure` markdown while
-preserving the existing per-node-type editing affordances.
+Every directive on disk is `::figure`, and the public renderer has one
+image widget.
 
 ## 10. Remote image import
 
@@ -524,11 +641,10 @@ destructive trim.
   autoplay muted loop width=... caption="..."}`. `autoplay` forces
   `muted`+`playsinline`. Unknown id renders a comment. Missing/invalid
   trim/poster render a comment.
-- **Editor**: TipTap `video` node with a trim/poster/caption popover that
-  persists trim/poster to the sidecar via `POST /admin/video/:id/trim`.
-  Round-trips through `::video` markdown. Authors insert one via the
-  toolbar `+Video` button (local file only, no source picker) or by
-  dropping/pasting a video file into the editor.
+- **Editor**: the Video palette item opens the video dialog: one video
+  from the same sources as images, a caption and a layout. Trim and
+  poster are set through `POST /admin/video/:id/trim`; the editor has no
+  control for them yet (`DEFERRED.md`).
 
 OAuth tokens are stored encrypted at rest with a server-held key.
 
@@ -562,18 +678,26 @@ POST   /admin/auth/token-login        ADMIN_TOKEN bearer login (form)
 POST   /admin/logout                  destroy session
 
 # Admin core — admin.ts + admin-shell.ts
+GET    /admin                         302 → /admin/blocks
 GET    /admin/editor                  404: retired, points at /admin/blocks
-GET    /admin/view/:slug              302 → /admin/blocks/edit/:slug (retired TipTap preview)
-POST   /admin/posts                   save markdown (insert or overwrite by slug)
+GET    /admin/view/:slug              302 → /admin/blocks/edit/:slug
 POST   /admin/upload                  multipart, streams to originals
 POST   /admin/upload/video            multipart video ingest → probe + transcode + poster
 POST   /admin/video/:id/trim          non-destructive trim + poster time (rewrites sidecar only)
 POST   /admin/reset                   wipe posts/images/cache (bearer)
 
-# Admin posts index — admin-posts.ts
-GET    /admin/posts                   post list (drafts + published)
-POST   /admin/posts/:slug/delete      delete a post + its sidecar refs
-POST   /admin/posts/:slug/status      flip draft ↔ published
+# Admin block pages — admin-blocks.ts
+GET    /admin/blocks                  pages list (query: q filters by title)
+GET    /admin/blocks/new              new-page form (title, slug)
+POST   /admin/blocks/new               create an empty draft page → 303 to its editor
+GET    /admin/blocks/edit/:slug       the editor (View / Edit)
+GET    /admin/blocks/:slug            page JSON (title, tree)
+POST   /admin/blocks/:slug            save the whole tree; 400 invalid, 409 conflict or file collision
+POST   /admin/blocks/_render          re-render a posted tree for the editor; never writes
+GET    /admin/blocks/macros           palette entries for the site's macros
+
+# Admin posts — admin-posts.ts
+GET    /admin/posts                   301 → / (old bookmarks)
 
 # Admin image edit — admin-image-lookup.ts + admin-sidecar-edit.ts
 GET    /admin/preview/:id             302 to a derivative URL the editor uses as <img src>
@@ -589,8 +713,8 @@ POST   /admin/settings/banner         set site-wide banner image id via JSON
 POST   /admin/settings/gdrive/disconnect   revoke gdrive tokens for the session user
 POST   /admin/settings/onedrive/disconnect revoke onedrive tokens for the session user
 POST   /admin/reindex                 rebuild post index + FTS from markdown files
-GET    /admin/banner/edit             open (creating if absent) _site-banner.md in editor
-GET    /admin/about/edit              open (creating if absent) _about.md in editor
+GET    /admin/banner/edit             create _site-banner.md if absent, back to settings
+GET    /admin/about/edit              create _about.md if absent, back to settings
 
 # Admin comments — admin-comments.ts
 GET    /admin/comments                comment moderation list
@@ -603,9 +727,6 @@ GET    /admin/tags                    tag autocomplete (query param: q)
 POST   /admin/import/url              server-side fetch
 POST   /admin/import/gdrive           Google Drive Picker payload
 POST   /admin/import/onedrive         OneDrive Picker payload
-
-# Admin offline pin/load — admin-post-bundle.ts
-GET    /admin/post-bundle/:slug       full post JSON for offline editor load
 
 # Integrations — integrations-gdrive.ts + integrations-onedrive.ts
 GET    /admin/integrations/<p>/connect          OAuth initiation
@@ -837,7 +958,6 @@ Adding any of these requires reopening the spec.
 - Plugin / theme marketplace.
 - Multi-tenant operation.
 - Real-time collaboration.
-- A WYSIWYG editor that matches the published theme exactly.
 - Cloud storage for originals or cache.
 - A CDN in front of the front proxy.
 - WebSockets / SSE / any real-time channel.
