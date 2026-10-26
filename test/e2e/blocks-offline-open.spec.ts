@@ -108,3 +108,32 @@ test('leaving right after a save still re-caches the saved page', async ({ page 
     )
     .toContain('Saved, then left.');
 });
+
+test('signing out drops the cached editor pages and the editor drafts', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-signout-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Sign out', markdown: 'Cached page.' });
+  await page.goto('/admin/blocks');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await expect.poll(() => cachedPage(page)).toContain('Cached page.');
+  const hasDrafts = () =>
+    page.evaluate(async () =>
+      (await indexedDB.databases()).map((d) => d.name).includes('rkr-blocks-editor')
+    );
+  await expect.poll(hasDrafts).toBe(true);
+
+  await page.goto('/');
+  await Promise.all([
+    page.waitForURL((url: URL) => url.pathname === '/'),
+    page.getByRole('button', { name: 'Logout' }).click()
+  ]);
+  await expect
+    .poll(() =>
+      page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('rkr-admin-')))
+    )
+    .toEqual([]);
+  await expect.poll(hasDrafts).toBe(false);
+});

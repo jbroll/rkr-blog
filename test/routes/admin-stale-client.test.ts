@@ -194,3 +194,36 @@ test('the stamped build is the one serverAssets hands the templates', (t) => {
   assert.equal(serverAssets('/admin/static').hash, BUILD);
   assert.equal(staleClientRejection(serverAssets().hash), null);
 });
+
+// ---- POST /admin/blocks/:slug --------------------------------------
+
+const PAGE_TREE = {
+  version: 1,
+  body: [{ type: 'text', markdown: 'Saved.' }],
+  fields: { title: 'Page', slug: 'page' }
+};
+
+test('POST /admin/blocks/:slug: a stale build is refused with 426', async (t) => {
+  const { root, app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/blocks/page',
+    headers: { 'x-rkr-build': OLD_BUILD },
+    payload: { tree: PAGE_TREE }
+  });
+  assert.equal(res.statusCode, 426);
+  assert.equal(res.json().error, 'stale-client');
+  assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 'page.json')), false);
+});
+
+test('POST /admin/blocks/:slug: the current build saves', async (t) => {
+  const { root, app } = await setup(t);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/blocks/page',
+    headers: { 'x-rkr-build': BUILD },
+    payload: { tree: PAGE_TREE }
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'page.json')));
+});

@@ -6,6 +6,12 @@
 > admin shell offline launch. The block editor opens offline (§3).
 > This document is the behavioral spec; for the as-built code map see
 > `implementation.md §11 Steps 13–15`.
+>
+> The `savePost` op and `POST /admin/posts` were retired with the JSON
+> page cutover. Page edits save whole trees to `POST /admin/blocks/:slug`
+> with an IndexedDB draft per page (`spec.md §8a`); a queued `savePost`
+> is skipped, never sent. Rows below that name `savePost` describe that
+> retired path.
 
 What the application does when the network is gone, and how it recovers
 when the network returns. Implementation-agnostic — an alternate stack
@@ -328,7 +334,7 @@ connection that drops mid-stream gets the user nothing usable.
 | `X-Rkr-Device-Id` | upload, commitImageEdit, savePost | opaque id | the device's `meta/_root.json` `deviceId`; scopes `X-Rkr-Outbox-Seq`, which is only monotonic per device |
 | `X-Rkr-Sidecar-Base` | commitImageEdit | ISO-8601 | the sidecar `updatedAt` the client saw when the edit began. Compare-and-swap, same shape as `X-Rkr-Last-Synced-At`; omitted on entries queued before the field existed, which the server accepts without a 409 |
 | `X-Rkr-Last-Synced-At` | savePost | ISO-8601 | the `meta.lastSyncedAt` the client believed the server had at the time the OFFLINE EDITS BEGAN. Not the time of drain — the time of the last successful pull |
-| `X-Rkr-Build` | upload, commit, savePost | 12-hex git hash | the build the page was rendered from, stamped into the admin shell as `<meta name="rkr-build">` and read at drain time. A mismatch against the running server is refused with 426; a missing header is permissive (legacy queued entries, the WordPress importer, scripted clients) |
+| `X-Rkr-Build` | upload, commit, block page save | 12-hex git hash | the build the page was rendered from, stamped into the admin shell as `<meta name="rkr-build">` and read at drain time. A mismatch against the running server is refused with 426; a missing header is permissive (legacy queued entries, the WordPress importer, scripted clients) |
 
 ### `savePost` conflict response
 
@@ -640,11 +646,10 @@ Single tabular summary of every reconciliation point.
 | Sync drain hits 413 (image too large) | Outbox entry stays for explicit retry-or-discard. Discarding offers to also drop dependent entries (§5.2). |
 | Browser tab killed mid-drain | Outbox JSON commits before HTTP request fires; partial drain re-attempts on next load. |
 | Browser cleared site data | OPFS gone. Outbox lost. Surface "your offline cache was cleared by the browser; pull pinned posts again" on next online connect. |
-| Two outbox entries for the same `slug`'s `savePost` | Coalesce within the not-yet-drained queue: keep only the latest. Drained entries are removed normally; coalesce applies only to pending. |
-| Two outbox entries `commitImageEdit` for the same `id` | Same coalescing as above. |
+| Two outbox entries `commitImageEdit` for the same `id` | Coalesce within the not-yet-drained queue: keep only the latest. Drained entries are removed normally; coalesce applies only to pending. |
 | Image format the browser can't preview-decode (e.g. HEIC on a non-Safari) | Upload outbox entry succeeds (server has sharp); preview shows a placeholder; no failure. |
 | OPFS handle invalidated by long backgrounding | Some browsers expire handles. SPA re-acquires the root handle on every editor mount; doesn't rely on cross-load handle stability. |
-| User signs out | Cookie cleared; OPFS untouched. The server session ends but local-first access does not end *offline*: the cached shell still launches with no network and OPFS drafts stay readable. Cached edit pages stay readable offline after sign-out. Online, edit pages are network-first, and a 401 is a resolved response rather than a rejection, so a signed-out author with a working network gets the 401 body, not the cached copy. Unsynced work is not lost — a drain against `/admin/upload` or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
+| User signs out | Cookie cleared. The page the logout lands on deletes the `rkr-admin-*` caches and the editor's IndexedDB page drafts and unregisters the admin worker, so a shared device keeps no editor pages and no unsent page edits; the editor's leave warning fires first when a page has unsaved work. OPFS (originals and the outbox) is untouched: a drain against `/admin/upload` or `/admin/sidecar/:id/commit` without a session gets a non-2xx, which throws in `src/admin/drainers.ts`, and the loop halts with the entry still in the outbox, so it syncs after logging back in. |
 
 ## 13. HTTP routes added or changed
 
@@ -653,9 +658,10 @@ GET  /admin/post-bundle/:slug?manifest=1   new (§6) — manifest only
 GET  /manifest.webmanifest                 new (§9)
 GET  /sw.js                                new (§9)
 POST /admin/sidecar/:id/commit             ops + optional bake in one request; honors X-Rkr-Sidecar-Base (§6)
-POST /admin/posts                          honors X-Rkr-Last-Synced-At (§6)
-POST /admin/upload, /admin/posts, /admin/sidecar/:id/commit
+POST /admin/upload, /admin/sidecar/:id/commit
                                            accept X-Rkr-Outbox-Seq + X-Rkr-Device-Id as an idempotency key (§6)
+POST /admin/upload, /admin/sidecar/:id/commit, /admin/blocks/:slug
+                                           refuse a stale X-Rkr-Build with 426 (§6)
 ```
 
 ## 14. Phasing

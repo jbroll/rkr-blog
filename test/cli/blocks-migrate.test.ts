@@ -358,4 +358,22 @@ describe('blocks-migrate', () => {
     assert.equal(fs.existsSync(path.join(root, 'content', 'posts-legacy')), false);
     assert.match(lines.join('\n'), /would move 1 markdown file/);
   });
+
+  it('archive treats a twin the index would skip as no twin', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    writePost(root, 'a.md', POST.replace('slug: t', 'slug: a'));
+    writePost(root, 'b.md', POST.replace('slug: t', 'slug: b'));
+    const blocksDir = path.join(root, 'content', 'blocks');
+    fs.mkdirSync(blocksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(blocksDir, 'a.json'),
+      JSON.stringify({ version: 1, body: [{ type: 'mystery' }], fields: { title: 'A', slug: 'a' } })
+    );
+    fs.writeFileSync(
+      path.join(blocksDir, 'b.json'),
+      JSON.stringify({ version: 1, body: [], fields: { slug: 'b' } })
+    );
+    assert.throws(() => runBlocksArchive(root), /no JSON twin for a \(a\.md\), b \(b\.md\)/);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'posts', 'a.md')));
+  });
 });

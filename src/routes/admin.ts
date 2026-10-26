@@ -7,10 +7,9 @@
 //   POST /admin/upload       → multipart image ingest (routed to ingestStream)
 //   POST /admin/import/url   → server-side fetch + ingest from a URL
 //
-// All blog editing now goes through the JSON blocks editor
-// (/admin/blocks*). The markdown write paths (POST /admin/posts and
-// friends) were retired in the JSON cutover; markdown is read-only
-// until Task 4 archives the sources.
+// Page editing goes through the JSON blocks editor (/admin/blocks*).
+// Markdown posts are read-only; `blocks-migrate --archive` moves them out
+// of the read path.
 
 import fs from 'node:fs';
 import path from 'node:path';

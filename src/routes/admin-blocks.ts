@@ -20,12 +20,15 @@ import {
 } from '../lib/block-pages.ts';
 import { type BlockTree, parseBlockTree } from '../lib/blocks.ts';
 import { renderEditBody } from '../lib/blocks-edit-render.ts';
+import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
+import { staleClientRejection } from '../lib/client-build.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { loadMacroLibrary, ROOT_MACROS } from '../lib/macro-library.ts';
-import { readAllIndexedPosts, runReindex } from '../lib/post-index.ts';
+import { readAllIndexedPosts, readIndexedPostBySlug, runReindex } from '../lib/post-index.ts';
 import { dropIndexedPost, reindexBlockPage } from '../lib/post-index-blocks.ts';
 import { listPosts } from '../lib/posts.ts';
+import { RESERVED_SLUGS } from '../lib/reserved-slugs.ts';
 import {
   setAdminEditorSecurityHeaders,
   setPublicSecurityHeaders
@@ -56,6 +59,27 @@ function readStoredFields(file: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+const TEXT_FIELDS = ['title', 'subtitle', 'status', 'date', 'excerpt'] as const;
+
+/** Page fields as sent; throws naming the first field of the wrong type,
+ * since the index and Page settings read these as strings. */
+function checkFields(raw: unknown): Record<string, unknown> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new Error('fields must be an object');
+  const fields = raw as Record<string, unknown>;
+  for (const key of TEXT_FIELDS) {
+    if (fields[key] !== undefined && typeof fields[key] !== 'string') {
+      throw new Error(`fields.${key} must be a string`);
+    }
+  }
+  const tags = fields.tags;
+  if (tags !== undefined && !(Array.isArray(tags) && tags.every((t) => typeof t === 'string'))) {
+    throw new Error('fields.tags must be a list of strings');
+  }
+  return fields;
 }
 
 /** Stored pages with status and last-change time. The index wins; a page
@@ -185,7 +209,15 @@ export function registerAdminBlockRoutes(
           error: 'Use lowercase letters, digits and hyphens.'
         });
       }
-      if (fs.existsSync(blockFile(siteRoot, slug)) || findBlockFile(siteRoot, slug)) {
+      if (RESERVED_SLUGS.has(slug)) {
+        return sendNewForm(reply, 400, {
+          title,
+          slug,
+          error: `The address /${slug} is used by the site. Choose another slug.`
+        });
+      }
+      const indexed = opts.db ? readIndexedPostBySlug(opts.db, slug) : undefined;
+      if (indexed || fs.existsSync(blockFile(siteRoot, slug)) || findBlockFile(siteRoot, slug)) {
         return sendNewForm(reply, 409, {
           title,
           slug,
@@ -267,6 +299,9 @@ export function registerAdminBlockRoutes(
     async (req, reply) => {
       const { slug } = req.params;
       if (!VALID_SLUG.test(slug)) return reply.code(404).send({ error: 'not found' });
+      // An editor bundle older than the server saves through a stale contract.
+      const stale = staleClientRejection(req.headers[BUILD_HEADER]);
+      if (stale) return reply.code(STALE_CLIENT_STATUS).send(stale);
       const body = (req.body ?? {}) as Record<string, unknown>;
       let existing: string | null = null;
       let tree: BlockTree & { fields: Record<string, unknown> };
@@ -281,7 +316,7 @@ export function registerAdminBlockRoutes(
           ...parseBlockTree({ version: 1, body: rec.body }),
           fields: {
             ...existingFields,
-            ...((rec.fields ?? {}) as Record<string, unknown>),
+            ...checkFields(rec.fields),
             slug
           }
         };

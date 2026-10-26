@@ -7,9 +7,19 @@
 //    controller, if any).
 // 2. Unregister any SW from a previous deploy so casual readers
 //    don't retain offline caching they no longer need.
+// 3. After a logout, clear the editor's caches and drafts (clearAdminState).
+
+import { clearAdminState } from './admin-signout.ts';
 
 {
   const url = new URL(location.href);
+  if (url.searchParams.get('_rkr') === 'logout') {
+    void clearAdminState({
+      caches: globalThis.caches,
+      indexedDB: globalThis.indexedDB,
+      serviceWorker: navigator.serviceWorker
+    }).catch(() => {});
+  }
   if (url.searchParams.has('_rkr')) {
     url.searchParams.delete('_rkr');
     const clean = url.pathname + (url.search ? url.search : '') + url.hash;

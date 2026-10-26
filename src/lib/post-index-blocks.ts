@@ -82,6 +82,21 @@ function readIndexablePage(fullPath: string): IndexablePage {
   return { tree, fields: fields as IndexablePage['fields'] };
 }
 
+/** Slugs of the page files in `blocksDir` the index would accept. */
+export function indexableBlockSlugs(blocksDir: string): Set<string> {
+  const slugs = new Set<string>();
+  if (!fs.existsSync(blocksDir)) return slugs;
+  for (const file of fs.readdirSync(blocksDir)) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      slugs.add(readIndexablePage(path.join(blocksDir, file)).fields.slug);
+    } catch {
+      // Not indexable, so it cannot keep a post readable.
+    }
+  }
+  return slugs;
+}
+
 /** Upsert the row, FTS row and tags for one page. The row is matched by
  * slug, so a twin shares its markdown sibling's row and comment thread.
  * While that sibling is on disk the row keeps its markdown path; after

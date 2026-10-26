@@ -43,13 +43,14 @@ export function within<T>(op: Promise<T>, ms: number): Promise<T | undefined> {
 }
 
 const OP_TIMEOUT_MS = 500;
-const DB_NAME = 'rkr-blocks-editor';
+/** Also deleted on sign-out (src/site/sw-admin-core.ts). */
+export const DRAFTS_DB = 'rkr-blocks-editor';
 const STORE = 'drafts';
 
 /* v8 ignore start -- IndexedDB needs a real browser; covered by the blocks e2e */
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DRAFTS_DB, 1);
     req.onupgradeneeded = () => {
       req.result.createObjectStore(STORE);
     };

@@ -10,6 +10,7 @@ import { open } from '../../src/lib/db.ts';
 import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { ingestStream } from '../../src/lib/originals.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
 const TREE = {
@@ -1015,5 +1016,70 @@ describe('admin blocks atomic writes', () => {
     });
     assert.ok(seen.renamed.includes(dest));
     assert.ok(!seen.inPlace.includes(dest));
+  });
+});
+
+describe('admin blocks minor guards', () => {
+  it('new page refuses a slug an unarchived markdown post holds', async (t) => {
+    const { root, app } = await setup(t);
+    fs.mkdirSync(path.join(root, 'content', 'posts'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'content', 'posts', 'old.md'),
+      '---\ntitle: Old\nslug: old\nstatus: published\n---\n\nOld post.\n'
+    );
+    runReindex(root);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/new',
+      payload: { title: 'New', slug: 'old' }
+    });
+    assert.equal(res.statusCode, 409);
+    assert.match(res.body, /already exists/);
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 'old.json')), false);
+  });
+
+  it('new page refuses a reserved slug', async (t) => {
+    const { root, app } = await setup(t);
+    for (const slug of ['new', 'search']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/blocks/new',
+        payload: { title: 'X', slug }
+      });
+      assert.equal(res.statusCode, 400, slug);
+      assert.match(res.body, /used by the site/);
+      assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', `${slug}.json`)), false);
+    }
+  });
+
+  it('save rejects fields of the wrong type with 400', async (t) => {
+    const { root, app } = await setup(t);
+    const bad: unknown[] = [
+      { title: 3 },
+      { status: true },
+      { date: 20260101 },
+      { excerpt: ['x'] },
+      { subtitle: {} },
+      { tags: 'news' },
+      { tags: ['ok', 2] },
+      []
+    ];
+    for (const fields of bad) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/blocks/typed',
+        payload: { tree: { version: 1, body: [], fields } }
+      });
+      assert.equal(res.statusCode, 400, JSON.stringify(fields));
+    }
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 'typed.json')), false);
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/typed',
+      payload: {
+        tree: { version: 1, body: [], fields: { title: 'T', tags: ['a'], wp_id: 4 } }
+      }
+    });
+    assert.equal(ok.statusCode, 200);
   });
 });

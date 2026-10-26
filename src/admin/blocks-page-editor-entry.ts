@@ -9,8 +9,10 @@
 import 'cropperjs/dist/cropper.css';
 
 import type { BlockTree } from '../lib/blocks.ts';
+import { STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
 import { EDITOR_SAVED } from '../site/sw-admin-core.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
+import { buildIdHeader } from './build-id.ts';
 import { getPreviewUrl, hasWebglSupport } from './canvas-loaders.ts';
 import { createRecache, guardUnload, shouldWarnOnLeave } from './editor-leave.ts';
 import type { ImageEditorHost, MediaDialogDeps } from './figure-dialog-tree.ts';
@@ -32,6 +34,7 @@ import { uploadImage } from './upload.ts';
 import { uploadVideo } from './video-upload.ts';
 
 const SLUG_TAKEN = 'Not saved. Another page already uses this address.';
+const STALE_EDITOR = 'Not saved. The site was updated; reload the page to keep editing.';
 
 const root = document.getElementById('rkr-blocks-edit-root');
 const slug = root?.dataset.slug ?? '';
@@ -177,7 +180,7 @@ if (root && slug && tree) {
     try {
       res = await fetch(`/admin/blocks/${encodeURIComponent(slug)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildIdHeader() },
         body: JSON.stringify({ tree: next, baseVersion })
       });
     } catch {
@@ -189,6 +192,7 @@ if (root && slug && tree) {
     if (res.status === 409 && reply.error === 'conflict' && version)
       throw new SaveConflict(version);
     if (res.status === 409) throw new SaveFailure(SLUG_TAKEN);
+    if (res.status === STALE_CLIENT_STATUS) throw new SaveFailure(STALE_EDITOR);
     if (!res.ok) throw new Error(`save page ${res.status}`);
     recache.request();
     return version;
@@ -244,7 +248,10 @@ if (root && slug && tree) {
       );
       opfsReady = await initOpfsForUnifiedEditor();
     } catch (err: unknown) {
-      root.innerHTML = `<p role="alert">Editor failed to load: ${err instanceof Error ? err.message : String(err)}</p>`;
+      const alert = document.createElement('p');
+      alert.setAttribute('role', 'alert');
+      alert.textContent = `Editor failed to load: ${err instanceof Error ? err.message : String(err)}`;
+      root.replaceChildren(alert);
     }
   })();
 }

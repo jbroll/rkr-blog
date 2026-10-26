@@ -11,6 +11,7 @@ import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { findBlockFile } from '../lib/block-pages.ts';
 import { paths } from '../lib/config.ts';
 import { type MigratedTree, migratePostToTree } from '../lib/markdown-migrate.ts';
+import { indexableBlockSlugs } from '../lib/post-index-blocks.ts';
 import { listPosts } from '../lib/posts.ts';
 import { RESERVED_SLUGS } from '../lib/reserved-slugs.ts';
 
@@ -106,26 +107,6 @@ export interface ArchivedPost {
   file: string;
 }
 
-/** Slugs carried by the JSON pages in content/blocks/. Corrupt or
- * malformed files are not twins — they cannot keep a post readable. */
-function listBlockSlugs(blocksDir: string): Set<string> {
-  const slugs = new Set<string>();
-  if (!fs.existsSync(blocksDir)) return slugs;
-  for (const file of fs.readdirSync(blocksDir)) {
-    if (!file.endsWith('.json')) continue;
-    try {
-      const parsed = JSON.parse(fs.readFileSync(path.join(blocksDir, file), 'utf8')) as {
-        fields?: { slug?: unknown };
-      };
-      const slug = parsed.fields?.slug;
-      if (typeof slug === 'string' && slug) slugs.add(slug);
-    } catch {
-      // Unreadable twin: leave the markdown in place.
-    }
-  }
-  return slugs;
-}
-
 /** Move every non-system markdown post from content/posts/ to
  * content/posts-legacy/ so the JSON twin becomes the only readable
  * source. `_`-prefixed system pages (_about, _site-banner) stay live:
@@ -144,7 +125,8 @@ export function runBlocksArchive(
   const posts = listPosts(siteRoot).filter(
     (p) => !p.filename.startsWith('_') && !p.slug.startsWith('_')
   );
-  const twinSlugs = listBlockSlugs(path.join(siteRoot, 'content', 'blocks'));
+  // Only a twin the index accepts keeps the post readable after the move.
+  const twinSlugs = indexableBlockSlugs(path.join(siteRoot, 'content', 'blocks'));
 
   const untwinned = posts.filter((p) => !twinSlugs.has(p.slug));
   if (untwinned.length > 0 && !opts.includeUntwinned) {

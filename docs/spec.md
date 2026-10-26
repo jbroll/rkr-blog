@@ -325,8 +325,10 @@ all use that one rule. Corrupt files are skipped.
 code. It never carries image or widget syntax; images beside prose are
 sibling `figure` blocks. `figure` and `video` slots keep the attribute
 names of §9 and §10a (`ids`, `alts`, `captions`, `justify`, `matrix`,
-`trim`, `poster`). `embed` accepts only youtube.com, youtu.be, vimeo.com,
-docs.google.com and maps.google.com URLs.
+`trim`, `poster`). `embed` is unsupported: the renderer emits an iframe for youtube.com,
+youtu.be, vimeo.com, docs.google.com and maps.google.com URLs, but the
+public CSP has no `frame-src`, so browsers block it. Nothing in the
+editor, `blocks-migrate` or the WordPress importer creates one.
 
 Rows and columns are flexbox and stack on narrow screens. There is no
 free positioning and no per-page CSS; themes own the tokens.
@@ -441,7 +443,14 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   the editor offers Load latest (discard local changes) or Keep mine (save over the newer version). A request
   without `baseVersion` (scripted clients) overwrites.
 - A save that would create a file whose name another page already uses
-  gets `409`. An invalid tree gets `400` and is never stored.
+  gets `409`. An invalid tree, a title, subtitle, status, date or
+  excerpt that is not a string, or tags that are not a list of strings
+  get `400` and are never stored.
+- A save from an editor bundle older than the running server (its
+  `X-Rkr-Build` differs) gets `426`; the editor asks for a reload.
+- New page refuses a slug that a fixed route answers (`about`, `search`,
+  `new` and the others in `src/lib/reserved-slugs.ts`) and a slug the
+  index already holds, such as an unarchived markdown post's.
 - A save updates that page's index entry (row, tags, search text) and
   queues derivative renders for its media.
 - The tree is written to an IndexedDB draft before each request and

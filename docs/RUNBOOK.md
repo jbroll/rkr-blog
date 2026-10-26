@@ -592,7 +592,8 @@ Deploying a site.
   `{ "tree": ... }` overwrites the page. Adding `baseVersion` makes the
   write conflict-checked.
 - **Unsaved work.** Each browser keeps its unsent tree in IndexedDB until
-  the server has it. Clearing site data discards it. An edit page opens
+  the server has it. Clearing site data discards it, and so does signing
+  out, which also drops the cached editor pages. An edit page opens
   offline only if an earlier online visit cached it; otherwise it
   answers 503.
 - **Old URLs.** `/admin/editor` answers 404, `/admin/view/:slug`

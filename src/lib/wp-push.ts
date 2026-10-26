@@ -8,8 +8,8 @@
 //      → produces local markdown + originals/<id>.<ext> + sidecars
 //   3. POST each original to <to>/admin/upload  (multipart, bearer)
 //   4. Convert the markdown to a JSON block tree (lib/markdown-migrate)
-//      and POST it to <to>/admin/blocks/:slug (JSON, bearer); then
-//      POST <to>/admin/reindex so the new page is publicly visible.
+//      and POST it to <to>/admin/blocks/:slug (JSON, bearer), which
+//      indexes the page so it is publicly visible.
 //   5. clean up the temp siteRoot
 //
 // The markdown write route (`POST /admin/posts`) was retired with the
@@ -162,20 +162,8 @@ async function pushWpObject(post: WpPost, opts: PushOpts): Promise<PushResult> {
     }
     const created = (await postRes.json()) as { slug: string; inserted?: boolean };
 
-    // The retired /admin/posts handler reindexed on every save; the
-    // blocks save route does not. Rebuild the target index here so the
-    // pushed page is publicly visible without a manual reindex.
-    // Do not follow the 303: the reindex route redirects to the settings
-    // HTML page, which a scripted bearer client has no use for (and which
-    // reads site secrets that a freshly seeded target may not have yet).
-    const reindexRes = await fetcher(`${targetBase}/admin/reindex`, {
-      method: 'POST',
-      headers: { authorization: auth },
-      redirect: 'manual'
-    });
-    if (!(reindexRes.ok || reindexRes.status === 303)) {
-      throw new Error(`POST /admin/reindex: ${reindexRes.status} ${await reindexRes.text()}`);
-    }
+    // The save route indexes the page it writes, so the pushed page is
+    // public without a reindex.
 
     return {
       slug: created.slug,
