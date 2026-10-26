@@ -28,6 +28,8 @@ const BUTTON = `
 .rkr-edit-btn.is-primary:hover{background:color-mix(in srgb,var(--rkr-edit-accent) 86%,#000)}
 .rkr-edit-btn.is-quiet{background:transparent;border-color:transparent}
 .rkr-edit-btn.is-quiet:hover{border-color:var(--rkr-edit-border)}
+.rkr-edit-btn.is-danger{color:var(--rkr-edit-danger);border-color:currentColor}
+.rkr-page-delete{margin-top:1rem}
 .rkr-edit-btn:disabled,.rkr-edit-btn.is-busy{opacity:.5;cursor:default}
 .rkr-edit-btn[hidden]{display:none}
 :is(.rkr-edit-btn,.rkr-dialog-close,.rkr-blocks-palette-item,.rkr-unified-mode,.rkr-block-action,.rkr-segment):focus-visible{outline:2px solid var(--rkr-edit-accent);outline-offset:2px}

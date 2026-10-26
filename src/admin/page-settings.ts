@@ -73,6 +73,9 @@ interface PageSettingsOpts {
   refuse?(): string | null;
   /** `YYYY-MM-DD`; defaults to the current UTC day. */
   today?: string;
+  /** Delete the page; resolves an error message, or null once deleted.
+   * Without it there is no Delete page button. */
+  onDelete?(): Promise<string | null>;
 }
 
 export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSettingsDialog {
@@ -168,6 +171,34 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
   link.textContent = `/${opts.slug}`;
   url.append(doc.createTextNode('Address: '), link);
   form.append(url);
+
+  const onDelete = opts.onDelete;
+  if (onDelete) {
+    const remove = doc.createElement('button');
+    remove.type = 'button';
+    remove.className = 'rkr-edit-btn is-danger rkr-page-delete';
+    remove.textContent = 'Delete page';
+    remove.addEventListener('click', () => {
+      const warning = doc.createElement('p');
+      warning.textContent = `Delete “${values.title.trim() || opts.fields.title}”? This can't be undone.`;
+      dialog.pushView({
+        title: 'Delete page',
+        body: warning,
+        primaryLabel: 'Delete page',
+        cancelLabel: 'Keep page',
+        onPrimary: async () => {
+          const error = await onDelete();
+          if (error) {
+            dialog.setError(error);
+            return false;
+          }
+          dialog.close();
+          return false;
+        }
+      });
+    });
+    form.append(remove);
+  }
 
   const setField = (name: FieldName, value: string): void => {
     values[name] = value;

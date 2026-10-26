@@ -449,6 +449,11 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   draft restores on reload. The indicator shows clean, editing, saving,
   unsaved, offline or conflict.
 - Leaving with unsaved work asks for confirmation.
+- **Delete page** (Page settings) asks for confirmation naming the page,
+  then removes its file and index entry and returns to the pages list.
+  Its comments go with it, as a deleted markdown post's did. If a
+  markdown post or another file still carries the slug, that one takes
+  the slug back.
 - Editor pages open offline after one online visit (`spec-offline.md §3`).
 
 ## 9. Image widgets
@@ -712,6 +717,7 @@ GET    /admin/blocks/edit/:slug       the editor (View / Edit)
 GET    /admin/blocks/:slug            page JSON (title, tree)
 POST   /admin/blocks/:slug            save the whole tree; 400 invalid, 409 conflict or file collision
 POST   /admin/blocks/_render          re-render a posted tree for the editor; never writes
+POST   /admin/blocks/:slug/delete     delete the page file and its index entry
 GET    /admin/blocks/macros           palette entries for the site's macros
 GET    /admin/blocks/preview/:macro   one macro rendered with its defaults
 

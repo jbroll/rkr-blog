@@ -855,3 +855,165 @@ describe('admin pages list', () => {
     assert.match(none.body, /No pages match/);
   });
 });
+
+describe('admin blocks delete', () => {
+  const addComment = (db: Awaited<ReturnType<typeof setup>>['db'], slug: string) => {
+    const post = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
+    assert.ok(post, `${slug} is indexed`);
+    db.prepare(
+      `INSERT INTO comments
+         (post_id, parent_id, wp_comment_id, author_name, author_email,
+          body, status, source, created_at)
+       VALUES (?,NULL,NULL,'Al','al@example.com','Hi','published','web',?)`
+    ).run(post.id, new Date().toISOString());
+  };
+  const count = (db: Awaited<ReturnType<typeof setup>>['db'], sql: string, slug: string) =>
+    db.prepare<{ n: number }>(sql).get(slug)?.n ?? 0;
+
+  it('removes the page file, its index row and its comments', async (t) => {
+    const { root, app, db } = await setup(t);
+    await publishPage(app, 'gone', [{ type: 'text', markdown: 'Bye.' }]);
+    await publishPage(app, 'kept', [{ type: 'text', markdown: 'Stay.' }]);
+    addComment(db, 'gone');
+
+    const res = await app.inject({ method: 'POST', url: '/admin/blocks/gone/delete' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json(), { deleted: 'gone' });
+    assert.equal(fs.existsSync(path.join(root, 'content', 'blocks', 'gone.json')), false);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM posts WHERE slug = ?', 'gone'), 0);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM posts_fts WHERE slug = ?', 'gone'), 0);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM comments WHERE ? IS NOT NULL', 'x'), 0);
+    assert.equal((await app.inject({ method: 'GET', url: '/gone' })).statusCode, 404);
+    assert.equal((await app.inject({ method: 'GET', url: '/kept' })).statusCode, 200);
+  });
+
+  it('a twin whose markdown is still on disk falls back to the markdown post', async (t) => {
+    const { root, app, db } = await setup(t);
+    fs.mkdirSync(path.join(root, 'content', 'posts'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'content', 'posts', 'twin.md'),
+      '---\ntitle: Markdown title\nslug: twin\nstatus: published\n---\n\nFrom markdown.\n'
+    );
+    await publishPage(app, 'twin', [{ type: 'text', markdown: 'From JSON.' }]);
+    addComment(db, 'twin');
+
+    const res = await app.inject({ method: 'POST', url: '/admin/blocks/twin/delete' });
+    assert.equal(res.statusCode, 200);
+    const page = await app.inject({ method: 'GET', url: '/twin' });
+    assert.equal(page.statusCode, 200);
+    assert.match(page.body, /From markdown\./);
+    assert.match(page.body, /Markdown title/);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM comments WHERE ? IS NOT NULL', 'x'), 1);
+  });
+
+  it('a second file claiming the slug takes over its row', async (t) => {
+    const { root, app, db } = await setup(t);
+    await publishPage(app, 'dup', [{ type: 'text', markdown: 'First.' }]);
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'zz-dup.json'),
+      JSON.stringify({
+        version: 1,
+        body: [{ type: 'text', markdown: 'Second.' }],
+        fields: { title: 'Second file', slug: 'dup', status: 'published' }
+      })
+    );
+    addComment(db, 'dup');
+    assert.equal(
+      (await app.inject({ method: 'POST', url: '/admin/blocks/dup/delete' })).statusCode,
+      200
+    );
+    const page = await app.inject({ method: 'GET', url: '/dup' });
+    assert.match(page.body, /Second\./);
+    assert.match(page.body, /Second file/);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM comments WHERE ? IS NOT NULL', 'x'), 1);
+  });
+
+  it('404s an unknown page or a bad slug', async (t) => {
+    const { app } = await setup(t);
+    for (const url of ['/admin/blocks/nope/delete', '/admin/blocks/BAD/delete']) {
+      assert.equal((await app.inject({ method: 'POST', url })).statusCode, 404, url);
+    }
+  });
+
+  it('requires a signed-in editor', async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-admin-blocks-gated-'));
+    fs.mkdirSync(path.join(root, 'content', 'blocks'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'data'), { recursive: true });
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', 'p.json'),
+      JSON.stringify({ version: 1, body: [], fields: { title: 'P', slug: 'p' } })
+    );
+    const db = open(path.join(root, 'data', 'site.db'));
+    migrate(db);
+    t.after(() => db.close());
+    const app = await buildApp({
+      siteRoot: root,
+      db,
+      startWorker: false,
+      auth: {
+        exchange: {
+          authorizationUrl: () => new URL('https://example.com/'),
+          exchange: async () => {
+            throw new Error('not used');
+          }
+        },
+        secureCookies: false
+      }
+    });
+    t.after(async () => {
+      await app.close();
+      events.removeAllListeners('enqueued');
+    });
+    const res = await app.inject({ method: 'POST', url: '/admin/blocks/p/delete' });
+    assert.equal(res.statusCode, 401);
+    assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'p.json')));
+  });
+});
+
+describe('admin blocks atomic writes', () => {
+  /** Paths written in place versus renamed into place during `run`. */
+  async function watchWrites(t: TestContext, run: () => Promise<void>) {
+    const inPlace: string[] = [];
+    const renamed: string[] = [];
+    const write = fs.writeFileSync;
+    const rename = fs.renameSync;
+    t.mock.method(fs, 'writeFileSync', (...a: Parameters<typeof fs.writeFileSync>) => {
+      inPlace.push(String(a[0]));
+      return write(...a);
+    });
+    t.mock.method(fs, 'renameSync', (...a: Parameters<typeof fs.renameSync>) => {
+      renamed.push(String(a[1]));
+      return rename(...a);
+    });
+    await run();
+    t.mock.restoreAll();
+    return { inPlace, renamed };
+  }
+
+  it('a save replaces the page file by rename, never in place', async (t) => {
+    const { root, app } = await setup(t);
+    await publishPage(app, 'atomic', [{ type: 'text', markdown: 'One.' }]);
+    const dest = path.join(root, 'content', 'blocks', 'atomic.json');
+    const seen = await watchWrites(t, async () => {
+      await publishPage(app, 'atomic', [{ type: 'text', markdown: 'Two.' }]);
+    });
+    assert.ok(seen.renamed.includes(dest));
+    assert.ok(!seen.inPlace.includes(dest));
+  });
+
+  it('a new page is created by rename, never in place', async (t) => {
+    const { root, app } = await setup(t);
+    const dest = path.join(root, 'content', 'blocks', 'fresh.json');
+    const seen = await watchWrites(t, async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/blocks/new',
+        payload: { title: 'Fresh', slug: 'fresh' }
+      });
+      assert.equal(res.statusCode, 303);
+    });
+    assert.ok(seen.renamed.includes(dest));
+    assert.ok(!seen.inPlace.includes(dest));
+  });
+});

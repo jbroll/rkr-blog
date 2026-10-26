@@ -1905,6 +1905,49 @@ describe('unified shell page settings', () => {
       subtitle: ''
     });
   });
+
+  const mountWithDelete = (onDelete: () => Promise<void>) => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'text', markdown: 'One' }],
+      fields: { title: 'Doomed', slug: 'saved' }
+    };
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'One')]);
+    mountUnifiedShell(f.root as unknown as Element, {
+      tree,
+      macros: [],
+      onSave: async () => {},
+      render: markedRender,
+      onDelete
+    });
+    f.toolbar.querySelector('.rkr-unified-settings')?.click();
+    f.root.querySelector('.rkr-page-delete')?.click();
+    f.root.querySelector('.rkr-dialog-primary')?.click();
+    return f;
+  };
+
+  it('Delete page in settings calls onDelete once confirmed', async () => {
+    let deletes = 0;
+    const f = mountWithDelete(async () => {
+      deletes++;
+    });
+    await tick();
+    await tick();
+    assert.equal(deletes, 1);
+    assert.equal(f.root.querySelector('[data-rkr-dialog]'), null);
+  });
+
+  it('a failed delete keeps the dialog open with a message', async () => {
+    const f = mountWithDelete(async () => {
+      throw new Error('delete page 500');
+    });
+    await tick();
+    await tick();
+    assert.match(
+      f.root.querySelector('.rkr-dialog-error')?.textContent ?? '',
+      /Couldn't delete the page/
+    );
+  });
 });
 
 describe('unified shell add-block sheet', () => {

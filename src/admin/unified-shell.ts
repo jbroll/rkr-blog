@@ -47,6 +47,9 @@ export interface UnifiedShellDeps {
   /** Pickers and the image editor for media dialogs. Without it, media
    * dialogs can rearrange and caption but not add. */
   media?: MediaDialogDeps;
+  /** Delete the page (`POST /admin/blocks/:slug/delete`) and leave the
+   * editor; throws when the server did not delete it. */
+  onDelete?(): Promise<void>;
 }
 
 interface ApplyOpts {
@@ -65,6 +68,8 @@ export interface UnifiedShell {
 
 const RENDER_FAILED = "Couldn't refresh the page. Select Retry to try again.";
 const NOT_EDITABLE = "This block has formatting the editor can't edit in place.";
+const DELETE_FAILED = "Couldn't delete the page. Check your connection and try again.";
+const DELETE_WHILE_SAVING = 'Wait for the save to finish, then delete the page.';
 const OFFLINE_STRUCTURE = 'Reconnect to add or move blocks';
 const OFFLINE_DIALOG = "You're offline. Keep this open and save when you reconnect.";
 
@@ -200,6 +205,17 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     dirty.clear();
   };
 
+  // A save landing after the delete would write the page back.
+  const deletePage = (remove: () => Promise<void>) => async (): Promise<string | null> => {
+    if (save.state() === 'saving') return DELETE_WHILE_SAVING;
+    try {
+      await remove();
+      return null;
+    } catch {
+      return DELETE_FAILED;
+    }
+  };
+
   const openSettings = (): void => {
     flushText();
     const slug = (root as HTMLElement).dataset?.slug ?? '';
@@ -207,6 +223,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
       slug,
       fields: readPageFields(tree.fields, slug),
       refuse: () => (shown !== tree ? refuseOffline() : null),
+      ...(deps.onDelete ? { onDelete: deletePage(deps.onDelete) } : {}),
       onCommit: (fields) => {
         const next = {
           ...tree,

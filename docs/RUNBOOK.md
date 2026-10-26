@@ -545,7 +545,8 @@ Pages live in `<SITE_ROOT>/content/blocks/*.json` and macros in
 
 - **Authoring.** `/admin/blocks` lists pages. New page creates a draft
   and opens it in the editor. A draft stays off the public site until
-  Page settings sets its status to published.
+  Page settings sets its status to published. Page settings also has
+  Delete page, which removes the file and its comments.
 - **Macros.** `site-admin init` copies the repo's `macros/` seeds into
   `<SITE_ROOT>/macros/` and never overwrites an existing file. To add or
   change a macro, edit its JSON file. The palette (Sections group) and

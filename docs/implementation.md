@@ -550,6 +550,9 @@ before every request and clears it after the server has the tree
 - **Whole-tree save.** One request carries the full tree and the version
   it was edited from. This keeps the server a validator and writer, with
   no patch protocol.
+- **Atomic writes.** Save and create write through
+  `writeFileAtomicSync` (temp file plus rename), so a concurrent public
+  read never sees a partial page.
 - **Content-hash version.** `blockFileVersion` hashes the file's bytes.
   A modification time would let two writes inside one tick share a
   version and pass a stale save.

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
+import { writeFileAtomicSync } from '../lib/atomic-write.ts';
 import { requireUser } from '../lib/auth-middleware.ts';
 import {
   blockFileVersion,
@@ -23,7 +24,8 @@ import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { loadMacroLibrary, ROOT_MACROS } from '../lib/macro-library.ts';
 import { readAllIndexedPosts, runReindex } from '../lib/post-index.ts';
-import { reindexBlockPage } from '../lib/post-index-blocks.ts';
+import { dropIndexedPost, reindexBlockPage } from '../lib/post-index-blocks.ts';
+import { listPosts } from '../lib/posts.ts';
 import {
   setAdminEditorSecurityHeaders,
   setPublicSecurityHeaders
@@ -192,7 +194,7 @@ export function registerAdminBlockRoutes(
       }
       const dest = blockFile(siteRoot, slug);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(
+      writeFileAtomicSync(
         dest,
         `${JSON.stringify({ version: 1, body: [], fields: { title, slug, status: 'draft' } }, null, 2)}\n`
       );
@@ -241,6 +243,24 @@ export function registerAdminBlockRoutes(
     return { html: await renderEditBody(siteRoot, tree, req.log) };
   });
 
+  // The editor's Delete page. Another file claiming the slug, or a
+  // markdown post not yet archived, takes the slug back.
+  fastify.post<{ Params: { slug: string } }>(
+    '/admin/blocks/:slug/delete',
+    { ...guard },
+    async (req, reply) => {
+      const { slug } = req.params;
+      const file = VALID_SLUG.test(slug) ? findBlockFile(siteRoot, slug) : null;
+      if (!file) return reply.code(404).send({ error: 'not found' });
+      fs.unlinkSync(file);
+      const db = opts.db;
+      if (!db || listPosts(siteRoot).some((p) => p.slug === slug)) runReindex(siteRoot);
+      else if (findBlockFile(siteRoot, slug)) reindexBlockPage(db, siteRoot, slug);
+      else dropIndexedPost(db, slug);
+      return { deleted: slug };
+    }
+  );
+
   fastify.post<{ Params: { slug: string }; Body: unknown }>(
     '/admin/blocks/:slug',
     { ...guard },
@@ -280,7 +300,8 @@ export function registerAdminBlockRoutes(
       }
       const inserted = !existing;
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
+      // Public reads of this file run concurrently; rename never shows them a partial page.
+      writeFileAtomicSync(dest, `${JSON.stringify(tree, null, 2)}\n`);
       const version = blockFileVersion(dest);
 
       // Public / and /:slug read the DB index, so a save updates this

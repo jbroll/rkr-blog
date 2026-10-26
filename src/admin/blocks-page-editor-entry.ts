@@ -204,6 +204,18 @@ if (root && slug && tree) {
     return ((await res.json()) as { html: string }).html;
   };
 
+  const drafts = indexedDbDraftStore(slug);
+  let deleted = false;
+  const deletePage = async (): Promise<void> => {
+    const res = await fetch(`/admin/blocks/${encodeURIComponent(slug)}/delete`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error(`delete page ${res.status}`);
+    deleted = true;
+    await drafts.clear().catch(() => {});
+    location.assign('/admin/blocks');
+  };
+
   void (async () => {
     try {
       const res = await fetch('/admin/blocks/macros');
@@ -214,17 +226,21 @@ if (root && slug && tree) {
         tree,
         macros,
         version: root.dataset.version,
-        drafts: indexedDbDraftStore(slug),
+        drafts,
         onSave: save,
+        onDelete: deletePage,
         render,
         media: pageMedia(() => opfsReady)
       });
-      guardUnload(window, () =>
-        shouldWarnOnLeave({
-          saveState:
-            root.querySelector('#rkr-unified-shell')?.getAttribute('data-save-state') ?? null,
-          imageDirty: imageEditor?.dirty() ?? false
-        })
+      guardUnload(
+        window,
+        () =>
+          !deleted &&
+          shouldWarnOnLeave({
+            saveState:
+              root.querySelector('#rkr-unified-shell')?.getAttribute('data-save-state') ?? null,
+            imageDirty: imageEditor?.dirty() ?? false
+          })
       );
       opfsReady = await initOpfsForUnifiedEditor();
     } catch (err: unknown) {

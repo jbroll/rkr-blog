@@ -196,3 +196,14 @@ export function reindexBlockPage(db: Db, siteRoot: string, slug: string): void {
     db.prepare('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags)').run();
   })();
 }
+
+/** Remove a deleted page's row, FTS row and now-unused tags. Comments and
+ * post_tags go with the row (ON DELETE CASCADE), as a deleted markdown
+ * post's did. */
+export function dropIndexedPost(db: Db, slug: string): void {
+  db.transaction(() => {
+    db.prepare('DELETE FROM posts WHERE slug = ?').run(slug);
+    db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(slug);
+    db.prepare('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM post_tags)').run();
+  })();
+}
