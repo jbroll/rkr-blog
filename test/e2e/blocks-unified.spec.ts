@@ -151,10 +151,15 @@ async function dragTextAbove(
 ): Promise<void> {
   const box = await target.boundingBox();
   expect(box).not.toBeNull();
-  await page
+  const source = page
     .locator('.rkr-blocks-palette-item')
-    .filter({ has: page.getByText('Text', { exact: true }) })
-    .dragTo(target, { targetPosition: { x: box!.width - 8, y: 2 } });
+    .filter({ has: page.getByText('Text', { exact: true }) });
+  await source.hover();
+  await page.mouse.down();
+  // Drag by hand: the block toolbar only lets drops through once the drag has started.
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + 40, { steps: 5 });
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + 2, { steps: 5 });
+  await page.mouse.up();
 }
 
 test('edit after insert writes the right block', async ({ page }) => {

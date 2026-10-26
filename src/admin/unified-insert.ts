@@ -3,18 +3,16 @@
 //
 // Browser-safe: no node:* imports.
 
-import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
-import { gridLabel } from '../lib/grid.ts';
+import type { BlockNode, BlockTree } from '../lib/blocks.ts';
 import { moveBlock, movedPath } from './block-move.ts';
 import { childrenOf, getAtPath, insertAtPath, type Path } from './block-tree-ops.ts';
 import {
-  MAX_MACRO_DEPTH,
   mountBlocksPalette,
   PALETTE_PRIMITIVES,
   type PaletteMacro,
   primitiveNode
 } from './blocks-editor.ts';
-import { type DropSlot, findDropSlot } from './drop-slots.ts';
+import { type DropSlot, depthNudge, findDropSlot, fitsDepth } from './drop-slots.ts';
 
 function nodeFor(name: string): BlockNode {
   return name.startsWith('primitive:') ? primitiveNode(name) : { type: 'macro', macro: name };
@@ -72,10 +70,8 @@ export function mountPaletteInsert(env: InsertEnv): PaletteInsert {
 
   const insertNode = (name: string, at: Path, index: number): void => {
     const node = nodeFor(name);
-    if (node.type === 'grid' && at.length + containerDepth(node) > MAX_MACRO_DEPTH) {
-      env.showNudge(
-        `${gridLabel(node.slots)} can't go here: grids nest at most ${MAX_MACRO_DEPTH} levels. Save the inner part as its own macro.`
-      );
+    if (node.type === 'grid' && !fitsDepth(at, node)) {
+      env.showNudge(depthNudge(node));
       return;
     }
     const next = insertAtPath(env.getTree(), at, index, node);

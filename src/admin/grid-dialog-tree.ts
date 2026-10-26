@@ -78,6 +78,8 @@ export interface GridDialog {
 
 interface GridDialogOpts {
   initial: GridFields;
+  /** A band belongs at page level; below it the checkbox shows only for a band that is already on. */
+  canBand?: boolean;
   onCommit(slots: Slots): void;
   /** A message keeps the dialog open with it as the error (e.g. offline). */
   refuse?(): string | null;
@@ -101,6 +103,8 @@ export function openGridDialog(root: Element, opts: GridDialogOpts): GridDialog 
   };
 
   const syncVisibility = (): void => {
+    const bandRow = rows.get('band');
+    if (bandRow) bandRow.hidden = !(opts.canBand ?? true) && !opts.initial.band;
     const widths = rows.get('widths');
     if (widths) widths.hidden = !widthsOffered(values.cols);
     for (const name of ['theme', 'edge'] as const) {

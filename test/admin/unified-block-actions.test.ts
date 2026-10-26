@@ -435,3 +435,14 @@ describe('wrap and unwrap', () => {
     assert.equal(h.applied[0]?.select, undefined);
   });
 });
+
+describe('toolbar while dragging', () => {
+  it('lets drops through from dragstart until dragend', async () => {
+    const h = harness(AB, [0], ['0', '1']);
+    h.doc.dispatchEvent(new FakeEvent('dragstart'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(h.bar().hasAttribute('data-dragging'));
+    h.doc.dispatchEvent(new FakeEvent('dragend'));
+    assert.ok(!h.bar().hasAttribute('data-dragging'));
+  });
+});

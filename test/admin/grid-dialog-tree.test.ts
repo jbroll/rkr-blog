@@ -13,12 +13,13 @@ import { FakeDocument, type FakeElement } from './fake-dom.ts';
 
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-function open(slots: Slots) {
+function open(slots: Slots, canBand = true) {
   const doc = new FakeDocument();
   const root = doc.createElement('div');
   const commits: Slots[] = [];
   const dialog: GridDialog = openGridDialog(root as unknown as Element, {
     initial: readGridFields(slots),
+    canBand,
     onCommit: (next) => {
       commits.push(next);
     }
@@ -106,6 +107,20 @@ describe('grid dialog', () => {
     dialog.setField('band', true);
     assert.equal(hidden('theme'), false);
     assert.equal(hidden('edge'), false);
+  });
+});
+
+describe('grid dialog band field', () => {
+  const bandHidden = (root: FakeElement): boolean =>
+    ((root.querySelector('#rkr-grid-field-band') as FakeElement).parentNode as FakeElement).hidden;
+
+  it('hides Full-width band below page level', () => {
+    assert.equal(bandHidden(open({ cols: 2 }, false).root), true);
+  });
+
+  it('keeps it for a grid that is already a band, and at page level', () => {
+    assert.equal(bandHidden(open({ band: true }, false).root), false);
+    assert.equal(bandHidden(open({ cols: 2 }, true).root), false);
   });
 });
 

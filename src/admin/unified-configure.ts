@@ -109,6 +109,7 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
     if (node?.type !== 'grid') return;
     openGridDialog(root, {
       initial: readGridFields(node.slots),
+      canBand: path.length === 1,
       refuse,
       onCommit: (slots) => {
         commitSlots(path, (current) => applyGridSlots(current, slots));

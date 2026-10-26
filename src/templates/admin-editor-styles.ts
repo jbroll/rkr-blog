@@ -112,6 +112,7 @@ const BLOCKS = `
 #rkroll-admin-status.is-error{color:var(--rkr-danger,#c0392b)}
 .rkr-block-toolbar{position:fixed;z-index:35;display:flex;flex-wrap:wrap;align-items:center;gap:.15rem;max-width:calc(100vw - 8px);padding:.2rem .3rem;color:var(--rkr-text);background:var(--rkr-edit-surface);border:1px solid var(--rkr-edit-border);border-radius:var(--rkr-edit-radius);box-shadow:var(--rkr-edit-shadow);font:400 .75rem/1.2 var(--rkr-edit-font)}
 .rkr-block-toolbar[hidden]{display:none}
+.rkr-block-toolbar[data-dragging]{pointer-events:none}
 .rkr-block-type{padding:0 .4rem;font-weight:600;color:var(--rkr-edit-muted)}
 .rkr-block-action{margin:0;padding:.25rem .5rem;font:500 .75rem/1.2 var(--rkr-edit-font);color:var(--rkr-text);background:transparent;border:0;border-radius:4px;cursor:pointer}
 .rkr-block-action:hover{background:color-mix(in srgb,var(--rkr-bg) 86%,var(--rkr-text))}

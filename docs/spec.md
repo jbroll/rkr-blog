@@ -445,7 +445,8 @@ the editing chrome. View and Edit are two modes of the same page.
   into its parent and selects the first; an empty grid is removed.
 - **Configure a grid** opens a dialog: Columns (1 to 6), Narrowest cell
   (Narrow, Medium, Wide), Column widths (blank for equal, or one number
-  per column, offered for 2 to 4 columns), Full-width band, and with
+  per column, offered for 2 to 4 columns), Full-width band (shown only
+  at page level, or on a band so it can be turned off), and with
   the band on, Background and Bottom edge. Changing Columns so the
   widths no longer match keeps the dialog open with the message.
 - **Image and Video** show the new block and open its picker. Nothing

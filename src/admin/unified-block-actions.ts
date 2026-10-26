@@ -9,7 +9,7 @@
 //
 // Browser-safe: no node:* imports.
 
-import { type BlockNode, type BlockTree, containerDepth } from '../lib/blocks.ts';
+import type { BlockNode, BlockTree, ContainerNode } from '../lib/blocks.ts';
 import { gridLabel, readGridSlots } from '../lib/grid.ts';
 import { moveBlock } from './block-move.ts';
 import {
@@ -21,7 +21,7 @@ import {
   unwrapAtPath,
   wrapAtPath
 } from './block-tree-ops.ts';
-import { MAX_MACRO_DEPTH } from './blocks-editor.ts';
+import { depthNudge, fitsDepth } from './drop-slots.ts';
 
 export interface BlockActionsEnv {
   body: Element;
@@ -196,13 +196,13 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   const wrap = (cols: 1 | 2): void =>
     act((tree, path) => {
       if (!wrapAllowed(tree, path, cols)) return;
-      const grid: BlockNode = {
+      const grid: ContainerNode = {
         type: 'grid',
         slots: { cols },
         children: [getAtPath(tree, path) as BlockNode]
       };
-      if (path.length - 1 + containerDepth(grid) > MAX_MACRO_DEPTH) {
-        note.textContent = `${gridLabel(grid.slots)} can't go here: grids nest at most ${MAX_MACRO_DEPTH} levels. Save the inner part as its own macro.`;
+      if (!fitsDepth(path.slice(0, -1), grid)) {
+        note.textContent = depthNudge(grid);
         note.hidden = false;
         return;
       }
@@ -405,6 +405,18 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
   };
   doc.addEventListener('keydown', onKeydown);
 
+  // The fixed toolbar can sit over the drop target; a drop on it is refused.
+  // Deferred so the browser still starts the drag from the handle.
+  const dragStarted = (): void => {
+    setTimeout(() => bar.setAttribute('data-dragging', ''), 0);
+  };
+  const dragEnded = (): void => {
+    bar.removeAttribute('data-dragging');
+  };
+  doc.addEventListener('dragstart', dragStarted);
+  doc.addEventListener('dragend', dragEnded);
+  doc.addEventListener('drop', dragEnded, true);
+
   const view = doc.defaultView;
   view?.addEventListener('scroll', position, true);
   view?.addEventListener('resize', position);
@@ -416,6 +428,9 @@ export function mountBlockActions(env: BlockActionsEnv): { refresh(): void; disp
     refresh,
     dispose: () => {
       doc.removeEventListener('keydown', onKeydown);
+      doc.removeEventListener('dragstart', dragStarted);
+      doc.removeEventListener('dragend', dragEnded);
+      doc.removeEventListener('drop', dragEnded, true);
       view?.removeEventListener('scroll', position, true);
       view?.removeEventListener('resize', position);
       body.removeEventListener('input', position);

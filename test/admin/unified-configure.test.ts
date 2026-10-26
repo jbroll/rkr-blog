@@ -45,6 +45,25 @@ describe('configure a grid', () => {
     assert.deepEqual(applied[0]?.select, [0]);
   });
 
+  it('offers the band only for a grid at page level', () => {
+    const nested: BlockTree = {
+      version: 1,
+      body: [{ type: 'grid', children: [{ type: 'grid', slots: { cols: 2 }, children: [] }] }]
+    };
+    const root = new FakeDocument().createElement('div');
+    createConfigurator({
+      root: root as unknown as Element,
+      macros: [],
+      getTree: () => nested,
+      applyTree: async () => {},
+      flushText: () => {},
+      refuse: () => null
+    }).configure([0, 0]);
+    const row = (root.querySelector('#rkr-grid-field-band') as FakeElement)
+      .parentNode as FakeElement;
+    assert.equal(row.hidden, true);
+  });
+
   it('ignores a path that is not a grid', () => {
     const { root, configurator } = setup();
     configurator.configure([5]);
