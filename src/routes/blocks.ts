@@ -59,7 +59,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
 
   async function renderMacro(name: string, log: { warn(o: object, m: string): void }) {
-    const lib = loadMacroLibrary(`${siteRoot}/macros`);
+    const lib = loadMacroLibrary(`${siteRoot}/macros`, log);
     if (!lib.get(name)) return null;
     const node = expandMacro(lib, name, {});
     const synthetic = figureLeaves(node).map((f) => ({

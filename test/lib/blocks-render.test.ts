@@ -119,11 +119,6 @@ describe('blocks-render', () => {
     assert.match(html, /<!-- embed: invalid url -->/);
   });
 
-  it('throws on an unknown block type', async () => {
-    const tree = { version: 1, body: [{ type: 'nope' }] } as unknown as BlockTree;
-    await assert.rejects(renderBlockTree(tree, fakeCtx, emptyLib), /unknown block type nope/);
-  });
-
   it('markers zip with source order, public output unchanged without mark', async () => {
     // Two top-level leaves then a section wrapping two leaves (a
     // section>… nesting: each child appends its index to the parent path).
@@ -307,5 +302,34 @@ describe('blocks-render', () => {
       );
       assert.match(html, /Curried probe/);
     });
+  });
+});
+
+describe('renderBlockTree unknown types', () => {
+  it('renders nothing for an unknown nested type and warns instead of throwing', async (t) => {
+    const warned: string[] = [];
+    t.mock.method(console, 'warn', (...a: unknown[]) => {
+      warned.push(a.map(String).join(' '));
+    });
+    const lib: RenderMacroLib = {
+      get: (n) =>
+        n === 'odd'
+          ? {
+              defaults: {},
+              tree: {
+                type: 'section',
+                children: [{ type: 'mystery' } as never, { type: 'text', markdown: 'Kept' }]
+              }
+            }
+          : undefined
+    };
+    const html = await renderBlockTree(
+      { version: 1, body: [{ type: 'macro', macro: 'odd' }] },
+      fakeCtx,
+      lib
+    );
+    assert.match(html, /Kept/);
+    assert.doesNotMatch(html, /mystery/);
+    assert.match(warned.join('\n'), /unknown block type mystery/);
   });
 });

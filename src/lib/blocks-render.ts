@@ -216,7 +216,11 @@ async function renderNodeHtml(
       return renderNodeHtml(tree, ctx, lib, [...stack, node.macro], path);
     }
     default: {
-      throw new Error(`renderBlockTree: unknown block type ${(node as { type: unknown }).type}`);
+      // Page trees are validated on save and macros on load; this guards
+      // anything that slipped past, without taking the page down.
+      // biome-ignore lint/suspicious/noConsole: no request logger reaches the renderer
+      console.warn(`renderBlockTree: unknown block type ${(node as { type: unknown }).type}`);
+      return '';
     }
   }
 }

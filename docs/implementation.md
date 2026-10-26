@@ -567,7 +567,9 @@ before every request and clears it after the server has the tree
 
 `runReindex` (`src/lib/post-index.ts`) reads `content/blocks/*.json` and
 `content/posts/*.md` and pairs them by slug, so comment threads and
-permalinks survive. A JSON page wins over a markdown post with the same
+permalinks survive. Text leaves reach the search index through the same
+mdast plain-text walk as markdown posts (`post-text.ts`), so markup,
+URLs and raw HTML stay out of snippets. A JSON page wins over a markdown post with the same
 slug and the pair renders once. A corrupt JSON file is skipped, and the
 markdown post, if any, stays indexed. A JSON-only page is indexed,
 listed and searchable.

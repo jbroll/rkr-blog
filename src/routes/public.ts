@@ -12,14 +12,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { readBlockPage } from '../lib/block-pages.ts';
+import { renderBlockPost } from '../lib/block-post-render.ts';
 import { extractBlockTeaser } from '../lib/block-teaser.ts';
-import { collectBlockFigureIds, renderBlockTree } from '../lib/blocks-render.ts';
 import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
-import { loadMacroLibrary } from '../lib/macro-library.ts';
 import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
@@ -370,32 +369,16 @@ export default async function publicRoutes(
       let bannerHtml: string | null = null;
       let bodyHtml: string;
       if (twin) {
-        const lib = loadMacroLibrary(path.join(siteRoot, 'macros'));
-        const getMacroTree = (name: string) => lib.get(name)?.tree;
-        const synthetic = collectBlockFigureIds(twin.tree, getMacroTree).map((ids) => ({
-          type: 'leafDirective',
-          name: 'figure',
-          attributes: { ids },
-          children: []
-        }));
-        const ctx = {
-          images: await buildImageMap(siteRoot, synthetic as unknown as DirectiveNode[], {
-            log: req.log
-          }),
+        const parts = await renderBlockPost(siteRoot, twin, {
+          widgets,
           videos: widgetsCtx.videos,
-          widgets
-        };
-        bodyHtml = await renderBlockTree(twin.tree, ctx, {
-          get: (n: string) => {
-            const d = lib.get(n);
-            return d ? { defaults: d.defaults, tree: d.tree } : undefined;
-          }
+          log: req.log
         });
+        bodyHtml = parts.bodyHtml;
+        bannerHtml = parts.bannerHtml;
+        subtitle = parts.subtitle;
         title = twin.title;
         date = row.published_at ?? undefined;
-        if (typeof twin.fields.subtitle === 'string' && twin.fields.subtitle.trim()) {
-          subtitle = twin.fields.subtitle;
-        }
       } else {
         const fullPath = path.join(siteRoot, row.path);
         const raw = await fs.promises.readFile(fullPath, 'utf8');

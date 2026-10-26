@@ -8,6 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Root } from 'mdast';
+import { remark } from 'remark';
+import remarkDirective from 'remark-directive';
 import { type BlockNode, type BlockTree, parseBlockTree } from './blocks.ts';
 import { type PostFrontmatter, parsePost } from './content.ts';
 import { type Db, open } from './db.ts';
@@ -402,12 +404,16 @@ function listJson(dir: string): string[] {
     .sort();
 }
 
-/** Plain-text bag for FTS: every text leaf's markdown plus button and
- * marquee labels, in document order. */
+/** Plain-text bag for FTS: every text leaf's words (through the same
+ * mdast extraction markdown posts use) plus button and marquee labels,
+ * in document order. */
 function extractBlockPlainText(tree: BlockTree): string {
   const parts: string[] = [];
   const walk = (node: BlockNode): void => {
-    if (node.type === 'text' && node.markdown) parts.push(node.markdown);
+    if (node.type === 'text' && node.markdown) {
+      const words = extractPlainText(remark().use(remarkDirective).parse(node.markdown) as Root);
+      if (words) parts.push(words);
+    }
     if (node.type === 'button' && typeof node.slots?.label === 'string')
       parts.push(node.slots.label);
     if (node.type === 'marquee' && typeof node.slots?.text === 'string')

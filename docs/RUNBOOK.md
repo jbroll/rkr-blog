@@ -551,7 +551,9 @@ Pages live in `<SITE_ROOT>/content/blocks/*.json` and macros in
   change a macro, edit its JSON file. The palette (Sections group) and
   the public render read the file on each request. A new seed in the repo
   reaches an existing site only if you copy the file. Format and
-  placeholder syntax: `spec.md §8a`.
+  placeholder syntax: `spec.md §8a`. A broken macro file is skipped with a
+  `macro-library: <file>` warning in the server log; fix the file and
+  the next request picks it up.
 - **Hand edits.** A page file can be edited on disk. An open editor sees
   the change as a conflict on its next save and offers Load latest or
   Keep mine. Run `site-admin reindex` afterward so the public index

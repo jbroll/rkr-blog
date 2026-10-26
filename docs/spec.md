@@ -331,6 +331,11 @@ docs.google.com and maps.google.com URLs.
 Rows and columns are flexbox and stack on narrow screens. There is no
 free positioning and no per-page CSS; themes own the tokens.
 
+A figure that opens the page, or opens a leading `flow`, is the page's
+hero: it renders in the banner slot (above the header with
+`bannerAboveHeader`) and the index teaser, not in the body. This is the
+markdown rule for a post's leading `::figure`.
+
 ### Macros
 
 A macro is `<site>/macros/<name>.json`: `description`, `defaults`, an
@@ -348,6 +353,10 @@ only the slots it overrides.
   comment instead of looping.
 - The `page` macro holds site-wide defaults (site title, menu,
   announcement, footer). It is not placeable.
+- A macro file that is not valid JSON, lacks object `defaults`, or holds
+  a node the page validator rejects is skipped and logged. Pages that
+  use the other macros render; an instance of the skipped one renders a
+  comment.
 - The editor does not edit macro definitions; change the JSON file.
   There is no macro history or diff UI; git holds it.
 - A definition holds at most three container levels. The editor refuses

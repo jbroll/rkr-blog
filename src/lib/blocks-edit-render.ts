@@ -30,7 +30,7 @@ export async function renderEditBody(
   tree: BlockTree,
   log: FastifyBaseLogger
 ): Promise<string> {
-  const lib = loadMacroLibrary(path.join(siteRoot, 'macros'));
+  const lib = loadMacroLibrary(path.join(siteRoot, 'macros'), log);
   const macroLib = {
     get: (name: string) => {
       const def = lib.get(name);

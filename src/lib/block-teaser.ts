@@ -1,13 +1,14 @@
-// Teaser (hero figure + lede paragraph) from a stored JSON block tree.
-// Mirrors the markdown teaser in routes/public.ts: the first figure in
-// document order, then the first text leaf after it; no figure or no
-// lede means no teaser. Only those two nodes are measured and rendered,
-// so a broken image later in the page cannot take the index down.
+// Hero figure and teaser (hero + lede paragraph) from a stored JSON block
+// tree. Mirrors the markdown rule in routes/public.ts: only a figure that
+// opens the post is its hero; the lede is the first text leaf after it.
+// No hero or no lede means no teaser. Only those two nodes are measured
+// and rendered, so a broken image later in the page cannot take the
+// index down.
 
 import type { Paragraph, Root } from 'mdast';
 import { remark } from 'remark';
 import remarkDirective from 'remark-directive';
-import type { BlockNode, BlockTree, LeafNode } from './blocks.ts';
+import type { BlockNode, BlockTree, ContainerNode, LeafNode } from './blocks.ts';
 import { type RenderCtx, renderPostHtml } from './content.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import { truncateParagraph } from './teaser-truncate.ts';
@@ -35,12 +36,35 @@ function blockLeaves(node: BlockNode): BlockNode[] {
   return [node];
 }
 
+/** The page hero and the tree without it. The hero is the body's first
+ * node when that is a figure, or the first block of a leading flow (where
+ * a migrated post's body lives). */
+export function splitHero(tree: BlockTree): { hero: LeafNode | null; rest: BlockTree } {
+  const first = tree.body[0];
+  if (first?.type === 'figure') {
+    return { hero: first as LeafNode, rest: { ...tree, body: tree.body.slice(1) } };
+  }
+  if (first?.type === 'flow') {
+    const flow = first as ContainerNode;
+    const key = flow.blocks ? 'blocks' : 'children';
+    const kids = flow[key] ?? [];
+    if (kids[0]?.type === 'figure') {
+      const rest: BlockTree = {
+        ...tree,
+        body: [{ ...flow, [key]: kids.slice(1) }, ...tree.body.slice(1)]
+      };
+      return { hero: kids[0] as LeafNode, rest };
+    }
+  }
+  return { hero: null, rest: tree };
+}
+
 /** Hero figure + lede markdown from a block tree. */
 function blockTeaserSource(tree: BlockTree): { figure: LeafNode; lede: string } | null {
+  const figure = splitHero(tree).hero;
+  if (!figure) return null;
   const leaves = tree.body.flatMap(blockLeaves);
-  const heroIdx = leaves.findIndex((n) => n.type === 'figure');
-  if (heroIdx === -1) return null;
-  const figure = leaves[heroIdx] as LeafNode;
+  const heroIdx = leaves.indexOf(figure);
   for (const node of leaves.slice(heroIdx + 1)) {
     if (node.type !== 'text') continue;
     const lede =
@@ -52,7 +76,7 @@ function blockTeaserSource(tree: BlockTree): { figure: LeafNode; lede: string } 
 
 /** A figure block's slots as the directive the widget dispatcher reads,
  * matching `renderBlockTree` and the `GET /:slug` synthetic prepass. */
-function figureDirective(node: LeafNode): DirectiveNode {
+export function figureDirective(node: LeafNode): DirectiveNode {
   const attributes: Record<string, string | null | undefined> = {};
   for (const [k, v] of Object.entries(node.slots ?? {})) {
     if (v === undefined || v === null) continue;

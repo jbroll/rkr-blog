@@ -119,6 +119,8 @@
     "src/lib/auth-middleware.ts": 100,
     "src/lib/bearer.ts": 100,
     "src/lib/block-pages.ts": 100,
+    "src/lib/block-post-render.ts": 100,
+    "src/lib/block-teaser.ts": 100,
     "src/lib/blocks-edit-render.ts": 100,
     "src/lib/blocks-render.ts": 100,
     "src/lib/blocks.ts": 94.81,

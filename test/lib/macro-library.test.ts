@@ -96,13 +96,17 @@ describe('macro-library', () => {
     assert.equal(lib.get('hero')?.fieldSchema?.heading?.label, 'Heading');
   });
 
-  it('rejects malformed macro files with the file named', (t: TestContext) => {
+  it('skips and logs a malformed macro file, naming it, and keeps the rest', (t: TestContext) => {
     const cases: [unknown, RegExp][] = [
       ['{not json', /bad\.json is not valid JSON/],
       [{ defaults: [], tree: { type: 'text' } }, /bad\.json needs object defaults/],
-      [{ defaults: {}, tree: { type: 'nope' } }, /unknown block type nope/],
-      [{ defaults: {}, tree: 'text' }, /unknown block type \?/],
-      [{ defaults: {}, tree: { type: 'macro' } }, /macro instance needs a macro name/]
+      [{ defaults: {}, tree: { type: 'nope' } }, /bad\.json.*unknown block type nope/],
+      [{ defaults: {}, tree: 'text' }, /bad\.json.*needs a string type/],
+      [{ defaults: {}, tree: { type: 'macro' } }, /bad\.json.*macro instance needs a macro name/],
+      [
+        { defaults: {}, tree: { type: 'section', children: [{ type: 'mystery' }] } },
+        /bad\.json.*unknown block type mystery/
+      ]
     ];
     for (const [json, error] of cases) {
       const dir = freshDir(t);
@@ -110,8 +114,24 @@ describe('macro-library', () => {
         path.join(dir, 'bad.json'),
         typeof json === 'string' ? json : JSON.stringify(json)
       );
-      assert.throws(() => loadMacroLibrary(dir), error);
+      writeMacro(dir, 'good', { defaults: {}, tree: { type: 'text', markdown: 'ok' } });
+      const warnings: string[] = [];
+      const lib = loadMacroLibrary(dir, { warn: (_o, m) => warnings.push(m) });
+      assert.deepEqual([...lib.keys()], ['good']);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0] ?? '', error);
     }
+  });
+
+  it('logs to console.warn when no logger is passed', (t: TestContext) => {
+    const dir = freshDir(t);
+    fs.writeFileSync(path.join(dir, 'bad.json'), '{not json');
+    const warned: string[] = [];
+    t.mock.method(console, 'warn', (...a: unknown[]) => {
+      warned.push(a.map(String).join(' '));
+    });
+    assert.equal(loadMacroLibrary(dir).size, 0);
+    assert.match(warned.join('\n'), /bad\.json/);
   });
 
   it('types stored macros and field specs', () => {

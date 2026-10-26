@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { type BlockNode, resolveSlots, type Slots } from './blocks.ts';
+import { type BlockNode, parseBlockTree, resolveSlots, type Slots } from './blocks.ts';
 
 export interface FieldSpec {
   label: string;
@@ -30,37 +30,44 @@ export type MacroLib = Map<string, StoredMacro>;
 /** Macros that carry site-wide settings, not placeable content. */
 export const ROOT_MACROS: ReadonlySet<string> = new Set(['page']);
 
-const KNOWN_TYPES: ReadonlySet<string> = new Set([
-  'section',
-  'row',
-  'col',
-  'flow',
-  'text',
-  'figure',
-  'video',
-  'button',
-  'list',
-  'marquee',
-  'accordion',
-  'progress',
-  'embed',
-  'macro'
-]);
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
-function checkNode(node: unknown): BlockNode {
-  if (!isRecord(node) || typeof node.type !== 'string' || !KNOWN_TYPES.has(node.type)) {
-    throw new Error(
-      `macro-library: unknown block type ${(node as { type?: unknown }).type ?? '?'}`
-    );
+/** Structural logger so callers can pass Fastify's request log. */
+interface MacroLogger {
+  warn(obj: Record<string, unknown>, msg: string): void;
+}
+
+const consoleLogger: MacroLogger = {
+  // biome-ignore lint/suspicious/noConsole: CLI and render callers without a request log
+  warn: (_obj, msg) => console.warn(msg)
+};
+
+/** One macro file, validated with the same node rules as a page tree. */
+function readMacro(file: string, raw: string): StoredMacro {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`macro-library: ${file} is not valid JSON`);
   }
-  if (node.type === 'macro' && typeof node.macro !== 'string') {
-    throw new Error('macro-library: macro instance needs a macro name');
+  if (!isRecord(parsed) || !isRecord(parsed.defaults)) {
+    throw new Error(`macro-library: ${file} needs object defaults`);
   }
-  return node as unknown as BlockNode;
+  try {
+    parseBlockTree({ version: 1, body: [parsed.tree] });
+  } catch (err) {
+    throw new Error(`macro-library: ${file}: ${(err as Error).message}`);
+  }
+  return {
+    description: typeof parsed.description === 'string' ? parsed.description : undefined,
+    defaults: parsed.defaults as Slots,
+    fieldSchema: isRecord(parsed.fieldSchema)
+      ? (parsed.fieldSchema as Record<string, FieldSpec>)
+      : undefined,
+    tree: parsed.tree as BlockNode
+  };
 }
 
 /** Repo-shipped macro seeds. Mirrors repoThemesDir() in config.ts:
@@ -85,30 +92,19 @@ export function seedSiteMacros(siteRoot: string): string[] {
   }
   return copied;
 }
-export function loadMacroLibrary(dir: string): MacroLib {
+/** Every valid macro under `dir`. A bad file is skipped and logged, so
+ * one broken macro never takes down the pages that use the others. */
+export function loadMacroLibrary(dir: string, log: MacroLogger = consoleLogger): MacroLib {
   const lib: MacroLib = new Map();
   if (!fs.existsSync(dir)) return lib;
   for (const file of fs.readdirSync(dir).sort()) {
     if (!file.endsWith('.json')) continue;
-    const raw = fs.readFileSync(path.join(dir, file), 'utf8');
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error(`macro-library: ${file} is not valid JSON`);
+      const macro = readMacro(file, fs.readFileSync(path.join(dir, file), 'utf8'));
+      lib.set(file.slice(0, -'.json'.length), macro);
+    } catch (err) {
+      log.warn({ file }, `${(err as Error).message}; skipped`);
     }
-    if (!isRecord(parsed) || !isRecord(parsed.defaults)) {
-      throw new Error(`macro-library: ${file} needs object defaults`);
-    }
-    const name = file.slice(0, -'.json'.length);
-    lib.set(name, {
-      description: typeof parsed.description === 'string' ? parsed.description : undefined,
-      defaults: parsed.defaults as Slots,
-      fieldSchema: isRecord(parsed.fieldSchema)
-        ? (parsed.fieldSchema as Record<string, FieldSpec>)
-        : undefined,
-      tree: checkNode(parsed.tree)
-    });
   }
   return lib;
 }

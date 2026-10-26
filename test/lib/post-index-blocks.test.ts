@@ -90,4 +90,22 @@ describe('post index with JSON twins', () => {
     runReindex(root);
     assert.equal(indexedTitle(root, 'hello'), 'Markdown title');
   });
+
+  it('indexes text leaves as plain words, without markdown, URLs or HTML', (t: TestContext) => {
+    const root = freshRoot(t);
+    writeJson(root, 'plain.json', { title: 'P', slug: 'plain', status: 'published' }, [
+      { type: 'text', markdown: '**bold** [link](http://x.example/secret-url)' },
+      { type: 'text', markdown: '<div class="raw">tagged</div>' }
+    ]);
+    runReindex(root);
+    const db = open(path.join(root, 'data', 'site.db'));
+    try {
+      const row = db
+        .prepare<{ body: string }>('SELECT body FROM posts_fts WHERE slug = ?')
+        .get('plain');
+      assert.equal(row?.body, 'bold link');
+    } finally {
+      db.close();
+    }
+  });
 });

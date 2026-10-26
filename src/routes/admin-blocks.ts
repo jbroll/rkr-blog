@@ -90,8 +90,8 @@ export function registerAdminBlockRoutes(
   const { siteRoot, getSite } = opts;
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
 
-  fastify.get('/admin/blocks/macros', { ...guard }, async (_req, _reply) => {
-    const lib = loadMacroLibrary(`${siteRoot}/macros`);
+  fastify.get('/admin/blocks/macros', { ...guard }, async (req, _reply) => {
+    const lib = loadMacroLibrary(`${siteRoot}/macros`, req.log);
     return [...lib.keys()]
       .filter((name) => !ROOT_MACROS.has(name))
       .sort()

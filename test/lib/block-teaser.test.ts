@@ -36,10 +36,10 @@ test('extractBlockTeaser: skips macros and non-text leaves, reads slots.markdown
     version: 1,
     body: [
       {
-        type: 'section',
-        children: [
-          { type: 'macro', macro: 'hidden-hero' },
+        type: 'flow',
+        blocks: [
           { type: 'figure', slots: { ids: ['aaaa1111', 'bbbb2222'], justify: null } },
+          { type: 'macro', macro: 'hidden-lede' },
           { type: 'video', slots: { ids: 'cccc3333' } },
           { type: 'text', slots: { markdown: 'Lede from slots.' } }
         ]
@@ -58,6 +58,19 @@ test('extractBlockTeaser: a lede with no paragraph → null', async (t) => {
     body: [
       { type: 'figure', slots: { ids: 'aaaa1111' } },
       { type: 'text', markdown: '::figure{ids="bbbb2222"}' }
+    ]
+  };
+  assert.equal(await extractBlockTeaser(root, tree, registry(), 30), null);
+});
+
+test('extractBlockTeaser: a figure that does not open the page is no hero', async (t) => {
+  const root = freshSiteRoot(t);
+  const tree: BlockTree = {
+    version: 1,
+    body: [
+      { type: 'text', markdown: 'Intro first.' },
+      { type: 'figure', slots: { ids: 'aaaa1111' } },
+      { type: 'text', markdown: 'Then a lede.' }
     ]
   };
   assert.equal(await extractBlockTeaser(root, tree, registry(), 30), null);
