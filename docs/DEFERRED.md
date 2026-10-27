@@ -24,6 +24,7 @@ Format: **item** — _revisit when:_ trigger.
 - **Per-instance crops** — crops are per-sidecar (global to every page using the image). _Revisit when:_ an author wants the same image cropped differently on two pages.
 - **Cross-figure image move** — an image moves between figures by removing it from one and adding it in the other's dialog. _Revisit when:_ an author asks for a one-step move.
 - **No video trim or poster control in the editor** — `POST /admin/video/:id/trim` works, but the video dialog sets only the video, caption and layout. _Revisit when:_ an author needs a trimmed clip.
+- **Full-bleed bands sit off-center under a theme whose `main` is not centered** (tufte's 8% left margin); the `100vw` breakout assumes a centered column, as `.rkr-justify-bleed` does. _Revisit when:_ a site uses bands with tufte or another left-biased theme.
 - **Grid cells cannot span columns or rows**; authors nest a grid instead. _Revisit when:_ an author needs a wide cell over two small ones.
 - **No prompt to merge a row of single-image figures into one figure.** _Revisit when:_ authors build rows of single-image figures.
 - **Delete on a non-empty container has no confirm and no undo.** _Revisit when:_ an author loses a section to a stray Delete.

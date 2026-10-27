@@ -492,6 +492,7 @@ throws rather than return a partial one, so nothing invalid reaches disk.
   `collectBlockFigureIds`, the macro preview and the prewarm scan
   collect it. The band breaks out to the viewport with the `100vw`
   technique `.rkr-justify-bleed` uses, which assumes `main` is centered.
+  Only page-level bands break out; one inside a grid cell stays in it.
   Edit mode turns the breakout off so bands stay beside the palette.
   `src/lib/themes.ts` lists section themes: the four built-ins plus the
   names in the active theme's `rkr-section-themes` comment.

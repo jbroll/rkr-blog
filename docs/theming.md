@@ -256,7 +256,9 @@ rules a theme should not touch.
 Block pages (spec §8a) render through these classes.
 
 - `.rkr-section` — a band (`grid` with `band: true`). Its background
-  spans the viewport; padding is `--rkr-section-pad`.
+  spans the viewport; padding is `--rkr-section-pad`. A band inside a
+  `.rkr-grid-cell` stays in the cell. A waved band that is last in its
+  container gets a bottom margin of `--rkr-section-wave-height`.
 - `.rkr-theme-<name>` — on `.rkr-section`, the band's section theme.
   Sets `--rkr-band-bg`, `--rkr-band-fg`, `--rkr-band-heading` and
   `--rkr-band-link` from the `--rkr-section-<name>-*` tokens; the band

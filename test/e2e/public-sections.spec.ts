@@ -32,7 +32,15 @@ test.beforeAll(async ({ browser }) => {
     slug: SLUG,
     title: 'Sections',
     kind: 'page',
-    body: [band('dark', 'wave'), ...THEMES.map((t) => band(t))]
+    body: [
+      ...THEMES.map((t) => band(t)),
+      {
+        type: 'grid',
+        slots: { cols: 2, min: 'narrow' },
+        children: [band('dark-bold'), { type: 'text', markdown: 'Beside the nested band.' }]
+      },
+      band('dark', 'wave')
+    ]
   });
   await page.close();
 });
@@ -44,8 +52,7 @@ for (const size of [
   test(`bands at ${size.width}x${size.height}`, async ({ page }) => {
     await page.setViewportSize(size);
     await page.goto(`/${SLUG}`);
-    const sections = page.locator('section.rkr-section');
-    await expect(sections).toHaveCount(5);
+    await expect(page.locator('section.rkr-section')).toHaveCount(6);
 
     const m = await page.evaluate(() => {
       const probe = document.createElement('div');
@@ -55,19 +62,40 @@ for (const size of [
       probe.remove();
       const bg = (el: Element) => getComputedStyle(el).backgroundColor;
       const pageBg = bg(document.body);
-      const bands = [...document.querySelectorAll('section.rkr-section')].map((s) => {
-        const r = s.getBoundingClientRect();
-        const inner = s.querySelector(':scope > .rkr-section-inner') as Element;
-        const wave = s.querySelector(':scope > .rkr-section-wave');
-        return {
-          left: r.left,
-          right: r.right,
-          bg: bg(s),
-          inner: inner.getBoundingClientRect().width,
-          wave: wave ? { height: wave.getBoundingClientRect().height, bg: bg(wave) } : null
-        };
-      });
-      return { content, pageBg, clientWidth: document.documentElement.clientWidth, bands };
+      const all = [...document.querySelectorAll('section.rkr-section')];
+      const nestedEl = all.find((s) => s.closest('.rkr-grid-cell')) as Element;
+      const cell = (nestedEl.closest('.rkr-grid-cell') as Element).getBoundingClientRect();
+      const nr = nestedEl.getBoundingClientRect();
+      const nested = { left: nr.left, right: nr.right, cellLeft: cell.left, cellRight: cell.right };
+      const main = (document.querySelector('main') as Element).getBoundingClientRect();
+      const bands = all
+        .filter((s) => s !== nestedEl)
+        .map((s) => {
+          const r = s.getBoundingClientRect();
+          const inner = s.querySelector(':scope > .rkr-section-inner') as Element;
+          const wave = s.querySelector(':scope > .rkr-section-wave');
+          return {
+            left: r.left,
+            right: r.right,
+            bg: bg(s),
+            inner: inner.getBoundingClientRect().width,
+            wave: wave
+              ? {
+                  height: wave.getBoundingClientRect().height,
+                  bottom: wave.getBoundingClientRect().bottom,
+                  bg: bg(wave)
+                }
+              : null
+          };
+        });
+      return {
+        content,
+        pageBg,
+        clientWidth: document.documentElement.clientWidth,
+        bands,
+        nested,
+        mainBottom: main.bottom
+      };
     });
 
     for (const b of m.bands) {
@@ -76,9 +104,13 @@ for (const size of [
       expect(b.inner).toBeLessThanOrEqual(m.content + 0.5);
       expect(b.bg).not.toBe(m.pageBg);
     }
-    const [waved, ...themed] = m.bands;
+    const themed = m.bands.slice(0, THEMES.length);
+    const waved = m.bands[THEMES.length];
     expect(waved?.wave?.height).toBeGreaterThan(0);
     expect(waved?.wave?.bg).toBe(waved?.bg);
+    expect(waved?.wave?.bottom).toBeLessThanOrEqual(m.mainBottom + 0.5);
+    expect(m.nested.left).toBeGreaterThanOrEqual(m.nested.cellLeft - 0.5);
+    expect(m.nested.right).toBeLessThanOrEqual(m.nested.cellRight + 0.5);
     expect(new Set(themed.map((b) => b.bg)).size).toBe(THEMES.length);
     expect(
       await page.evaluate(

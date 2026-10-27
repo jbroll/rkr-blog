@@ -232,6 +232,8 @@ function clampInt(v: unknown, bounds: { min: number; max: number }): number | un
   return Math.max(bounds.min, Math.min(bounds.max, Math.round(v)));
 }
 
+let writes = 0;
+
 /** Persist the blog-level config. Read-modify-writes the JSON file so
  * a partial update from the admin UI keeps fields it didn't change.
  * Nested ingestResize merges per-field (a patch with maxDim only
@@ -256,8 +258,6 @@ export function writePersistedSiteConfig(
   writes += 1;
   return next;
 }
-
-let writes = 0;
 
 /** Count of settings writes in this process; lets caches built from
  * site.json (themes.ts) notice a change. */

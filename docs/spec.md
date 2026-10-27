@@ -353,10 +353,10 @@ editor, `blocks-migrate` or the WordPress importer creates one.
 | `cols` | integer 1 to 6 | 1 | Cells side by side when there is room. Children fill cells in reading order and wrap, so six children at `cols: 3` make two rows. |
 | `min` | `narrow` (10rem), `medium` (16rem), `wide` (24rem) | `medium` | Narrowest cell. A grid too narrow for `cols` cells of this width shows fewer columns, down to one. |
 | `widths` | space-separated positive numbers, one per column | equal | Column ratio, such as `2 1`. Ignored unless it has exactly `cols` entries. With `widths`, the grid goes straight to one column when it is too narrow for every column at `min`. |
-| `band` | boolean | false | The background spans the viewport and the content stays capped at `--rkr-content`, with `--rkr-section-pad` around it. `theme`, `edge` and `bg` apply only with `band`. |
+| `band` | boolean | false | The background spans the viewport and the content stays capped at `--rkr-content`, with `--rkr-section-pad` around it. A band inside a grid cell stays in its cell as a themed panel. `theme`, `edge` and `bg` apply only with `band`. |
 | `theme` | `light`, `light-bold`, `dark`, `dark-bold`, or a name the active theme declares | `light` | Band section theme: background, text, heading and link colors from tokens (see `docs/theming.md`, Blocks). Any `[a-z-]+` name saves; one with no CSS renders unstyled. |
 | `edge` | `straight`, `wave` | `straight` | Band bottom edge. `wave` draws a wave in the band's background color over the top of what follows. |
-| `bg` | one image id | none | Band background image, rendered through the image pipeline as a cover image behind the content. Ignored without `band`; an id that does not resolve renders no image. |
+| `bg` | one image id | none | Band background image, rendered through the image pipeline as a cover image behind the content. Ignored without `band`; an id that does not resolve renders no image. A band with a background image and no content renders nothing. |
 | `align` | `start`, `center` | `start` | Text and cell alignment in the grid's cells. |
 | `box` | boolean | false | Draws the grid as a panel: `--rkr-box-bg`, `--rkr-box-fg`, `--rkr-box-pad`, `--rkr-radius`. |
 

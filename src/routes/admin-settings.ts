@@ -37,7 +37,7 @@ import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 
 const MAX_TITLE = 200;
 const MAX_TAGLINE = 500;
-// Match VALID_THEME_NAME in lib/config.ts. Keep in sync — the regex
+// Match VALID_THEME_NAME in lib/themes.ts. Keep in sync — the regex
 // is the security boundary for the theme name (it ends up in a CSS
 // URL path).
 const VALID_THEME_NAME = /^[a-z][a-z0-9-]*$/;

@@ -1329,6 +1329,11 @@ body[data-mode="figure"] .rkr-meta {
   background: var(--rkr-band-bg, transparent);
   color: var(--rkr-band-fg, inherit);
 }
+/* A band inside a grid cell stays in its cell: a themed panel. */
+.rkr-grid-cell .rkr-section {
+  width: auto;
+  margin: 0;
+}
 .rkr-section :is(h1, h2, h3, h4, h5, h6) {
   color: var(--rkr-band-heading, inherit);
 }
@@ -1396,6 +1401,9 @@ body[data-mode="figure"] .rkr-meta {
 }
 .rkr-section:has(> .rkr-section-wave) + :not(.rkr-section) {
   margin-top: calc(var(--rkr-section-wave-height) + var(--rkr-gap));
+}
+.rkr-section:has(> .rkr-section-wave):last-child {
+  margin-bottom: var(--rkr-section-wave-height);
 }
 .rkr-box {
   box-sizing: border-box;
