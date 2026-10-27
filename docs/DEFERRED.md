@@ -46,12 +46,26 @@ Format: **item** — _revisit when:_ trigger.
 ## Organization sites
 
 - **`default.css` sets `main { padding: 1.25rem 1rem }` under 640px and ignores `--rkr-main-pad`**, so a theme repeats the rule to put a band flush under the header on phones. _Revisit when:_ next edit to the mobile block of `default.css`.
+- **The settings Home page select lists at most 1000 pages, and re-saving settings silently clears a `homePage` that has become a draft.** _Revisit when:_ a site passes 1000 pages or an author loses the home page setting.
+- **Nested list item specs are forbidden only by a doc comment**; macro load does not reject a `list` inside a list `item`. _Revisit when:_ someone writes one.
+- **An added empty list row saves as `{}` and renders an empty item.** _Revisit when:_ an author reports a blank card or person.
+- **Removing every default list row commits `[]`, which restores the defaults**, so an author cannot blank a default list. _Revisit when:_ an author needs an empty list.
+- **`.rkr-align-center` leaves block-level embed, accordion and video start-aligned.** _Revisit when:_ a centered section holds one of them.
+- **The circle mask on justified and masonry figure layouts is not checked in a browser.** _Revisit when:_ a masked multi-image figure looks wrong.
+- **Grid dialog: `setField('bg')` does not refresh the thumbnail, and an offline-cached editor page can show stale section theme names.** _Revisit when:_ an author reports either.
+- **A dismissed announcement shows briefly before `announcement.js` hides it** (CSP blocks an inline script). _Revisit when:_ the flash draws a complaint.
+- **`GET /admin/blocks/preview/:macro` renders through `expandMacro`, which fills no placeholders**, so a seed preview shows raw `{{…}}` and a light band in place of a templated theme. No UI calls it. _Revisit when:_ the palette shows macro previews.
+- **Deleting the active site theme file 404s its stylesheet until a settings write or restart.** _Revisit when:_ an operator removes a theme in use.
 
 ## Image pipeline
 
 - **`buildImageMapFromOpfs` blob: URLs are never revoked** — every URL it makes reaches the rendered document and must outlive it, and the preview renders once per page load, so there is nothing to revoke yet. _Revisit when:_ the preview starts re-rendering without a full page reload.
 - **Local-thumbnail blob URLs in the unified editor are never revoked.** _Revisit when:_ a long editing session grows memory.
 - **HEIC originals show no local thumbnail** (the browser cannot decode them until the upload drains). _Revisit when:_ HEIC uploads are common.
+- **The `/img/<id>.gif` route re-reads and re-copies the original on every Node hit** even when the cache copy exists (matters without Apache). _Revisit when:_ a deploy serves GIFs without the Apache fast path.
+- **A sidecar commit racing a `.gif` request can leave a stale `<id>.gif` until gc**, and no test checks that a commit unlinks a cached `.gif`. _Revisit when:_ a stale animated GIF shows after an edit.
+- **Prewarm stops at macro nodes**, so list-item images and macro band backgrounds are not prewarmed. _Revisit when:_ a macro-heavy page is slow on first view.
+- **The macro figure-id prepass exists three times** (`prepareBlockRender`, `renderEditBody`, `routes/blocks.ts` `renderMacro`). _Revisit when:_ the prepass changes again.
 
 ## UI / UX
 
