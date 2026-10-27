@@ -26,6 +26,8 @@ For local development setup, see [developer-quickstart.md](./developer-quickstar
 - Plugin / theme marketplace.
 - Multi-tenant operation.
 - Real-time collaboration.
+- Commerce: memberships, merchandise, sponsorship checkout.
+- Free positioning of elements. Pages stay on the grid.
 - Pixel-exact fidelity while editing. The block editor's View mode
   shows the page as published; Edit mode overlays editing controls.
 
@@ -493,7 +495,10 @@ only the slots it overrides.
 - `hero` has a second button (`cta2Label`, `cta2Href`), empty by
   default so it renders nothing. `marquee-band` has an optional `image`
   used as the band background. `cards` has a `heading` and an optional
-  `intro` markdown line under it.
+  `intro` markdown line under it. The instance field was named `title`
+  before; `site-admin macros --update cards` replaces the site copy, so
+  an existing instance loses its `title` override and shows the empty
+  `heading` until the author sets it.
 - `site-admin macros` lists the seeds whose site copy is missing or
   differs from the shipped file. `site-admin macros --update <name>`
   overwrites that one site file from its seed. Init and re-init never do.

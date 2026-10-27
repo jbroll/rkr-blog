@@ -85,6 +85,9 @@ From the 2026-09-12 infra review. The evidence is in `~/Install/services.md`, un
 
 - [ ] **Decide on static publishing with auth at the proxy.** Readers get only static files, sign-in moves to a separate service in front of the editor, and comments become an optional separate service. Written up for later consideration in [proposal-static-publishing.md](./proposal-static-publishing.md).
 - [ ] **Decide on richer page design.** Header and footer filled from settings, sections with fixed layouts, a tag-driven listing block, events with dates and calendar links, and a few smaller blocks, sized from a full inventory of the co-op's Squarespace site. Written up in [proposal-page-design.md](./proposal-page-design.md).
+- [ ] **Listings and collections.** A `list` block rendering one card per page with a tag, nested URLs such as `/recipes/pad-thai`, previous and next links, and collection tags kept off the home index. Starts from section 3 of the page-design proposal.
+- [ ] **Events and calendar.** Events with dates, addresses, and Google Calendar and ICS links (section 4 of the page-design proposal). Follows listings.
+- [ ] **Forms.** Newsletter signup through Mailchimp's own form, and a contact form. Waits on the static publishing decision, because a static site has nowhere to post.
 
 ---
 
