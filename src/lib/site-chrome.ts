@@ -40,8 +40,13 @@ export async function renderLogoHtml(
 
 const FOOTER_SLUG = '_footer';
 
+// Bounds staleness from changes the key cannot see: in-place macro edits
+// and image sidecars.
+const FOOTER_MAX_AGE_MS = 60_000;
+
 interface FooterEntry {
   key: string;
+  at: number;
   html: string | undefined;
 }
 
@@ -80,10 +85,20 @@ async function renderFooterHtml(siteRoot: string, log: ChromeLogger): Promise<st
     siteConfigWrites()
   ].join('|');
   const hit = footerCache.get(siteRoot);
-  if (hit?.key === key) return hit.html;
+  const now = Date.now();
+  if (hit?.key === key && now - hit.at < FOOTER_MAX_AGE_MS) return hit.html;
   const html = await renderFooter(siteRoot, log);
-  footerCache.set(siteRoot, { key, html });
+  footerCache.set(siteRoot, { key, at: now, html });
   return html;
+}
+
+async function safeFooterHtml(siteRoot: string, log: ChromeLogger): Promise<string | undefined> {
+  try {
+    return await renderFooterHtml(siteRoot, log);
+  } catch (err) {
+    log.warn({ err }, 'footer render failed; using the default footer');
+    return undefined;
+  }
 }
 
 export async function loadChrome(
@@ -92,7 +107,7 @@ export async function loadChrome(
   log: ChromeLogger
 ): Promise<SiteNavChrome> {
   const out: SiteNavChrome = {};
-  const footerHtml = await renderFooterHtml(siteRoot, log);
+  const footerHtml = await safeFooterHtml(siteRoot, log);
   if (footerHtml) out.footerHtml = footerHtml;
   const logoHtml = await renderLogoHtml(siteRoot, site.logo, log);
   if (logoHtml) out.logoHtml = logoHtml;

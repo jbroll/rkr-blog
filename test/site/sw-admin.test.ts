@@ -137,6 +137,16 @@ test('editor navigation: prefers the network and caches the render under its pat
   assert.equal(await (hit as Response).text(), 'network:https://x.test/admin/blocks/edit/hello');
 });
 
+test('editor navigation: caches _footer but not other _ slugs', async () => {
+  const e = env(okPrecache);
+  await precacheInstall(e);
+  await handleFetch(e, navRequest('https://x.test/admin/blocks/edit/_footer'));
+  await handleFetch(e, navRequest('https://x.test/admin/blocks/edit/_other'));
+  const cache = await e.caches.open(`${CACHE_PREFIX}abcdef012345`);
+  assert.ok(await cache.match('https://x.test/admin/blocks/edit/_footer'));
+  assert.equal(await cache.match('https://x.test/admin/blocks/edit/_other'), undefined);
+});
+
 test('editor navigation: offline serves the last render of the same page', async () => {
   const e = env(okPrecache);
   await precacheInstall(e);

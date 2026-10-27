@@ -9,7 +9,7 @@ export const CACHE_PREFIX = 'rkr-admin-';
 export const PRECACHE_URL = '/admin/static/admin/precache.json';
 export const EDITOR_SAVED = 'rkr-editor-saved';
 
-const EDIT_PAGE = /^\/admin\/blocks\/edit\/_?[a-z0-9-]+$/;
+const EDIT_PAGE = /^\/admin\/blocks\/edit\/(?:_footer|[a-z0-9-]+)$/;
 const MACROS_URL = '/admin/blocks/macros';
 
 export interface SwEnv {

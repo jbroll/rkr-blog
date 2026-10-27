@@ -1036,6 +1036,26 @@ test('a published _footer renders in the footer of /, /:slug, /search and 404s',
   assert.equal((await app.inject({ method: 'GET', url: '/_footer' })).statusCode, 404);
 });
 
+test('saving _footer through the editor route changes the rendered footer', async (t) => {
+  const { app } = await setup(t);
+  const save = (markdown: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/admin/blocks/_footer',
+      payload: {
+        tree: {
+          version: 1,
+          body: [{ type: 'grid', children: [{ type: 'text', markdown }] }],
+          fields: { title: 'Footer', status: 'published', kind: 'page' }
+        }
+      }
+    });
+  assert.equal((await save('First foot')).statusCode, 200);
+  assert.match((await app.inject({ method: 'GET', url: '/nope' })).body, /First foot/);
+  assert.equal((await save('Second foot')).statusCode, 200);
+  assert.match((await app.inject({ method: 'GET', url: '/nope' })).body, /Second foot/);
+});
+
 test('a draft or missing _footer leaves the default footer with the admin link', async (t) => {
   const { root, app } = await setup(t);
   writePost(root, 'a.md', { slug: 'a', title: 'Alpha', status: 'published' }, 'body a');

@@ -100,12 +100,14 @@ function readPageFile(file: string, slug: string): ResolvedPage | null {
   return { title, tree, fields: parsed.fields, file, version: contentVersion(bytes) };
 }
 
-/** The one slug-to-file rule: the first file, in sorted name order, whose
+/** The one slug-to-file rule: a system slug reads only `<slug>.json`;
+ * any other slug takes the first file, in sorted name order, whose
  * `fields.slug` equals the slug and whose tree parses. A `<slug>.json` with
  * a different `fields.slug` does not match. */
 function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
   if (!isEditableSlug(slug)) return null;
   const dir = path.join(siteRoot, 'content', 'blocks');
+  if (SYSTEM_SLUGS.has(slug)) return readPageFile(path.join(dir, `${slug}.json`), slug);
   let files: string[];
   try {
     files = fs.readdirSync(dir);

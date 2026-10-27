@@ -125,6 +125,49 @@ test('loadChrome: an unchanged _footer is not re-rendered and an edit shows', as
   assert.ok(scans() > afterFirst, 'the edit re-rendered');
 });
 
+test('loadChrome: a _footer stored under another filename is not used', async (t) => {
+  const root = freshSiteRoot(t);
+  const file = writeFooter(root, 'published', 'Misfiled words');
+  fs.renameSync(file, path.join(path.dirname(file), 'a-footer.json'));
+  assert.equal((await loadChrome(root, {}, log)).footerHtml, undefined);
+});
+
+test('loadChrome: the cached footer expires after 60 seconds', async (t) => {
+  const root = freshSiteRoot(t);
+  const macros = path.join(root, 'macros');
+  fs.mkdirSync(macros, { recursive: true });
+  writeFooter(root, 'published', 'Words');
+  let now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const readdir = t.mock.method(fs, 'readdirSync');
+  const scans = () =>
+    readdir.mock.calls.filter((c) => path.resolve(String(c.arguments[0])) === macros).length;
+  await loadChrome(root, {}, log);
+  const first = scans();
+  now += 59_000;
+  await loadChrome(root, {}, log);
+  assert.equal(scans(), first);
+  now += 2_000;
+  await loadChrome(root, {}, log);
+  assert.ok(scans() > first);
+});
+
+test('loadChrome: a footer render failure is logged and leaves the default footer', async (t) => {
+  const root = freshSiteRoot(t);
+  const macros = path.join(root, 'macros');
+  fs.mkdirSync(macros, { recursive: true });
+  writeFooter(root, 'published', 'Words');
+  const real = fs.readdirSync;
+  t.mock.method(fs, 'readdirSync', ((p: fs.PathLike, ...rest: unknown[]) => {
+    if (path.resolve(String(p)) === macros) throw new Error('boom');
+    return (real as (...a: unknown[]) => unknown)(p, ...rest);
+  }) as typeof fs.readdirSync);
+  const warned: string[] = [];
+  const chrome = await loadChrome(root, {}, { warn: (_o, msg) => warned.push(msg) });
+  assert.equal(chrome.footerHtml, undefined);
+  assert.equal(warned.length, 1);
+});
+
 test('loadChrome: a macro change re-renders the footer', async (t) => {
   const root = freshSiteRoot(t);
   const macros = path.join(root, 'macros');

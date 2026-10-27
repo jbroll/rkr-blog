@@ -292,9 +292,12 @@ is the one `_` slug in `SYSTEM_SLUGS` (`src/lib/block-pages.ts`); the editor
 routes (JSON read, edit page, save, delete) accept it through
 `isEditableSlug`, while `/admin/blocks/new`, `GET /_footer`, the index, the
 page list and search still refuse it. When it is published, it replaces the
-copyright line in the footer of every public page. The rendered footer is
-cached per site and re-rendered when the file, the `macros/` directory or the
-site settings change.
+copyright line in the footer of every public page. A system slug reads only
+`content/blocks/<slug>.json`. The rendered footer is cached per site and
+re-rendered when the file, the `macros/` directory or the site settings
+change, and at least every 60 seconds (in-place macro edits and image
+changes are only picked up then). A footer that fails to render is logged and
+the default footer is shown.
 `GET /about` serves the block page with slug `about` when one is
 published (an admin sees it in any status) and falls back to `_about.md`
 otherwise. With neither, or a malformed `_about.md`, it is a 404.

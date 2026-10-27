@@ -5,6 +5,7 @@ import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
 import {
+  findBlockFile,
   isEditableSlug,
   listBlockPages,
   readBlockPage,
@@ -130,6 +131,12 @@ describe('system slugs', () => {
     assert.equal(isEditableSlug('_render'), false);
     assert.equal(isEditableSlug('../x'), false);
     assert.deepEqual([...SYSTEM_SLUGS], ['_footer']);
+  });
+
+  it('resolves _footer only from _footer.json', (t: TestContext) => {
+    const root = withBlocks(t, { 'a-footer.json': FOOTER });
+    assert.equal(readBlockPage(root, '_footer'), null);
+    assert.equal(findBlockFile(root, '_footer'), null);
   });
 
   it('reads _footer but not other underscore slugs, and does not list it', (t: TestContext) => {
