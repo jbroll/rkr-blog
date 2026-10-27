@@ -480,6 +480,20 @@ only the slots it overrides.
   Their defaults are generic placeholder text with empty image fields; an
   empty image renders nothing. `split` sets its `side` select into the
   grid's `order` slot.
+- Every seed is a band with `theme` (Light, Light bold, Dark, Dark bold)
+  and `edge` (Straight, Wave) selects. Seeds with figures (`hero`,
+  `split`, `cards`, `people-grid`, `icon-grid`) have a `mask` select
+  (Square, Circle, Rounded; Square stores `none`, which adds no mask);
+  inside a list it applies to every item. Seeds that center their
+  content (`hero`, `split`, `photo-callout`, `people-grid`, `icon-grid`,
+  `logo-wall`) have a `contentAlign` select (Left, Center). The defaults
+  match the look each seed shipped with: `hero` dark with a wave and a
+  rounded image, `photo-callout` dark, `marquee-band` dark bold,
+  `people-grid` circle photos, the rest light and straight.
+- `hero` has a second button (`cta2Label`, `cta2Href`), empty by
+  default so it renders nothing. `marquee-band` has an optional `image`
+  used as the band background. `cards` has a `heading` and an optional
+  `intro` markdown line under it.
 - `site-admin macros` lists the seeds whose site copy is missing or
   differs from the shipped file. `site-admin macros --update <name>`
   overwrites that one site file from its seed. Init and re-init never do.

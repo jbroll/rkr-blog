@@ -5,22 +5,58 @@
     "heading": "Heading",
     "text": "A few lines for the callout.",
     "ctaLabel": "Learn more",
-    "ctaHref": "/"
+    "ctaHref": "/",
+    "theme": "dark",
+    "edge": "straight",
+    "contentAlign": "center"
   },
   "fieldSchema": {
     "image": { "label": "Background image", "type": "image" },
     "heading": { "label": "Heading", "type": "text" },
     "text": { "label": "Text", "type": "markdown" },
     "ctaLabel": { "label": "Button label", "type": "text" },
-    "ctaHref": { "label": "Button link", "type": "link" }
+    "ctaHref": { "label": "Button link", "type": "link" },
+    "theme": {
+      "label": "Background",
+      "type": "select",
+      "options": [
+        { "value": "light", "label": "Light" },
+        { "value": "light-bold", "label": "Light bold" },
+        { "value": "dark", "label": "Dark" },
+        { "value": "dark-bold", "label": "Dark bold" }
+      ]
+    },
+    "edge": {
+      "label": "Bottom edge",
+      "type": "select",
+      "options": [
+        { "value": "straight", "label": "Straight" },
+        { "value": "wave", "label": "Wave" }
+      ]
+    },
+    "contentAlign": {
+      "label": "Alignment",
+      "type": "select",
+      "options": [
+        { "value": "start", "label": "Left" },
+        { "value": "center", "label": "Center" }
+      ]
+    }
   },
   "tree": {
     "type": "grid",
-    "slots": { "cols": 1, "band": true, "theme": "dark", "edge": "straight", "bg": "{{image}}", "align": "center" },
+    "slots": {
+      "cols": 1,
+      "band": true,
+      "theme": "{{theme}}",
+      "edge": "{{edge}}",
+      "bg": "{{image}}",
+      "align": "{{contentAlign}}"
+    },
     "children": [
       {
         "type": "grid",
-        "slots": { "cols": 1, "box": true, "align": "center" },
+        "slots": { "cols": 1, "box": true, "align": "{{contentAlign}}" },
         "children": [
           { "type": "text", "markdown": "## {{heading}}\n\n{{text}}" },
           { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary", "size": "large" } }

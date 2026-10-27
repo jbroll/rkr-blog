@@ -7,7 +7,11 @@
       { "photo": "", "name": "Person two", "role": "Role", "href": "" },
       { "photo": "", "name": "Person three", "role": "Role", "href": "" },
       { "photo": "", "name": "Person four", "role": "Role", "href": "" }
-    ]
+    ],
+    "theme": "light",
+    "edge": "straight",
+    "mask": "circle",
+    "contentAlign": "center"
   },
   "fieldSchema": {
     "title": { "label": "Heading", "type": "text" },
@@ -20,22 +24,57 @@
         "role": { "label": "Role", "type": "text" },
         "href": { "label": "Link", "type": "link" }
       }
+    },
+    "theme": {
+      "label": "Background",
+      "type": "select",
+      "options": [
+        { "value": "light", "label": "Light" },
+        { "value": "light-bold", "label": "Light bold" },
+        { "value": "dark", "label": "Dark" },
+        { "value": "dark-bold", "label": "Dark bold" }
+      ]
+    },
+    "edge": {
+      "label": "Bottom edge",
+      "type": "select",
+      "options": [
+        { "value": "straight", "label": "Straight" },
+        { "value": "wave", "label": "Wave" }
+      ]
+    },
+    "mask": {
+      "label": "Photo shape",
+      "type": "select",
+      "options": [
+        { "value": "none", "label": "Square" },
+        { "value": "circle", "label": "Circle" },
+        { "value": "rounded", "label": "Rounded" }
+      ]
+    },
+    "contentAlign": {
+      "label": "Alignment",
+      "type": "select",
+      "options": [
+        { "value": "start", "label": "Left" },
+        { "value": "center", "label": "Center" }
+      ]
     }
   },
   "tree": {
     "type": "grid",
-    "slots": { "cols": 1, "band": true, "theme": "light", "edge": "straight" },
+    "slots": { "cols": 1, "band": true, "theme": "{{theme}}", "edge": "{{edge}}" },
     "children": [
       { "type": "text", "markdown": "## {{title}}" },
       {
         "type": "grid",
-        "slots": { "cols": 4, "min": "narrow", "align": "center", "each": "people" },
+        "slots": { "cols": 4, "min": "narrow", "align": "{{contentAlign}}", "each": "people" },
         "children": [
           {
             "type": "grid",
             "slots": { "cols": 1 },
             "children": [
-              { "type": "figure", "slots": { "ids": "{{photo}}", "mask": "circle", "href": "{{href}}" } },
+              { "type": "figure", "slots": { "ids": "{{photo}}", "mask": "{{mask}}", "href": "{{href}}" } },
               { "type": "text", "markdown": "### {{name}}\n\n{{role}}" }
             ]
           }

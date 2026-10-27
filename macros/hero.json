@@ -1,36 +1,80 @@
 {
-  "description": "A headline band with text, a button and an optional image",
+  "description": "A headline band with text, up to two buttons and an optional image",
   "defaults": {
     "heading": "Welcome",
     "text": "A line or two about this site.",
     "ctaLabel": "Join",
     "ctaHref": "/join",
-    "image": ""
+    "cta2Label": "",
+    "cta2Href": "",
+    "image": "",
+    "theme": "dark",
+    "edge": "wave",
+    "mask": "rounded",
+    "contentAlign": "center"
   },
   "fieldSchema": {
     "heading": { "label": "Heading", "type": "text" },
     "text": { "label": "Text", "type": "markdown" },
     "ctaLabel": { "label": "Button label", "type": "text" },
     "ctaHref": { "label": "Button link", "type": "link" },
-    "image": { "label": "Image", "type": "image" }
+    "cta2Label": { "label": "Second button label", "type": "text" },
+    "cta2Href": { "label": "Second button link", "type": "link" },
+    "image": { "label": "Image", "type": "image" },
+    "theme": {
+      "label": "Background",
+      "type": "select",
+      "options": [
+        { "value": "light", "label": "Light" },
+        { "value": "light-bold", "label": "Light bold" },
+        { "value": "dark", "label": "Dark" },
+        { "value": "dark-bold", "label": "Dark bold" }
+      ]
+    },
+    "edge": {
+      "label": "Bottom edge",
+      "type": "select",
+      "options": [
+        { "value": "straight", "label": "Straight" },
+        { "value": "wave", "label": "Wave" }
+      ]
+    },
+    "mask": {
+      "label": "Image shape",
+      "type": "select",
+      "options": [
+        { "value": "none", "label": "Square" },
+        { "value": "circle", "label": "Circle" },
+        { "value": "rounded", "label": "Rounded" }
+      ]
+    },
+    "contentAlign": {
+      "label": "Alignment",
+      "type": "select",
+      "options": [
+        { "value": "start", "label": "Left" },
+        { "value": "center", "label": "Center" }
+      ]
+    }
   },
   "tree": {
     "type": "grid",
-    "slots": { "cols": 1, "band": true, "theme": "dark", "edge": "wave" },
+    "slots": { "cols": 1, "band": true, "theme": "{{theme}}", "edge": "{{edge}}" },
     "children": [
       {
         "type": "grid",
-        "slots": { "cols": 2, "widths": "3 2", "align": "center" },
+        "slots": { "cols": 2, "widths": "3 2", "align": "{{contentAlign}}" },
         "children": [
           {
             "type": "grid",
             "slots": { "cols": 1 },
             "children": [
               { "type": "text", "markdown": "# {{heading}}\n\n{{text}}" },
-              { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary", "size": "large" } }
+              { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary", "size": "large" } },
+              { "type": "button", "slots": { "label": "{{cta2Label}}", "href": "{{cta2Href}}", "variant": "secondary", "size": "large" } }
             ]
           },
-          { "type": "figure", "slots": { "ids": "{{image}}", "mask": "rounded" } }
+          { "type": "figure", "slots": { "ids": "{{image}}", "mask": "{{mask}}" } }
         ]
       }
     ]

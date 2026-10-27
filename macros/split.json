@@ -8,7 +8,11 @@
     "button1Label": "",
     "button1Href": "",
     "button2Label": "",
-    "button2Href": ""
+    "button2Href": "",
+    "theme": "light",
+    "edge": "straight",
+    "mask": "rounded",
+    "contentAlign": "center"
   },
   "fieldSchema": {
     "side": {
@@ -25,17 +29,52 @@
     "button1Label": { "label": "First button label", "type": "text" },
     "button1Href": { "label": "First button link", "type": "link" },
     "button2Label": { "label": "Second button label", "type": "text" },
-    "button2Href": { "label": "Second button link", "type": "link" }
+    "button2Href": { "label": "Second button link", "type": "link" },
+    "theme": {
+      "label": "Background",
+      "type": "select",
+      "options": [
+        { "value": "light", "label": "Light" },
+        { "value": "light-bold", "label": "Light bold" },
+        { "value": "dark", "label": "Dark" },
+        { "value": "dark-bold", "label": "Dark bold" }
+      ]
+    },
+    "edge": {
+      "label": "Bottom edge",
+      "type": "select",
+      "options": [
+        { "value": "straight", "label": "Straight" },
+        { "value": "wave", "label": "Wave" }
+      ]
+    },
+    "mask": {
+      "label": "Image shape",
+      "type": "select",
+      "options": [
+        { "value": "none", "label": "Square" },
+        { "value": "circle", "label": "Circle" },
+        { "value": "rounded", "label": "Rounded" }
+      ]
+    },
+    "contentAlign": {
+      "label": "Alignment",
+      "type": "select",
+      "options": [
+        { "value": "start", "label": "Left" },
+        { "value": "center", "label": "Center" }
+      ]
+    }
   },
   "tree": {
     "type": "grid",
-    "slots": { "cols": 1, "band": true, "theme": "light", "edge": "straight" },
+    "slots": { "cols": 1, "band": true, "theme": "{{theme}}", "edge": "{{edge}}" },
     "children": [
       {
         "type": "grid",
-        "slots": { "cols": 2, "widths": "1 1", "align": "center", "order": "{{side}}" },
+        "slots": { "cols": 2, "widths": "1 1", "align": "{{contentAlign}}", "order": "{{side}}" },
         "children": [
-          { "type": "figure", "slots": { "ids": "{{image}}", "mask": "rounded" } },
+          { "type": "figure", "slots": { "ids": "{{image}}", "mask": "{{mask}}" } },
           {
             "type": "grid",
             "slots": { "cols": 1 },

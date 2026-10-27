@@ -45,8 +45,6 @@ Format: **item** — _revisit when:_ trigger.
 
 ## Organization sites
 
-- **Seed macros fix their band theme, edge, figure mask and alignment**; an instance cannot pick them, so a theme gives each macro one look through `.rkr-macro-<name>` (the ECCG port's cards are purple on Home, where the original is green, and its card photos are not circles). _Revisit when:_ a site needs two looks of the same seed.
-- **Seed shapes the ECCG port lacked**: `hero` has one button (Home needs two), `marquee-band` has no background image, `cards` has no intro line under its heading. _Revisit when:_ a second org site hits the same section.
 - **`default.css` sets `main { padding: 1.25rem 1rem }` under 640px and ignores `--rkr-main-pad`**, so a theme repeats the rule to put a band flush under the header on phones. _Revisit when:_ next edit to the mobile block of `default.css`.
 
 ## Image pipeline
