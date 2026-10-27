@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
 import { _resetGitHashCache } from '../../src/lib/build-info.ts';
-import { _resetThemeNameCache } from '../../src/lib/config.ts';
 import { serverAssets } from '../../src/lib/site-assets.ts';
+import { _resetThemeNameCache } from '../../src/lib/themes.ts';
 
 afterEach(() => {
   _resetGitHashCache();

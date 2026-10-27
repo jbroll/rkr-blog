@@ -56,7 +56,7 @@ Build hygiene, security, video, the WordPress permalink redirect and the dump co
 
 ## 6. Performance / reliability
 
-- [ ] **Module-level mutable singletons** — `liveInflight` + `events` in `jobs.ts`, theme cache in `config.ts` are process-singletons. (`DEFERRED.md: Performance`)
+- [ ] **Module-level mutable singletons** — `liveInflight` + `events` in `jobs.ts`, theme cache in `themes.ts` are process-singletons. (`DEFERRED.md: Performance`)
 - [ ] **Per-process scaling ceiling** — `inflightRenders`/`renderSemaphore` per-process; `listSidecars`/`listPosts` O(n) scans. (`DEFERRED.md: Performance`)
 - [ ] **SW `networkFirst` doesn't fall back on non-200** — only on throw/offline; 5xx during deploy won't degrade to cache. (`DEFERRED.md: Performance`)
 

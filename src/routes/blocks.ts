@@ -9,8 +9,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { requireUser } from '../lib/auth-middleware.ts';
 import { readBlockPage } from '../lib/block-pages.ts';
-import type { BlockNode } from '../lib/blocks.ts';
-import { renderBlockTree } from '../lib/blocks-render.ts';
+import { collectBlockFigureIds, renderBlockTree } from '../lib/blocks-render.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
 import { expandMacro, loadMacroLibrary } from '../lib/macro-library.ts';
@@ -32,13 +31,6 @@ export interface BlockRoutesOpts {
   requireAuth: boolean;
 }
 
-function figureLeaves(node: BlockNode, out: BlockNode[] = []): BlockNode[] {
-  if (node.type === 'figure') out.push(node);
-  const kids = node.type === 'grid' ? node.children : [];
-  for (const k of kids) figureLeaves(k, out);
-  return out;
-}
-
 function sendPages404(reply: FastifyReply) {
   return reply
     .code(404)
@@ -57,11 +49,17 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
   async function renderMacro(name: string, log: { warn(o: object, m: string): void }) {
     const lib = loadMacroLibrary(`${siteRoot}/macros`, log);
     if (!lib.get(name)) return null;
-    const node = expandMacro(lib, name, {});
-    const synthetic = figureLeaves(node).map((f) => ({
+    const tree = { version: 1 as const, body: [expandMacro(lib, name, {})] };
+    const macroLib = {
+      get: (n: string) => {
+        const d = lib.get(n);
+        return d ? { defaults: d.defaults, tree: d.tree } : undefined;
+      }
+    };
+    const synthetic = collectBlockFigureIds(tree, macroLib).map((ids) => ({
       type: 'leafDirective',
       name: 'figure',
-      attributes: { ids: String((f.slots?.ids ?? '') as string) },
+      attributes: { ids },
       children: []
     }));
     const ctx = {
@@ -69,12 +67,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
       videos: await buildVideoMap(siteRoot),
       widgets
     };
-    return renderBlockTree({ version: 1, body: [node] }, ctx, {
-      get: (n: string) => {
-        const d = lib.get(n);
-        return d ? { defaults: d.defaults, tree: d.tree } : undefined;
-      }
-    });
+    return renderBlockTree(tree, ctx, macroLib);
   }
 
   // Old /pages/:slug links land on the canonical URL. A draft 404s so the

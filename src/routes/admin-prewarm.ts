@@ -14,6 +14,7 @@
 
 import type { BlockNode, BlockTree, ContainerNode } from '../lib/blocks.ts';
 import type { Db } from '../lib/db.ts';
+import { readGridSlots } from '../lib/grid.ts';
 import { cacheKey } from '../lib/hash.ts';
 import { enqueue } from '../lib/jobs.ts';
 import {
@@ -28,7 +29,8 @@ import { videoCachePaths } from '../lib/video-render.ts';
 import { readVideoSidecar } from '../lib/video-sidecar.ts';
 
 /** Flatten every string that may carry a media id into one scan text:
- * slot ids from figure/video leaves plus markdown from text leaves. */
+ * slot ids from figure/video leaves, band backgrounds, and markdown
+ * from text leaves. */
 function collectMediaRefs(tree: BlockTree): string {
   const parts: string[] = [];
   const walk = (node: BlockNode): void => {
@@ -39,6 +41,10 @@ function collectMediaRefs(tree: BlockTree): string {
     }
     if ((node.type === 'figure' || node.type === 'video') && typeof node.slots?.ids === 'string') {
       parts.push(node.slots.ids);
+    }
+    if (node.type === 'grid') {
+      const { bg } = readGridSlots(node.slots);
+      if (bg) parts.push(bg);
     }
     if (node.type === 'macro') return;
     const kids = (node as ContainerNode).children ?? [];

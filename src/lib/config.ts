@@ -2,7 +2,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import { writeFileAtomicSync } from './atomic-write.ts';
 import { type OrgSiteFields, orgSiteConfig, pickOrgFields } from './site-org-settings.ts';
@@ -139,8 +138,8 @@ export interface PersistedSiteConfig extends OrgSiteFields {
 }
 
 /** Read the persisted blog-level config. Returns an empty object when
- * the file is missing or unreadable; siteConfig / themeName then fall
- * through to env vars. Parse errors are logged once but not thrown —
+ * the file is missing or unreadable; siteConfig / themeName (themes.ts)
+ * then fall through to env vars. Parse errors are logged once but not thrown —
  * a malformed file shouldn't take the site down. */
 export function readPersistedSiteConfig(env: Env = process.env): PersistedSiteConfig {
   const p = paths(env).siteConfigFile;
@@ -254,9 +253,16 @@ export function writePersistedSiteConfig(
   const p = paths(env).siteConfigFile;
   fs.mkdirSync(path.dirname(p), { recursive: true });
   writeFileAtomicSync(p, `${JSON.stringify(next, null, 2)}\n`);
-  // Drop the theme-name memoisation so the next call sees the new value.
-  resolvedThemeName = null;
+  writes += 1;
   return next;
+}
+
+let writes = 0;
+
+/** Count of settings writes in this process; lets caches built from
+ * site.json (themes.ts) notice a change. */
+export function siteConfigWrites(): number {
+  return writes;
 }
 
 export function siteConfig(env: Env = process.env): SiteConfig {
@@ -383,67 +389,4 @@ export function serverConfig(env: Env = process.env): ServerConfig {
     host: env.HOST || '127.0.0.1',
     logLevel: env.LOG_LEVEL || 'info'
   };
-}
-
-/** Repo's static/themes directory. Used to validate SITE_THEME at
- * resolve time so an unknown theme name falls back to default with
- * a one-shot warning rather than 404ing the stylesheet. */
-function repoThemesDir(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  // src/lib → ../../static/themes
-  return path.resolve(here, '..', '..', 'static', 'themes');
-}
-
-const VALID_THEME_NAME = /^[a-z][a-z0-9-]*$/;
-let resolvedThemeName: string | null = null;
-
-/** Active theme name. Precedence: `config/site.json#theme` > SITE_THEME
- * env > `default`. Unknown / invalid names fall back to default with a
- * one-shot stderr warning so the operator notices. Memoised across
- * calls; writePersistedSiteConfig() resets the cache so an admin-UI
- * edit takes effect without a restart. */
-export function themeName(env: Env = process.env): string {
-  if (resolvedThemeName !== null) return resolvedThemeName;
-  const persisted = readPersistedSiteConfig(env).theme;
-  const requested = persisted || env.SITE_THEME || 'default';
-  if (!VALID_THEME_NAME.test(requested)) {
-    process.stderr.write(
-      `[rkroll] theme="${requested}" rejected (must match ${VALID_THEME_NAME.source}); using default\n`
-    );
-    resolvedThemeName = 'default';
-    return resolvedThemeName;
-  }
-  const themePath = path.join(repoThemesDir(), `${requested}.css`);
-  if (!fs.existsSync(themePath)) {
-    process.stderr.write(
-      `[rkroll] theme="${requested}" not found at ${themePath}; using default\n`
-    );
-    resolvedThemeName = 'default';
-    return resolvedThemeName;
-  }
-  resolvedThemeName = requested;
-  return resolvedThemeName;
-}
-
-/** Enumerate themes available on disk (`static/themes/*.css`). Drives
- * the future select-menu UI; sorted with `default` first, then the
- * rest alphabetically, so the picker reads naturally. */
-export function listAvailableThemes(): string[] {
-  const dir = repoThemesDir();
-  /* c8 ignore start -- defensive: repo always ships at least default.css */
-  if (!fs.existsSync(dir)) return ['default'];
-  /* c8 ignore stop */
-  const names = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => f.slice(0, -'.css'.length))
-    .filter((n) => VALID_THEME_NAME.test(n));
-  const rest = names.filter((n) => n !== 'default').sort();
-  return ['default', ...rest];
-}
-
-/** Reset the memoised theme. Tests only — production resolves once
- * per process. */
-export function _resetThemeNameCache(): void {
-  resolvedThemeName = null;
 }

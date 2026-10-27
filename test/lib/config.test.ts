@@ -2,16 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, type TestContext, test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 
 import {
-  _resetThemeNameCache,
   adminBaseUrl,
   csrfAllowedOrigins,
   csrfPublicOnlyOrigins,
   gdriveOAuthConfigured,
   gphotosOAuthConfigured,
-  listAvailableThemes,
   onedriveOAuthConfigured,
   paths,
   publicBaseUrl,
@@ -19,16 +17,9 @@ import {
   serverConfig,
   siteConfig,
   siteRoot,
-  themeName,
   writePersistedSiteConfig
 } from '../../src/lib/config.ts';
 import { pickOrgFields } from '../../src/lib/site-org-settings.ts';
-
-// themeName() memoises within the process so the warning fires once;
-// reset between tests that probe the env-driven branches.
-afterEach(() => {
-  _resetThemeNameCache();
-});
 
 function freshRoot(t: TestContext): { root: string; env: NodeJS.ProcessEnv } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-cfg-'));
@@ -74,34 +65,6 @@ test('siteConfig: SITE_TITLE / SITE_TAGLINE override defaults', () => {
   const c = siteConfig({ SITE_TITLE: 'My Photos', SITE_TAGLINE: 'images from the road' });
   assert.equal(c.title, 'My Photos');
   assert.equal(c.tagline, 'images from the road');
-});
-
-test('themeName: defaults to "default"', () => {
-  assert.equal(themeName({}), 'default');
-});
-
-test('themeName: SITE_THEME=default resolves to default (round-trip)', () => {
-  assert.equal(themeName({ SITE_THEME: 'default' }), 'default');
-});
-
-test('themeName: rejects unsafe names with a fallback to default', (t) => {
-  // Suppress the stderr warning so the test output stays readable.
-  const writes: string[] = [];
-  t.mock.method(process.stderr, 'write', (chunk: unknown) => {
-    writes.push(String(chunk));
-    return true;
-  });
-  assert.equal(themeName({ SITE_THEME: '../../etc/passwd' }), 'default');
-  assert.ok(
-    writes.some((s) => s.includes('rejected')),
-    'expected a "rejected" warning on stderr'
-  );
-});
-
-test('themeName: memoises across calls in a process', () => {
-  // First call with custom env wins; second call ignores a different env.
-  assert.equal(themeName({ SITE_THEME: 'default' }), 'default');
-  assert.equal(themeName({ SITE_THEME: 'whatever-other' }), 'default');
 });
 
 test('paths: includes config dir + siteConfigFile', () => {
@@ -193,23 +156,6 @@ test('siteConfig: file overrides env, env overrides default', (t) => {
     title: 'From File',
     tagline: 'tag'
   });
-});
-
-test('themeName: file overrides SITE_THEME env', (t) => {
-  const { root, env } = freshRoot(t);
-  fs.mkdirSync(path.join(root, 'config'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'config', 'site.json'), JSON.stringify({ theme: 'papermod' }));
-  assert.equal(themeName({ ...env, SITE_THEME: 'default' }), 'papermod');
-});
-
-test('listAvailableThemes: default first, others sorted', () => {
-  const themes = listAvailableThemes();
-  assert.equal(themes[0], 'default');
-  assert.ok(themes.includes('papermod'), 'papermod should be available');
-  // The rest are sorted alphabetically.
-  const rest = themes.slice(1);
-  const sorted = [...rest].sort();
-  assert.deepEqual(rest, sorted);
 });
 
 test('postTeaser round-trips true/false; siteConfig surfaces only when true', (t) => {

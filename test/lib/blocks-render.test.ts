@@ -610,3 +610,90 @@ describe('renderBlockTree unknown types', () => {
     });
   });
 });
+
+describe('band background, alignment and panel', () => {
+  const BG = 'abcdef12';
+  const images: ImageMap = new Map([
+    [
+      BG,
+      {
+        sidecar: {} as never,
+        width: 2000,
+        height: 1000,
+        urlFor: (w, format) => `/img/${BG}.${w}.${format}`
+      }
+    ]
+  ]);
+  const ctx = { ...fakeCtx, images };
+  const one = (slots: Record<string, unknown>): BlockTree => ({
+    version: 1,
+    body: [{ type: 'grid', slots, children: [{ type: 'text', markdown: 'x' }] }]
+  });
+
+  it('a band with bg renders a section-bg picture and has-bg', async () => {
+    const html = await renderBlockTree(
+      one({ band: true, theme: 'dark', bg: BG, edge: 'wave' }),
+      ctx,
+      emptyLib
+    );
+    assert.match(
+      html,
+      /^<section class="rkr-section rkr-theme-dark has-bg">\n<div class="rkr-section-bg" aria-hidden="true"><picture>/
+    );
+    assert.match(html, /<img src="\/img\/abcdef12\.1200\.jpeg" alt="" loading="lazy"/);
+    assert.doesNotMatch(html, /data-pswp|<a /);
+    assert.match(html, /<\/picture><\/div>\n<div class="rkr-section-inner rkr-grid"/);
+    assert.match(html, /rkr-section-wave/);
+  });
+
+  it('a band whose bg does not resolve renders no picture', async () => {
+    const html = await renderBlockTree(one({ band: true, bg: '999999' }), ctx, emptyLib);
+    assert.match(html, /^<section class="rkr-section rkr-theme-light">/);
+    assert.doesNotMatch(html, /rkr-section-bg|has-bg/);
+  });
+
+  it('bg on a non-band grid is ignored', async () => {
+    const html = await renderBlockTree(one({ cols: 2, bg: BG }), ctx, emptyLib);
+    assert.doesNotMatch(html, /rkr-section-bg|has-bg|<picture/);
+  });
+
+  it('align center and box add rkr-align-center and rkr-box', async () => {
+    const html = await renderBlockTree(one({ cols: 2, align: 'center', box: true }), ctx, emptyLib);
+    assert.match(html, /^<div class="rkr-grid rkr-align-center rkr-box" style=/);
+    const band = await renderBlockTree(one({ band: true, box: true }), ctx, emptyLib);
+    assert.match(band, /<div class="rkr-section-inner rkr-grid rkr-box" style=/);
+    const stacked = await renderBlockTree(
+      one({ cols: 2, widths: '2 1', align: 'center' }),
+      ctx,
+      emptyLib
+    );
+    assert.match(stacked, /<div class="rkr-grid rkr-collapse-2-medium rkr-align-center" style=/);
+    const plain = await renderBlockTree(one({ cols: 2, align: 'start' }), ctx, emptyLib);
+    assert.doesNotMatch(plain, /rkr-align|rkr-box/);
+  });
+
+  it('collectBlockFigureIds includes a band bg id', () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        {
+          type: 'grid',
+          slots: { band: true, bg: BG },
+          children: [{ type: 'figure', slots: { ids: 'aaaaaa' } }]
+        },
+        { type: 'grid', slots: { bg: 'bbbbbb' }, children: [] },
+        { type: 'macro', macro: 'photo' }
+      ]
+    };
+    const lib: RenderMacroLib = {
+      get: (n) =>
+        n === 'photo'
+          ? {
+              defaults: { img: 'cccccc' },
+              tree: { type: 'grid', slots: { band: true, bg: '{{img}}' }, children: [] }
+            }
+          : undefined
+    };
+    assert.deepEqual(collectBlockFigureIds(tree, lib), [BG, 'aaaaaa', 'cccccc']);
+  });
+});

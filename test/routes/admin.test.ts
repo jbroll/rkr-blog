@@ -5,11 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
-
-import { _resetThemeNameCache } from '../../src/lib/config.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
 import { read as sidecarRead } from '../../src/lib/sidecar.ts';
+import { _resetThemeNameCache } from '../../src/lib/themes.ts';
 import { buildApp } from '../../src/server.ts';
 import { buildMultipart } from '../helpers/multipart.ts';
 import type { ErrorBody } from '../helpers/oauth-fixtures.ts';

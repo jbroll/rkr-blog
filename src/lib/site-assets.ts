@@ -4,7 +4,7 @@
 
 import type { AssetCtx } from '../templates/layout.ts';
 import { shortGitHash } from './build-info.ts';
-import { themeName } from './config.ts';
+import { themeName } from './themes.ts';
 
 export function serverAssets(base = '/static'): AssetCtx {
   return { theme: themeName(), hash: shortGitHash(), base };

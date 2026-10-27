@@ -486,6 +486,15 @@ throws rather than return a partial one, so nothing invalid reaches disk.
   `gridLabel`, `GRID_MIN_REM`). `expandShorthand` turns `section`, `row`,
   `col` and `flow` into a grid on read, so macro files and old pages need
   no migration and every later layer sees only `grid`.
+- **Bands.** `renderGrid` (`src/lib/blocks-render-grid.ts`) writes the
+  band `<section>`. A band's `bg` image renders through `renderPicture`
+  with the figure widget's variants, so it uses the same derivatives;
+  `collectBlockFigureIds`, the macro preview and the prewarm scan
+  collect it. The band breaks out to the viewport with the `100vw`
+  technique `.rkr-justify-bleed` uses, which assumes `main` is centered.
+  Edit mode turns the breakout off so bands stay beside the palette.
+  `src/lib/themes.ts` lists section themes: the four built-ins plus the
+  names in the active theme's `rkr-section-themes` comment.
 - **Two validation levels.** `parseBlockTree` checks structure and clamps
   slots at render, so a file on disk always opens. `validateForSave`
   (`blocks.ts`) applies the placement rules and runs only in the save

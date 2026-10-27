@@ -20,7 +20,6 @@ import {
   gdriveOAuthConfigured,
   gphotosOAuthConfigured,
   isValidEmail,
-  listAvailableThemes,
   onedriveOAuthConfigured,
   type PersistedIngestResize,
   readPersistedSiteConfig,
@@ -33,6 +32,7 @@ import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
 import { readIndexedPosts, runReindex } from '../lib/post-index.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { listAvailableThemes } from '../lib/themes.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 
 const MAX_TITLE = 200;

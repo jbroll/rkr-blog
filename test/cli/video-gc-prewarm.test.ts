@@ -217,6 +217,36 @@ test('prewarmBlockTree scans figure directives embedded in text leaves', async (
   assert.equal(row.kind, 'render');
 });
 
+test('prewarmBlockTree warms a band background image', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = 'c'.repeat(64);
+  const dir = path.join(root, 'originals', id.slice(0, 2), id.slice(2, 4));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${id}.webp`), Buffer.alloc(8));
+  fs.writeFileSync(
+    path.join(root, 'sidecars', `${id}.json`),
+    JSON.stringify({
+      version: 1,
+      original: id,
+      source: {},
+      ops: [],
+      variants: [{ w: 640, h: 480, fit: 'inside' }],
+      outputs: [{ format: 'webp', quality: 80 }]
+    })
+  );
+  const db = open(':memory:');
+  migrate(db);
+  t.after(() => db.close());
+
+  await prewarmBlockTree(db, root, {
+    version: 1,
+    body: [{ type: 'grid', slots: { band: true, bg: id }, children: [] }]
+  });
+
+  const row = db.prepare<{ payload: string }>('SELECT payload FROM jobs LIMIT 1').get();
+  assert.equal((JSON.parse(row?.payload ?? '{}') as { originalId?: string }).originalId, id);
+});
+
 test('prewarmBlockTree skips unreadable or empty image sidecars', async (t) => {
   const root = freshSiteRoot(t);
   const missing = 'a'.repeat(64);

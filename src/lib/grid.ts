@@ -17,9 +17,19 @@ export interface GridSlots {
   band: boolean;
   theme: string;
   edge: 'straight' | 'wave';
+  /** One image id for the band's background; always null off a band. */
+  bg: string | null;
+  align: 'start' | 'center';
+  box: boolean;
 }
 
-const THEME = /^[a-z-]+$/;
+export const THEME = /^[a-z-]+$/;
+const IMAGE_ID = /^[0-9a-f]{6,64}$/;
+
+function imageId(v: unknown): string | null {
+  const id = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  return IMAGE_ID.test(id) ? id : null;
+}
 
 function isMin(v: unknown): v is GridMin {
   return v === 'narrow' || v === 'medium' || v === 'wide';
@@ -41,13 +51,17 @@ export function readGridSlots(slots: Record<string, unknown> | undefined): GridS
   const s = slots ?? {};
   const cols = clampCols(s.cols);
   const widths = parseWidths(s.widths);
+  const band = s.band === true;
   return {
     cols,
     min: isMin(s.min) ? s.min : 'medium',
     widths: widths && widths.length === cols ? widths : null,
-    band: s.band === true,
+    band,
     theme: typeof s.theme === 'string' && THEME.test(s.theme) ? s.theme : 'light',
-    edge: s.edge === 'wave' ? 'wave' : 'straight'
+    edge: s.edge === 'wave' ? 'wave' : 'straight',
+    bg: band ? imageId(s.bg) : null,
+    align: s.align === 'center' ? 'center' : 'start',
+    box: s.box === true
   };
 }
 
@@ -80,6 +94,13 @@ export function gridSlotProblem(slots: Record<string, unknown> | undefined): str
   }
   if (s.edge !== undefined && s.edge !== 'straight' && s.edge !== 'wave') {
     return 'Bottom edge must be straight or wave.';
+  }
+  if (s.align !== undefined && s.align !== 'start' && s.align !== 'center') {
+    return 'Alignment must be start or center.';
+  }
+  if (s.box !== undefined && typeof s.box !== 'boolean') return 'Panel must be true or false.';
+  if (s.bg !== undefined && s.bg !== null && !imageId(s.bg)) {
+    return 'Background image must be one image.';
   }
   return null;
 }

@@ -251,6 +251,87 @@ rules a theme should not touch.
 - `.rkr-video-wrapper video` — the player element.
 - `.rkr-video-caption` — caption text.
 
+### Blocks
+
+Block pages (spec §8a) render through these classes.
+
+- `.rkr-section` — a band (`grid` with `band: true`). Its background
+  spans the viewport; padding is `--rkr-section-pad`.
+- `.rkr-theme-<name>` — on `.rkr-section`, the band's section theme.
+  Sets `--rkr-band-bg`, `--rkr-band-fg`, `--rkr-band-heading` and
+  `--rkr-band-link` from the `--rkr-section-<name>-*` tokens; the band
+  reads those four for its background, text, headings and links.
+- `.has-bg` — on `.rkr-section` when it has a background image.
+- `.rkr-section-bg` — the background image layer: a `<picture>` that
+  covers the band, under the content. Decorative (`aria-hidden`).
+- `.rkr-section-inner` — the band's grid, capped at `--rkr-content`
+  and centered. With column widths the cap is on the `.rkr-grid-wrap`
+  that holds it.
+- `.rkr-section-wave` — a wave of height `--rkr-section-wave-height` in
+  the band's background color, hung below the band over the top of the
+  next one. Only with `edge: wave`.
+- `.rkr-grid` — every grid. `--rkr-grid-cols`, `--rkr-grid-min` and
+  `--rkr-grid-widths` are set inline from the slots; don't override
+  them.
+- `.rkr-grid-wrap` — wraps a grid with column widths so it can collapse
+  on its own width.
+- `.rkr-grid-cell` — one child of a grid.
+- `.rkr-align-center` — on `.rkr-grid` with `align: center`: centered
+  text and cells.
+- `.rkr-box` — on `.rkr-grid` with `box: true`: a panel with
+  `--rkr-box-bg`, `--rkr-box-fg`, `--rkr-box-pad` and `--rkr-radius`.
+- `.rkr-btn` with `.is-primary` or `.is-secondary` — button block.
+- `.rkr-marquee` (text in a `span`) — scrolling text.
+- `.rkr-accordion` — `details` items.
+- `.rkr-progress`, `.rkr-progress-bar` — progress bar.
+- `.rkr-embed` — embedded iframe.
+- `.rkr-macro-<name>` — see Macros below.
+
+| Token | Default | Used for |
+| --- | --- | --- |
+| `--rkr-section-pad` | `3rem 1.5rem` | `padding` on `.rkr-section`. |
+| `--rkr-section-wave-height` | `1.5rem` | Height of `.rkr-section-wave`. |
+| `--rkr-section-light-bg` | `--rkr-bg` mixed 6% toward `--rkr-text` | `light` band background. |
+| `--rkr-section-light-fg`, `-heading` | `var(--rkr-text)` | `light` band text and headings. |
+| `--rkr-section-light-link` | `var(--rkr-link)` | `light` band links. |
+| `--rkr-section-light-bold-bg` | `#f6d776` | `light-bold` band background. |
+| `--rkr-section-light-bold-fg`, `-heading` | `#1a1a1a` | `light-bold` band text and headings. |
+| `--rkr-section-light-bold-link` | `#5a2d0c` | `light-bold` band links. |
+| `--rkr-section-dark-bg` | `#2a2438` | `dark` band background. |
+| `--rkr-section-dark-fg` | `#f5f2ea` | `dark` band text. |
+| `--rkr-section-dark-heading` | `#ffffff` | `dark` band headings. |
+| `--rkr-section-dark-link` | `#f5f2ea` | `dark` band links. |
+| `--rkr-section-dark-bold-bg` | `#1a4f7f` | `dark-bold` band background. |
+| `--rkr-section-dark-bold-fg`, `-heading` | `#ffffff` | `dark-bold` band text and headings. |
+| `--rkr-section-dark-bold-link` | `#ffe8a3` | `dark-bold` band links. |
+| `--rkr-box-bg` | `var(--rkr-bg)` | `.rkr-box` background. |
+| `--rkr-box-fg` | `var(--rkr-text)` | `.rkr-box` text. |
+| `--rkr-box-pad` | `1.5rem` | `.rkr-box` padding. |
+
+A theme restyles the four built-in section themes by setting their
+tokens. To add a section theme, declare its name in one comment line
+the server reads, then define its tokens and map them:
+
+```css
+/* rkr-section-themes: forest, sand */
+:root {
+  --rkr-section-forest-bg: #1f3d2b;
+  --rkr-section-forest-fg: #f1efe8;
+  --rkr-section-forest-heading: #ffffff;
+  --rkr-section-forest-link: #cde8b5;
+}
+.rkr-theme-forest {
+  --rkr-band-bg: var(--rkr-section-forest-bg);
+  --rkr-band-fg: var(--rkr-section-forest-fg);
+  --rkr-band-heading: var(--rkr-section-forest-heading);
+  --rkr-band-link: var(--rkr-section-forest-link);
+}
+```
+
+Names match `[a-z-]+`. The section themes offered for a band are
+`light`, `light-bold`, `dark`, `dark-bold`, then the active theme's
+declared names (`activeSectionThemes()` in `src/lib/themes.ts`).
+
 ### Macros
 - `.rkr-macro-<name>` — root element of every instance of the macro
   `macros/<name>.json`: the band's `<section>`, the outermost grid

@@ -126,6 +126,32 @@ describe('gridSlotProblem', () => {
   });
 });
 
+describe('bg, align and box slots', () => {
+  it('readGridSlots reads bg, align and box; gridSlotProblem refuses bad values', () => {
+    const g = readGridSlots({ band: true, bg: ' ABCDEF12 ', align: 'center', box: true });
+    assert.equal(g.bg, 'abcdef12');
+    assert.equal(g.align, 'center');
+    assert.equal(g.box, true);
+    const plain = readGridSlots({ bg: 'abcdef12', align: 'middle', box: 'yes' });
+    assert.equal(plain.bg, null, 'bg is band only');
+    assert.equal(plain.align, 'start');
+    assert.equal(plain.box, false);
+    assert.equal(readGridSlots({ band: true, bg: 'aaaaaa,bbbbbb' }).bg, null);
+
+    assert.equal(gridSlotProblem({ align: 'middle' }), 'Alignment must be start or center.');
+    assert.equal(gridSlotProblem({ box: 'yes' }), 'Panel must be true or false.');
+    for (const bg of ['aaaaaa,bbbbbb', 'not-an-id', 7, '']) {
+      assert.equal(
+        gridSlotProblem({ band: true, bg }),
+        'Background image must be one image.',
+        String(bg)
+      );
+    }
+    assert.equal(gridSlotProblem({ band: true, bg: 'abcdef12', align: 'start', box: false }), null);
+    assert.equal(gridSlotProblem({ bg: null, align: 'center', box: true }), null);
+  });
+});
+
 describe('gridLabel', () => {
   it('names band, column and row grids', () => {
     assert.equal(gridLabel({ band: true, cols: 3 }), 'Section');
