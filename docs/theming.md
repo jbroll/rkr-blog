@@ -251,6 +251,13 @@ rules a theme should not touch.
 - `.rkr-video-wrapper video` — the player element.
 - `.rkr-video-caption` — caption text.
 
+### Macros
+- `.rkr-macro-<name>` — root element of every instance of the macro
+  `macros/<name>.json`: the band's `<section>`, the outermost grid
+  element, or a `div` wrapping a leaf root. Scope a macro's styles with
+  it, such as `.rkr-macro-board .rkr-grid-cell`. Names outside
+  `[a-z][a-z0-9-]*` get no class.
+
 ### Admin posts list (`/admin/posts`)
 - `.rkr-admin-posts-heading` — page h1.
 - `.rkr-admin-posts` — the `<table>`.

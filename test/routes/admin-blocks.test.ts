@@ -320,6 +320,34 @@ describe('admin blocks save', () => {
       assert.equal(fs.existsSync(rulesFile(root)), false);
     });
 
+    it('an unknown key in a macro list item is 400 naming the item', async (t) => {
+      const { root, app } = await setup(t);
+      fs.mkdirSync(path.join(root, 'macros'), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, 'macros', 'board.json'),
+        JSON.stringify({
+          defaults: {},
+          fieldSchema: {
+            people: {
+              label: 'People',
+              type: 'list',
+              item: { name: { label: 'Name', type: 'text' } }
+            }
+          },
+          tree: { type: 'grid', slots: { each: 'people' }, children: [] }
+        })
+      );
+      const people = [{ name: 'Ann' }, { name: 'Bo', age: 3 }];
+      const res = await save(app, [{ type: 'macro', macro: 'board', slots: { people } }]);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.json(), {
+        error: 'invalid',
+        path: [0],
+        message: 'People, item 2: unknown field age.'
+      });
+      assert.equal(fs.existsSync(rulesFile(root)), false);
+    });
+
     it('an empty figure is 400', async (t) => {
       const { app } = await setup(t);
       const res = await save(app, [{ type: 'figure', slots: {} }]);

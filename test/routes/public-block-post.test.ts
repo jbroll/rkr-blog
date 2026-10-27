@@ -16,9 +16,9 @@ import { ingestStream } from '../../src/lib/originals.ts';
 import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
-async function ingestImage(root: string): Promise<string> {
+async function ingestImage(root: string, red = 30): Promise<string> {
   const jpeg = await sharp({
-    create: { width: 640, height: 480, channels: 3, background: { r: 30, g: 60, b: 120 } }
+    create: { width: 640, height: 480, channels: 3, background: { r: red, g: 60, b: 120 } }
   })
     .jpeg({ quality: 80 })
     .toBuffer();
@@ -174,6 +174,40 @@ test('one malformed macro file does not take down pages using a good macro', asy
     macros.map((m) => m.name),
     ['hero']
   );
+});
+
+test('a macro each grid renders a picture for every list item image', async (t) => {
+  const { root, app, page } = await setup(t);
+  const a = await ingestImage(root);
+  const b = await ingestImage(root, 200);
+  fs.writeFileSync(
+    path.join(root, 'macros', 'board.json'),
+    JSON.stringify({
+      defaults: {},
+      fieldSchema: {
+        people: {
+          label: 'People',
+          type: 'list',
+          item: { photo: { label: 'Photo', type: 'image' } }
+        }
+      },
+      tree: {
+        type: 'grid',
+        slots: { cols: 2, each: 'people' },
+        children: [{ type: 'figure', slots: { ids: '{{photo}}' } }]
+      }
+    })
+  );
+  page('board', [
+    { type: 'macro', macro: 'board', slots: { people: [{ photo: a }, { photo: b }] } }
+  ]);
+  const res = await app.inject({ method: 'GET', url: '/board' });
+  assert.equal(res.statusCode, 200);
+  const body = res.body.slice(res.body.indexOf('<main'));
+  assert.equal((body.match(/<picture/g) ?? []).length, 2);
+  assert.ok(body.includes(a) && body.includes(b));
+  assert.doesNotMatch(body, /unresolved id/);
+  assert.match(body, /class="rkr-grid rkr-macro-board"/);
 });
 
 test('GET /<page> renders no article header, date, copy-link, bubble or comment form', async (t) => {

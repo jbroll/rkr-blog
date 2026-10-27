@@ -344,6 +344,128 @@ describe('blocks-render', () => {
   });
 });
 
+describe('macro list slots, quiet buttons, class hook', () => {
+  const lib = (
+    name: string,
+    tree: unknown,
+    defaults: Record<string, unknown> = {}
+  ): RenderMacroLib => ({
+    get: (n) => (n === name ? { defaults, tree: tree as BlockTree['body'][number] } : undefined)
+  });
+  const one = (node: unknown): BlockTree => ({
+    version: 1,
+    body: [node as BlockTree['body'][number]]
+  });
+  const people = {
+    type: 'grid',
+    slots: { cols: 2, each: 'people' },
+    children: [{ type: 'text', markdown: '## {{name}} {{site}}' }]
+  };
+
+  it('a button with an empty label renders nothing publicly and a placeholder when marked', async () => {
+    const node = one({ type: 'button', slots: { label: '', href: '/x' } });
+    assert.equal(await renderBlockTree(node, fakeCtx, emptyLib), '');
+    assert.match(await renderBlockTree(node, fakeCtx, emptyLib, { mark }), /rkr-btn/);
+  });
+
+  it('an each grid renders its children once per list item, item slots first', async () => {
+    const html = await renderBlockTree(
+      one({
+        type: 'macro',
+        macro: 'board',
+        slots: { people: [{ name: 'Ann' }, { name: 'Bo', site: 'Y' }], site: 'X' }
+      }),
+      fakeCtx,
+      lib('board', people)
+    );
+    assert.match(html, /Ann X[\s\S]*Bo Y/);
+    assert.equal((html.match(/class="rkr-grid-cell"/g) ?? []).length, 2);
+    assert.doesNotMatch(html, /each/);
+  });
+
+  it('an empty or missing list renders the each grid empty (no cells)', async () => {
+    const band = { type: 'grid', slots: { band: true }, children: [people] };
+    for (const slots of [{ people: [] }, {}, { people: 'nope' }]) {
+      const html = await renderBlockTree(
+        one({ type: 'macro', macro: 'board', slots }),
+        fakeCtx,
+        lib('board', band)
+      );
+      assert.doesNotMatch(html, /rkr-grid-cell/);
+    }
+  });
+
+  it('collectBlockFigureIds returns image ids from list items', () => {
+    const tree = {
+      type: 'grid',
+      slots: { each: 'people' },
+      children: [{ type: 'figure', slots: { ids: '{{photo}}' } }]
+    };
+    assert.deepEqual(
+      collectBlockFigureIds(
+        one({
+          type: 'macro',
+          macro: 'board',
+          slots: { people: [{ photo: 'aaa' }, { photo: 'bbb' }] }
+        }),
+        lib('board', tree)
+      ),
+      ['aaa', 'bbb']
+    );
+  });
+
+  it('macro root carries rkr-macro-<name>; a leaf root is wrapped in a div', async () => {
+    const band = await renderBlockTree(
+      one({ type: 'macro', macro: 'hero-band' }),
+      fakeCtx,
+      lib('hero-band', {
+        type: 'grid',
+        slots: { band: true },
+        children: [{ type: 'text', markdown: 'x' }]
+      })
+    );
+    assert.match(band, /^<section class="rkr-section rkr-theme-light rkr-macro-hero-band">/);
+    const grid = await renderBlockTree(
+      one({ type: 'macro', macro: 'cards' }),
+      fakeCtx,
+      lib('cards', {
+        type: 'grid',
+        slots: { cols: 2 },
+        children: [{ type: 'text', markdown: 'x' }]
+      })
+    );
+    assert.match(grid, /^<div class="rkr-grid rkr-macro-cards"/);
+    const stacked = await renderBlockTree(
+      one({ type: 'macro', macro: 'split' }),
+      fakeCtx,
+      lib('split', {
+        type: 'grid',
+        slots: { cols: 2, widths: '2 1' },
+        children: [{ type: 'text', markdown: 'x' }]
+      })
+    );
+    assert.match(stacked, /^<div class="rkr-grid-wrap rkr-macro-split">/);
+    const leaf = await renderBlockTree(
+      one({ type: 'macro', macro: 'note' }),
+      fakeCtx,
+      lib('note', { type: 'text', markdown: 'Hi' })
+    );
+    assert.equal(leaf, '<div class="rkr-macro-note"><p>Hi</p>\n</div>\n');
+    const quiet = await renderBlockTree(
+      one({ type: 'macro', macro: 'cta' }),
+      fakeCtx,
+      lib('cta', { type: 'button', slots: { label: '' } })
+    );
+    assert.equal(quiet, '');
+    const odd = await renderBlockTree(
+      one({ type: 'macro', macro: 'Bad Name' }),
+      fakeCtx,
+      lib('Bad Name', { type: 'text', markdown: 'Hi' })
+    );
+    assert.equal(odd, '<p>Hi</p>\n');
+  });
+});
+
 describe('renderBlockTree unknown types', () => {
   it('renders nothing for an unknown nested type and warns instead of throwing', async (t) => {
     const warned: string[] = [];

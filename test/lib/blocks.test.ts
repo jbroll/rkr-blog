@@ -7,6 +7,7 @@ import {
   type ContainerNode,
   containerDepth,
   detectCycle,
+  type FieldSpec,
   type LeafNode,
   type MacroInstanceNode,
   parseBlockTree,
@@ -155,6 +156,62 @@ describe('validateForSave', () => {
       ok([{ type: 'grid', children: [{ type: 'grid', children: [{ type: 'grid' }] }] }]),
       null
     );
+  });
+
+  describe('list slots', () => {
+    const schemas: Record<string, Record<string, FieldSpec>> = {
+      board: {
+        title: { label: 'Title', type: 'text' },
+        people: {
+          label: 'Board members',
+          type: 'list',
+          item: { name: { label: 'Name', type: 'text' }, photo: { label: 'Photo', type: 'image' } }
+        }
+      }
+    };
+    const check = (slots: Record<string, unknown>) =>
+      validateForSave(
+        parseBlockTree({
+          version: 1,
+          body: [{ type: 'grid', children: [{ type: 'macro', macro: 'board', slots }] }]
+        }),
+        new Set(['board']),
+        (m) => schemas[m]
+      );
+
+    it('accepts an array of records with known keys, or no value', () => {
+      assert.equal(check({ people: [{ name: 'Ann' }, { name: 'Bo', photo: 'aa11' }] }), null);
+      assert.equal(check({ people: [] }), null);
+      assert.equal(check({ title: 'x' }), null);
+    });
+
+    it('validateForSave refuses a list value that is not an array of records', () => {
+      for (const people of ['Ann', [{ name: 'Ann' }, 'Bo'], [[]], { name: 'Ann' }]) {
+        const problem = check({ people });
+        assert.deepEqual(problem?.path, [0, 0]);
+        assert.match(problem?.message ?? '', /Board members/);
+      }
+    });
+
+    it('validateForSave refuses an unknown key in a list item, naming the item number', () => {
+      const problem = check({ people: [{ name: 'Ann' }, { name: 'Bo', age: 3 }] });
+      assert.deepEqual(problem?.path, [0, 0]);
+      assert.match(problem?.message ?? '', /item 2/i);
+      assert.match(problem?.message ?? '', /age/);
+      assert.match(check({ people: [{ constructor: 'x' }] })?.message ?? '', /item 1/);
+    });
+
+    it('skips list checks without a schema lookup', () => {
+      const tree = parseBlockTree({
+        version: 1,
+        body: [{ type: 'macro', macro: 'board', slots: { people: 'Ann' } }]
+      });
+      assert.equal(validateForSave(tree, new Set(['board'])), null);
+      assert.equal(
+        validateForSave(tree, new Set(['board']), () => undefined),
+        null
+      );
+    });
   });
 
   it('reports a bad grid slot', () => {

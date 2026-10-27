@@ -329,7 +329,9 @@ all use that one rule. Corrupt files are skipped.
 
 `text` markdown allows inline formatting, links, lists, headings and
 code. It never carries image or widget syntax; images beside prose are
-sibling `figure` blocks. `figure` and `video` slots keep the attribute
+sibling `figure` blocks. Readers see nothing for blank text or a
+`button` with an empty label; the editor keeps an element for each so it
+can be selected. `figure` and `video` slots keep the attribute
 names of §9 and §10a (`ids`, `alts`, `captions`, `justify`, `matrix`,
 `trim`, `poster`). `embed` is unsupported: the renderer emits an iframe for youtube.com,
 youtu.be, vimeo.com, docs.google.com and maps.google.com URLs, but the
@@ -392,6 +394,9 @@ these (see Saving); the editor never builds a tree that breaks them.
 5. At most three grid levels nest, counted from the page body. A macro's
    own grids count inside its definition.
 6. Grid slots hold the values in the table above.
+7. A macro instance's `list` slot (see List slots) is an array of
+   records whose keys appear in the field's `item`. An unknown key is
+   refused with its item number, counted from 1.
 
 Guidance, not errors: a band grid is offered only at page level, and a
 one-column grid directly inside another one-column grid is never offered.
@@ -450,6 +455,27 @@ digits, `_` and `-`.
 - Page-body blocks that are not part of a macro tree do not expand
   placeholders.
 
+#### List slots
+
+A `fieldSchema` entry of type `list` holds `item`, a map of field specs
+for one item (any type but `list`). The instance value is an array of
+records, such as `"people": [{ "name": "Ann", "photo": "ab12…" }]`.
+
+A grid in the macro tree with `slots.each: "people"` renders its
+children once per item, in order. Inside it, `{{name}}` resolves from
+the item first and the instance slots second. The `each` key is dropped
+from the rendered grid, and the grid counts as one grid level. A missing
+or empty list renders the grid with no cells, which readers do not see.
+Image ids in items reach the image prepass the same way, so a `figure`
+with `ids: "{{photo}}"` inside an `each` grid resolves.
+
+#### Class hook
+
+A macro instance's root element carries `rkr-macro-<name>`: the
+`<section>` of a band, the outermost grid element otherwise. A root
+that is a leaf or another macro instance is wrapped in a `div` with the
+class. Only names matching `^[a-z][a-z0-9-]*$` get the class.
+
 #### Field types in the dialog
 
 The macro dialog lists one field per key in `defaults`, in that order.
@@ -462,6 +488,7 @@ the type:
 | `markdown` | multi-line input |
 | `select` | dropdown of `options`, first entry "Default (value)" |
 | `image` | thumbnail with Choose image and Remove, via the media picker |
+| `list` | not yet in the dialog; set it in the page JSON |
 | none | single-line input; multi-line when the value or default has a newline |
 
 Each field starts empty with the default as its placeholder. Typing sets

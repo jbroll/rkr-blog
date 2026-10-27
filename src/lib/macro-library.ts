@@ -8,14 +8,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { type BlockNode, parseBlockTree, resolveSlots, type Slots } from './blocks.ts';
-
-export interface FieldSpec {
-  label: string;
-  type: 'text' | 'markdown' | 'image' | 'link' | 'select';
-  default?: unknown;
-  options?: string[];
-}
+import {
+  type BlockNode,
+  type FieldSpec,
+  parseBlockTree,
+  resolveSlots,
+  type Slots
+} from './blocks.ts';
 
 export interface StoredMacro {
   /** One line for the editor palette. */

@@ -46,6 +46,16 @@ export interface MacroDef {
   defaults: Slots;
 }
 
+/** One entry of a macro's `fieldSchema`. */
+export interface FieldSpec {
+  label: string;
+  type: 'text' | 'markdown' | 'image' | 'link' | 'select' | 'list';
+  default?: unknown;
+  options?: string[];
+  /** Field specs of one item of a `list` field; never themselves `list`. */
+  item?: Record<string, FieldSpec>;
+}
+
 const LEAVES: ReadonlySet<string> = new Set([
   'text',
   'figure',
@@ -190,18 +200,42 @@ function hasIds(slots: Slots | undefined): boolean {
   return list.some((id) => typeof id === 'string' && id.trim() !== '');
 }
 
-/** Hard rules 2-6 for a tree about to be saved (rule 1 is `parseBlockTree`).
+/** First list-slot problem in a macro instance's slots, or null. */
+function listSlotProblem(
+  slots: Slots | undefined,
+  schema: Record<string, FieldSpec>
+): string | null {
+  for (const [key, spec] of Object.entries(schema)) {
+    const value = slots?.[key];
+    if (spec.type !== 'list' || value === undefined) continue;
+    if (!Array.isArray(value) || !value.every(isRecord)) {
+      return `${spec.label} must be a list of items.`;
+    }
+    for (const [i, item] of value.entries()) {
+      const unknown = Object.keys(item).find((k) => !spec.item || !Object.hasOwn(spec.item, k));
+      if (unknown) return `${spec.label}, item ${i + 1}: unknown field ${unknown}.`;
+    }
+  }
+  return null;
+}
+
+/** Hard rules 2-7 for a tree about to be saved (rule 1 is `parseBlockTree`).
+ * `schemaOf` supplies macro field schemas so list slots can be checked.
  * Returns the first problem in document order, or null. */
 export function validateForSave(
   tree: BlockTree,
-  macroNames: ReadonlySet<string>
+  macroNames: ReadonlySet<string>,
+  schemaOf?: (macro: string) => Record<string, FieldSpec> | undefined
 ): { path: number[]; message: string } | null {
   const own = (node: BlockNode, level: number): string | null => {
     switch (node.type) {
-      case 'macro':
-        return macroNames.has(node.macro)
-          ? null
-          : `This block can't be saved: the macro ${node.macro} no longer exists. Delete it to save.`;
+      case 'macro': {
+        if (!macroNames.has(node.macro)) {
+          return `This block can't be saved: the macro ${node.macro} no longer exists. Delete it to save.`;
+        }
+        const schema = schemaOf?.(node.macro);
+        return schema ? listSlotProblem(node.slots, schema) : null;
+      }
       case 'figure':
         return hasIds(node.slots) ? null : 'An image block has no images.';
       case 'video':

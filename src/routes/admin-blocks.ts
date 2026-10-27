@@ -24,7 +24,7 @@ import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
 import { staleClientRejection } from '../lib/client-build.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
-import { loadMacroLibrary, ROOT_MACROS } from '../lib/macro-library.ts';
+import { loadMacroLibrary, type MacroLib, ROOT_MACROS } from '../lib/macro-library.ts';
 import { readAllIndexedPosts, readIndexedPostBySlug, runReindex } from '../lib/post-index.ts';
 import { dropIndexedPost, reindexBlockPage } from '../lib/post-index-blocks.ts';
 import { listPosts } from '../lib/posts.ts';
@@ -319,14 +319,18 @@ export function registerAdminBlockRoutes(
       } catch (err) {
         return invalid({ message: (err as Error).message });
       }
-      let macroNames: Set<string>;
+      let macros: MacroLib;
       try {
-        macroNames = new Set(loadMacroLibrary(`${siteRoot}/macros`, req.log).keys());
+        macros = loadMacroLibrary(`${siteRoot}/macros`, req.log);
       } catch (err) {
         req.log.error({ err }, 'macro library failed to load');
         return reply.code(500).send({ error: 'macro library unavailable' });
       }
-      const problem = validateForSave(parsed, macroNames);
+      const problem = validateForSave(
+        parsed,
+        new Set(macros.keys()),
+        (name) => macros.get(name)?.fieldSchema
+      );
       if (problem) return invalid(problem);
       let existing: string | null = null;
       let tree: BlockTree & { fields: Record<string, unknown> };

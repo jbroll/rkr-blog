@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
+import type { FieldSpec } from '../../src/lib/blocks.ts';
 import {
   expandMacro,
-  type FieldSpec,
   getRootDefaults,
   loadMacroLibrary,
   type StoredMacro

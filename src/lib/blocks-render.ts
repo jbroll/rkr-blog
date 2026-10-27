@@ -64,6 +64,26 @@ function fillPlaceholders<T>(value: T, slots: Slots): T {
   return value;
 }
 
+const isRecord = (v: unknown): v is Slots => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Fill placeholders through a macro tree. A grid whose `each` slot names
+ * a list repeats its children once per item, item values shadowing `slots`. */
+function fillTree(node: BlockNode, slots: Slots): BlockNode {
+  if (node.type !== 'grid') return fillPlaceholders(node, slots);
+  const { each, ...own } = node.slots ?? {};
+  const filledSlots = fillPlaceholders(own, slots);
+  const gridSlots = node.slots ? { slots: filledSlots } : {};
+  if (each === undefined) {
+    return { ...node, ...gridSlots, children: node.children.map((k) => fillTree(k, slots)) };
+  }
+  const list = typeof each === 'string' ? slots[each] : undefined;
+  const items = Array.isArray(list) ? list.filter(isRecord) : [];
+  const children = items.flatMap((item) =>
+    node.children.map((k) => fillTree(k, { ...slots, ...item }))
+  );
+  return { ...node, ...gridSlots, children };
+}
+
 /** A macro instance's tree with its slots filled in. Tree slots (theme,
  * edge) plus explicit overrides survive; defaults feed placeholders only. */
 function expandInstance(
@@ -72,9 +92,11 @@ function expandInstance(
 ): BlockNode {
   const overrides = node.slots ?? {};
   const merged = resolveSlots({ defaults: def.defaults }, overrides).slots;
-  const filled = fillPlaceholders(def.tree, merged);
+  const filled = fillTree(def.tree, merged);
   return { ...filled, slots: { ...(filled.slots ?? {}), ...overrides } } as BlockNode;
 }
+
+const MACRO_NAME = /^[a-z][a-z0-9-]*$/;
 
 function leafDirective(name: string, attrs: Record<string, string>): DirectiveNode {
   const attributes: Record<string, string | null | undefined> = { ...attrs };
@@ -111,9 +133,11 @@ const hasElement = (html: string): boolean => /<[a-z]/i.test(html.replace(/<!--[
 function renderGrid(
   node: Extract<BlockNode, { type: 'grid' }>,
   kids: string[],
-  opts?: RenderNodeOpts
+  opts?: RenderNodeOpts,
+  rootClass = ''
 ): string {
   const marked = Boolean(opts?.mark);
+  const extra = rootClass ? ` ${rootClass}` : '';
   // Readers get no empty cell for a child that renders only a comment; the
   // editor keeps one so the block can be selected and deleted.
   const inCell = (html: string): boolean => marked || hasElement(html);
@@ -125,13 +149,14 @@ function renderGrid(
     : '<p class="rkr-grid-empty" data-rkr-grid-empty>Empty grid: drag blocks here</p>\n';
   const stacked = g.widths !== null && g.cols > 1;
   const collapse = stacked ? ` rkr-collapse-${g.cols}-${g.min}` : '';
-  const cls = `${g.band ? 'rkr-section-inner ' : ''}rkr-grid${collapse}`;
+  const outer = g.band ? '' : extra;
+  const cls = `${g.band ? 'rkr-section-inner ' : ''}rkr-grid${collapse}${stacked ? '' : outer}`;
   const label = marked ? ` data-rkr-grid-label="${escapeAttr(gridLabel(node.slots))}"` : '';
   const grid = `<div class="${cls}" style="${gridStyle(g)}"${stacked ? ' data-widths' : ''}${label}>\n${inner}</div>`;
-  const body = stacked ? `<div class="rkr-grid-wrap">${grid}</div>` : grid;
+  const body = stacked ? `<div class="rkr-grid-wrap${outer}">${grid}</div>` : grid;
   if (!g.band) return `${body}\n`;
   const wave = g.edge === 'wave' ? '\n<div class="rkr-section-wave" aria-hidden="true"></div>' : '';
-  return `<section class="rkr-section rkr-theme-${escapeAttr(g.theme)}">\n${body}${wave}\n</section>\n`;
+  return `<section class="rkr-section rkr-theme-${escapeAttr(g.theme)}${extra}">\n${body}${wave}\n</section>\n`;
 }
 
 /** Render one node, then (when marking) prepend its path marker.
@@ -179,6 +204,8 @@ async function renderNodeHtml(
     }
     case 'button': {
       const label = textOf(node.slots?.label);
+      // Readers get no empty pill; the editor needs an element to select.
+      if (!label.trim() && !opts?.mark) return '';
       const href = safeLinkUrl(textOf(node.slots?.href, '#'));
       const variant =
         textOf(node.slots?.variant, 'primary') === 'secondary' ? 'secondary' : 'primary';
@@ -225,7 +252,17 @@ async function renderNodeHtml(
       }
       // The instance is one editable unit: mark the instance path once,
       // render the expansion internals unmarked.
-      return renderNodeHtml(expandInstance(node, def), ctx, lib, [...stack, node.macro], path);
+      const expanded = expandInstance(node, def);
+      const inner = [...stack, node.macro];
+      const cls = MACRO_NAME.test(node.macro) ? `rkr-macro-${node.macro}` : '';
+      if (expanded.type === 'grid') {
+        const kids = await Promise.all(
+          expanded.children.map((k, i) => renderNode(k, ctx, lib, inner, [...path, i]))
+        );
+        return renderGrid(expanded, kids, undefined, cls);
+      }
+      const html = await renderNodeHtml(expanded, ctx, lib, inner, path);
+      return cls && hasElement(html) ? `<div class="${cls}">${html}</div>\n` : html;
     }
     default: {
       // Page trees are validated on save and macros on load; this guards
