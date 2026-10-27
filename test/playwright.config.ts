@@ -10,7 +10,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
-const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-e2e-'));
+// The config loads in the runner and again in each worker; the env var makes
+// them share one site root, which global-teardown.ts removes.
+process.env.RKR_E2E_SITE_ROOT ??= fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-e2e-'));
+const tmpRoot = process.env.RKR_E2E_SITE_ROOT;
 const PORT = 3789;
 const HOST = '127.0.0.1';
 const BASE_URL = `http://${HOST}:${PORT}`;
