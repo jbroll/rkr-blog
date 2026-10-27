@@ -56,6 +56,10 @@ Format: **item** — _revisit when:_ trigger.
 - **A dismissed announcement shows briefly before `announcement.js` hides it** (CSP blocks an inline script). _Revisit when:_ the flash draws a complaint.
 - **`GET /admin/blocks/preview/:macro` renders through `expandMacro`, which fills no placeholders**, so a seed preview shows raw `{{…}}` and a light band in place of a templated theme. No UI calls it. _Revisit when:_ the palette shows macro previews.
 - **Deleting the active site theme file 404s its stylesheet until a settings write or restart.** _Revisit when:_ an operator removes a theme in use.
+- **`people-grid`, `icon-grid` and `logo-wall` fix `cols: 4`**, so five or six items wrap 4+1 or 4+2 and an instance cannot pick a row of five or six. _Revisit when:_ a site needs a different row length.
+- **A `marquee-band` caps its marquee at `--rkr-content`**, so the scrolling text stops at the column edge instead of running edge to edge. _Revisit when:_ next marquee or band layout change.
+- **A strip of page background sits between the last band and the site footer**, so a final wave edge draws over white, not the footer (ECCG Home, About, Contribute); source not traced. _Revisit when:_ a site ends a page on a waved band.
+- **No seed puts several masked photos around a text block** (ECCG home "A grocery store by the community": circles in a row above the text instead). _Revisit when:_ another site asks for a scattered photo layout.
 
 ## Image pipeline
 
