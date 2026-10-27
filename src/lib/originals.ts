@@ -335,6 +335,7 @@ export async function imageInfo(
   format: string | null;
   width: number | null;
   height: number | null;
+  pages: number | null;
 } | null> {
   const found = await findExistingOriginal(siteRoot, id);
   if (!found) return null;
@@ -348,13 +349,21 @@ export async function imageInfo(
       ext: found.ext,
       format: meta.format ?? null,
       width: meta.width ?? null,
-      height: meta.height ?? null
+      height: meta.height ?? null,
+      pages: meta.pages ?? 1
     };
   } catch {
     /* c8 ignore start -- undecodable file on disk shouldn't happen for
        ingested originals; surface a partial result so callers can
        still report "image present but unreadable" */
-    return { path: found.path, ext: found.ext, format: null, width: null, height: null };
+    return {
+      path: found.path,
+      ext: found.ext,
+      format: null,
+      width: null,
+      height: null,
+      pages: null
+    };
     /* c8 ignore stop */
   }
 }

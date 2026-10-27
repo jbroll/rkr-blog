@@ -395,6 +395,14 @@ Both compete for jobs via an atomic SQLite `UPDATE … WHERE state = 'queued' RE
 6. On budget exceeded: enqueues the job, returns `202` + a low-res
    placeholder, client retries.
 
+`GET /img/<originalId>.gif` takes a separate branch: when the original
+is a GIF with more than one page and the sidecar has no ops, the route
+copies it to `cache/img/<originalId>.gif` (tmp + rename) and serves it;
+anything else is `404`. `imageSourceById` sets `passthroughUrl` on the
+same condition, and `renderPicture` emits that URL in place of the
+`<picture>` sources. `site-admin gc` keeps the copy while the condition
+holds.
+
 The 8 s default keeps a miss inside a reader's patience on a low-end
 VPS; the spec just calls for "configurable wall-clock budget" without
 fixing the number. Override via `BuildAppOpts.renderBudgetMs` when

@@ -11,6 +11,9 @@ export interface ImageSource {
   width: number;
   height: number;
   urlFor(width: number, format: string, quality: number): string;
+  /** Set for an animated GIF: renderers emit this one URL instead of
+   * derivatives, which would keep only the first frame. */
+  passthroughUrl?: string;
 }
 
 /** Keyed by the id as written in the post, lowercased — prefix

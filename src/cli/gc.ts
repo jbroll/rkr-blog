@@ -1,7 +1,8 @@
 // `site-admin gc` — delete orphan cache entries + leaked tmp files.
 //
 // Walks every sidecar, builds the set of valid <id>.<ophash>.<fmt> filenames
-// (from the cross product of its declared variants × outputs), then deletes
+// (from the cross product of its declared variants × outputs, plus <id>.gif
+// for an animated GIF served unchanged), then deletes
 // every file in cache/img/ not in that set. Also sweeps `*.tmp` files left
 // behind by crashed atomic-write paths in cache/img, bakes/, sidecars/, and
 // originals/.tmp/. Idempotent: a second run is a no-op (zero deletions).
@@ -10,6 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { paths } from '../lib/config.ts';
+import { isAnimatedGif, passthroughFilename } from '../lib/image-map-fs.ts';
+import { imageInfo } from '../lib/originals.ts';
 import {
   listPosts,
   listSidecarIds,
@@ -72,6 +75,14 @@ export async function runGc(
         };
         valid.add(derivativeFilename(args));
       }
+    }
+    const gifName = passthroughFilename(s.original);
+    if (
+      (s.ops ?? []).length === 0 &&
+      fs.existsSync(path.join(siteRoot, 'cache', 'img', gifName)) &&
+      isAnimatedGif(await imageInfo(siteRoot, s.original))
+    ) {
+      valid.add(gifName);
     }
   }
 

@@ -115,6 +115,7 @@ export interface PictureArgs {
  */
 export function renderPicture(args: PictureArgs): string {
   const { src, variants, fallback, alt = '', loading = 'lazy', lightbox = false } = args;
+  if (src.passthroughUrl) return renderPassthrough(src, src.passthroughUrl, alt, loading, lightbox);
 
   const fbUrl = src.urlFor(fallback.w, fallback.format, fallback.quality);
   const formats = unique(variants.flatMap((v) => v.formats));
@@ -148,6 +149,26 @@ export function renderPicture(args: PictureArgs): string {
   return wrapLightboxAnchor(pictureBlock, { src, variants, alt });
 }
 
+function renderPassthrough(
+  src: ImageSource,
+  url: string,
+  alt: string,
+  loading: 'lazy' | 'eager',
+  lightbox: boolean
+): string {
+  const block = `<picture>\n<img src="${url}" width="${src.width}" height="${src.height}" alt="${alt}" loading="${loading}" decoding="async"/>\n</picture>`;
+  if (!lightbox) return block;
+  return lightboxAnchor(block, url, src.width, src.height, alt);
+}
+
+function lightboxAnchor(block: string, href: string, w: number, h: number, alt: string): string {
+  return [
+    `<a href="${href}" data-pswp-width="${w}" data-pswp-height="${h}" target="_blank" rel="noopener" aria-label="Enlarge image${alt ? `: ${alt}` : ''}">`,
+    block,
+    '</a>'
+  ].join('\n');
+}
+
 /** Wrap a `<picture>` block in the PhotoSwipe-compatible anchor. The
  * href targets the largest configured variant in webp (PhotoSwipe will
  * load this same URL into its slide); the data-pswp-* attributes carry
@@ -170,11 +191,7 @@ function wrapLightboxAnchor(
   const lbW = Math.min(widest.w, srcW);
   const lbH = Math.max(1, Math.round(lbW * (srcH / srcW)));
 
-  return [
-    `<a href="${lbUrl}" data-pswp-width="${lbW}" data-pswp-height="${lbH}" target="_blank" rel="noopener" aria-label="Enlarge image${alt ? `: ${alt}` : ''}">`,
-    pictureBlock,
-    '</a>'
-  ].join('\n');
+  return lightboxAnchor(pictureBlock, lbUrl, lbW, lbH, alt);
 }
 
 function unique<T>(arr: T[]): T[] {

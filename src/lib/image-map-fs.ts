@@ -60,8 +60,26 @@ export async function imageSourceById(
 ): Promise<ImageSource | null> {
   const sidecar = await sidecarRead(siteRoot, id);
   if (!sidecar) return null;
+  if ((sidecar.ops ?? []).length === 0) {
+    const info = await imageInfo(siteRoot, id);
+    const source = makeSource(id, sidecar, info?.width ?? 1, info?.height ?? 1);
+    if (isAnimatedGif(info)) source.passthroughUrl = `/img/${passthroughFilename(id)}`;
+    return source;
+  }
   const { width, height } = await imageDimensions(siteRoot, id, sidecar, opts);
   return makeSource(id, sidecar, width, height);
+}
+
+/** Derivatives keep only the first frame, so an animated GIF with no
+ * ops is served as its original bytes (spec.md §7). */
+export function isAnimatedGif(
+  info: { format: string | null; pages: number | null } | null
+): boolean {
+  return info?.format === 'gif' && (info.pages ?? 1) > 1;
+}
+
+export function passthroughFilename(id: string): string {
+  return `${id}.gif`;
 }
 
 function makeSource(id: string, sidecar: Sidecar, width: number, height: number): ImageSource {

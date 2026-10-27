@@ -1,17 +1,21 @@
-// GET /img/:filename — derivative image, on Apache cache-miss fall-through.
+// GET /img/:filename — derivative image or animated GIF original, on
+// Apache cache-miss fall-through.
 //
 // Apache rewrites /img/* directly to the cache file when present
 // (implementation.md §7); only on miss does it fall through here.
 // On miss this route synchronously renders the derivative within a
 // wall-clock budget; past that it returns 202 and the client retries.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import type { Sidecar } from '@rkr/image-edit';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../lib/db.ts';
 import { cacheKey } from '../lib/hash.ts';
-import { imageDimensions } from '../lib/image-map-fs.ts';
+import { imageDimensions, isAnimatedGif, passthroughFilename } from '../lib/image-map-fs.ts';
 import { enqueue, noteLiveRender } from '../lib/jobs.ts';
+import { imageInfo } from '../lib/originals.ts';
 import {
   type DerivativeArgs,
   type Op,
@@ -31,6 +35,7 @@ import { read as sidecarRead } from '../lib/sidecar.ts';
 const MIN_RENDER_DIM = 16;
 
 const FILENAME_RE = /^([0-9a-f]{64})\.([0-9a-f]{12})\.(webp|avif|jpeg|jpg|png)$/;
+const PASSTHROUGH_RE = /^([0-9a-f]{64})\.gif$/;
 
 const MIME: Record<OutputFormat, string> = {
   webp: 'image/webp',
@@ -69,6 +74,31 @@ function findVariantOutput(sidecar: Sidecar, ophash: string): VariantOutputMatch
     }
   }
   return null;
+}
+
+/** Copy an animated GIF original into cache/img so the front proxy
+ * serves later requests straight from disk. Null when the id is not
+ * an animated GIF with no ops. */
+async function cacheAnimatedOriginal(
+  siteRoot: string,
+  id: string
+): Promise<{ path: string; bytes: number } | null> {
+  const sidecar = await sidecarRead(siteRoot, id);
+  if (!sidecar || (sidecar.ops ?? []).length > 0) return null;
+  const info = await imageInfo(siteRoot, id);
+  if (!info || !isAnimatedGif(info)) return null;
+  const dest = path.join(siteRoot, 'cache', 'img', passthroughFilename(id));
+  const tmp = `${dest}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+  try {
+    await fs.promises.copyFile(info.path, tmp);
+    await fs.promises.rename(tmp, dest);
+  } catch (err) {
+    await fs.promises.unlink(tmp).catch(() => {});
+    throw err;
+  }
+  const stat = await fs.promises.stat(dest);
+  return { path: dest, bytes: stat.size };
 }
 
 function resolveInlineConcurrency(): number {
@@ -112,6 +142,16 @@ export function registerPublicImgRoutes(fastify: FastifyInstance, opts: PublicIm
     },
     async (req, reply) => {
       const { filename } = req.params;
+      const gif = PASSTHROUGH_RE.exec(filename);
+      if (gif) {
+        const cached = await cacheAnimatedOriginal(siteRoot, gif[1] as string);
+        if (!cached) return reply.code(404).send({ error: 'not an animated original' });
+        setPublicSecurityHeaders(reply);
+        return reply
+          .type('image/gif')
+          .header('content-length', String(cached.bytes))
+          .send(fs.createReadStream(cached.path));
+      }
       const m = FILENAME_RE.exec(filename);
       if (!m) {
         return reply.code(404).send({ error: 'bad filename' });

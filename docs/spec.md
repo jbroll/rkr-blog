@@ -228,6 +228,18 @@ finishes the render in the background; subsequent requests pick up
 the cached result. The exact default is set by the implementation
 (see `implementation.md` §5).
 
+### Animated GIFs
+
+Derivatives keep only the first frame of an animated GIF. An animated
+GIF original with no ops therefore skips derivatives: image widgets
+emit one `<img>` (inside `<picture>`) at `/img/<originalId>.gif`, with
+`width` and `height` from the original, and the lightbox opens the same
+URL. On the first request the application server copies the original
+into `cache/img/<originalId>.gif` unchanged; the front proxy serves it
+from then on. The trade-off: no resize and no WebP/AVIF, so every
+reader downloads the full original bytes at every display size. A GIF
+with ops renders through derivatives and shows its first frame only.
+
 ### Bake invalidation
 
 `POST /admin/sidecar/:id/commit` atomically commits the ops chain and
@@ -890,7 +902,7 @@ GET    /search                        full-text search page
 GET    /:slug                         rendered single post
 GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug (published only)
 GET    /pages/:slug                   old block-page URL → 301 /:slug (published only)
-GET    /img/:filename                 derivative image (cache-miss handler)
+GET    /img/:filename                 derivative image, or animated GIF original (cache-miss handler)
 GET    /video/:filename               derivative mp4, Range/206-capable (cache-miss handler)
 GET    /video/poster/:filename        derivative jpeg poster (cache-miss handler)
 POST   /:slug/comments                anonymous reader comment submission

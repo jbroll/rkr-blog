@@ -65,6 +65,28 @@ test('runGc deletes orphan cache files; idempotent on second run', async (t) => 
   assert.equal(second.kept, validCount);
 });
 
+test('runGc keeps an animated GIF passthrough copy and drops a .gif for any other id', async (t) => {
+  const root = freshSiteRoot(t);
+  const gif = await ingestStream({
+    stream: fs.createReadStream(path.join(import.meta.dirname, '../fixtures/images/two-frame.gif')),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'anim.gif' }
+  });
+  const still = await ingestStream({
+    stream: Readable.from([await makeJpeg()]),
+    siteRoot: root,
+    source: { kind: 'upload', originalName: 'pic.jpg' }
+  });
+  const cacheDir = path.join(root, 'cache', 'img');
+  fs.copyFileSync(gif.path, path.join(cacheDir, `${gif.id}.gif`));
+  fs.writeFileSync(path.join(cacheDir, `${still.id}.gif`), Buffer.alloc(8));
+
+  const result = await runGc(root, { tmpMinAgeMs: 0 });
+  assert.deepEqual(result, { deleted: 1, kept: 1 });
+  assert.equal(fs.existsSync(path.join(cacheDir, `${gif.id}.gif`)), true);
+  assert.equal(fs.existsSync(path.join(cacheDir, `${still.id}.gif`)), false);
+});
+
 test('runGc on an empty cache directory returns zero counts', async (t) => {
   const root = freshSiteRoot(t);
   const result = await runGc(root);
