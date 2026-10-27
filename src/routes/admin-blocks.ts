@@ -244,7 +244,7 @@ export function registerAdminBlockRoutes(
       const page = isEditableSlug(slug) ? readBlockPage(siteRoot, slug) : null;
       if (!page) return reply.code(404).send({ error: 'not found' });
 
-      const bodyHtml = await renderEditBody(siteRoot, page.tree, req.log);
+      const bodyHtml = await renderEditBody(siteRoot, page.tree, req.log, getSite().campaign);
 
       setAdminEditorSecurityHeaders(reply);
       const assets = serverAssets('/admin/static');
@@ -275,7 +275,7 @@ export function registerAdminBlockRoutes(
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
-    return { html: await renderEditBody(siteRoot, tree, req.log) };
+    return { html: await renderEditBody(siteRoot, tree, req.log, getSite().campaign) };
   });
 
   // The editor's Delete page. Another file claiming the slug, or a

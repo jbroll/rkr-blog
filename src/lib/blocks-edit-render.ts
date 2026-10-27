@@ -12,6 +12,7 @@ import type { BlockTree } from './blocks.ts';
 import { collectBlockFigureIds, renderBlockTree } from './blocks-render.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import { loadMacroLibrary } from './macro-library.ts';
+import type { Campaign } from './site-org-settings.ts';
 import { buildVideoMap } from './video-map-fs.ts';
 import { type DirectiveNode, WidgetRegistry } from './widgets.ts';
 
@@ -28,7 +29,8 @@ function editWidgets(): WidgetRegistry {
 export async function renderEditBody(
   siteRoot: string,
   tree: BlockTree,
-  log: FastifyBaseLogger
+  log: FastifyBaseLogger,
+  campaign?: Campaign
 ): Promise<string> {
   const lib = loadMacroLibrary(path.join(siteRoot, 'macros'), log);
   const macroLib = {
@@ -50,5 +52,5 @@ export async function renderEditBody(
     videos: await buildVideoMap(siteRoot),
     widgets: editWidgets()
   };
-  return renderBlockTree(tree, ctx, macroLib, { mark: pathMarker });
+  return renderBlockTree(tree, ctx, macroLib, { mark: pathMarker, campaign });
 }

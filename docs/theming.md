@@ -341,10 +341,16 @@ Block pages (spec §8a) render through these classes.
 - `.rkr-box` — on `.rkr-grid` with `box: true`: a panel with
   `--rkr-box-bg`, `--rkr-box-fg`, `--rkr-box-pad` and `--rkr-radius`.
 - `.rkr-btn` with `.is-primary` or `.is-secondary` — button block.
-- `.rkr-marquee` (text in a `span`) — scrolling text.
-- `.rkr-accordion` — `details` items.
-- `.rkr-progress`, `.rkr-progress-bar` — progress bar.
-- `.rkr-embed` — embedded iframe.
+  `.is-large` is the `size: large` button; `.rkr-btn-arrow` is the
+  `→` span from `arrow: true`.
+- `.rkr-marquee` — scrolling text in two identical `span` halves; the
+  second is `aria-hidden`. Each half translates by its own width.
+- `.rkr-accordion` — `details` items; the body is rendered markdown.
+- `.rkr-progress`, `.rkr-progress-bar` — progress bar. Under it,
+  `.rkr-progress-figures` holds `.rkr-progress-raised` and
+  `.rkr-progress-goal`.
+- `.rkr-embed` — embedded iframe. With a `height` slot it carries an
+  inline `height` and the aspect ratio no longer applies.
 - `.rkr-macro-<name>` — see Macros below.
 
 | Token | Default | Used for |

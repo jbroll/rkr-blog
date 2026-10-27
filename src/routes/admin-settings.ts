@@ -33,6 +33,7 @@ import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
 import { readIndexedPosts, runReindex } from '../lib/post-index.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { parseCampaignForm } from '../lib/site-campaign-form.ts';
 import { parseHeaderForm } from '../lib/site-header-form.ts';
 import { listAvailableThemes } from '../lib/themes.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
@@ -226,6 +227,11 @@ export function registerAdminSettingsRoutes(
       return reply.redirect(`/admin/settings?err=${encodeURIComponent(header.error)}`, 303);
     }
 
+    const campaign = parseCampaignForm(body as Record<string, unknown>);
+    if ('error' in campaign) {
+      return reply.redirect(`/admin/settings?err=${encodeURIComponent(campaign.error)}`, 303);
+    }
+
     // Persist the form values verbatim, empty strings included.
     // siteConfig() / themeName() each treat an empty-string persisted
     // field as falsy (the `||` chain falls through to SITE_TITLE /
@@ -243,6 +249,7 @@ export function registerAdminSettingsRoutes(
       notifyEmail: notifyEmailRaw,
       ...(homePageRaw !== undefined ? { homePage: homePageRaw } : {}),
       ...header.patch,
+      ...campaign.patch,
       ...(commentNotify ? { commentNotify } : {}),
       ...(ingestResize ? { ingestResize } : {})
     });

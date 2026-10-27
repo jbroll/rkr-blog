@@ -3,23 +3,26 @@
 // existing post pipeline; figure/video leaves delegate to the widget
 // registry; macro instances expand against a RenderMacroLib.
 
-import { remark } from 'remark';
-import remarkDirective from 'remark-directive';
 import { type BlockNode, type BlockTree, detectCycle, resolveSlots, type Slots } from './blocks.ts';
 import { hasElement, renderGrid } from './blocks-render-grid.ts';
-import { escapeAttr, escapeText, type RenderCtx, renderPostHtml } from './content.ts';
+import {
+  renderAccordion,
+  renderButton,
+  renderEmbed,
+  renderMarkdown,
+  renderMarquee,
+  renderProgress,
+  textOf
+} from './blocks-render-leaves.ts';
+import { escapeText, type RenderCtx } from './content.ts';
 import { readGridSlots } from './grid.ts';
-import { safeLinkUrl } from './safe-url.ts';
+import type { Campaign } from './site-org-settings.ts';
 import type { DirectiveNode } from './widgets.ts';
 
 /** Minimal macro source for the renderer. Task 3 provides the
  * file-backed implementation; the renderer only needs lookup. */
 export interface RenderMacroLib {
   get(name: string): { defaults: Slots; tree: BlockNode } | undefined;
-}
-
-function textOf(v: unknown, fallback = ''): string {
-  return typeof v === 'string' ? v : fallback;
 }
 
 /** Direct macro-instance names inside a tree (one level). */
@@ -113,8 +116,6 @@ function strSlots(slots: Slots | undefined): Record<string, string> {
   return out;
 }
 
-const EMBED_ALLOW = ['youtube.com', 'youtu.be', 'vimeo.com', 'docs.google.com', 'maps.google.com'];
-
 /** Optional render decorations, shared by `renderNode` and
  * `renderBlockTree`. `mark` returns an invisible prefix (the editor uses
  * an HTML comment carrying the node's tree path) that is prepended to
@@ -122,6 +123,8 @@ const EMBED_ALLOW = ['youtube.com', 'youtu.be', 'vimeo.com', 'docs.google.com', 
  * paths. Absent `mark`, output is byte-identical to the public render. */
 interface RenderNodeOpts {
   mark?: (path: number[]) => string;
+  /** Figures for progress blocks with `source: "site"`. */
+  campaign?: Campaign;
 }
 
 /** Render one node, then (when marking) prepend its path marker.
@@ -162,54 +165,22 @@ async function renderNodeHtml(
       const md = node.markdown ?? textOf(node.slots?.markdown);
       // Blank text is invisible to readers; the editor needs an element to type into.
       if (!md) return opts?.mark ? '<p class="rkr-unified-blank" data-rkr-blank></p>\n' : '';
-      const ast = remark().use(remarkDirective).parse(md);
-      return renderPostHtml(ast as Parameters<typeof renderPostHtml>[0], ctx);
+      return renderMarkdown(md, ctx);
     }
     case 'figure':
     case 'video': {
       return ctx.widgets.dispatch(node.type, leafDirective(node.type, strSlots(node.slots)), ctx);
     }
-    case 'button': {
-      const label = textOf(node.slots?.label);
-      // Readers get no empty pill; the editor needs an element to select.
-      if (!label.trim() && !opts?.mark) return '';
-      const href = safeLinkUrl(textOf(node.slots?.href, '#'));
-      const variant =
-        textOf(node.slots?.variant, 'primary') === 'secondary' ? 'secondary' : 'primary';
-      return `<a class="rkr-btn is-${variant}" href="${escapeAttr(href)}">${escapeText(label)}</a>\n`;
-    }
-    case 'marquee': {
-      return `<div class="rkr-marquee"><span>${escapeText(textOf(node.slots?.text))}</span></div>\n`;
-    }
-    case 'accordion': {
-      const items = Array.isArray(node.slots?.items) ? node.slots.items : [];
-      const out = items
-        .map((it) => {
-          const rec = (it ?? {}) as Record<string, unknown>;
-          return `<details><summary>${escapeText(textOf(rec.title))}</summary>\n${escapeText(textOf(rec.body))}\n</details>`;
-        })
-        .join('\n');
-      return `<div class="rkr-accordion">\n${out}\n</div>\n`;
-    }
-    case 'progress': {
-      const goal = Number(node.slots?.goal ?? 0);
-      const raised = Number(node.slots?.raised ?? 0);
-      const pct = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
-      return `<div class="rkr-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="rkr-progress-bar" style="width: ${pct}%"></div></div>\n`;
-    }
-    case 'embed': {
-      const url = textOf(node.slots?.url);
-      let host = '';
-      try {
-        host = new URL(url).hostname;
-      } catch {
-        return `<!-- embed: invalid url -->`;
-      }
-      if (!EMBED_ALLOW.some((h) => host === h || host.endsWith(`.${h}`))) {
-        return `<a href="${escapeAttr(safeLinkUrl(url))}">${escapeText(url)}</a>\n`;
-      }
-      return `<iframe class="rkr-embed" src="${escapeAttr(url)}" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>\n`;
-    }
+    case 'button':
+      return renderButton(node.slots, Boolean(opts?.mark));
+    case 'marquee':
+      return renderMarquee(node.slots, Boolean(opts?.mark));
+    case 'accordion':
+      return renderAccordion(node.slots, ctx);
+    case 'progress':
+      return renderProgress(node.slots, opts?.campaign);
+    case 'embed':
+      return renderEmbed(node.slots);
     case 'macro': {
       if (stack.includes(node.macro)) return `<!-- macro cycle: ${escapeText(node.macro)} -->`;
       const def = lib.get(node.macro);
@@ -220,15 +191,16 @@ async function renderNodeHtml(
       // The instance is one editable unit: mark the instance path once,
       // render the expansion internals unmarked.
       const expanded = expandInstance(node, def);
+      const unmarked = opts?.campaign ? { campaign: opts.campaign } : undefined;
       const inner = [...stack, node.macro];
       const cls = MACRO_NAME.test(node.macro) ? `rkr-macro-${node.macro}` : '';
       if (expanded.type === 'grid') {
         const kids = await Promise.all(
-          expanded.children.map((k, i) => renderNode(k, ctx, lib, inner, [...path, i]))
+          expanded.children.map((k, i) => renderNode(k, ctx, lib, inner, [...path, i], unmarked))
         );
         return renderGrid(expanded, kids, ctx, false, cls);
       }
-      const html = await renderNodeHtml(expanded, ctx, lib, inner, path);
+      const html = await renderNodeHtml(expanded, ctx, lib, inner, path, unmarked);
       return cls && hasElement(html) ? `<div class="${cls}">${html}</div>\n` : html;
     }
     default: {

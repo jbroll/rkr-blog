@@ -47,7 +47,11 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
   widgets.register(videoWidget);
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
 
-  async function renderMacro(name: string, log: { warn(o: object, m: string): void }) {
+  async function renderMacro(
+    name: string,
+    log: { warn(o: object, m: string): void },
+    campaign: SiteConfig['campaign']
+  ) {
     const lib = loadMacroLibrary(`${siteRoot}/macros`, log);
     if (!lib.get(name)) return null;
     const tree = { version: 1 as const, body: [expandMacro(lib, name, {})] };
@@ -68,7 +72,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
       videos: await buildVideoMap(siteRoot),
       widgets
     };
-    return renderBlockTree(tree, ctx, macroLib);
+    return renderBlockTree(tree, ctx, macroLib, { campaign });
   }
 
   // Old /pages/:slug links land on the canonical URL. A draft 404s so the
@@ -91,7 +95,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
       if (!VALID_MACRO.test(macro)) {
         return reply.code(404).type('text/html; charset=utf-8').send('not found');
       }
-      const bodyHtml = await renderMacro(macro, req.log);
+      const bodyHtml = await renderMacro(macro, req.log, site.campaign);
       if (bodyHtml === null)
         return reply.code(404).type('text/html; charset=utf-8').send('not found');
       setPublicSecurityHeaders(reply);

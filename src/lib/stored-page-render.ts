@@ -69,7 +69,12 @@ export async function renderStoredPage(opts: StoredPageOpts): Promise<string> {
   let bannerHtml: string | null = null;
   let bodyHtml: string;
   if (twin) {
-    const parts = await renderBlockPost(siteRoot, twin, { widgets, videos, log });
+    const parts = await renderBlockPost(siteRoot, twin, {
+      widgets,
+      videos,
+      log,
+      campaign: site.campaign
+    });
     bodyHtml = parts.bodyHtml;
     bannerHtml = parts.bannerHtml;
     subtitle = parts.subtitle;

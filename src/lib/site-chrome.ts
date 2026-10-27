@@ -12,7 +12,7 @@ import { prepareBlockRender } from './block-post-render.ts';
 import { renderBlockTree } from './blocks-render.ts';
 import { siteConfigWrites } from './config.ts';
 import { imageSourceById } from './image-map-fs.ts';
-import type { OrgSiteFields } from './site-org-settings.ts';
+import type { Campaign, OrgSiteFields } from './site-org-settings.ts';
 import { buildVideoMap } from './video-map-fs.ts';
 import { renderPicture } from './widget-helpers.ts';
 import { WidgetRegistry } from './widgets.ts';
@@ -62,7 +62,11 @@ const statKey = (file: string): string => {
   }
 };
 
-async function renderFooter(siteRoot: string, log: ChromeLogger): Promise<string | undefined> {
+async function renderFooter(
+  siteRoot: string,
+  log: ChromeLogger,
+  campaign: Campaign | undefined
+): Promise<string | undefined> {
   const page = readBlockPage(siteRoot, FOOTER_SLUG);
   if (page?.fields.status !== 'published') return undefined;
   if (!footerWidgets) {
@@ -72,13 +76,17 @@ async function renderFooter(siteRoot: string, log: ChromeLogger): Promise<string
   }
   const deps = { widgets: footerWidgets, videos: await buildVideoMap(siteRoot), log };
   const { ctx, macroLib } = await prepareBlockRender(siteRoot, page.tree, deps);
-  return renderBlockTree(page.tree, ctx, macroLib);
+  return renderBlockTree(page.tree, ctx, macroLib, { campaign });
 }
 
 /** Rendered `_footer` page, or undefined when it is absent or a draft. Every
  * public page asks, so the result is reused until the file, the macros
  * directory or the site settings change; an unchanged footer costs two stats. */
-async function renderFooterHtml(siteRoot: string, log: ChromeLogger): Promise<string | undefined> {
+async function renderFooterHtml(
+  siteRoot: string,
+  log: ChromeLogger,
+  campaign: Campaign | undefined
+): Promise<string | undefined> {
   const key = [
     statKey(path.join(siteRoot, 'content', 'blocks', `${FOOTER_SLUG}.json`)),
     statKey(path.join(siteRoot, 'macros')),
@@ -87,14 +95,18 @@ async function renderFooterHtml(siteRoot: string, log: ChromeLogger): Promise<st
   const hit = footerCache.get(siteRoot);
   const now = Date.now();
   if (hit?.key === key && now - hit.at < FOOTER_MAX_AGE_MS) return hit.html;
-  const html = await renderFooter(siteRoot, log);
+  const html = await renderFooter(siteRoot, log, campaign);
   footerCache.set(siteRoot, { key, at: now, html });
   return html;
 }
 
-async function safeFooterHtml(siteRoot: string, log: ChromeLogger): Promise<string | undefined> {
+async function safeFooterHtml(
+  siteRoot: string,
+  log: ChromeLogger,
+  campaign: Campaign | undefined
+): Promise<string | undefined> {
   try {
-    return await renderFooterHtml(siteRoot, log);
+    return await renderFooterHtml(siteRoot, log, campaign);
   } catch (err) {
     log.warn({ err }, 'footer render failed; using the default footer');
     return undefined;
@@ -107,7 +119,7 @@ export async function loadChrome(
   log: ChromeLogger
 ): Promise<SiteNavChrome> {
   const out: SiteNavChrome = {};
-  const footerHtml = await safeFooterHtml(siteRoot, log);
+  const footerHtml = await safeFooterHtml(siteRoot, log, site.campaign);
   if (footerHtml) out.footerHtml = footerHtml;
   const logoHtml = await renderLogoHtml(siteRoot, site.logo, log);
   if (logoHtml) out.logoHtml = logoHtml;

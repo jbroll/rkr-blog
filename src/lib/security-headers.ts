@@ -14,6 +14,8 @@
 
 import type { FastifyReply } from 'fastify';
 
+import { EMBED_FRAME_SRC } from './embed-allow.ts';
+
 /** Build the CSP string around an image-source allowlist. Public pages
  * get `'self' data:`; the block editor additionally needs `blob:` for
  * its client-side canvas previews (canvasToBlob → object URL). Every
@@ -26,6 +28,7 @@ function buildCsp(imgSrc: string): string {
     "script-src 'self'",
     "font-src 'self' data:",
     "connect-src 'self'",
+    `frame-src ${EMBED_FRAME_SRC}`,
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self'"

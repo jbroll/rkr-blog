@@ -101,24 +101,137 @@ describe('blocks-render', () => {
       ]
     };
     const html = await renderBlockTree(tree, fakeCtx, emptyLib);
-    assert.match(html, /<div class="rkr-marquee"><span>Big &lt;news&gt;<\/span><\/div>/);
-    assert.match(html, /<summary>Q\?<\/summary>\nA &amp; B\n<\/details>/);
+    assert.match(
+      html,
+      /<div class="rkr-marquee"><span>(Big &lt;news&gt; )+Big &lt;news&gt;<\/span>/
+    );
+    assert.match(html, /<summary>Q\?<\/summary>\n<p>A &amp; B<\/p>\n<\/details>/);
     assert.match(html, /<details><summary><\/summary>/);
     assert.match(html, /aria-valuenow="25"[^>]*><div class="rkr-progress-bar" style="width: 25%">/);
     assert.match(html, /aria-valuenow="0"/);
+  });
+
+  it('accordion body markdown renders links', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        {
+          type: 'accordion',
+          slots: { items: [{ title: 'Archive', body: '[Issue 1](https://x.test/)' }] }
+        }
+      ]
+    };
+    const html = await renderBlockTree(tree, fakeCtx, emptyLib);
+    assert.match(html, /<a href="https:\/\/x.test\/">Issue 1<\/a>/);
+  });
+
+  it('progress with source site shows the site campaign figures', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'progress', slots: { source: 'site', goal: 1, raised: 1 } },
+        { type: 'progress', slots: { source: 'site' } },
+        { type: 'progress', slots: { goal: 200, raised: 50 } }
+      ]
+    };
+    const html = await renderBlockTree(tree, fakeCtx, emptyLib, {
+      campaign: { goal: 12000, raised: 3000 }
+    });
+    assert.match(html, /aria-valuenow="25"/);
+    assert.match(
+      html,
+      /<p class="rkr-progress-figures"><span class="rkr-progress-raised">3,000<\/span> of <span class="rkr-progress-goal">12,000<\/span><\/p>/
+    );
+    assert.match(
+      html,
+      /<span class="rkr-progress-raised">50<\/span> of <span class="rkr-progress-goal">200<\/span>/
+    );
+    const none = await renderBlockTree(tree, fakeCtx, emptyLib);
+    assert.doesNotMatch(none, /12,000/);
+  });
+
+  it('progress inside a macro still gets the site campaign', async () => {
+    const lib: RenderMacroLib = {
+      get: (n) =>
+        n === 'bar'
+          ? { defaults: {}, tree: { type: 'progress', slots: { source: 'site' } } }
+          : undefined
+    };
+    const html = await renderBlockTree(
+      { version: 1, body: [{ type: 'macro', macro: 'bar' }] },
+      fakeCtx,
+      lib,
+      { campaign: { goal: 10, raised: 5 } }
+    );
+    assert.match(html, /rkr-progress-goal">10</);
+  });
+
+  it('marquee repeats short text into two halves, second hidden from readers', async () => {
+    const html = await renderBlockTree(
+      { version: 1, body: [{ type: 'marquee', slots: { text: 'Join us' } }] },
+      fakeCtx,
+      emptyLib
+    );
+    const m = html.match(/<span>([^<]*)<\/span><span aria-hidden="true">([^<]*)<\/span>/);
+    assert.ok(m);
+    assert.equal(m[1], m[2]);
+    assert.ok((m[1] as string).length >= 200);
+    assert.ok((m[1] as string).split('Join us').length - 1 >= 2);
+    const long = await renderBlockTree(
+      { version: 1, body: [{ type: 'marquee', slots: { text: 'x'.repeat(300) } }] },
+      fakeCtx,
+      emptyLib
+    );
+    assert.equal(long.split('x'.repeat(300)).length - 1, 4);
+  });
+
+  it('a blank marquee renders nothing publicly and an empty element when marked', async () => {
+    const tree: BlockTree = { version: 1, body: [{ type: 'marquee', slots: { text: ' ' } }] };
+    assert.equal(await renderBlockTree(tree, fakeCtx, emptyLib), '');
+    assert.match(await renderBlockTree(tree, fakeCtx, emptyLib, { mark }), /rkr-marquee/);
+  });
+
+  it('button size large and arrow', async () => {
+    const html = await renderBlockTree(
+      {
+        version: 1,
+        body: [
+          {
+            type: 'button',
+            slots: { label: 'Donate', href: '/give', size: 'large', arrow: true }
+          },
+          { type: 'button', slots: { label: 'Plain', href: '/p', size: 'normal' } }
+        ]
+      },
+      fakeCtx,
+      emptyLib
+    );
+    assert.match(
+      html,
+      /<a class="rkr-btn is-primary is-large" href="\/give">Donate<span class="rkr-btn-arrow" aria-hidden="true">→<\/span><\/a>/
+    );
+    assert.match(html, /<a class="rkr-btn is-primary" href="\/p">Plain<\/a>/);
   });
 
   it('embeds allowed hosts, links others, and comments out invalid urls', async () => {
     const tree: BlockTree = {
       version: 1,
       body: [
-        { type: 'embed', slots: { url: 'https://www.youtube.com/embed/x' } },
+        {
+          type: 'embed',
+          slots: { url: 'https://www.youtube-nocookie.com/embed/x', height: 99999 }
+        },
+        { type: 'embed', slots: { url: 'https://www.youtube.com/watch?v=x' } },
         { type: 'embed', slots: { url: 'https://example.com/page' } },
         { type: 'embed', slots: { url: 'not a url' } }
       ]
     };
     const html = await renderBlockTree(tree, fakeCtx, emptyLib);
-    assert.match(html, /<iframe class="rkr-embed" src="https:\/\/www\.youtube\.com\/embed\/x"/);
+    assert.match(
+      html,
+      /<iframe class="rkr-embed" src="https:\/\/www\.youtube-nocookie\.com\/embed\/x" loading="lazy" style="height:2000px" sandbox="allow-scripts allow-same-origin allow-forms allow-popups">/
+    );
+    assert.match(html, /<a href="https:\/\/www\.youtube\.com\/watch\?v=x">/);
     assert.match(html, /<a href="https:\/\/example\.com\/page">https:\/\/example\.com\/page<\/a>/);
     assert.match(html, /<!-- embed: invalid url -->/);
   });

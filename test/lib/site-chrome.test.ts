@@ -105,6 +105,22 @@ test('loadChrome: a published _footer renders; a draft or missing one does not',
   assert.match((await loadChrome(root, {}, log)).footerHtml ?? '', /Visible words/);
 });
 
+test('loadChrome: a footer progress block with source site gets the campaign', async (t) => {
+  const root = freshSiteRoot(t);
+  const file = path.join(root, 'content', 'blocks', '_footer.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'progress', slots: { source: 'site' } }],
+      fields: { title: 'Footer', slug: '_footer', status: 'published', kind: 'page' }
+    })
+  );
+  const chrome = await loadChrome(root, { campaign: { goal: 5000, raised: 1250 } }, log);
+  assert.match(chrome.footerHtml ?? '', /rkr-progress-raised">1,250<\/span> of .*">5,000</);
+});
+
 test('loadChrome: an unchanged _footer is not re-rendered and an edit shows', async (t) => {
   const root = freshSiteRoot(t);
   fs.mkdirSync(path.join(root, 'macros'), { recursive: true });

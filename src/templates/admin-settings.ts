@@ -13,6 +13,7 @@ import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import { TEASER_WORDS_BOUNDS } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import type { OrgSiteFields } from '../lib/site-org-settings.ts';
+import { renderCampaignSettings } from './admin-settings-campaign.ts';
 import { HEADER_SETTINGS_CSS, renderHeaderSettings } from './admin-settings-header.ts';
 import { icon } from './icons.ts';
 import {
@@ -132,6 +133,8 @@ ${saveBtn}
   </select>
 
   ${renderHeaderSettings(data.persisted)}
+
+  ${renderCampaignSettings(data.persisted.campaign)}
 
   <h2 class="rkr-admin-settings-section">Banner</h2>
   <div class="rkr-admin-settings-banner" style="grid-column:1/-1">

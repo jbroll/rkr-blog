@@ -246,6 +246,11 @@ test('GET / and GET /:slug emit CSP + X-Content-Type-Options + frame-blocking he
     assert.match(csp, /default-src 'self'/, `${url}: csp default-src`);
     assert.match(csp, /frame-ancestors 'none'/, `${url}: csp frame-ancestors`);
     assert.match(csp, /script-src 'self'/, `${url}: csp script-src`);
+    assert.match(
+      csp,
+      /frame-src https:\/\/docs\.google\.com https:\/\/www\.youtube-nocookie\.com https:\/\/player\.vimeo\.com https:\/\/www\.google\.com\/maps\/embed\/(;|$)/,
+      `${url}: csp frame-src`
+    );
     assert.equal(res.headers['x-content-type-options'], 'nosniff', `${url}: nosniff`);
     assert.equal(res.headers['x-frame-options'], 'DENY', `${url}: x-frame-options`);
     assert.match(

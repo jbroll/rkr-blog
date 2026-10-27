@@ -8,6 +8,7 @@ import type { BlockTree } from './blocks.ts';
 import { collectBlockFigureIds, renderBlockTree } from './blocks-render.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import { loadMacroLibrary } from './macro-library.ts';
+import type { Campaign } from './site-org-settings.ts';
 import type { DirectiveNode, VideoMapView, WidgetRegistry } from './widgets.ts';
 
 interface Logger {
@@ -20,7 +21,12 @@ export interface BlockPostParts {
   subtitle?: string;
 }
 
-type BlockRenderDeps = { widgets: WidgetRegistry; videos: VideoMapView; log: Logger };
+type BlockRenderDeps = {
+  widgets: WidgetRegistry;
+  videos: VideoMapView;
+  log: Logger;
+  campaign?: Campaign;
+};
 
 /** The render context and macro lookup a tree needs, with its figures resolved. */
 export async function prepareBlockRender(siteRoot: string, tree: BlockTree, deps: BlockRenderDeps) {
@@ -57,7 +63,7 @@ export async function renderBlockPost(
   const bannerHtml = hero
     ? await deps.widgets.dispatch('figure', figureDirective(hero), ctx)
     : null;
-  const bodyHtml = await renderBlockTree(rest, ctx, macroLib);
+  const bodyHtml = await renderBlockTree(rest, ctx, macroLib, { campaign: deps.campaign });
   const sub = page.fields.subtitle;
   return {
     bodyHtml,

@@ -121,6 +121,26 @@ describe('post index with JSON twins', () => {
     assert.equal(indexedTitle(root, 'hello'), 'Markdown title');
   });
 
+  it('indexes accordion titles and markdown bodies as plain words', (t: TestContext) => {
+    const root = freshRoot(t);
+    writeJson(root, 'faq.json', { title: 'F', slug: 'faq', status: 'published' }, [
+      {
+        type: 'accordion',
+        slots: { items: [{ title: 'Archive', body: '[Issue one](http://x.example/u)' }, null] }
+      }
+    ]);
+    runReindex(root);
+    const db = open(path.join(root, 'data', 'site.db'));
+    try {
+      const row = db
+        .prepare<{ body: string }>('SELECT body FROM posts_fts WHERE slug = ?')
+        .get('faq');
+      assert.equal(row?.body, 'Archive\nIssue one');
+    } finally {
+      db.close();
+    }
+  });
+
   it('indexes text leaves as plain words, without markdown, URLs or HTML', (t: TestContext) => {
     const root = freshRoot(t);
     writeJson(root, 'plain.json', { title: 'P', slug: 'plain', status: 'published' }, [

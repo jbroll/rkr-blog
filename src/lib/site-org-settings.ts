@@ -32,6 +32,11 @@ export interface Announcement {
   on: boolean;
 }
 
+export interface Campaign {
+  goal: number;
+  raised: number;
+}
+
 export interface OrgSiteFields {
   /** Slug of the page `/` renders instead of the post index. */
   homePage?: string;
@@ -42,6 +47,8 @@ export interface OrgSiteFields {
   cta?: NavLink;
   social?: SocialLink[];
   announcement?: Announcement;
+  /** Figures shown by progress blocks with `source: "site"`. */
+  campaign?: Campaign;
 }
 
 const VALID_SLUG = /^[a-z0-9-]*$/;
@@ -95,8 +102,18 @@ function pickAnnouncement(raw: unknown): Announcement | undefined {
   return href ? { text, href, on: raw.on } : { text, on: raw.on };
 }
 
+const wholeNumber = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+
+function pickCampaign(raw: unknown): Campaign | undefined {
+  if (!isRecord(raw)) return undefined;
+  const goal = wholeNumber(raw.goal);
+  const raised = wholeNumber(raw.raised);
+  return goal !== null && raised !== null ? { goal, raised } : undefined;
+}
+
 /** Cleared values (empty string, empty list, empty CTA pair, announcement
- * switched off) are kept so a clear overwrites the stored one;
+ * switched off, a zero goal) are kept so a clear overwrites the stored one;
  * orgSiteConfig drops them when the runtime config is built. */
 export function pickOrgFields(raw: Record<string, unknown>): OrgSiteFields {
   const out: OrgSiteFields = {};
@@ -112,6 +129,8 @@ export function pickOrgFields(raw: Record<string, unknown>): OrgSiteFields {
   if (social) out.social = social;
   const announcement = pickAnnouncement(raw.announcement);
   if (announcement) out.announcement = announcement;
+  const campaign = pickCampaign(raw.campaign);
+  if (campaign) out.campaign = campaign;
   return out;
 }
 
@@ -125,6 +144,7 @@ export function orgSiteConfig(persisted: OrgSiteFields): OrgSiteFields {
   if (persisted.announcement?.on && persisted.announcement.text) {
     out.announcement = persisted.announcement;
   }
+  if (persisted.campaign?.goal) out.campaign = persisted.campaign;
   return out;
 }
 

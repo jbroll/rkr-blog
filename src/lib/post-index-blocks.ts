@@ -34,7 +34,7 @@ export function syncPostTags(db: Db, postId: number, rawTags: string[]): void {
 }
 
 /** Plain-text bag for FTS: every text leaf's words (through the same
- * mdast extraction markdown posts use) plus button and marquee labels,
+ * mdast extraction markdown posts use) plus button and marquee labels and accordion titles and bodies,
  * in document order. */
 function extractBlockPlainText(tree: BlockTree): string {
   const parts: string[] = [];
@@ -47,6 +47,15 @@ function extractBlockPlainText(tree: BlockTree): string {
       parts.push(node.slots.label);
     if (node.type === 'marquee' && typeof node.slots?.text === 'string')
       parts.push(node.slots.text);
+    if (node.type === 'accordion' && Array.isArray(node.slots?.items)) {
+      for (const it of node.slots.items as Record<string, unknown>[]) {
+        if (typeof it?.title === 'string') parts.push(it.title);
+        if (typeof it?.body === 'string') {
+          const words = extractPlainText(remark().use(remarkDirective).parse(it.body) as Root);
+          if (words) parts.push(words);
+        }
+      }
+    }
     if (node.type === 'grid') for (const k of node.children) walk(k);
   };
   for (const n of tree.body) walk(n);

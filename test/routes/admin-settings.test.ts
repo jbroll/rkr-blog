@@ -933,3 +933,30 @@ test('public pages render the header menu and announcement from settings', async
     assert.match(res.body, /class="rkr-site-foot-admin" href="\/login"/, url);
   }
 });
+
+test('POST /admin/settings saves the campaign, clears it, and rejects a bad figure', async (t) => {
+  const { root, app } = await setup(t);
+  const onDisk = () => JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+
+  const ok = await postForm(app, headerForm({ campaignGoal: '12,000', campaignRaised: '3000' }));
+  assert.equal(ok.headers.location, '/admin/settings?flash=saved');
+  assert.deepEqual(onDisk().campaign, { goal: 12000, raised: 3000 });
+  const page = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(page.body, /name="campaignGoal"[^>]*value="12000"/);
+  assert.match(page.body, /name="campaignRaised"[^>]*value="3000"/);
+
+  const bad = await postForm(app, headerForm({ campaignGoal: '12x', campaignRaised: '1' }));
+  assert.match(bad.headers.location as string, /^\/admin\/settings\?err=Campaign%20goal/);
+  assert.deepEqual(onDisk().campaign, { goal: 12000, raised: 3000 });
+
+  const neg = await postForm(app, headerForm({ campaignGoal: '5', campaignRaised: '-1' }));
+  assert.match(neg.headers.location as string, /err=Campaign%20raised/);
+
+  await postForm(app, headerForm({}));
+  assert.deepEqual(onDisk().campaign, { goal: 12000, raised: 3000 });
+
+  await postForm(app, headerForm({ campaignGoal: '', campaignRaised: '' }));
+  assert.deepEqual(onDisk().campaign, { goal: 0, raised: 0 });
+  const cleared = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(cleared.body, /name="campaignGoal"[^>]*value=""/);
+});

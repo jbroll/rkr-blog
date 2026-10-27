@@ -347,10 +347,21 @@ sibling `figure` blocks. Readers see nothing for blank text or a
 `button` with an empty label; the editor keeps an element for each so it
 can be selected. `figure` and `video` slots keep the attribute
 names of §9 and §10a (`ids`, `alts`, `captions`, `justify`, `matrix`,
-`trim`, `poster`). `embed` is unsupported: the renderer emits an iframe for youtube.com,
-youtu.be, vimeo.com, docs.google.com and maps.google.com URLs, but the
-public CSP has no `frame-src`, so browsers block it. Nothing in the
-editor, `blocks-migrate` or the WordPress importer creates one.
+`trim`, `poster`).
+
+- `accordion` item bodies are markdown, rendered like `text` blocks.
+- `progress` shows the raised and goal figures under the bar. With
+  `source: "site"` it reads `site.json#campaign` (`goal`, `raised`),
+  edited on the settings page.
+- `marquee` repeats its text until each of its two halves holds at
+  least 200 characters; the second half is `aria-hidden`.
+- `button` takes `size` (`normal`, `large`) and `arrow` (true appends →).
+- `embed` (`url`, `height` clamped to 150 to 2000 px) frames only
+  `docs.google.com`, `www.youtube-nocookie.com`, `player.vimeo.com` and
+  `www.google.com/maps/embed/`. `lib/embed-allow.ts` is the one list
+  for the renderer and the CSP `frame-src`. Any other URL renders as a
+  link. Nothing in the editor, `blocks-migrate` or the WordPress
+  importer creates an embed yet.
 
 #### Grid
 
