@@ -5,6 +5,7 @@
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import {
   bundleVersion,
+  footerOpt,
   headIcons,
   renderSearchForm,
   type SiteChrome,
@@ -82,7 +83,7 @@ ${bodyHtml}
 </aside>
 </div>
 </main>
-${siteFoot(data.site, { isAdmin: data.isAdmin })}
+${siteFoot(data.site, { isAdmin: data.isAdmin, ...footerOpt(data.chrome) })}
 </body>
 </html>
 `;

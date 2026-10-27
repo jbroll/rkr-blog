@@ -6,6 +6,7 @@ import { renderCommentForm, renderCommentList } from './comments.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,
+  footerOpt,
   headIcons,
   postAdminFab,
   type SiteChrome,
@@ -131,7 +132,7 @@ ${showHeader ? header : ''}${post.bodyHtml}
 </article>
 ${showComments ? commentsBlock : ''}
 </main>
-${siteFoot(post.site, { isAdmin: post.isAdmin })}
+${siteFoot(post.site, { isAdmin: post.isAdmin, ...footerOpt(post.chrome) })}
 ${post.isAdmin ? postAdminFab(post.slug) : ''}
 </body>
 </html>

@@ -1008,3 +1008,43 @@ test('legacy permalink 404s for a draft, an unknown slug, and a non-date path', 
     assert.equal(res.headers.location, undefined, url);
   }
 });
+
+function writeFooterPage(root: string, status: string): void {
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', '_footer.json'),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'grid', children: [{ type: 'text', markdown: 'Contact the co-op' }] }],
+      fields: { title: 'Footer', slug: '_footer', status, kind: 'page' }
+    })
+  );
+}
+
+test('a published _footer renders in the footer of /, /:slug, /search and 404s', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(root, 'a.md', { slug: 'a', title: 'Alpha', status: 'published' }, 'body a');
+  runReindex(root);
+  writeFooterPage(root, 'published');
+
+  for (const url of ['/', '/a', '/search?q=alpha', '/nope']) {
+    const res = await app.inject({ method: 'GET', url });
+    const foot = /<footer class="rkr-site-foot">([\s\S]*?)<\/footer>/.exec(res.body)?.[1] ?? '';
+    assert.match(foot, /Contact the co-op/, url);
+    assert.match(foot, /<a class="rkr-site-foot-admin" href="\/login">Admin<\/a>/, url);
+    assert.ok(!foot.includes('&copy;'), url);
+  }
+  assert.equal((await app.inject({ method: 'GET', url: '/_footer' })).statusCode, 404);
+});
+
+test('a draft or missing _footer leaves the default footer with the admin link', async (t) => {
+  const { root, app } = await setup(t);
+  writePost(root, 'a.md', { slug: 'a', title: 'Alpha', status: 'published' }, 'body a');
+  runReindex(root);
+  for (const setupFooter of [() => {}, () => writeFooterPage(root, 'draft')]) {
+    setupFooter();
+    const res = await app.inject({ method: 'GET', url: '/a' });
+    assert.match(res.body, /&copy; \d{4}/);
+    assert.ok(!res.body.includes('Contact the co-op'));
+    assert.match(res.body, /class="rkr-site-foot-admin" href="\/login"/);
+  }
+});

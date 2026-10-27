@@ -83,6 +83,66 @@ test('loadChrome: copies the header settings and renders the logo', async (t) =>
   assert.deepEqual(chrome.announcement, { text: 'Hi', on: true });
 });
 
+function writeFooter(root: string, status: string, markdown: string): string {
+  const file = path.join(root, 'content', 'blocks', '_footer.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const page = {
+    version: 1,
+    body: [{ type: 'grid', children: [{ type: 'text', markdown }] }],
+    fields: { title: 'Footer', slug: '_footer', status, kind: 'page' }
+  };
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(page));
+  fs.renameSync(`${file}.tmp`, file);
+  return file;
+}
+
+test('loadChrome: a published _footer renders; a draft or missing one does not', async (t) => {
+  const root = freshSiteRoot(t);
+  assert.equal((await loadChrome(root, {}, log)).footerHtml, undefined);
+  writeFooter(root, 'draft', 'Hidden words');
+  assert.equal((await loadChrome(root, {}, log)).footerHtml, undefined);
+  writeFooter(root, 'published', 'Visible words');
+  assert.match((await loadChrome(root, {}, log)).footerHtml ?? '', /Visible words/);
+});
+
+test('loadChrome: an unchanged _footer is not re-rendered and an edit shows', async (t) => {
+  const root = freshSiteRoot(t);
+  fs.mkdirSync(path.join(root, 'macros'), { recursive: true });
+  writeFooter(root, 'published', 'First words');
+  const macros = path.join(root, 'macros');
+  const readdir = t.mock.method(fs, 'readdirSync');
+  const scans = () =>
+    readdir.mock.calls.filter((c) => path.resolve(String(c.arguments[0])) === macros).length;
+
+  assert.match((await loadChrome(root, {}, log)).footerHtml ?? '', /First words/);
+  const afterFirst = scans();
+  assert.ok(afterFirst > 0, 'first render loads the macro library');
+  assert.match((await loadChrome(root, {}, log)).footerHtml ?? '', /First words/);
+  assert.equal(scans(), afterFirst, 'second render came from the cache');
+
+  writeFooter(root, 'published', 'Second words');
+  assert.match((await loadChrome(root, {}, log)).footerHtml ?? '', /Second words/);
+  assert.ok(scans() > afterFirst, 'the edit re-rendered');
+});
+
+test('loadChrome: a macro change re-renders the footer', async (t) => {
+  const root = freshSiteRoot(t);
+  const macros = path.join(root, 'macros');
+  fs.mkdirSync(macros, { recursive: true });
+  writeFooter(root, 'published', 'Words');
+  const readdir = t.mock.method(fs, 'readdirSync');
+  const scans = () =>
+    readdir.mock.calls.filter((c) => path.resolve(String(c.arguments[0])) === macros).length;
+  await loadChrome(root, {}, log);
+  const before = scans();
+  fs.writeFileSync(
+    path.join(macros, 'x.json'),
+    JSON.stringify({ defaults: {}, tree: { type: 'text', markdown: 'x' } })
+  );
+  await loadChrome(root, {}, log);
+  assert.ok(scans() > before);
+});
+
 test('loadChrome: an empty site gives an empty chrome', async (t) => {
   const root = freshSiteRoot(t);
   assert.deepEqual(await loadChrome(root, {}, log), {});

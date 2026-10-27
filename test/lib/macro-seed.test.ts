@@ -21,13 +21,15 @@ function withSiteRoot(t: TestContext): string {
 }
 
 describe('macro seeding', () => {
-  it('ships page, hero, cards-3, and logo-wall seeds', () => {
+  it('ships hero, cards-3, and logo-wall seeds and no page root macro', () => {
     const dir = seedMacrosDir();
-    for (const name of ['page', 'hero', 'cards-3', 'logo-wall']) {
+    for (const name of ['hero', 'cards-3', 'logo-wall']) {
       assert.ok(fs.existsSync(path.join(dir, `${name}.json`)), `missing seed ${name}`);
     }
+    assert.equal(fs.existsSync(path.join(dir, 'page.json')), false);
     const lib = loadMacroLibrary(dir);
-    assert.ok(lib.has('page') && lib.has('hero'));
+    assert.ok(lib.has('hero'));
+    assert.equal(lib.has('page'), false);
   });
 
   it('init copies seeds into a fresh site root without overwriting', (t: TestContext) => {

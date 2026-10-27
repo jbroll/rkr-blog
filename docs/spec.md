@@ -284,6 +284,17 @@ indexed, never listed, never searchable, and `GET /_<slug>` is always
 Both are created on demand from the settings page (`Create About` /
 `Create banner`), which writes a stub file and returns to settings. The
 block editor does not edit `_site-banner` (`DEFERRED.md`).
+
+The footer is a block page, not a markdown post: `content/blocks/_footer.json`
+(slug `_footer`), created by `Edit footer` on the settings page
+(`GET /admin/footer/edit`, a draft, then redirects to the editor). `_footer`
+is the one `_` slug in `SYSTEM_SLUGS` (`src/lib/block-pages.ts`); the editor
+routes (JSON read, edit page, save, delete) accept it through
+`isEditableSlug`, while `/admin/blocks/new`, `GET /_footer`, the index, the
+page list and search still refuse it. When it is published, it replaces the
+copyright line in the footer of every public page. The rendered footer is
+cached per site and re-rendered when the file, the `macros/` directory or the
+site settings change.
 `GET /about` serves the block page with slug `about` when one is
 published (an admin sees it in any status) and falls back to `_about.md`
 otherwise. With neither, or a malformed `_about.md`, it is a 404.
@@ -433,8 +444,6 @@ only the slots it overrides.
   macro's slots and leaves the rest open.
 - A macro that reaches itself, directly or through others, renders a
   comment instead of looping.
-- The `page` macro holds site-wide defaults (site title, menu,
-  announcement, footer). It is not placeable.
 - A macro file that is not valid JSON, lacks object `defaults`, or holds
   a node the page validator rejects is skipped and logged. Pages that
   use the other macros render; an instance of the skipped one renders a
@@ -922,6 +931,7 @@ POST   /admin/settings/onedrive/disconnect revoke onedrive tokens for the sessio
 POST   /admin/reindex                 rebuild post index + FTS from markdown files
 GET    /admin/banner/edit             create _site-banner.md if absent, back to settings
 GET    /admin/about/edit              create _about.md if absent, back to settings
+GET    /admin/footer/edit             create the draft _footer block page if absent, open it in the editor
 
 # Admin comments — admin-comments.ts
 GET    /admin/comments                comment moderation list

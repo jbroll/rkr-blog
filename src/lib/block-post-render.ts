@@ -20,11 +20,10 @@ export interface BlockPostParts {
   subtitle?: string;
 }
 
-export async function renderBlockPost(
-  siteRoot: string,
-  page: { tree: BlockTree; fields: Record<string, unknown> },
-  deps: { widgets: WidgetRegistry; videos: VideoMapView; log: Logger }
-): Promise<BlockPostParts> {
+type BlockRenderDeps = { widgets: WidgetRegistry; videos: VideoMapView; log: Logger };
+
+/** The render context and macro lookup a tree needs, with its figures resolved. */
+export async function prepareBlockRender(siteRoot: string, tree: BlockTree, deps: BlockRenderDeps) {
   const lib = loadMacroLibrary(path.join(siteRoot, 'macros'), deps.log);
   const macroLib = {
     get: (n: string) => {
@@ -32,7 +31,7 @@ export async function renderBlockPost(
       return d ? { defaults: d.defaults, tree: d.tree } : undefined;
     }
   };
-  const synthetic = collectBlockFigureIds(page.tree, macroLib).map((ids) => ({
+  const synthetic = collectBlockFigureIds(tree, macroLib).map((ids) => ({
     type: 'leafDirective',
     name: 'figure',
     attributes: { ids },
@@ -45,6 +44,15 @@ export async function renderBlockPost(
     videos: deps.videos,
     widgets: deps.widgets
   };
+  return { ctx, macroLib };
+}
+
+export async function renderBlockPost(
+  siteRoot: string,
+  page: { tree: BlockTree; fields: Record<string, unknown> },
+  deps: BlockRenderDeps
+): Promise<BlockPostParts> {
+  const { ctx, macroLib } = await prepareBlockRender(siteRoot, page.tree, deps);
   const { hero, rest } = splitHero(page.tree);
   const bannerHtml = hero
     ? await deps.widgets.dispatch('figure', figureDirective(hero), ctx)

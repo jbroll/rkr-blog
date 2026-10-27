@@ -5,6 +5,7 @@
 import { escapeText } from '../lib/content.ts';
 import {
   bundleVersion,
+  footerOpt,
   headIcons,
   type SiteChrome,
   siteFoot,
@@ -42,7 +43,7 @@ ${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash, assets: a, ...
 <p>The page you’re looking for isn’t here.</p>
 <p><a href="/">← Back to ${escapeText(data.site.title)}</a></p>
 </main>
-${siteFoot(data.site, { isAdmin: data.isAdmin })}
+${siteFoot(data.site, { isAdmin: data.isAdmin, ...footerOpt(data.chrome) })}
 </body>
 </html>
 `;

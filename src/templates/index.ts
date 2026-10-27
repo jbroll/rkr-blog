@@ -11,6 +11,7 @@ import { escapeAttr, escapeText } from '../lib/content.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,
+  footerOpt,
   headIcons,
   indexAdminFabs,
   renderSearchForm,
@@ -135,7 +136,7 @@ ${pager}
 ${tagRail}
 </div>
 </main>
-${siteFoot(data.site, { isAdmin: data.isAdmin })}
+${siteFoot(data.site, { isAdmin: data.isAdmin, ...footerOpt(data.chrome) })}
 ${data.isAdmin ? indexAdminFabs() : ''}
 </body>
 </html>

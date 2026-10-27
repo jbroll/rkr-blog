@@ -15,6 +15,7 @@ import { requireUser } from '../lib/auth-middleware.ts';
 import {
   blockFileVersion,
   findBlockFile,
+  isEditableSlug,
   listBlockPages,
   readBlockPage
 } from '../lib/block-pages.ts';
@@ -24,7 +25,7 @@ import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
 import { staleClientRejection } from '../lib/client-build.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
-import { loadMacroLibrary, type MacroLib, ROOT_MACROS } from '../lib/macro-library.ts';
+import { loadMacroLibrary, type MacroLib } from '../lib/macro-library.ts';
 import { readAllIndexedPosts, readIndexedPostBySlug, runReindex } from '../lib/post-index.ts';
 import { dropIndexedPost, reindexBlockPage } from '../lib/post-index-blocks.ts';
 import { listPosts } from '../lib/posts.ts';
@@ -123,23 +124,20 @@ export function registerAdminBlockRoutes(
 
   fastify.get('/admin/blocks/macros', { ...guard }, async (req, _reply) => {
     const lib = loadMacroLibrary(`${siteRoot}/macros`, req.log);
-    return [...lib.keys()]
-      .filter((name) => !ROOT_MACROS.has(name))
-      .sort()
-      .map((name) => {
-        const macro = lib.get(name);
-        return {
-          name,
-          label: name
-            .split('-')
-            .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-            .join(' '),
-          group: 'Sections',
-          description: macro?.description ?? 'Ready-made section',
-          defaults: macro?.defaults ?? {},
-          fieldSchema: macro?.fieldSchema ?? {}
-        };
-      });
+    return [...lib.keys()].sort().map((name) => {
+      const macro = lib.get(name);
+      return {
+        name,
+        label: name
+          .split('-')
+          .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+          .join(' '),
+        group: 'Sections',
+        description: macro?.description ?? 'Ready-made section',
+        defaults: macro?.defaults ?? {},
+        fieldSchema: macro?.fieldSchema ?? {}
+      };
+    });
   });
 
   fastify.get<{ Params: { slug: string } }>(
@@ -243,7 +241,7 @@ export function registerAdminBlockRoutes(
     { ...guard },
     async (req, reply) => {
       const { slug } = req.params;
-      const page = VALID_SLUG.test(slug) ? readBlockPage(siteRoot, slug) : null;
+      const page = isEditableSlug(slug) ? readBlockPage(siteRoot, slug) : null;
       if (!page) return reply.code(404).send({ error: 'not found' });
 
       const bodyHtml = await renderEditBody(siteRoot, page.tree, req.log);
@@ -268,7 +266,7 @@ export function registerAdminBlockRoutes(
   );
 
   // Re-render for the editor after a structural change. Never writes;
-  // the save route persists. The `_` keeps it off VALID_SLUG, so no
+  // the save route persists. `_render` is not in SYSTEM_SLUGS, so no
   // page slug can collide with it.
   fastify.post<{ Body: unknown }>('/admin/blocks/_render', { ...guard }, async (req, reply) => {
     let tree: BlockTree;
@@ -287,7 +285,7 @@ export function registerAdminBlockRoutes(
     { ...guard },
     async (req, reply) => {
       const { slug } = req.params;
-      const file = VALID_SLUG.test(slug) ? findBlockFile(siteRoot, slug) : null;
+      const file = isEditableSlug(slug) ? findBlockFile(siteRoot, slug) : null;
       if (!file) return reply.code(404).send({ error: 'not found' });
       fs.unlinkSync(file);
       const db = opts.db;
@@ -303,7 +301,7 @@ export function registerAdminBlockRoutes(
     { ...guard },
     async (req, reply) => {
       const { slug } = req.params;
-      if (!VALID_SLUG.test(slug)) return reply.code(404).send({ error: 'not found' });
+      if (!isEditableSlug(slug)) return reply.code(404).send({ error: 'not found' });
       // An editor bundle older than the server saves through a stale contract.
       const stale = staleClientRejection(req.headers[BUILD_HEADER]);
       if (stale) return reply.code(STALE_CLIENT_STATUS).send(stale);

@@ -53,14 +53,24 @@ test('siteHead: authed visitor sees a POST-form Logout button in the header', ()
   assert.ok(!html.includes('rkr-admin-strip'), 'admin strip must be absent');
 });
 
-test('siteFoot: renders copyright line without auth links', () => {
+test('siteFoot: copyright line plus an admin link that points by sign-in state', () => {
   const anon = siteFoot({ title: 'My site' });
   const auth = siteFoot({ title: 'My site' }, { isAdmin: true });
   for (const html of [anon, auth]) {
     assert.match(html, /My site/);
-    assert.ok(!html.includes('Login'), 'Login is in the header now');
-    assert.ok(!html.includes('Logout'), 'Logout is in the header now');
+    assert.ok(!html.includes('Logout'), 'Logout is in the header');
   }
+  assert.match(anon, /<a class="rkr-site-foot-admin" href="\/login">Admin<\/a>/);
+  assert.match(auth, /<a class="rkr-site-foot-admin" href="\/admin\/blocks">Admin<\/a>/);
+});
+
+test('siteFoot: footerHtml replaces the copyright line and keeps the admin link', () => {
+  const html = siteFoot({ title: 'My site' }, { footerHtml: '<p>Join us</p>' });
+  assert.match(
+    html,
+    /^<footer class="rkr-site-foot"><p>Join us<\/p><a class="rkr-site-foot-admin"/
+  );
+  assert.ok(!html.includes('&copy;'));
 });
 
 test('indexAdminFabs: renders New page, Settings and Comments-moderation anchors', () => {

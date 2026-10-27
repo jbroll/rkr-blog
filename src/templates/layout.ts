@@ -146,12 +146,23 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
 
 export interface FootOpts {
   isAdmin?: boolean;
+  /** Rendered `_footer` block page; replaces the copyright line. */
+  footerHtml?: string;
 }
 
-export function siteFoot(site: SiteChrome['site'], _opts: FootOpts = {}): string {
+export const footerOpt = (chrome?: SiteNavChrome): FootOpts =>
+  chrome?.footerHtml ? { footerHtml: chrome.footerHtml } : {};
+
+/** The footer's admin link is the only sign-in path once a menu replaces
+ * the header's Login link. */
+export function siteFoot(site: SiteChrome['site'], opts: FootOpts = {}): string {
+  const adminLink = `<a class="rkr-site-foot-admin" href="${opts.isAdmin ? '/admin/blocks' : '/login'}">Admin</a>`;
+  if (opts.footerHtml) {
+    return `<footer class="rkr-site-foot">${opts.footerHtml}${adminLink}</footer>`;
+  }
   const year = new Date().getFullYear();
   return `<footer class="rkr-site-foot">
-  &copy; ${year} ${escapeText(site.title)} &mdash; <a href="https://github.com/jbroll/rkr-blog">GitHub</a>
+  &copy; ${year} ${escapeText(site.title)} &mdash; <a href="https://github.com/jbroll/rkr-blog">GitHub</a> ${adminLink}
 </footer>`;
 }
 

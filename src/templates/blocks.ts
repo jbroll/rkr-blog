@@ -3,6 +3,7 @@ import { icon } from './icons.ts';
 import {
   adminPwaHead,
   bundleVersion,
+  footerOpt,
   headIcons,
   type SiteChrome,
   siteFoot,
@@ -54,7 +55,7 @@ ${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash, assets: a, ...
 <main id="main" tabindex="-1">
 ${data.bodyHtml}</main>
 ${data.isAdmin && data.slug ? blocksAdminFab(data.slug) : ''}
-${siteFoot(data.site, { isAdmin: data.isAdmin })}
+${siteFoot(data.site, { isAdmin: data.isAdmin, ...footerOpt(data.chrome) })}
 <script type="module" src="${a.base}/site/carousel.js${bundleVersion(a)}" defer></script>
 <script type="module" src="${a.base}/site/version-check.js${bundleVersion(a)}" defer></script>
 </body>

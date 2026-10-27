@@ -12,6 +12,13 @@ import { type BlockTree, parseBlockTree } from './blocks.ts';
 
 const VALID_SLUG = /^[a-z0-9-]+$/;
 
+/** Pages the editor routes open although the slug starts with `_`. Public
+ * routes and the indexer keep refusing every `_` slug. */
+export const SYSTEM_SLUGS: ReadonlySet<string> = new Set(['_footer']);
+
+export const isEditableSlug = (slug: string): boolean =>
+  VALID_SLUG.test(slug) || SYSTEM_SLUGS.has(slug);
+
 export interface BlockPage {
   title: string;
   tree: BlockTree;
@@ -97,7 +104,7 @@ function readPageFile(file: string, slug: string): ResolvedPage | null {
  * `fields.slug` equals the slug and whose tree parses. A `<slug>.json` with
  * a different `fields.slug` does not match. */
 function resolveBlockPage(siteRoot: string, slug: string): ResolvedPage | null {
-  if (!VALID_SLUG.test(slug)) return null;
+  if (!isEditableSlug(slug)) return null;
   const dir = path.join(siteRoot, 'content', 'blocks');
   let files: string[];
   try {

@@ -147,6 +147,11 @@ ${saveBtn}
     <a href="/admin/about/edit">${data.hasAbout ? 'Edit About →' : 'Create About'}</a>
   </div>
 
+  <h2 class="rkr-admin-settings-section">Footer</h2>
+  <div class="rkr-admin-settings-banner" style="grid-column:1/-1">
+    <a href="/admin/footer/edit">Edit footer →</a>
+  </div>
+
   <h2 class="rkr-admin-settings-section">Posts</h2>
   <label for="rkr-settings-post-teaser">Feature top post on homepage</label>
   <input id="rkr-settings-post-teaser" name="postTeaser" type="checkbox"${

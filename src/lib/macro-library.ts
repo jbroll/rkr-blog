@@ -1,8 +1,7 @@
 // File-backed macro library. Each macro is a pretty-printed JSON file:
 // { defaults, fieldSchema?, tree }. A macro whose tree is itself a macro
 // instance is curried: it fixes some slots of another macro and leaves
-// the rest open. The `page` macro holds site-wide chrome defaults,
-// replacing config/site.json on the experimental JSON-pages path.
+// the rest open.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,9 +24,6 @@ export interface StoredMacro {
 }
 
 export type MacroLib = Map<string, StoredMacro>;
-
-/** Macros that carry site-wide settings, not placeable content. */
-export const ROOT_MACROS: ReadonlySet<string> = new Set(['page']);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -107,11 +103,6 @@ export function loadMacroLibrary(dir: string, log: MacroLogger = consoleLogger):
     }
   }
   return lib;
-}
-
-/** Site-wide chrome defaults: the slots of the root `page` macro. */
-export function getRootDefaults(lib: MacroLib): Slots {
-  return { ...(lib.get('page')?.defaults ?? {}) };
 }
 
 /** Expand one macro instance to a concrete node. Precedence, lowest

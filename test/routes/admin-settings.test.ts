@@ -430,6 +430,39 @@ test('GET /admin/banner/edit: requires auth', async (t) => {
   assert.ok(res.statusCode === 302 || res.statusCode === 401);
 });
 
+test('GET /admin/footer/edit: creates a draft _footer page once and opens the editor', async (t) => {
+  const { root, app } = await setup(t);
+  const file = path.join(root, 'content', 'blocks', '_footer.json');
+  assert.ok(!fs.existsSync(file));
+
+  const res = await app.inject({ method: 'GET', url: '/admin/footer/edit' });
+  assert.equal(res.statusCode, 302);
+  assert.equal(res.headers.location, '/admin/blocks/edit/_footer');
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {
+    version: 1,
+    body: [],
+    fields: { title: 'Footer', slug: '_footer', status: 'draft', kind: 'page' }
+  });
+
+  const edited = JSON.stringify({
+    version: 1,
+    body: [],
+    fields: { slug: '_footer', title: 'Mine' }
+  });
+  fs.writeFileSync(file, edited);
+  await app.inject({ method: 'GET', url: '/admin/footer/edit' });
+  assert.equal(fs.readFileSync(file, 'utf8'), edited);
+
+  const editor = await app.inject({ method: 'GET', url: res.headers.location as string });
+  assert.equal(editor.statusCode, 200);
+});
+
+test('GET /admin/settings links to the footer editor', async (t) => {
+  const { app } = await setup(t);
+  const res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /href="\/admin\/footer\/edit"/);
+});
+
 test('POST /admin/settings: checked postTeaser persists true', async (t) => {
   const { root, app } = await setup(t);
   const res = await app.inject({
@@ -895,6 +928,8 @@ test('public pages render the header menu and announcement from settings', async
     const res = await app.inject({ method: 'GET', url });
     assert.match(res.body, /class="rkr-site-menu-link" href="\/visit">Visit</, url);
     assert.match(res.body, /class="rkr-announce"/, url);
-    assert.doesNotMatch(res.body, /href="\/login"/, url);
+    const header = /<header[\s\S]*?<\/header>/.exec(res.body)?.[0] ?? '';
+    assert.doesNotMatch(header, /href="\/login"/, url);
+    assert.match(res.body, /class="rkr-site-foot-admin" href="\/login"/, url);
   }
 });

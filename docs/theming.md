@@ -80,10 +80,14 @@ Themes can assume this structure on every public page:
 </header>
 <main id="main" tabindex="-1">…</main>
 <footer class="rkr-site-foot">
-  &copy; … <span class="rkr-site-foot-sep">·</span>
-  <a class="rkr-site-foot-admin" href="/admin/login">Admin</a>
+  &copy; …
+  <a class="rkr-site-foot-admin" href="/login">Admin</a>
 </footer>
 ```
+
+When a `_footer` block page is published, its rendered blocks replace the
+copyright line inside `.rkr-site-foot`. The admin link follows in both cases:
+`/login` when signed out, `/admin/blocks` when signed in.
 
 When `site.json#menu` is set, the header is built from the settings
 instead (see `docs/spec.md` §14a), with the announcement bar above it
@@ -232,7 +236,7 @@ should be added here at the same time.
   announcement bar above the header.
 - `.rkr-fab` — the admin floating action buttons (edit, new post,
   settings, comments) shown bottom-right when logged in.
-- `.rkr-site-foot`, `.rkr-site-foot-sep`, `.rkr-site-foot-admin` — footer + dot separator + small admin link.
+- `.rkr-site-foot`, `.rkr-site-foot-admin` — footer + small admin link.
 
 ### Index
 - `.rkr-index-heading` — visually-hidden h1 on `/`.

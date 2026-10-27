@@ -15,6 +15,7 @@ import path from 'node:path';
 import { INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import type { FastifyInstance } from 'fastify';
 import { writeFileAtomicSync } from '../lib/atomic-write.ts';
+import { findBlockFile } from '../lib/block-pages.ts';
 import { resolveGitHash } from '../lib/build-info.ts';
 import {
   gdriveOAuthConfigured,
@@ -312,6 +313,22 @@ export function registerAdminSettingsRoutes(
       writeFileAtomicSync(aboutPath, '---\nslug: _about\ntitle: About\nstatus: published\n---\n');
     }
     return reply.redirect('/admin/settings?flash=system-pages', 302);
+  });
+
+  // GET /admin/footer/edit — create the _footer block page as a draft if
+  // absent, then open it in the block editor.
+  fastify.get('/admin/footer/edit', { ...guard }, async (_req, reply) => {
+    const footerPath = path.join(siteRoot, 'content', 'blocks', '_footer.json');
+    if (!findBlockFile(siteRoot, '_footer')) {
+      fs.mkdirSync(path.dirname(footerPath), { recursive: true });
+      const page = {
+        version: 1,
+        body: [],
+        fields: { title: 'Footer', slug: '_footer', status: 'draft', kind: 'page' }
+      };
+      writeFileAtomicSync(footerPath, `${JSON.stringify(page, null, 2)}\n`);
+    }
+    return reply.redirect('/admin/blocks/edit/_footer', 302);
   });
 
   // POST /admin/settings/banner — set the site-wide banner image by ID.

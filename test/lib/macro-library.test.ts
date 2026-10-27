@@ -5,12 +5,7 @@ import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
 import type { FieldSpec } from '../../src/lib/blocks.ts';
-import {
-  expandMacro,
-  getRootDefaults,
-  loadMacroLibrary,
-  type StoredMacro
-} from '../../src/lib/macro-library.ts';
+import { expandMacro, loadMacroLibrary, type StoredMacro } from '../../src/lib/macro-library.ts';
 
 function freshDir(t: TestContext): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-'));
@@ -41,18 +36,6 @@ describe('macro-library', () => {
     const node = expandMacro(lib, 'cards-home', { title: 'News' });
     assert.equal(node.slots?.title, 'News');
     assert.equal(node.slots?.layout, 'cards');
-  });
-
-  it('root page supplies chrome defaults', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macros-root-'));
-    writeMacro(dir, 'page', {
-      defaults: { menu: [{ label: 'Join', target: '/join' }] },
-      tree: { type: 'col', children: [] }
-    });
-    const lib = loadMacroLibrary(dir);
-    const root = getRootDefaults(lib);
-    assert.ok(Array.isArray(root.menu));
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it('keeps the tree inline slots when overrides are empty', () => {

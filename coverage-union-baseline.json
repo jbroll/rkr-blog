@@ -224,7 +224,7 @@
     "src/routes/admin-posts.ts": 100,
     "src/routes/admin-prewarm.ts": 100,
     "src/routes/admin-reset-helpers.ts": 97.27,
-    "src/routes/admin-settings.ts": 98.24,
+    "src/routes/admin-settings.ts": 98.31,
     "src/routes/admin-shell.ts": 100,
     "src/routes/admin-sidecar-edit.ts": 93.44,
     "src/routes/admin-tags.ts": 100,

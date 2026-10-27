@@ -4,7 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, type TestContext } from 'node:test';
 
-import { listBlockPages, readBlockPage, readIndexedBlockPage } from '../../src/lib/block-pages.ts';
+import {
+  isEditableSlug,
+  listBlockPages,
+  readBlockPage,
+  readIndexedBlockPage,
+  SYSTEM_SLUGS
+} from '../../src/lib/block-pages.ts';
 
 const PAGE = {
   version: 1,
@@ -107,5 +113,36 @@ describe('block-pages', () => {
     for (const p of ['content/blocks/b.json', 'content/blocks/gone.json', 'content/posts/a.md']) {
       assert.equal(readIndexedBlockPage(root, { slug: 'hello', path: p })?.title, 'Hello', p);
     }
+  });
+});
+
+describe('system slugs', () => {
+  const FOOTER = {
+    version: 1,
+    body: [{ type: 'grid', children: [{ type: 'text', markdown: 'Foot' }] }],
+    fields: { title: 'Footer', slug: '_footer', status: 'published', kind: 'page' }
+  };
+
+  it('isEditableSlug accepts plain slugs and _footer only', () => {
+    assert.equal(isEditableSlug('hello-1'), true);
+    assert.equal(isEditableSlug('_footer'), true);
+    assert.equal(isEditableSlug('_other'), false);
+    assert.equal(isEditableSlug('_render'), false);
+    assert.equal(isEditableSlug('../x'), false);
+    assert.deepEqual([...SYSTEM_SLUGS], ['_footer']);
+  });
+
+  it('reads _footer but not other underscore slugs, and does not list it', (t: TestContext) => {
+    const root = withBlocks(t, {
+      '_footer.json': FOOTER,
+      '_other.json': { ...FOOTER, fields: { ...FOOTER.fields, slug: '_other' } },
+      'hello.json': PAGE
+    });
+    assert.equal(readBlockPage(root, '_footer')?.title, 'Footer');
+    assert.equal(readBlockPage(root, '_other'), null);
+    assert.deepEqual(
+      listBlockPages(root).map((p) => p.slug),
+      ['hello']
+    );
   });
 });

@@ -236,7 +236,7 @@ describe('admin blocks save', () => {
     assert.deepEqual(list.find((m) => m.name === 'hero')?.defaults, { heading: 'Fresh food' });
   });
 
-  it('macros endpoint omits root macros and returns groups', async (t) => {
+  it('macros endpoint lists every macro with its group', async (t) => {
     const { root, app } = await setup(t);
     const tree = { type: 'text', markdown: 'Hi' };
     fs.writeFileSync(
@@ -261,7 +261,8 @@ describe('admin blocks save', () => {
     }[];
     assert.equal(
       list.some((m) => m.name === 'page'),
-      false
+      true,
+      'the macros list no longer filters any name'
     );
     const hero = list.find((m) => m.name === 'hero');
     assert.equal(hero?.group, 'Sections');
@@ -737,6 +738,88 @@ describe('admin blocks save', () => {
     assert.deepEqual(rest, { slug: 'render', inserted: true });
     assert.equal(typeof version, 'string');
     assert.ok(fs.existsSync(path.join(root, 'content', 'blocks', 'render.json')));
+  });
+
+  it('the editor routes open and save _footer but refuse other _ slugs', async (t) => {
+    const { root, app } = await setup(t);
+    const file = path.join(root, 'content', 'blocks', '_footer.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        version: 1,
+        body: [],
+        fields: { title: 'Footer', slug: '_footer', status: 'draft', kind: 'page' }
+      })
+    );
+    const json = await app.inject({ method: 'GET', url: '/admin/blocks/_footer' });
+    assert.equal(json.statusCode, 200);
+    const edit = await app.inject({ method: 'GET', url: '/admin/blocks/edit/_footer' });
+    assert.equal(edit.statusCode, 200);
+    const save = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/_footer',
+      payload: { tree: { version: 1, body: [{ type: 'text', markdown: 'Foot' }] } }
+    });
+    assert.equal(save.statusCode, 200);
+    assert.match(fs.readFileSync(file, 'utf8'), /Foot/);
+    assert.equal(
+      (await app.inject({ method: 'GET', url: '/admin/blocks/edit/_other' })).statusCode,
+      404
+    );
+    assert.equal(
+      (await app.inject({ method: 'GET', url: '/admin/blocks/_other' })).statusCode,
+      404
+    );
+    const other = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/_other',
+      payload: { tree: { version: 1, body: [] } }
+    });
+    assert.equal(other.statusCode, 404);
+    assert.equal(
+      (await app.inject({ method: 'POST', url: '/admin/blocks/_other/delete' })).statusCode,
+      404
+    );
+    const del = await app.inject({ method: 'POST', url: '/admin/blocks/_footer/delete' });
+    assert.equal(del.statusCode, 200);
+    assert.equal(fs.existsSync(file), false);
+  });
+
+  it('_render still re-renders and _footer is a separate route', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/_render',
+      payload: { tree: { version: 1, body: [] } }
+    });
+    assert.equal(res.statusCode, 200);
+    assert.ok('html' in JSON.parse(res.body));
+  });
+
+  it('_footer is never indexed, listed or served publicly', async (t) => {
+    const { root, app, db } = await setup(t);
+    await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/_footer',
+      payload: { tree: { version: 1, body: [], fields: { title: 'F', status: 'published' } } }
+    });
+    runReindex(root);
+    assert.deepEqual(db.prepare('SELECT COUNT(*) AS n FROM posts WHERE slug = ?').get('_footer'), {
+      n: 0
+    });
+    assert.equal((await app.inject({ method: 'GET', url: '/_footer' })).statusCode, 404);
+    const list = await app.inject({ method: 'GET', url: '/admin/blocks' });
+    assert.ok(!list.body.includes('_footer'));
+  });
+
+  it('/admin/blocks/new refuses _footer', async (t) => {
+    const { app } = await setup(t);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/new',
+      payload: { title: 'F', slug: '_footer' }
+    });
+    assert.equal(res.statusCode, 400);
   });
 
   it('GET /admin/blocks/new renders the new-page form', async (t) => {
