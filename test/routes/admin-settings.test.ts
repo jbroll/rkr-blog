@@ -832,6 +832,44 @@ test('POST /admin/settings round-trips the header fields', async (t) => {
   assert.deepEqual(cleared.announcement, { text: 'Open day Saturday', on: false });
 });
 
+test('POST /admin/settings refuses a half-filled header row and writes nothing', async (t) => {
+  const { root, app } = await setup(t);
+  const file = path.join(root, 'config', 'site.json');
+  fs.writeFileSync(file, JSON.stringify({ title: 'Kept', menu: [{ label: 'A', href: '/a' }] }));
+  const cases: [Record<string, string>, string][] = [
+    [
+      {
+        'menu.0.label': '',
+        'menu.0.href': '',
+        'menu.1.label': '',
+        'menu.1.href': '',
+        'menu.2.label': 'Shop',
+        'menu.2.href': ''
+      },
+      'Menu item 3 needs both a label and a link.'
+    ],
+    [{ 'menu.0.label': '', 'menu.0.href': '/x' }, 'Menu item 1 needs both a label and a link.'],
+    [{ ctaLabel: 'Join', ctaHref: '' }, 'The header button needs both a label and a link.'],
+    [{ ctaLabel: '', ctaHref: '/join' }, 'The header button needs both a label and a link.'],
+    [
+      {
+        'social.0.platform': 'facebook',
+        'social.0.url': '',
+        'social.1.platform': 'myspace',
+        'social.1.url': 'https://x'
+      },
+      'Social link 2 needs a service.'
+    ]
+  ];
+  for (const [fields, message] of cases) {
+    const res = await postForm(app, headerForm({ ...fields, title: 'Changed' }));
+    assert.equal(res.headers.location, `/admin/settings?err=${encodeURIComponent(message)}`);
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.equal(saved.title, 'Kept');
+    assert.deepEqual(saved.menu, [{ label: 'A', href: '/a' }]);
+  }
+});
+
 test('POST /admin/settings without header fields leaves them alone', async (t) => {
   const { root, app } = await setup(t);
   fs.writeFileSync(

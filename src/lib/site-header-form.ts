@@ -3,20 +3,22 @@
 // rows are numbered (`menu.0.label`). A field missing from the body
 // leaves the stored value alone; pickOrgFields validates what is sent.
 
-import type { NavLink, OrgSiteFields, SocialLink } from './site-org-settings.ts';
+import {
+  type NavLink,
+  type OrgSiteFields,
+  SOCIAL_PLATFORMS,
+  type SocialLink
+} from './site-org-settings.ts';
 
 type Body = Record<string, unknown>;
 
 const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
-function rows(body: Body, prefix: string, a: string, b: string): [string, string][] {
-  const out: [string, string][] = [];
+/** Every numbered row, blank ones included, as [first, second, number]. */
+function rows(body: Body, prefix: string, a: string, b: string): [string, string, number][] {
+  const out: [string, string, number][] = [];
   for (let i = 0; `${prefix}.${i}.${a}` in body || `${prefix}.${i}.${b}` in body; i++) {
-    const pair: [string, string] = [
-      text(body[`${prefix}.${i}.${a}`]),
-      text(body[`${prefix}.${i}.${b}`])
-    ];
-    if (pair[0] || pair[1]) out.push(pair);
+    out.push([text(body[`${prefix}.${i}.${a}`]), text(body[`${prefix}.${i}.${b}`]), i + 1]);
   }
   return out;
 }
@@ -28,27 +30,56 @@ function emailUrl(platform: string, url: string): string {
   return platform === 'email' && url.includes('@') && !url.includes(':') ? `mailto:${url}` : url;
 }
 
-export function parseHeaderForm(body: Body): OrgSiteFields {
-  const out: OrgSiteFields = {};
-  if ('logo' in body) out.logo = text(body.logo);
-  if (hasRows(body, 'menu')) {
-    out.menu = rows(body, 'menu', 'label', 'href').map(
-      ([label, href]): NavLink => ({ label, href })
-    );
+function parseMenu(body: Body): NavLink[] | string {
+  const out: NavLink[] = [];
+  for (const [label, href, n] of rows(body, 'menu', 'label', 'href')) {
+    if (!label && !href) continue;
+    if (!label || !href) return `Menu item ${n} needs both a label and a link.`;
+    out.push({ label, href });
   }
-  if ('ctaLabel' in body) out.cta = { label: text(body.ctaLabel), href: text(body.ctaHref) };
+  return out;
+}
+
+function parseSocial(body: Body): SocialLink[] | string {
+  const out: SocialLink[] = [];
+  for (const [platform, url, n] of rows(body, 'social', 'platform', 'url')) {
+    if (!url) continue;
+    const known = SOCIAL_PLATFORMS.find((p) => p === platform);
+    if (!known) return `Social link ${n} needs a service.`;
+    out.push({ platform: known, url: emailUrl(known, url) });
+  }
+  return out;
+}
+
+/** The patch, or an error naming the half-filled row. Fully blank rows
+ * are ignored. */
+export function parseHeaderForm(body: Body): { patch: OrgSiteFields } | { error: string } {
+  const patch: OrgSiteFields = {};
+  if ('logo' in body) patch.logo = text(body.logo);
+  if (hasRows(body, 'menu')) {
+    const menu = parseMenu(body);
+    if (typeof menu === 'string') return { error: menu };
+    patch.menu = menu;
+  }
+  if ('ctaLabel' in body) {
+    const cta = { label: text(body.ctaLabel), href: text(body.ctaHref) };
+    if (!cta.label !== !cta.href) {
+      return { error: 'The header button needs both a label and a link.' };
+    }
+    patch.cta = cta;
+  }
   if (hasRows(body, 'social')) {
-    out.social = rows(body, 'social', 'platform', 'url')
-      .filter(([, url]) => url)
-      .map(([platform, url]) => ({ platform, url: emailUrl(platform, url) }) as SocialLink);
+    const social = parseSocial(body);
+    if (typeof social === 'string') return { error: social };
+    patch.social = social;
   }
   if ('announcementText' in body) {
     const href = text(body.announcementHref);
-    out.announcement = {
+    patch.announcement = {
       text: text(body.announcementText),
       on: 'announcementOn' in body,
       ...(href ? { href } : {})
     };
   }
-  return out;
+  return { patch };
 }

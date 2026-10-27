@@ -6,6 +6,7 @@ import {
   MAX_ANNOUNCEMENT,
   MAX_LABEL,
   MAX_MENU_ITEMS,
+  MAX_SOCIAL_LINKS,
   type NavLink,
   type OrgSiteFields,
   SOCIAL_PLATFORMS,
@@ -23,8 +24,8 @@ export const HEADER_SETTINGS_CSS = `.rkr-admin-settings-rows{grid-column:1/-1;bo
 const input = (name: string, value: string, extra: string): string =>
   `<input name="${name}" type="text" value="${escapeAttr(value)}" ${extra}/>`;
 
-function blankRows<T>(rows: T[], blank: T): T[] {
-  const count = Math.min(rows.length + BLANK_ROWS, MAX_MENU_ITEMS);
+function blankRows<T>(rows: T[], blank: T, max: number): T[] {
+  const count = Math.min(rows.length + BLANK_ROWS, max);
   return [...rows, ...Array.from({ length: Math.max(0, count - rows.length) }, () => blank)];
 }
 
@@ -41,7 +42,7 @@ function renderLogo(logo: string | undefined): string {
 }
 
 function renderMenuRows(menu: NavLink[]): string {
-  return blankRows(menu, { label: '', href: '' })
+  return blankRows(menu, { label: '', href: '' }, MAX_MENU_ITEMS)
     .map(
       (m, i) => `<div class="rkr-admin-settings-row">
       ${input(`menu.${i}.label`, m.label, `maxlength="${MAX_LABEL}" placeholder="Label" aria-label="Menu link ${i + 1} label"`)}
@@ -58,7 +59,7 @@ function platformOptions(selected: string): string {
 }
 
 function renderSocialRows(social: SocialLink[]): string {
-  return blankRows<SocialLink>(social, { platform: 'facebook', url: '' })
+  return blankRows<SocialLink>(social, { platform: 'facebook', url: '' }, MAX_SOCIAL_LINKS)
     .map(
       (s, i) => `<div class="rkr-admin-settings-row">
       <select name="social.${i}.platform" aria-label="Social link ${i + 1} service">${platformOptions(s.platform)}</select>

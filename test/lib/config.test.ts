@@ -377,6 +377,11 @@ test('pickOrgFields: social drops a bad platform, an empty url and a non-mailto 
     { platform: 'email', url: 'mailto:hi@example.org' }
   ]);
   assert.deepEqual(pickOrgFields({ social: {} }), {});
+  const many = Array.from({ length: 13 }, (_, i) => ({
+    platform: 'youtube',
+    url: `https://y/${i}`
+  }));
+  assert.equal(pickOrgFields({ social: many }).social?.length, 12);
 });
 
 test('pickOrgFields: announcement keeps text, optional href and the on flag', () => {

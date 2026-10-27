@@ -47,6 +47,7 @@ export interface OrgSiteFields {
 const VALID_SLUG = /^[a-z0-9-]*$/;
 const IMAGE_ID = /^(?:[0-9a-f]{64})?$/;
 export const MAX_MENU_ITEMS = 12;
+export const MAX_SOCIAL_LINKS = 12;
 export const MAX_LABEL = 60;
 const MAX_URL = 2048;
 export const MAX_ANNOUNCEMENT = 300;
@@ -73,12 +74,12 @@ function pickSocial(raw: unknown): SocialLink | null {
   return { platform, url };
 }
 
-function pickList<T>(raw: unknown, pick: (v: unknown) => T | null): T[] | undefined {
+function pickList<T>(raw: unknown, pick: (v: unknown) => T | null, max: number): T[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   return raw
     .map(pick)
     .filter((v): v is T => v !== null)
-    .slice(0, MAX_MENU_ITEMS);
+    .slice(0, max);
 }
 
 function pickCta(raw: unknown): NavLink | undefined {
@@ -103,11 +104,11 @@ export function pickOrgFields(raw: Record<string, unknown>): OrgSiteFields {
     out.homePage = raw.homePage;
   }
   if (typeof raw.logo === 'string' && IMAGE_ID.test(raw.logo)) out.logo = raw.logo;
-  const menu = pickList(raw.menu, pickLink);
+  const menu = pickList(raw.menu, pickLink, MAX_MENU_ITEMS);
   if (menu) out.menu = menu;
   const cta = pickCta(raw.cta);
   if (cta) out.cta = cta;
-  const social = pickList(raw.social, pickSocial);
+  const social = pickList(raw.social, pickSocial, MAX_SOCIAL_LINKS);
   if (social) out.social = social;
   const announcement = pickAnnouncement(raw.announcement);
   if (announcement) out.announcement = announcement;

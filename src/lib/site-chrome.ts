@@ -3,7 +3,7 @@
 
 import type { SiteNavChrome } from '../templates/site-nav.ts';
 import { fallback, variants } from '../widgets/figure.ts';
-import { buildImageMap } from './image-map-fs.ts';
+import { imageSourceById } from './image-map-fs.ts';
 import type { OrgSiteFields } from './site-org-settings.ts';
 import { renderPicture } from './widget-helpers.ts';
 
@@ -23,12 +23,7 @@ export async function renderLogoHtml(
   log: ChromeLogger
 ): Promise<string | undefined> {
   if (!logoId) return undefined;
-  const images = await buildImageMap(
-    siteRoot,
-    { type: 'leafDirective', name: 'figure', attributes: { ids: logoId } },
-    { log }
-  );
-  const src = images.get(logoId);
+  const src = await imageSourceById(siteRoot, logoId, { log });
   if (!src) return undefined;
   return renderPicture({ src, variants: LOGO_VARIANTS, fallback, alt: '', loading: 'eager' });
 }

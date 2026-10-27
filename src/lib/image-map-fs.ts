@@ -43,15 +43,25 @@ export async function buildImageMap(
   const entries = await Promise.all(
     raws.map(async (raw, i): Promise<[string, ImageSource] | null> => {
       const id = resolved[i];
-      if (!id) return null;
-      const sidecar = await sidecarRead(siteRoot, id);
-      if (!sidecar) return null;
-      const { width, height } = await imageDimensions(siteRoot, id, sidecar, opts);
-      return [raw, makeSource(id, sidecar, width, height)];
+      const src = id ? await imageSourceById(siteRoot, id, opts) : null;
+      return src ? [raw, src] : null;
     })
   );
 
   return new Map(entries.filter((e): e is [string, ImageSource] => e !== null));
+}
+
+/** One image by its full id, without listing the sidecars directory.
+ * Null when the sidecar is missing. */
+export async function imageSourceById(
+  siteRoot: string,
+  id: string,
+  opts: ImageMapOpts = {}
+): Promise<ImageSource | null> {
+  const sidecar = await sidecarRead(siteRoot, id);
+  if (!sidecar) return null;
+  const { width, height } = await imageDimensions(siteRoot, id, sidecar, opts);
+  return makeSource(id, sidecar, width, height);
 }
 
 function makeSource(id: string, sidecar: Sidecar, width: number, height: number): ImageSource {

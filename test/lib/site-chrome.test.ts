@@ -44,6 +44,18 @@ test('renderLogoHtml: an ingested image renders an eager picture through /img', 
   assert.match(html, /alt=""/);
 });
 
+test('renderLogoHtml reads the one sidecar without listing the sidecars directory', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = await seed(root);
+  const sidecars = path.join(root, 'sidecars');
+  const readdir = t.mock.method(fs, 'readdirSync');
+  const listed = () =>
+    readdir.mock.calls.filter((c) => path.resolve(String(c.arguments[0])) === sidecars).length;
+  assert.match((await renderLogoHtml(root, id, log)) ?? '', /<picture>/);
+  assert.equal(await renderLogoHtml(root, 'd'.repeat(64), log), undefined);
+  assert.equal(listed(), 0);
+});
+
 test('renderLogoHtml: unset or unknown id renders nothing', async (t) => {
   const root = freshSiteRoot(t);
   assert.equal(await renderLogoHtml(root, undefined, log), undefined);

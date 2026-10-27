@@ -99,7 +99,9 @@ when one is on:
   <div class="rkr-site-head-inner">
     <div class="rkr-site-head-brand">
       <p class="rkr-site-title"><a href="/">…</a></p>  <!-- logo <picture> or title -->
+      <span class="rkr-site-tagline">…</span>          <!-- optional -->
     </div>
+    <span class="rkr-site-head-version">…</span>       <!-- build hash, public pages -->
     <input type="checkbox" id="rkr-menu-toggle" class="rkr-menu-toggle"/>
     <label for="rkr-menu-toggle" class="rkr-menu-toggle-btn">…Menu</label>
     <nav class="rkr-site-head-nav rkr-site-menu" aria-label="Site">

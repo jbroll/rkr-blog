@@ -220,6 +220,11 @@ export function registerAdminSettingsRoutes(
       );
     }
 
+    const header = parseHeaderForm(body as Record<string, unknown>);
+    if ('error' in header) {
+      return reply.redirect(`/admin/settings?err=${encodeURIComponent(header.error)}`, 303);
+    }
+
     // Persist the form values verbatim, empty strings included.
     // siteConfig() / themeName() each treat an empty-string persisted
     // field as falsy (the `||` chain falls through to SITE_TITLE /
@@ -236,7 +241,7 @@ export function registerAdminSettingsRoutes(
       teaserWords: teaserWords.value ?? 0,
       notifyEmail: notifyEmailRaw,
       ...(homePageRaw !== undefined ? { homePage: homePageRaw } : {}),
-      ...parseHeaderForm(body as Record<string, unknown>),
+      ...header.patch,
       ...(commentNotify ? { commentNotify } : {}),
       ...(ingestResize ? { ingestResize } : {})
     });

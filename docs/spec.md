@@ -1107,20 +1107,23 @@ a `Logout` form.
 
 The settings page's Header section fills `config/site.json`:
 
-- `menu`: up to 12 `{ label, href }` links, label at most 60 characters.
-  The form shows the saved rows plus three blank ones; blank rows are
-  dropped.
+- `menu`: up to 12 `{ label, href }` links (`MAX_MENU_ITEMS`), label at
+  most 60 characters. The form shows the saved rows plus three blank
+  ones; blank rows are ignored.
 - `logo`: an image id. The form uploads the file to `POST /admin/upload`
   and keeps the returned id in a hidden field, with a thumbnail and a
   Remove button. It renders as a `<picture>` through `/img`.
 - `cta`: one `{ label, href }` rendered as a `.rkr-btn`.
-- `social`: `{ platform, url }` rows, platform one of `facebook`,
+- `social`: up to 12 `{ platform, url }` rows (`MAX_SOCIAL_LINKS`), platform one of `facebook`,
   `instagram`, `youtube`, `mastodon`, `bluesky`, `email`, each drawn as
   a bundled SVG icon. An `email` url is a `mailto:` address; the form
   adds `mailto:` to a bare address.
 - `announcement`: `{ text, href?, on }`, at most 300 characters.
 
-Invalid entries are dropped when the file is read. Every href passes
+A menu row, social row or button with only one of its two fields filled
+is refused with an error naming it ("Menu item 3 needs both a label and
+a link."), and nothing is saved. Invalid entries in the file itself are
+dropped when it is read. Every href passes
 through `safeLinkUrl` when rendered, so a `javascript:` link becomes `#`.
 
 While `menu` has at least one link, the header shows the logo (or the
