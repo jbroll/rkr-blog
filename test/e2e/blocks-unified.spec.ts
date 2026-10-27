@@ -482,6 +482,42 @@ test('macro field edit renders', async ({ page }) => {
   await expect(page.locator('main')).not.toContainText('Fresh food, owned by neighbors');
 });
 
+test('macro list field: add rows, save, reload', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-macro-list-${Date.now()}`;
+  await seedBlockPage(page, {
+    slug,
+    title: 'Macro list',
+    body: [{ type: 'macro', macro: 'e2e-team', slots: {} }]
+  });
+
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.locator('#rkr-blocks-page-body .rkr-unified-empty').first().click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  const dialog = page.getByLabel('Edit E2e team');
+  await dialog.getByRole('button', { name: 'Add row' }).click();
+  await dialog.getByRole('group', { name: 'Row 1' }).getByLabel('Name').fill('Ann');
+  await dialog.getByRole('button', { name: 'Add row' }).click();
+  await dialog.getByRole('group', { name: 'Row 2' }).getByLabel('Name').fill('Bo');
+  const saved = saveResponse(page, slug);
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await saved;
+
+  const body = page.locator('#rkr-blocks-page-body');
+  await expect(body).toContainText('Member Ann');
+  await expect(body).toContainText('Member Bo');
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#rkr-blocks-page-body')).toContainText('Member Bo');
+  await page.locator('#rkr-blocks-page-body .rkr-grid').first().click();
+  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  const reopened = page.getByLabel('Edit E2e team');
+  await expect(reopened.getByLabel('Name')).toHaveCount(2);
+  await expect(reopened.getByLabel('Name').first()).toHaveValue('Ann');
+});
+
 const savePill = (page: Page) => page.locator('.rkr-unified-save-state');
 
 test('offline text edit survives reload', async ({ page, context }) => {

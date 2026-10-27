@@ -27,6 +27,21 @@ for (const sub of ['sidecars', 'originals', 'cache/img', 'data', 'content/posts'
 }
 ensureSecretKey(root);
 seedSiteMacros(root);
+fs.writeFileSync(
+  path.join(root, 'macros', 'e2e-team.json'),
+  JSON.stringify({
+    description: 'E2E fixture with a list field',
+    defaults: { people: [] },
+    fieldSchema: {
+      people: { label: 'People', type: 'list', item: { name: { label: 'Name', type: 'text' } } }
+    },
+    tree: {
+      type: 'grid',
+      slots: { cols: 2, each: 'people' },
+      children: [{ type: 'text', markdown: 'Member {{name}}' }]
+    }
+  })
+);
 
 // Dummy OAuth wiring so makeGoogleExchange() doesn't throw at route
 // registration. The e2e suite hits /admin/auth/token-login, not the

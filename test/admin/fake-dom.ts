@@ -116,7 +116,10 @@ export class FakeNode {
     this.listeners.get(type)?.delete(listener);
   }
 
-  dispatchEvent(ev: FakeEvent): boolean {
+  dispatchEvent(event: FakeEvent | Event): boolean {
+    // Browser code builds real Events; the fake only reads type and bubbles.
+    const ev =
+      event instanceof FakeEvent ? event : new FakeEvent(event.type, { bubbles: event.bubbles });
     ev.target ??= this;
     let node: FakeNode | null = this;
     while (node) {

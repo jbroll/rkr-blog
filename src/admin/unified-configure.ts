@@ -43,11 +43,12 @@ const NO_MEDIA: MediaDialogDeps = {
 };
 
 /** Merge touched macro fields over the instance slots; an empty value
- * clears the override so the default flows through again. */
+ * or empty list clears the override so the default flows through again. */
 function mergeMacroFields(slots: Slots, touched: Record<string, unknown>): Slots {
   const merged = { ...slots };
   for (const [key, value] of Object.entries(touched)) {
-    if (typeof value !== 'string' || value === '') delete merged[key];
+    if (Array.isArray(value) && value.length > 0) merged[key] = value;
+    else if (typeof value !== 'string' || value === '') delete merged[key];
     else merged[key] = value;
   }
   return merged;

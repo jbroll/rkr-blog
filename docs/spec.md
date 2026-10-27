@@ -488,7 +488,7 @@ the type:
 | `markdown` | multi-line input |
 | `select` | dropdown of `options`, first entry "Default (value)" |
 | `image` | thumbnail with Choose image and Remove, via the media picker |
-| `list` | not yet in the dialog; set it in the page JSON |
+| `list` | a group of item rows with add, remove and move up/down; each row has one control per `item` field spec, so an `image` item opens the media picker. An empty list clears the override |
 | none | single-line input; multi-line when the value or default has a newline |
 
 Each field starts empty with the default as its placeholder. Typing sets

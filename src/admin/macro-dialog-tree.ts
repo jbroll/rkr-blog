@@ -15,17 +15,21 @@
 import type { BlockNode, Slots } from '../lib/blocks.ts';
 import type { PaletteFieldSpec } from './blocks-editor.ts';
 import { openEditorDialog } from './editor-dialog.ts';
+import { control, imageControl, type MacroField, type ValueControl } from './macro-controls.ts';
+import { openListField } from './macro-list-field.ts';
 import type { MediaPicker } from './media-source.ts';
 
-export interface MacroField {
-  name: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  multiline: boolean;
-  options?: string[];
-  /** The slot holds an image id: shown as a thumbnail, never as text. */
-  image: boolean;
+function savedItems(raw: unknown): Record<string, string>[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item) =>
+      Object.fromEntries(
+        Object.entries(item).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string'
+        )
+      )
+    );
 }
 
 /** One editor per default key, prefilled with the instance override
@@ -55,7 +59,8 @@ export function readMacroFields(
         placeholder.includes('\n') ||
         name === 'markdown',
       options: spec?.type === 'select' ? spec.options : undefined,
-      image: spec?.type === 'image'
+      image: spec?.type === 'image',
+      list: spec?.type === 'list' ? { item: spec.item ?? {}, items: savedItems(raw) } : undefined
     };
   });
 }
@@ -68,6 +73,12 @@ export interface MacroDialog {
   close(): void;
   /** Names touched since open (override set or cleared). */
   touched(): string[];
+  /** List-field row edits for tests; rows are 0-based, ignored when out of range. */
+  addRow(name: string): void;
+  removeRow(name: string, index: number): void;
+  moveUp(name: string, index: number): void;
+  moveDown(name: string, index: number): void;
+  setItemField(name: string, index: number, key: string, value: string): void;
 }
 
 export interface MacroDialogOpts {
@@ -82,95 +93,13 @@ export interface MacroDialogOpts {
   media?: MediaPicker;
 }
 
-type ValueControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-
-function control(doc: Document, f: MacroField): ValueControl {
-  if (f.options) {
-    const select = doc.createElement('select');
-    for (const optionValue of ['', ...f.options]) {
-      const option = doc.createElement('option');
-      option.value = optionValue;
-      option.setAttribute('value', optionValue);
-      option.textContent =
-        optionValue === '' ? `Default (${f.placeholder || 'none'})` : optionValue;
-      select.append(option);
-    }
-    return select;
-  }
-  if (f.multiline) {
-    const area = doc.createElement('textarea');
-    area.setAttribute('rows', '4');
-    return area;
-  }
-  return doc.createElement('input');
-}
-
-/** Thumbnail plus Choose image and Remove. `set` records the new id
- * ('' clears the override so the default shows again). */
-function imageControl(
-  doc: Document,
-  f: MacroField,
-  media: MediaPicker | undefined,
-  set: (id: string) => void
-): HTMLElement {
-  const wrap = doc.createElement('div');
-  wrap.className = 'rkr-image-field';
-  const preview = doc.createElement('div');
-  preview.className = 'rkr-media-thumb';
-  const choose = doc.createElement('button');
-  choose.type = 'button';
-  choose.className = 'rkr-edit-btn';
-  choose.textContent = 'Choose image';
-  const remove = doc.createElement('button');
-  remove.type = 'button';
-  remove.className = 'rkr-edit-btn is-quiet';
-  remove.textContent = 'Remove';
-  const show = (id: string): void => {
-    preview.textContent = '';
-    const url = id ? (media?.thumbUrl('image', id) ?? `/admin/preview/${id}`) : null;
-    if (url) {
-      const img = doc.createElement('img');
-      img.setAttribute('src', url);
-      img.setAttribute('alt', '');
-      img.setAttribute('width', '72');
-      img.setAttribute('height', '72');
-      preview.append(img);
-    } else {
-      preview.textContent = f.placeholder ? 'Default image' : 'No image';
-    }
-    remove.hidden = id === '';
-  };
-  if (media) {
-    choose.addEventListener('click', () => {
-      choose.setAttribute('disabled', '');
-      void media
-        .pick('image', false)
-        .then(([id]) => {
-          if (!id) return;
-          set(id);
-          show(id);
-        })
-        .catch((err: unknown) => console.error('macro image pick:', err))
-        .finally(() => choose.removeAttribute('disabled'));
-    });
-  } else {
-    choose.hidden = true;
-  }
-  remove.addEventListener('click', () => {
-    set('');
-    show('');
-  });
-  show(f.value);
-  wrap.append(preview, choose, remove);
-  return wrap;
-}
-
 /** Open the macro field dialog inside `root`. */
 export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDialog {
   const doc = root.ownerDocument;
-  const values = new Map<string, string>();
+  const values = new Map<string, unknown>();
   const touched = new Set<string>();
   const inputs = new Map<string, ValueControl>();
+  const lists = new Map<string, HTMLElement>();
   for (const f of opts.fields) values.set(f.name, f.value);
 
   const form = doc.createElement('div');
@@ -178,6 +107,16 @@ export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDial
   for (const [i, f] of opts.fields.entries()) {
     const row = doc.createElement('div');
     row.className = 'rkr-field';
+    if (f.list) {
+      const fieldset = openListField(doc, f, opts.media, (items) => {
+        values.set(f.name, items);
+        touched.add(f.name);
+      });
+      lists.set(f.name, fieldset);
+      row.append(fieldset);
+      form.append(row);
+      continue;
+    }
     const id = `rkr-macro-field-${i}`;
     const label = doc.createElement('label');
     label.textContent = f.label;
@@ -216,9 +155,24 @@ export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDial
     return slots;
   };
 
+  const click = (name: string, label: string): void => {
+    lists.get(name)?.querySelector<HTMLElement>(`[aria-label="${label}"]`)?.click();
+  };
+
   const driver: MacroDialog = {
+    addRow: (name) => click(name, 'Add row'),
+    removeRow: (name, index) => click(name, `Remove row ${index + 1}`),
+    moveUp: (name, index) => click(name, `Move row ${index + 1} up`),
+    moveDown: (name, index) => click(name, `Move row ${index + 1} down`),
+    setItemField(name, index, key, value) {
+      const rows = lists.get(name)?.querySelectorAll('.rkr-list-row');
+      const input = rows?.[index]?.querySelector(`[name="${key}"]`);
+      if (!input) return;
+      (input as unknown as ValueControl).value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    },
     setField(name, value) {
-      if (!values.has(name)) return;
+      if (!values.has(name) || lists.has(name)) return;
       values.set(name, value);
       touched.add(name);
       const input = inputs.get(name);

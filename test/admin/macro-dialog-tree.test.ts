@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { openMacroDialog, readMacroFields } from '../../src/admin/macro-dialog-tree.ts';
 import type { BlockNode } from '../../src/lib/blocks.ts';
-import { FakeDocument, FakeEvent } from './fake-dom.ts';
+import { FakeDocument, type FakeElement, FakeEvent } from './fake-dom.ts';
 
 const NODE: BlockNode = { type: 'macro', macro: 'hero', slots: { heading: 'Old' } };
 const DEFAULTS = { heading: 'Fresh', sub: 'Default sub' };
@@ -247,5 +247,138 @@ describe('macro dialog behaviour', () => {
     const { dialog } = open();
     dialog.setField('nope', 'x');
     assert.deepEqual(dialog.touched(), []);
+  });
+});
+
+describe('macro dialog list fields', () => {
+  const SCHEMA = {
+    people: {
+      label: 'People',
+      type: 'list',
+      item: {
+        name: { label: 'Name', type: 'text' },
+        photo: { label: 'Photo', type: 'image' }
+      }
+    }
+  };
+  const node = (people?: unknown): BlockNode => ({
+    type: 'macro',
+    macro: 'team',
+    slots: people === undefined ? {} : { people }
+  });
+  const SAVED = [{ name: 'Ann' }, { name: 'Bo' }];
+
+  const open = (
+    people: unknown = SAVED,
+    media?: Parameters<typeof openMacroDialog>[1]['media']
+  ) => {
+    const root = new FakeDocument().createElement('div');
+    const committed: Record<string, unknown>[] = [];
+    const dialog = openMacroDialog(root as unknown as Element, {
+      title: 'Edit team',
+      fields: readMacroFields(node(people), { people: [] }, SCHEMA),
+      media,
+      onCommit: (s) => committed.push(s),
+      onCancel: () => {}
+    });
+    return { root, dialog, committed };
+  };
+  const names = (root: FakeElement) =>
+    root.querySelectorAll('input').map((i) => (i as unknown as { value: string }).value);
+
+  it('renders one row per item with the item field specs', () => {
+    const { root } = open();
+    assert.equal(root.querySelectorAll('fieldset').length, 1);
+    assert.equal(root.querySelectorAll('.rkr-list-row').length, 2);
+    assert.deepEqual(names(root), ['Ann', 'Bo']);
+    assert.equal(root.querySelectorAll('.rkr-image-field').length, 2);
+    const labels = root.querySelectorAll('label').map((l) => l.textContent);
+    assert.deepEqual(labels, ['Name', 'Photo', 'Name', 'Photo']);
+  });
+
+  it('shows no rows for a missing or non-array value', () => {
+    assert.equal(open(null).root.querySelectorAll('.rkr-list-row').length, 0);
+    assert.equal(open('oops').root.querySelectorAll('.rkr-list-row').length, 0);
+  });
+
+  it('add, remove, move up and move down change the committed array', () => {
+    const { dialog, committed } = open();
+    dialog.addRow('people');
+    dialog.setItemField('people', 2, 'name', 'Cy');
+    dialog.moveUp('people', 2);
+    assert.equal(dialog.commit(), true);
+    assert.deepEqual(committed[0]?.people, [{ name: 'Ann' }, { name: 'Cy' }, { name: 'Bo' }]);
+  });
+
+  it('move down and remove reorder and drop rows', () => {
+    const { dialog, committed } = open();
+    dialog.moveDown('people', 0);
+    dialog.removeRow('people', 1);
+    dialog.commit();
+    assert.deepEqual(committed[0]?.people, [{ name: 'Bo' }]);
+  });
+
+  it('typing into a row field and the row buttons both commit', () => {
+    const { root, committed } = open();
+    const first = root.querySelectorAll('input')[0] as unknown as { value: string } & FakeElement;
+    first.value = 'Ada';
+    first.dispatchEvent(new FakeEvent('input'));
+    root.querySelector('[aria-label="Move row 1 down"]')?.click();
+    root.querySelector('[aria-label="Remove row 1"]')?.click();
+    root.querySelector('[aria-label="Add row"]')?.click();
+    root.querySelector('.rkr-dialog-primary')?.click();
+    return new Promise<void>((resolve) =>
+      setTimeout(() => {
+        assert.deepEqual(committed[0]?.people, [{ name: 'Ada' }, {}]);
+        resolve();
+      }, 0)
+    );
+  });
+
+  it('out-of-range row moves and unknown lists do nothing', () => {
+    const { dialog, committed } = open();
+    dialog.moveUp('people', 0);
+    dialog.moveDown('people', 1);
+    dialog.removeRow('people', 9);
+    dialog.addRow('nope');
+    dialog.setItemField('people', 9, 'name', 'x');
+    dialog.setItemField('nope', 0, 'name', 'x');
+    assert.equal(dialog.commit(), false);
+    assert.equal(committed.length, 0);
+  });
+
+  it('an image item field opens the media picker and stores the picked id', async () => {
+    const NEW = 'cd'.repeat(32);
+    const picks: boolean[] = [];
+    const { root, committed } = open([{ name: 'Ann' }], {
+      pick: async (_kind, multiple) => {
+        picks.push(multiple);
+        return [NEW];
+      },
+      thumbUrl: (_kind, id) => `/admin/preview/${id}`
+    });
+    root
+      .querySelectorAll('button')
+      .find((b) => b.textContent === 'Choose image')
+      ?.click();
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(picks, [false]);
+    assert.equal(root.querySelector('img')?.getAttribute('src'), `/admin/preview/${NEW}`);
+    root.querySelector('.rkr-dialog-primary')?.click();
+    await new Promise<void>((r) => setTimeout(r, 0));
+    assert.deepEqual(committed[0]?.people, [{ name: 'Ann', photo: NEW }]);
+  });
+
+  it('reopening the dialog shows the saved rows', () => {
+    const first = open();
+    first.dialog.addRow('people');
+    first.dialog.setItemField('people', 2, 'name', 'Cy');
+    first.dialog.commit();
+    assert.deepEqual(names(open(first.committed[0]?.people).root), ['Ann', 'Bo', 'Cy']);
+  });
+
+  it('drops non-string item values when reading saved rows', () => {
+    const fields = readMacroFields(node([{ name: 'Ann', n: 3 }, 'junk']), { people: [] }, SCHEMA);
+    assert.deepEqual(fields[0]?.list?.items, [{ name: 'Ann' }]);
   });
 });

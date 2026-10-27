@@ -70,3 +70,49 @@ describe('configure a grid', () => {
     assert.equal(root.querySelector('[data-rkr-dialog]'), null);
   });
 });
+
+describe('configure a macro with a list field', () => {
+  const macros = [
+    {
+      name: 'team',
+      label: 'Team',
+      defaults: { title: 'Our team', people: [] },
+      fieldSchema: {
+        title: { label: 'Title', type: 'text' },
+        people: { label: 'People', type: 'list', item: { name: { label: 'Name', type: 'text' } } }
+      }
+    }
+  ];
+
+  async function run(slots: Record<string, unknown>, act: (root: FakeElement) => void) {
+    const root = new FakeDocument().createElement('div');
+    const tree: BlockTree = { version: 1, body: [{ type: 'macro', macro: 'team', slots }] };
+    const applied: BlockTree[] = [];
+    createConfigurator({
+      root: root as unknown as Element,
+      macros,
+      getTree: () => tree,
+      applyTree: async (next) => {
+        applied.push(next);
+      },
+      flushText: () => {},
+      refuse: () => null
+    }).configure([0]);
+    act(root);
+    (root.querySelector('.rkr-dialog-primary') as FakeElement).click();
+    await tick();
+    return (applied[0]?.body[0] as { slots: Record<string, unknown> }).slots;
+  }
+
+  it('mergeMacroFields keeps arrays and clears the override for an empty list', async () => {
+    const added = await run({ title: 'T' }, (root) => {
+      (root.querySelector('[aria-label="Add row"]') as FakeElement).click();
+    });
+    assert.deepEqual(added, { title: 'T', people: [{}] });
+
+    const cleared = await run({ title: 'T', people: [{ name: 'Ann' }] }, (root) => {
+      (root.querySelector('[aria-label="Remove row 1"]') as FakeElement).click();
+    });
+    assert.deepEqual(cleared, { title: 'T' });
+  });
+});

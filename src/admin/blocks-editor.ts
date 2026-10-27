@@ -27,6 +27,8 @@ export interface PaletteFieldSpec {
   label: string;
   type: string;
   options?: string[];
+  /** Field specs of one `list` item. */
+  item?: Record<string, PaletteFieldSpec>;
 }
 
 export interface PaletteMacro {
