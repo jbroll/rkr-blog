@@ -474,6 +474,14 @@ only the slots it overrides.
   a node the page validator rejects is skipped and logged. Pages that
   use the other macros render; an instance of the skipped one renders a
   comment.
+- Seeds in the repo's `macros/`: `hero`, `split`, `photo-callout`,
+  `people-grid`, `icon-grid`, `logo-wall`, `cards` and `marquee-band`.
+  Their defaults are generic placeholder text with empty image fields; an
+  empty image renders nothing. A seed's `split` has no image-side choice:
+  the image is always first, because a macro tree has no conditional.
+- `site-admin macros` lists the seeds whose site copy is missing or
+  differs from the shipped file. `site-admin macros --update <name>`
+  overwrites that one site file from its seed. Init and re-init never do.
 - The editor does not edit macro definitions; change the JSON file.
   There is no macro history or diff UI; git holds it.
 - A definition holds at most three container levels. The editor refuses
@@ -1001,6 +1009,8 @@ editor:
 init                    create the runtime data tree, run migrations
 migrate                 run pending migrations
 reindex                 rebuild post index from content/
+macros                  list seed macros whose site copy is missing or differs (§8a)
+macros --update <name>  overwrite one site macro from its seed
 render                  pre-render every variant for every sidecar
 render --post <slug>    pre-render one post
 render --since <date>   pre-render posts newer than date

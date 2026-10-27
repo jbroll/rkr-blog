@@ -1,0 +1,44 @@
+{
+  "description": "A grid of small images with captions",
+  "defaults": {
+    "title": "What we offer",
+    "items": [
+      { "image": "", "caption": "First item" },
+      { "image": "", "caption": "Second item" },
+      { "image": "", "caption": "Third item" },
+      { "image": "", "caption": "Fourth item" }
+    ]
+  },
+  "fieldSchema": {
+    "title": { "label": "Heading", "type": "text" },
+    "items": {
+      "label": "Items",
+      "type": "list",
+      "item": {
+        "image": { "label": "Image", "type": "image" },
+        "caption": { "label": "Caption", "type": "text" }
+      }
+    }
+  },
+  "tree": {
+    "type": "grid",
+    "slots": { "cols": 1, "band": true, "theme": "light", "edge": "straight" },
+    "children": [
+      { "type": "text", "markdown": "## {{title}}" },
+      {
+        "type": "grid",
+        "slots": { "cols": 4, "min": "narrow", "align": "center", "each": "items" },
+        "children": [
+          {
+            "type": "grid",
+            "slots": { "cols": 1 },
+            "children": [
+              { "type": "figure", "slots": { "ids": "{{image}}" } },
+              { "type": "text", "markdown": "{{caption}}" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

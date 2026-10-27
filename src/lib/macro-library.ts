@@ -88,6 +88,31 @@ export function seedSiteMacros(siteRoot: string): string[] {
   }
   return copied;
 }
+function seedNames(): string[] {
+  return fs
+    .readdirSync(seedMacrosDir())
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => f.slice(0, -'.json'.length))
+    .sort();
+}
+
+/** Seeds whose site copy is missing or differs from the shipped file. */
+export function diffSeedMacros(siteRoot: string): string[] {
+  return seedNames().filter((name) => {
+    const site = path.join(siteRoot, 'macros', `${name}.json`);
+    const seed = path.join(seedMacrosDir(), `${name}.json`);
+    return !fs.existsSync(site) || !fs.readFileSync(site).equals(fs.readFileSync(seed));
+  });
+}
+
+/** Overwrite one site macro from its seed. */
+export function updateSiteMacro(siteRoot: string, name: string): void {
+  if (!seedNames().includes(name)) throw new Error(`no seed macro named ${name}`);
+  const dest = path.join(siteRoot, 'macros');
+  fs.mkdirSync(dest, { recursive: true });
+  fs.copyFileSync(path.join(seedMacrosDir(), `${name}.json`), path.join(dest, `${name}.json`));
+}
+
 /** Every valid macro under `dir`. A bad file is skipped and logged, so
  * one broken macro never takes down the pages that use the others. */
 export function loadMacroLibrary(dir: string, log: MacroLogger = consoleLogger): MacroLib {

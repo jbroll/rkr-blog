@@ -1,0 +1,43 @@
+{
+  "description": "An image beside a heading, text and up to two buttons",
+  "defaults": {
+    "image": "",
+    "heading": "Heading",
+    "text": "A few lines about this section.",
+    "button1Label": "",
+    "button1Href": "",
+    "button2Label": "",
+    "button2Href": ""
+  },
+  "fieldSchema": {
+    "image": { "label": "Image", "type": "image" },
+    "heading": { "label": "Heading", "type": "text" },
+    "text": { "label": "Text", "type": "markdown" },
+    "button1Label": { "label": "First button label", "type": "text" },
+    "button1Href": { "label": "First button link", "type": "link" },
+    "button2Label": { "label": "Second button label", "type": "text" },
+    "button2Href": { "label": "Second button link", "type": "link" }
+  },
+  "tree": {
+    "type": "grid",
+    "slots": { "cols": 1, "band": true, "theme": "light", "edge": "straight" },
+    "children": [
+      {
+        "type": "grid",
+        "slots": { "cols": 2, "widths": "1 1", "align": "center" },
+        "children": [
+          { "type": "figure", "slots": { "ids": "{{image}}", "mask": "rounded" } },
+          {
+            "type": "grid",
+            "slots": { "cols": 1 },
+            "children": [
+              { "type": "text", "markdown": "## {{heading}}\n\n{{text}}" },
+              { "type": "button", "slots": { "label": "{{button1Label}}", "href": "{{button1Href}}", "variant": "primary" } },
+              { "type": "button", "slots": { "label": "{{button2Label}}", "href": "{{button2Href}}", "variant": "secondary" } }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

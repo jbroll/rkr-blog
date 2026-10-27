@@ -1,0 +1,12 @@
+{
+  "description": "A band holding a scrolling line of text",
+  "defaults": { "text": "Announcement text" },
+  "fieldSchema": {
+    "text": { "label": "Scrolling text", "type": "text" }
+  },
+  "tree": {
+    "type": "grid",
+    "slots": { "cols": 1, "band": true, "theme": "dark-bold", "edge": "straight" },
+    "children": [{ "type": "marquee", "slots": { "text": "{{text}}" } }]
+  }
+}

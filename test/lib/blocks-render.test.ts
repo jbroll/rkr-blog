@@ -422,25 +422,59 @@ describe('blocks-render', () => {
     it('macro instance slots override defaults', async () => {
       const html = await render('hero', { heading: 'Probe hero heading' });
       assert.match(html, /Probe hero heading/);
-      assert.doesNotMatch(html, /Fresh food, owned by neighbors/);
-      assert.match(html, /community grocery/);
+      assert.doesNotMatch(html, /Welcome/);
+      assert.match(html, /A line or two about this site/);
     });
 
     it('macro defaults render when no override is set', async () => {
       const html = await render('hero', {});
-      assert.match(html, /Fresh food, owned by neighbors/);
+      assert.match(html, /Welcome/);
       assert.match(html, /rkr-theme-dark/);
     });
 
     it('every fieldSchema field of every placeable macro reaches the output', async () => {
       for (const [name, def] of lib) {
         if (name === 'page') continue;
-        for (const key of Object.keys(def.fieldSchema ?? {})) {
+        // A button with no label renders nothing, so its link is only visible with one.
+        const labels = Object.fromEntries(
+          Object.keys(def.fieldSchema ?? {})
+            .filter((k) => k.endsWith('Label'))
+            .map((k) => [k, 'Go'])
+        );
+        for (const [key, spec] of Object.entries(def.fieldSchema ?? {})) {
+          if (spec.type === 'image') continue;
           const probe = `Probe ${name} ${key}`;
-          const html = await render(name, { [key]: probe });
+          const itemText = Object.entries(spec.item ?? {}).find(([, f]) =>
+            ['text', 'markdown'].includes(f.type)
+          )?.[0];
+          if (spec.type === 'list' && !itemText) continue;
+          const value = spec.type === 'list' ? [{ [itemText ?? '']: probe }] : probe;
+          const html = await render(name, { ...labels, [key]: value } as Record<string, never>);
           assert.ok(html.includes(probe), `${name}.${key} does not render`);
         }
       }
+    });
+
+    it('every seed renders its defaults with no placeholder or unresolved id left', async () => {
+      assert.ok(lib.size >= 8);
+      for (const name of lib.keys()) {
+        const html = await render(name, {});
+        assert.doesNotMatch(html, /\{\{/, name);
+        assert.doesNotMatch(html, /unresolved id/, name);
+        assert.match(html, new RegExp(`rkr-macro-${name}`), name);
+      }
+    });
+
+    it('list seeds repeat per item and an empty image renders no picture', async () => {
+      const html = await render('people-grid', {});
+      assert.equal((html.match(/Person (one|two|three|four)/g) ?? []).length, 4);
+      assert.doesNotMatch(html, /<img|<picture/);
+    });
+
+    it('split quiets empty buttons and shows set ones', async () => {
+      assert.doesNotMatch(await render('split', {}), /rkr-btn/);
+      const html = await render('split', { button1Label: 'Go', button1Href: '/go' });
+      assert.equal((html.match(/rkr-btn/g) ?? []).length, 1);
     });
 
     it('unresolved placeholders render empty', async () => {

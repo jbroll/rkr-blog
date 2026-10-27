@@ -111,7 +111,7 @@ test('unified flow: new page, type, image, hero, publish, reload, public', async
   const heroInserted = saveResponse(page, slug);
   await dropBelow(page, 'Hero', body.locator('p').first());
   await heroInserted;
-  await expect(body).toContainText('Fresh food, owned by neighbors');
+  await expect(body).toContainText('Welcome');
   await body.locator('.rkr-section').click();
   await page.getByRole('button', { name: 'Configure', exact: true }).click();
   await page.getByLabel('Heading').fill('Full flow hero');
@@ -467,7 +467,7 @@ test('macro field edit renders', async ({ page }) => {
   await page.goto(`/admin/blocks/edit/${slug}`);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   const body = page.locator('#rkr-blocks-page-body');
-  await expect(body).toContainText('Fresh food, owned by neighbors');
+  await expect(body).toContainText('Welcome');
   await body.locator('.rkr-section').click();
   await page.getByRole('button', { name: 'Configure', exact: true }).click();
   await page.getByLabel('Heading').fill('Probe hero heading');
@@ -476,10 +476,10 @@ test('macro field edit renders', async ({ page }) => {
   await saved;
 
   await expect(body).toContainText('Probe hero heading');
-  await expect(body).not.toContainText('Fresh food, owned by neighbors');
+  await expect(body).not.toContainText('Welcome');
   await page.goto(`/${slug}`);
   await expect(page.locator('main')).toContainText('Probe hero heading');
-  await expect(page.locator('main')).not.toContainText('Fresh food, owned by neighbors');
+  await expect(page.locator('main')).not.toContainText('Welcome');
 });
 
 test('macro list field: add rows, save, reload', async ({ page }) => {

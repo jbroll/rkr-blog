@@ -1,26 +1,36 @@
 {
-  "description": "A headline band with text and a button",
+  "description": "A headline band with text, a button and an optional image",
   "defaults": {
-    "heading": "Fresh food, owned by neighbors",
-    "text": "Join the co-op building a community grocery.",
+    "heading": "Welcome",
+    "text": "A line or two about this site.",
     "ctaLabel": "Join",
-    "ctaHref": "/join"
+    "ctaHref": "/join",
+    "image": ""
   },
   "fieldSchema": {
     "heading": { "label": "Heading", "type": "text" },
     "text": { "label": "Text", "type": "markdown" },
     "ctaLabel": { "label": "Button label", "type": "text" },
-    "ctaHref": { "label": "Button link", "type": "link" }
+    "ctaHref": { "label": "Button link", "type": "link" },
+    "image": { "label": "Image", "type": "image" }
   },
   "tree": {
-    "type": "section",
-    "slots": { "theme": "dark", "edge": "wave" },
+    "type": "grid",
+    "slots": { "cols": 1, "band": true, "theme": "dark", "edge": "wave" },
     "children": [
       {
-        "type": "col",
+        "type": "grid",
+        "slots": { "cols": 2, "widths": "3 2", "align": "center" },
         "children": [
-          { "type": "text", "markdown": "# {{heading}}\n\n{{text}}" },
-          { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary" } }
+          {
+            "type": "grid",
+            "slots": { "cols": 1 },
+            "children": [
+              { "type": "text", "markdown": "# {{heading}}\n\n{{text}}" },
+              { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary", "size": "large" } }
+            ]
+          },
+          { "type": "figure", "slots": { "ids": "{{image}}", "mask": "rounded" } }
         ]
       }
     ]

@@ -1,0 +1,46 @@
+{
+  "description": "A band of cards, each with an image, title, text and link",
+  "defaults": {
+    "title": "Latest",
+    "cards": [
+      { "image": "", "title": "Card one", "text": "A line about the first card.", "href": "/" },
+      { "image": "", "title": "Card two", "text": "A line about the second card.", "href": "/" },
+      { "image": "", "title": "Card three", "text": "A line about the third card.", "href": "/" }
+    ]
+  },
+  "fieldSchema": {
+    "title": { "label": "Heading", "type": "text" },
+    "cards": {
+      "label": "Cards",
+      "type": "list",
+      "item": {
+        "image": { "label": "Image", "type": "image" },
+        "title": { "label": "Title", "type": "text" },
+        "text": { "label": "Text", "type": "markdown" },
+        "href": { "label": "Link", "type": "link" }
+      }
+    }
+  },
+  "tree": {
+    "type": "grid",
+    "slots": { "cols": 1, "band": true, "theme": "light", "edge": "straight" },
+    "children": [
+      { "type": "text", "markdown": "## {{title}}" },
+      {
+        "type": "grid",
+        "slots": { "cols": 3, "each": "cards" },
+        "children": [
+          {
+            "type": "grid",
+            "slots": { "cols": 1, "box": true },
+            "children": [
+              { "type": "figure", "slots": { "ids": "{{image}}", "href": "{{href}}" } },
+              { "type": "text", "markdown": "### {{title}}\n\n{{text}}" },
+              { "type": "button", "slots": { "label": "Read more", "href": "{{href}}", "variant": "secondary" } }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

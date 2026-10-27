@@ -1,0 +1,31 @@
+{
+  "description": "A band over a background photo with a boxed heading, text and button",
+  "defaults": {
+    "image": "",
+    "heading": "Heading",
+    "text": "A few lines for the callout.",
+    "ctaLabel": "Learn more",
+    "ctaHref": "/"
+  },
+  "fieldSchema": {
+    "image": { "label": "Background image", "type": "image" },
+    "heading": { "label": "Heading", "type": "text" },
+    "text": { "label": "Text", "type": "markdown" },
+    "ctaLabel": { "label": "Button label", "type": "text" },
+    "ctaHref": { "label": "Button link", "type": "link" }
+  },
+  "tree": {
+    "type": "grid",
+    "slots": { "cols": 1, "band": true, "theme": "dark", "edge": "straight", "bg": "{{image}}", "align": "center" },
+    "children": [
+      {
+        "type": "grid",
+        "slots": { "cols": 1, "box": true, "align": "center" },
+        "children": [
+          { "type": "text", "markdown": "## {{heading}}\n\n{{text}}" },
+          { "type": "button", "slots": { "label": "{{ctaLabel}}", "href": "{{ctaHref}}", "variant": "primary", "size": "large" } }
+        ]
+      }
+    ]
+  }
+}

@@ -112,6 +112,7 @@
     "src/cli/import.ts": 100,
     "src/cli/init.ts": 100,
     "src/cli/jobs.ts": 100,
+    "src/cli/macros.ts": 100,
     "src/cli/migrate.ts": 100,
     "src/cli/reindex.ts": 100,
     "src/cli/render.ts": 97.11,
