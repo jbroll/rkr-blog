@@ -442,7 +442,7 @@ describe('blocks-render', () => {
             .map((k) => [k, 'Go'])
         );
         for (const [key, spec] of Object.entries(def.fieldSchema ?? {})) {
-          if (spec.type === 'image') continue;
+          if (spec.type === 'image' || spec.type === 'select') continue;
           const probe = `Probe ${name} ${key}`;
           const itemText = Object.entries(spec.item ?? {}).find(([, f]) =>
             ['text', 'markdown'].includes(f.type)
@@ -469,6 +469,15 @@ describe('blocks-render', () => {
       const html = await render('people-grid', {});
       assert.equal((html.match(/Person (one|two|three|four)/g) ?? []).length, 4);
       assert.doesNotMatch(html, /<img|<picture/);
+    });
+
+    it('split side reverses the grid and cards show a button only with text', async () => {
+      assert.doesNotMatch(await render('split', {}), /rkr-grid-reverse/);
+      assert.match(await render('split', { side: 'reverse' }), /rkr-grid-reverse/);
+      const html = await render('cards', {
+        cards: [{ title: 'A', button: 'Go' }, { title: 'B' }]
+      } as never);
+      assert.equal((html.match(/rkr-btn/g) ?? []).length, 1);
     });
 
     it('split quiets empty buttons and shows set ones', async () => {

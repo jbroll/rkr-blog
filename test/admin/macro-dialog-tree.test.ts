@@ -136,6 +136,33 @@ describe('macro dialog behaviour', () => {
     );
   });
 
+  it('shows option labels and stores their values', () => {
+    const fields = readMacroFields(
+      NODE,
+      { side: 'forward' },
+      {
+        side: {
+          label: 'Side',
+          type: 'select',
+          options: [
+            { value: 'forward', label: 'Image on the left' },
+            { value: 'reverse', label: 'Image on the right' }
+          ]
+        }
+      }
+    );
+    const { root } = open(fields);
+    const options = root.querySelector('select')?.querySelectorAll('option') ?? [];
+    assert.deepEqual(
+      options.map((o) => [o.getAttribute('value'), o.textContent]),
+      [
+        ['', 'Default (Image on the left)'],
+        ['forward', 'Image on the left'],
+        ['reverse', 'Image on the right']
+      ]
+    );
+  });
+
   it('close cancels and removes the dialog', () => {
     let cancels = 0;
     const { root, dialog } = open(undefined, { onCancel: () => cancels++ });

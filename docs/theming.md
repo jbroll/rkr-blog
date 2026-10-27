@@ -338,6 +338,9 @@ Block pages (spec §8a) render through these classes.
 - `.rkr-grid-cell` — one child of a grid.
 - `.rkr-align-center` — on `.rkr-grid` with `align: center`: centered
   text and cells.
+- `.rkr-grid-reverse` — on `.rkr-grid` with `order: reverse`: columns
+  run right to left on screen (`direction: rtl`, children reset to
+  `ltr`). The markup order is unchanged.
 - `.rkr-box` — on `.rkr-grid` with `box: true`: a panel with
   `--rkr-box-bg`, `--rkr-box-fg`, `--rkr-box-pad` and `--rkr-radius`.
 - `.rkr-btn` with `.is-primary` or `.is-secondary` — button block.

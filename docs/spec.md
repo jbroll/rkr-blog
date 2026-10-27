@@ -396,6 +396,7 @@ names of §9 and §10a (`ids`, `alts`, `captions`, `justify`, `matrix`,
 | `bg` | one image id | none | Band background image, rendered through the image pipeline as a cover image behind the content. Ignored without `band`; an id that does not resolve renders no image. A band with a background image and no content renders nothing. |
 | `align` | `start`, `center` | `start` | Text and cell alignment in the grid's cells. |
 | `box` | boolean | false | Draws the grid as a panel: `--rkr-box-bg`, `--rkr-box-fg`, `--rkr-box-pad`, `--rkr-radius`. |
+| `order` | `forward`, `reverse` | `forward` | `reverse` flips the columns visually; the markup order stays, so a narrow screen still stacks the first child first. A string, so a macro can fill it with `{{side}}`. Not in the grid dialog. |
 
 - Each child renders in its own `.rkr-grid-cell`. On the public page a
   child that renders no element (an unknown macro's comment, a figure or
@@ -477,8 +478,8 @@ only the slots it overrides.
 - Seeds in the repo's `macros/`: `hero`, `split`, `photo-callout`,
   `people-grid`, `icon-grid`, `logo-wall`, `cards` and `marquee-band`.
   Their defaults are generic placeholder text with empty image fields; an
-  empty image renders nothing. A seed's `split` has no image-side choice:
-  the image is always first, because a macro tree has no conditional.
+  empty image renders nothing. `split` sets its `side` select into the
+  grid's `order` slot.
 - `site-admin macros` lists the seeds whose site copy is missing or
   differs from the shipped file. `site-admin macros --update <name>`
   overwrites that one site file from its seed. Init and re-init never do.
@@ -533,7 +534,7 @@ the type:
 |---|---|
 | `text`, `link` | single-line input |
 | `markdown` | multi-line input |
-| `select` | dropdown of `options`, first entry "Default (value)" |
+| `select` | dropdown of `options`, first entry "Default (label)". An option is a string, or `{ "value": "reverse", "label": "Image on the right" }` to show different text than the stored value |
 | `image` | thumbnail with Choose image and Remove, via the media picker |
 | `list` | a group of item rows with add, remove and move up/down; each row has one control per `item` field spec, so an `image` item opens the media picker. An empty list clears the override |
 | none | single-line input; multi-line when the value or default has a newline |

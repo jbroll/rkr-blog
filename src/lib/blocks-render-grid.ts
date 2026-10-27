@@ -41,7 +41,7 @@ export function renderGrid(
     : '<p class="rkr-grid-empty" data-rkr-grid-empty>Empty grid: drag blocks here</p>\n';
   const stacked = g.widths !== null && g.cols > 1;
   const collapse = stacked ? ` rkr-collapse-${g.cols}-${g.min}` : '';
-  const look = `${g.align === 'center' ? ' rkr-align-center' : ''}${g.box ? ' rkr-box' : ''}`;
+  const look = `${g.align === 'center' ? ' rkr-align-center' : ''}${g.box ? ' rkr-box' : ''}${g.order === 'reverse' ? ' rkr-grid-reverse' : ''}`;
   const outer = g.band ? '' : extra;
   const cls = `${g.band ? 'rkr-section-inner ' : ''}rkr-grid${collapse}${look}${stacked ? '' : outer}`;
   const label = marked ? ` data-rkr-grid-label="${escapeAttr(gridLabel(node.slots))}"` : '';

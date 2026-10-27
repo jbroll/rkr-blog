@@ -26,7 +26,7 @@ export function isValidMacroName(name: string): boolean {
 export interface PaletteFieldSpec {
   label: string;
   type: string;
-  options?: string[];
+  options?: Array<string | { value: string; label: string }>;
   /** Field specs of one `list` item. */
   item?: Record<string, PaletteFieldSpec>;
 }

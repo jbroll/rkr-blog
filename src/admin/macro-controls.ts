@@ -11,7 +11,7 @@ export interface MacroField {
   value: string;
   placeholder: string;
   multiline: boolean;
-  options?: string[];
+  options?: PaletteFieldSpec['options'];
   /** The slot holds an image id: shown as a thumbnail, never as text. */
   image: boolean;
   /** Set for `list` fields: the item field specs and the saved rows. */
@@ -23,12 +23,16 @@ export type ValueControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
 export function control(doc: Document, f: MacroField): ValueControl {
   if (f.options) {
     const select = doc.createElement('select');
-    for (const optionValue of ['', ...f.options]) {
+    const choices = f.options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o));
+    const defaultLabel = choices.find((c) => c.value === f.placeholder)?.label ?? f.placeholder;
+    for (const { value, label } of [
+      { value: '', label: `Default (${defaultLabel || 'none'})` },
+      ...choices
+    ]) {
       const option = doc.createElement('option');
-      option.value = optionValue;
-      option.setAttribute('value', optionValue);
-      option.textContent =
-        optionValue === '' ? `Default (${f.placeholder || 'none'})` : optionValue;
+      option.value = value;
+      option.setAttribute('value', value);
+      option.textContent = label;
       select.append(option);
     }
     return select;

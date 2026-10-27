@@ -21,6 +21,7 @@ export interface GridSlots {
   bg: string | null;
   align: 'start' | 'center';
   box: boolean;
+  order: 'forward' | 'reverse';
 }
 
 export const THEME = /^[a-z-]+$/;
@@ -61,7 +62,8 @@ export function readGridSlots(slots: Record<string, unknown> | undefined): GridS
     edge: s.edge === 'wave' ? 'wave' : 'straight',
     bg: band ? imageId(s.bg) : null,
     align: s.align === 'center' ? 'center' : 'start',
-    box: s.box === true
+    box: s.box === true,
+    order: s.order === 'reverse' ? 'reverse' : 'forward'
   };
 }
 
@@ -97,6 +99,9 @@ export function gridSlotProblem(slots: Record<string, unknown> | undefined): str
   }
   if (s.align !== undefined && s.align !== 'start' && s.align !== 'center') {
     return 'Alignment must be start or center.';
+  }
+  if (s.order !== undefined && s.order !== 'forward' && s.order !== 'reverse') {
+    return 'Order must be forward or reverse.';
   }
   if (s.box !== undefined && typeof s.box !== 'boolean') return 'Panel must be true or false.';
   if (s.bg !== undefined && s.bg !== null && !imageId(s.bg)) {

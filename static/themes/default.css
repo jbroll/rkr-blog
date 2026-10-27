@@ -1507,6 +1507,13 @@ body[data-mode="figure"] .rkr-meta {
 .rkr-grid[data-widths] {
   grid-template-columns: var(--rkr-grid-widths);
 }
+/* Visual order only: the DOM keeps the first child first, so readers and the one-column collapse still lead with it. */
+.rkr-grid-reverse {
+  direction: rtl;
+}
+.rkr-grid-reverse > * {
+  direction: ltr;
+}
 .rkr-grid-wrap {
   container-type: inline-size;
 }

@@ -3,9 +3,9 @@
   "defaults": {
     "title": "Latest",
     "cards": [
-      { "image": "", "title": "Card one", "text": "A line about the first card.", "href": "/" },
-      { "image": "", "title": "Card two", "text": "A line about the second card.", "href": "/" },
-      { "image": "", "title": "Card three", "text": "A line about the third card.", "href": "/" }
+      { "image": "", "title": "Card one", "text": "A line about the first card.", "href": "/", "button": "Read more" },
+      { "image": "", "title": "Card two", "text": "A line about the second card.", "href": "/", "button": "Read more" },
+      { "image": "", "title": "Card three", "text": "A line about the third card.", "href": "/", "button": "Read more" }
     ]
   },
   "fieldSchema": {
@@ -17,7 +17,8 @@
         "image": { "label": "Image", "type": "image" },
         "title": { "label": "Title", "type": "text" },
         "text": { "label": "Text", "type": "markdown" },
-        "href": { "label": "Link", "type": "link" }
+        "href": { "label": "Link", "type": "link" },
+        "button": { "label": "Button text", "type": "text" }
       }
     }
   },
@@ -36,7 +37,7 @@
             "children": [
               { "type": "figure", "slots": { "ids": "{{image}}", "href": "{{href}}" } },
               { "type": "text", "markdown": "### {{title}}\n\n{{text}}" },
-              { "type": "button", "slots": { "label": "Read more", "href": "{{href}}", "variant": "secondary" } }
+              { "type": "button", "slots": { "label": "{{button}}", "href": "{{href}}", "variant": "secondary" } }
             ]
           }
         ]

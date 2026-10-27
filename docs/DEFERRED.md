@@ -43,8 +43,6 @@ Format: **item** — _revisit when:_ trigger.
 - **`selected` is not cleared during a pending render when `opts.select` is absent.** _Revisit when:_ a toolbar appears over a block that is about to be replaced.
 - **No test for an unparseable `<slug>.json` colliding with a new page's file name** (same code path as a mismatched slug). _Revisit when:_ touching the collision check in `admin-blocks.ts`.
 
-- **`split` seed has no image-side choice** — a macro tree has no conditional and `cols` and child order cannot be templated; a grid slot such as `reverse` taking `{{side}}` would allow it. _Revisit when:_ a site needs the image on the right.
-
 ## Image pipeline
 
 - **`buildImageMapFromOpfs` blob: URLs are never revoked** — every URL it makes reaches the rendered document and must outlive it, and the preview renders once per page load, so there is nothing to revoke yet. _Revisit when:_ the preview starts re-rendering without a full page reload.

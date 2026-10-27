@@ -1,6 +1,7 @@
 {
   "description": "An image beside a heading, text and up to two buttons",
   "defaults": {
+    "side": "forward",
     "image": "",
     "heading": "Heading",
     "text": "A few lines about this section.",
@@ -10,6 +11,14 @@
     "button2Href": ""
   },
   "fieldSchema": {
+    "side": {
+      "label": "Image position",
+      "type": "select",
+      "options": [
+        { "value": "forward", "label": "Image on the left" },
+        { "value": "reverse", "label": "Image on the right" }
+      ]
+    },
     "image": { "label": "Image", "type": "image" },
     "heading": { "label": "Heading", "type": "text" },
     "text": { "label": "Text", "type": "markdown" },
@@ -24,7 +33,7 @@
     "children": [
       {
         "type": "grid",
-        "slots": { "cols": 2, "widths": "1 1", "align": "center" },
+        "slots": { "cols": 2, "widths": "1 1", "align": "center", "order": "{{side}}" },
         "children": [
           { "type": "figure", "slots": { "ids": "{{image}}", "mask": "rounded" } },
           {

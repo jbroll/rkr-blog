@@ -126,6 +126,16 @@ describe('gridSlotProblem', () => {
   });
 });
 
+describe('order slot', () => {
+  it('reads forward or reverse and refuses anything else on save', () => {
+    assert.equal(readGridSlots({ order: 'reverse' }).order, 'reverse');
+    assert.equal(readGridSlots({ order: 'sideways' }).order, 'forward');
+    assert.equal(readGridSlots({}).order, 'forward');
+    assert.equal(gridSlotProblem({ order: 'forward' }), null);
+    assert.equal(gridSlotProblem({ order: 'sideways' }), 'Order must be forward or reverse.');
+  });
+});
+
 describe('bg, align and box slots', () => {
   it('readGridSlots reads bg, align and box; gridSlotProblem refuses bad values', () => {
     const g = readGridSlots({ band: true, bg: ' ABCDEF12 ', align: 'center', box: true });

@@ -51,7 +51,8 @@ export interface FieldSpec {
   label: string;
   type: 'text' | 'markdown' | 'image' | 'link' | 'select' | 'list';
   default?: unknown;
-  options?: string[];
+  /** Plain values, or `{ value, label }` when the dialog should show different text. */
+  options?: Array<string | { value: string; label: string }>;
   /** Field specs of one item of a `list` field; never themselves `list`. */
   item?: Record<string, FieldSpec>;
 }
