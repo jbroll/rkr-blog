@@ -81,6 +81,11 @@ From the 2026-09-12 infra review. The evidence is in `~/Install/services.md`, un
 - [ ] **Log classify failures.** The `catch` in `src/lib/classify-handler.ts` writes the error only to the comment's `spam_reason` column, so a broken classifier is invisible unless someone opens the comment. One error log line puts it in the journal.
 - [ ] **Confirm a real comment classifies in production.** `SPAM_TIMEOUT_MS` went from 8000 to 120000 in `/etc/rkr-blog.env` on apps on 2026-09-12. No comment has arrived since 2026-05-16 to prove the path. That env file defines the variable twice and systemd takes the last, so edit both.
 
+## 10. Proposals from the co-op website move
+
+- [ ] **Decide on static publishing with auth at the proxy.** Readers get only static files, sign-in moves to a separate service in front of the editor, and comments become an optional separate service. Written up for later consideration in [proposal-static-publishing.md](./proposal-static-publishing.md).
+- [ ] **Decide on richer page design.** Header and footer filled from settings, sections with fixed layouts, a tag-driven listing block, events with dates and calendar links, and a few smaller blocks, sized from a full inventory of the co-op's Squarespace site. Written up in [proposal-page-design.md](./proposal-page-design.md).
+
 ---
 
 Verification for every item: `npm run typecheck && npm run lint && npm run knip:gate && npm run circular && npm test` green; add/extend a test that would have caught the bug; update `DEFERRED.md` (delete the line) and this file (check the box) in the same commit.
