@@ -50,6 +50,17 @@ function embeddedTree(): BlockTree | null {
   }
 }
 
+function sectionThemes(): string[] | undefined {
+  try {
+    const parsed: unknown = JSON.parse(root?.dataset.sectionThemes ?? '');
+    return Array.isArray(parsed)
+      ? parsed.filter((n): n is string => typeof n === 'string')
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`blocks editor: missing #${id}`);
@@ -235,7 +246,8 @@ if (root && slug && tree) {
         onSave: save,
         onDelete: deletePage,
         render,
-        media: pageMedia(() => opfsReady)
+        media: pageMedia(() => opfsReady),
+        themes: sectionThemes()
       });
       guardUnload(
         window,

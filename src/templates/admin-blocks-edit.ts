@@ -34,6 +34,8 @@ export interface BlocksEditPageData extends SiteChrome {
   /** Canonical tree JSON, embedded for client hydration. Escaped here
    * so a markdown slot can never close the script element. */
   treeJson?: string;
+  /** Section theme names for the grid dialog. */
+  sectionThemes?: string[];
 }
 
 /** Make JSON safe inside a `<script type="application/json">` block:
@@ -104,6 +106,9 @@ export function renderBlocksEditPage(data: BlocksEditPageData): string {
   const treeScript = data.treeJson
     ? `\n<script type="application/json" id="rkr-tree">${scriptSafeJson(data.treeJson)}</script>`
     : '';
+  const themesAttr = data.sectionThemes
+    ? ` data-section-themes="${escapeAttr(JSON.stringify(data.sectionThemes))}"`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,7 +128,7 @@ ${adminPwaHead(a)}
 ${siteHead(data.site, { isAdmin: data.isAdmin, assets: a })}
 <main id="main" tabindex="-1">
 <div id="rkroll-admin-status" role="status" aria-live="polite"></div>
-<div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}"${data.version ? ` data-version="${escapeAttr(data.version)}"` : ''}>${treeScript}
+<div id="rkr-blocks-edit-root" data-slug="${escapeAttr(data.slug)}"${data.version ? ` data-version="${escapeAttr(data.version)}"` : ''}${themesAttr}>${treeScript}
 <div id="rkr-unified-shell" class="rkr-unified-shell is-view" data-mode="view">
 <div id="rkr-unified-toolbar" class="rkr-unified-toolbar">
 <span class="rkr-unified-title">${escapeText(data.title || data.slug)}</span>

@@ -15,6 +15,8 @@ export interface ConfigureDeps {
   root: Element;
   macros: PaletteMacro[];
   media?: MediaDialogDeps;
+  /** Section theme names for the grid dialog; the built-ins when absent. */
+  themes?: string[];
   getTree(): BlockTree;
   applyTree(next: BlockTree, opts: { select?: Path; renderOnly?: boolean }): Promise<void>;
   flushText(): void;
@@ -111,6 +113,8 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
     openGridDialog(root, {
       initial: readGridFields(node.slots),
       canBand: path.length === 1,
+      themes: deps.themes,
+      media,
       refuse,
       onCommit: (slots) => {
         commitSlots(path, (current) => applyGridSlots(current, slots));

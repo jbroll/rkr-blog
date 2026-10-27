@@ -47,6 +47,8 @@ export interface UnifiedShellDeps {
   /** Pickers and the image editor for media dialogs. Without it, media
    * dialogs can rearrange and caption but not add. */
   media?: MediaDialogDeps;
+  /** Section theme names for the grid dialog (`data-section-themes`). */
+  themes?: string[];
   /** Delete the page (`POST /admin/blocks/:slug/delete`) and leave the
    * editor; throws when the server did not delete it. */
   onDelete?(): Promise<void>;
@@ -356,6 +358,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
     root,
     macros: deps.macros,
     media: deps.media,
+    themes: deps.themes,
     getTree: () => tree,
     applyTree,
     flushText,

@@ -542,6 +542,7 @@ describe('admin blocks save', () => {
     assert.equal(res.statusCode, 200);
     assert.match(res.body, /rkr-blocks-edit-root/);
     assert.match(res.body, /blocks-page-editor-entry/);
+    assert.match(res.body, /data-section-themes="\[&quot;light&quot;,&quot;light-bold&quot;/);
     // The editor's canvas preview pipeline renders a blob: URL; the
     // public CSP omits blob: and would make Chromium reject the decode.
     const csp = res.headers['content-security-policy'] as string;

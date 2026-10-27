@@ -34,6 +34,7 @@ import {
   setPublicSecurityHeaders
 } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { activeSectionThemes } from '../lib/themes.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
 import {
@@ -259,7 +260,8 @@ export function registerAdminBlockRoutes(
           isAdmin: true,
           title: page.title,
           bodyHtml,
-          treeJson: JSON.stringify({ ...page.tree, fields: page.fields })
+          treeJson: JSON.stringify({ ...page.tree, fields: page.fields }),
+          sectionThemes: activeSectionThemes()
         })
       );
     }

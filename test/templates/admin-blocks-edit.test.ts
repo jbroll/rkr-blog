@@ -27,6 +27,14 @@ describe('blocks edit page template', () => {
     assert.match(html, /Edit hello/);
   });
 
+  it('carries the section theme names as JSON', () => {
+    const html = renderBlocksEditPage({ ...base, sectionThemes: ['light', 'brand"red'] });
+    const match = html.match(/data-section-themes="([^"]*)"/);
+    assert.ok(match);
+    const decoded = (match[1] as string).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+    assert.deepEqual(JSON.parse(decoded), ['light', 'brand"red']);
+  });
+
   it('ships View/Edit toggles and a hidden right palette dock', () => {
     const html = renderBlocksEditPage(base);
     assert.match(html, /id="rkr-unified-shell"[^>]*data-mode="view"/);

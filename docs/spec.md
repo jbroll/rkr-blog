@@ -553,10 +553,14 @@ the editing chrome. View and Edit are two modes of the same page.
   into its parent and selects the first; an empty grid is removed.
 - **Configure a grid** opens a dialog: Columns (1 to 6), Narrowest cell
   (Narrow, Medium, Wide), Column widths (blank for equal, or one number
-  per column, offered for 2 to 4 columns), Full-width band (shown only
-  at page level, or on a band so it can be turned off), and with
-  the band on, Background (Light or Dark) and Bottom edge (Straight or
-  Wave). Changing Columns so the
+  per column, offered for 2 to 4 columns), Alignment (Start or Center),
+  Panel, Full-width band (shown only at page level, or on a band so it
+  can be turned off), and with the band on, Background (the four
+  built-in section themes, Light, Light bold, Dark and Dark bold, plus
+  any the active theme declares), Background image (thumbnail with
+  Choose image and Remove; the page's `data-section-themes` carries the
+  theme names) and Bottom edge (Straight or
+  Wave). Alignment `start` and Panel off are not saved. Changing Columns so the
   widths no longer match keeps the dialog open with the message.
 - **Image and Video** show the new block and open its picker. Nothing
   saves or drafts until the dialog saves with something picked; Cancel,

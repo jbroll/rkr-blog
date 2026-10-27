@@ -40,7 +40,7 @@
     "src/admin/figure-image-list.ts": 100,
     "src/admin/figure-node.ts": 100,
     "src/admin/figure-reorder.ts": 46.5,
-    "src/admin/grid-dialog-tree.ts": 98.59,
+    "src/admin/grid-dialog-tree.ts": 98.91,
     "src/admin/image-edit-panel.ts": 93.51,
     "src/admin/image-edit.ts": 84.91,
     "src/admin/image-insert.ts": 94.74,

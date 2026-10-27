@@ -64,6 +64,42 @@ describe('configure a grid', () => {
     assert.equal(row.hidden, true);
   });
 
+  it('passes the theme names and media to the grid dialog', async () => {
+    const band: BlockTree = {
+      version: 1,
+      body: [{ type: 'grid', slots: { band: true }, children: [] }]
+    };
+    const root = new FakeDocument().createElement('div');
+    const applied: BlockTree[] = [];
+    createConfigurator({
+      root: root as unknown as Element,
+      macros: [],
+      themes: ['light', 'brand-red'],
+      media: { pick: async () => ['abc123'], thumbUrl: () => null },
+      getTree: () => band,
+      applyTree: async (next) => {
+        applied.push(next);
+      },
+      flushText: () => {},
+      refuse: () => null
+    }).configure([0]);
+    const options = (root.querySelector('#rkr-grid-field-theme') as FakeElement).querySelectorAll(
+      'option'
+    );
+    assert.deepEqual(
+      options.map((o) => o.textContent),
+      ['Light', 'Brand red']
+    );
+    const choose = root
+      .querySelectorAll('button')
+      .find((b) => b.textContent === 'Choose image') as FakeElement;
+    choose.click();
+    await tick();
+    (root.querySelector('.rkr-dialog-primary') as FakeElement).click();
+    await tick();
+    assert.equal((applied[0]?.body[0] as unknown as { slots: { bg: string } }).slots.bg, 'abc123');
+  });
+
   it('ignores a path that is not a grid', () => {
     const { root, configurator } = setup();
     configurator.configure([5]);
