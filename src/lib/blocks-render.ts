@@ -172,7 +172,9 @@ async function renderNode(
   opts?: RenderNodeOpts
 ): Promise<string> {
   const html = await renderNodeHtml(node, ctx, lib, stack, path, opts);
-  if (!html || !opts?.mark) return html;
+  if (!opts?.mark) return html;
+  // An empty macro still needs its marker: the editor plants a stand-in to select.
+  if (!html && node.type !== 'macro') return html;
   return `${opts.mark(path)}${html}`;
 }
 

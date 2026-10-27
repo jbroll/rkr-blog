@@ -201,6 +201,22 @@ describe('validateForSave', () => {
       assert.match(check({ people: [{ constructor: 'x' }] })?.message ?? '', /item 1/);
     });
 
+    it('an each grid counts as one grid level', () => {
+      const eachGrid = (children: unknown[]) => ({
+        type: 'grid',
+        slots: { each: 'people' },
+        children
+      });
+      const three = eachGrid([{ type: 'grid', children: [eachGrid([{ type: 'text' }])] }]);
+      assert.equal(
+        containerDepth(parseBlockTree({ version: 1, body: [three] }).body[0] as BlockNode),
+        3
+      );
+      assert.equal(ok([three]), null);
+      const four = { type: 'grid', children: [three] };
+      assert.deepEqual(ok([four]), { path: [0, 0, 0, 0], message: 'Grids nest at most 3 levels.' });
+    });
+
     it('skips list checks without a schema lookup', () => {
       const tree = parseBlockTree({
         version: 1,

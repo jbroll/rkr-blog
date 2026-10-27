@@ -395,6 +395,19 @@ describe('macro list slots, quiet buttons, class hook', () => {
     }
   });
 
+  it('marks a macro instance whose expansion renders nothing', async () => {
+    const cases: [string, unknown, Record<string, unknown>][] = [
+      ['board', people, {}],
+      ['cta', { type: 'button', slots: { label: '' } }, {}]
+    ];
+    for (const [name, tree, slots] of cases) {
+      const node = one({ type: 'macro', macro: name, slots });
+      assert.equal(await renderBlockTree(node, fakeCtx, lib(name, tree)), '');
+      const marked = await renderBlockTree(node, fakeCtx, lib(name, tree), { mark });
+      assert.deepEqual(markerPaths(marked), [[0]], name);
+    }
+  });
+
   it('collectBlockFigureIds returns image ids from list items', () => {
     const tree = {
       type: 'grid',
