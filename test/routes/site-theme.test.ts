@@ -13,6 +13,7 @@ async function setup(t: TestContext) {
   fs.mkdirSync(path.join(root, 'themes'), { recursive: true });
   fs.mkdirSync(path.join(root, 'data'), { recursive: true });
   fs.writeFileSync(path.join(root, 'themes', 'club.css'), 'body{color:red}');
+  fs.writeFileSync(path.join(root, 'themes', 'default.css'), 'body{}');
   fs.writeFileSync(path.join(root, 'themes', 'x.js'), 'alert(1)');
   fs.writeFileSync(path.join(root, 'themes', 'Up.css'), 'a{}');
   const db = open(path.join(root, 'data', 'site.db'));
@@ -38,7 +39,15 @@ for (const prefix of ['/site-theme', '/admin/site-theme']) {
 
   test(`GET ${prefix}: bad names and missing files are 404`, async (t) => {
     const app = await setup(t);
-    for (const f of ['..%2Fx.css', 'X.css', 'Up.css', 'x.js', 'club.CSS', 'missing.css']) {
+    for (const f of [
+      '..%2Fx.css',
+      'X.css',
+      'Up.css',
+      'x.js',
+      'club.CSS',
+      'missing.css',
+      'default.css'
+    ]) {
       const res = await app.inject({ method: 'GET', url: `${prefix}/${f}` });
       assert.equal(res.statusCode, 404, f);
     }

@@ -15,7 +15,7 @@ export function registerSiteThemeRoutes(fastify: FastifyInstance, opts: SiteThem
   const dir = path.join(opts.siteRoot, 'themes');
   const serve = async (request: { params: unknown }, reply: FastifyReply) => {
     const { file } = request.params as { file: string };
-    if (!THEME_FILE.test(file)) return reply.callNotFound();
+    if (!THEME_FILE.test(file) || file === 'default.css') return reply.callNotFound();
     let css: Buffer;
     try {
       css = await fs.promises.readFile(path.join(dir, file));

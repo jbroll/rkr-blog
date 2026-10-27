@@ -43,11 +43,18 @@ test('site themes: listed after default, merged with bundled, selectable', (t) =
   assert.equal(themeName({ ...env, SITE_THEME: 'club' }), 'club');
 });
 
-test('site themes: a site copy wins a name clash', (t) => {
+test('site themes: a site copy wins a name clash with a bundled theme', (t) => {
+  const { root, env } = freshRoot(t);
+  siteTheme(root, 'dracula');
+  assert.equal(themeFile('dracula', env), path.join(root, 'themes', 'dracula.css'));
+});
+
+test('site themes: default stays bundled even with a site default.css', (t) => {
   const { root, env } = freshRoot(t);
   siteTheme(root, 'default');
-  assert.equal(themeFile('default', env), path.join(root, 'themes', 'default.css'));
-  assert.notEqual(themeFile('default', {}), path.join(root, 'themes', 'default.css'));
+  assert.equal(siteThemeFile('default', env), null);
+  assert.equal(themeFile('default', env), themeFile('default', {}));
+  assert.notEqual(themeFile('default', env), path.join(root, 'themes', 'default.css'));
 });
 
 test('site themes: activeSectionThemes reads the site copy', (t) => {

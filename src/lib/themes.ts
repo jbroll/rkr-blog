@@ -16,9 +16,10 @@ function repoThemesDir(): string {
   return path.resolve(here, '..', '..', 'static', 'themes');
 }
 
-/** The CSS file in `<site>/themes/` for a theme name, or null. */
+/** The CSS file in `<site>/themes/` for a theme name, or null. `default`
+ * is bundled-only: the layout always loads the bundled sheet. */
 export function siteThemeFile(name: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  if (!VALID_THEME_NAME.test(name)) return null;
+  if (!VALID_THEME_NAME.test(name) || name === 'default') return null;
   const file = path.join(paths(env).themes, `${name}.css`);
   return fs.existsSync(file) ? file : null;
 }

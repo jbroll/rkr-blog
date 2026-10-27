@@ -44,6 +44,8 @@ A site can carry its own themes in `<siteRoot>/themes/<name>.css`
 (`init` creates the directory). They appear in the settings picker
 beside the bundled ones and layer on `default.css` the same way. When
 a site theme and a bundled theme share a name, the site copy wins.
+`default` cannot be overridden: a site `default.css` is ignored and
+not served.
 Names match `^[a-z][a-z0-9-]*$`. A `rkr-section-themes` comment in a
 site theme is read like one in a bundled theme.
 
