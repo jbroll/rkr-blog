@@ -33,7 +33,8 @@ function savedItems(raw: unknown): Record<string, string>[] {
 }
 
 /** One editor per default key, prefilled with the instance override
- * (or empty when the instance follows the default). Markdown fields and
+ * (or empty when the instance follows the default; list rows start from
+ * the default list). Markdown fields and
  * newline-carrying values are multiline; a `select` schema entry keeps
  * its options. */
 export function readMacroFields(
@@ -60,7 +61,10 @@ export function readMacroFields(
         name === 'markdown',
       options: spec?.type === 'select' ? spec.options : undefined,
       image: spec?.type === 'image',
-      list: spec?.type === 'list' ? { item: spec.item ?? {}, items: savedItems(raw) } : undefined
+      list:
+        spec?.type === 'list'
+          ? { item: spec.item ?? {}, items: savedItems(Array.isArray(raw) ? raw : hint) }
+          : undefined
     };
   });
 }

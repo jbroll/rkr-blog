@@ -13,8 +13,8 @@ describe('groupPalette', () => {
     assert.deepEqual(
       groups.map((g) => [g.group, g.items.map((i) => i.label)]),
       [
-        ['Basics', ['Text', 'Button']],
-        ['Media', ['Image', 'Video']],
+        ['Basics', ['Text', 'Button', 'Marquee', 'Accordion', 'Progress']],
+        ['Media', ['Image', 'Video', 'Embed']],
         ['Layout', ['Section', 'Row', 'Column']],
         ['Sections', ['Hero']]
       ]

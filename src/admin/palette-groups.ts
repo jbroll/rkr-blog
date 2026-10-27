@@ -29,6 +29,16 @@ const svg = (body: string): string =>
 const ICONS: Record<string, string> = {
   'primitive:text': svg('<path d="M4 5h12M4 9h12M4 13h8"/>'),
   'primitive:button': svg('<rect x="2.5" y="6" width="15" height="8" rx="4"/><path d="M7 10h6"/>'),
+  'primitive:marquee': svg(
+    '<rect x="2.5" y="6.5" width="15" height="7" rx="1.5"/><path d="M5 10h5M12 10h3"/>'
+  ),
+  'primitive:accordion': svg('<path d="M3 5h14M3 10h14M3 15h14M14 7.5l-1.5 1.5-1.5-1.5"/>'),
+  'primitive:progress': svg(
+    '<rect x="2.5" y="7.5" width="15" height="5" rx="2.5"/><path d="M5 10h6"/>'
+  ),
+  'primitive:embed': svg(
+    '<rect x="2.5" y="4" width="15" height="12" rx="1.5"/><path d="M8 8l-2 2 2 2M12 8l2 2-2 2"/>'
+  ),
   'primitive:figure': svg(
     '<rect x="2.5" y="4" width="15" height="12" rx="1.5"/><circle cx="7" cy="8.5" r="1.2"/><path d="M3 14.5l4.5-4 3 2.5 3-3 3.5 3.5"/>'
   ),

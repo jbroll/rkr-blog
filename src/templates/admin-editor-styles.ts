@@ -194,6 +194,12 @@ dialog.rkr-dialog.is-wide:has(.rkr-media-dialog,.rkr-image-editor){width:min(46r
 .rkr-image-steps summary{cursor:pointer;font-size:.8125rem;color:var(--rkr-edit-muted)}
 .rkr-image-steps ol{margin:.4rem 0 0;padding-left:1.25rem;font-size:.8125rem}
 .rkr-image-field{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+.rkr-list-field{margin:0;padding:0;border:0;min-width:0}
+.rkr-list-field>legend{padding:0;font-weight:600}
+.rkr-list-rows{display:grid;gap:.6rem;margin:.4rem 0 .6rem}
+.rkr-list-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;padding:.6rem;border:1px solid var(--rkr-edit-border,#c9ccd1);border-radius:6px}
+.rkr-list-row>.rkr-field{flex:1 1 100%}
+.rkr-list-row>.rkr-edit-btn{flex:0 0 auto}
 dialog#rkr-source-picker.rkr-source-dialog{width:min(22rem,calc(100vw - 2rem));padding:0}
 #rkr-source-picker .rkr-dialog-foot button{margin:0}
 .rkr-source-actions{display:grid;gap:.4rem}

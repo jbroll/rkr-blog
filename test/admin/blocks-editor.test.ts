@@ -58,12 +58,31 @@ describe('blocks editor', () => {
     assert.equal(inserted, 'hero');
   });
 
+  it('Basics and Media list the small blocks and primitiveNode builds them', () => {
+    const dock = mount([], () => {});
+    const labels = dock
+      .querySelectorAll('.rkr-palette-group')
+      .map((g) => g.querySelectorAll('.rkr-palette-label').map((l) => l.textContent));
+    assert.deepEqual(labels[0], ['Text', 'Button', 'Marquee', 'Accordion', 'Progress']);
+    assert.deepEqual(labels[1], ['Image', 'Video', 'Embed']);
+    assert.deepEqual(primitiveNode('primitive:marquee'), { type: 'marquee', slots: { text: '' } });
+    assert.deepEqual(primitiveNode('primitive:accordion'), {
+      type: 'accordion',
+      slots: { items: [] }
+    });
+    assert.deepEqual(primitiveNode('primitive:progress'), {
+      type: 'progress',
+      slots: { source: 'site' }
+    });
+    assert.deepEqual(primitiveNode('primitive:embed'), { type: 'embed', slots: { url: '' } });
+  });
+
   it('Media offers Image and Video, and Video inserts an empty video node', () => {
     const dock = mount([], () => {});
     const media = dock.querySelectorAll('.rkr-palette-group')[1];
     assert.deepEqual(
       media?.querySelectorAll('.rkr-palette-label').map((l) => l.textContent),
-      ['Image', 'Video']
+      ['Image', 'Video', 'Embed']
     );
     assert.deepEqual(primitiveNode('primitive:video'), { type: 'video', slots: { ids: '' } });
   });

@@ -377,6 +377,30 @@ describe('macro dialog list fields', () => {
     assert.deepEqual(names(open(first.committed[0]?.people).root), ['Ann', 'Bo', 'Cy']);
   });
 
+  it('starts from the default rows when the instance has no override', () => {
+    const defaults = { people: [{ name: 'Sample A' }, { name: 'Sample B' }] };
+    const rowsFor = (people?: unknown) =>
+      readMacroFields(node(people), defaults, SCHEMA)[0]?.list?.items;
+    assert.deepEqual(rowsFor(), [{ name: 'Sample A' }, { name: 'Sample B' }]);
+    assert.deepEqual(rowsFor('oops'), [{ name: 'Sample A' }, { name: 'Sample B' }]);
+    assert.deepEqual(rowsFor([{ name: 'Mine' }]), [{ name: 'Mine' }]);
+  });
+
+  it('adding a row to default rows commits all of them', () => {
+    const root = new FakeDocument().createElement('div');
+    const committed: Record<string, unknown>[] = [];
+    const dialog = openMacroDialog(root as unknown as Element, {
+      title: 'Edit team',
+      fields: readMacroFields(node(), { people: [{ name: 'Sample A' }] }, SCHEMA),
+      onCommit: (s) => committed.push(s),
+      onCancel: () => {}
+    });
+    assert.deepEqual(names(root), ['Sample A']);
+    dialog.addRow('people');
+    dialog.commit();
+    assert.deepEqual(committed[0]?.people, [{ name: 'Sample A' }, {}]);
+  });
+
   it('drops non-string item values when reading saved rows', () => {
     const fields = readMacroFields(node([{ name: 'Ann', n: 3 }, 'junk']), { people: [] }, SCHEMA);
     assert.deepEqual(fields[0]?.list?.items, [{ name: 'Ann' }]);

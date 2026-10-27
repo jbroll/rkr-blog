@@ -777,3 +777,64 @@ test('sticky toolbar is compact at phone width', async ({ page }) => {
   const bar = page.locator('#rkr-unified-toolbar');
   expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(88);
 });
+
+test('marquee, accordion, progress and embed insert from the palette and configure', async ({
+  page
+}) => {
+  await login(page);
+  const slug = `e2e-small-blocks-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Small blocks', markdown: 'Top.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const body = page.locator('#rkr-blocks-page-body');
+  const configure = page.getByRole('button', { name: 'Configure', exact: true });
+  const insert = async (label: string) => {
+    const done = saveResponse(page, slug);
+    await paletteItem(page, label).focus();
+    await page.keyboard.press('Enter');
+    await done;
+  };
+  const save = async (dialogName: string) => {
+    const done = saveResponse(page, slug);
+    await page.getByLabel(dialogName).getByRole('button', { name: 'Save' }).click();
+    await done;
+  };
+
+  await insert('Marquee');
+  await configure.click();
+  await page.getByLabel('Text', { exact: true }).fill('Open Saturdays');
+  await save('Edit marquee');
+  await expect(body.locator('.rkr-marquee')).toContainText('Open Saturdays');
+
+  await insert('Accordion');
+  await configure.click();
+  await page.getByRole('button', { name: 'Add row', exact: true }).click();
+  await page.getByLabel('Title').fill('Hours');
+  await page.getByLabel('Body').fill('Mon to **Fri**');
+  await save('Edit accordion');
+  await expect(body.locator('details summary')).toHaveText('Hours');
+
+  await insert('Progress');
+  await expect(body.locator('.rkr-progress')).toHaveCount(1);
+  await configure.click();
+  await page.getByLabel('Source').selectOption('block');
+  await page.getByLabel('Goal').fill('1000');
+  await page.getByLabel('Raised').fill('250');
+  await save('Edit progress');
+  await expect(body.locator('.rkr-progress-figures')).toContainText('250 of 1,000');
+
+  await insert('Embed');
+  await configure.click();
+  await page.getByLabel('URL').fill('https://example.com/nope');
+  await page.getByLabel('Edit embed').getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByLabel('Edit embed')).toContainText("can't be embedded");
+  await page.getByLabel('URL').fill('https://docs.google.com/forms/d/e/abc/viewform');
+  await save('Edit embed');
+  await expect(body.locator('iframe.rkr-embed')).toHaveAttribute('src', /embedded=true/);
+
+  const res = await page.request.get(`/admin/blocks/${slug}`);
+  const { tree } = (await res.json()) as { tree: { body: { type: string }[] } };
+  expect(tree.body.map((n) => n.type).sort()).toEqual(
+    ['accordion', 'embed', 'marquee', 'progress', 'text'].sort()
+  );
+});

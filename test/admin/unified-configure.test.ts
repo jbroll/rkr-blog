@@ -152,3 +152,85 @@ describe('configure a macro with a list field', () => {
     assert.deepEqual(cleared, { title: 'T' });
   });
 });
+
+describe('configure the small blocks', () => {
+  async function run(
+    node: BlockTree['body'][number],
+    act: (root: FakeElement) => void
+  ): Promise<Record<string, unknown> | undefined> {
+    const root = new FakeDocument().createElement('div');
+    const tree: BlockTree = { version: 1, body: [node] };
+    const applied: BlockTree[] = [];
+    const configurator = createConfigurator({
+      root: root as unknown as Element,
+      macros: [],
+      getTree: () => tree,
+      applyTree: async (next) => {
+        applied.push(next);
+      },
+      flushText: () => {},
+      refuse: () => null
+    });
+    assert.ok(configurator.canConfigure(node));
+    configurator.configure([0]);
+    act(root);
+    (root.querySelector('.rkr-dialog-primary') as FakeElement).click();
+    await tick();
+    return (applied[0]?.body[0] as { slots?: Record<string, unknown> } | undefined)?.slots;
+  }
+  const type = (root: FakeElement, name: string, value: string): void => {
+    const el = root.querySelector(`[name="${name}"]`) as FakeElement & { value: string };
+    el.value = value;
+    el.dispatchEvent(new FakeEvent('change'));
+  };
+
+  it('marquee', async () => {
+    const slots = await run({ type: 'marquee', slots: { text: '' } }, (r) =>
+      type(r, 'text', 'Hello')
+    );
+    assert.deepEqual(slots, { text: 'Hello' });
+  });
+
+  it('progress switching to this block drops the site source', async () => {
+    const slots = await run({ type: 'progress', slots: { source: 'site' } }, (r) => {
+      type(r, 'source', 'block');
+      type(r, 'goal', '100');
+    });
+    assert.deepEqual(slots, { goal: 100, raised: 0 });
+  });
+
+  it('embed rewrites the url and drops a cleared height', async () => {
+    const slots = await run(
+      { type: 'embed', slots: { url: 'https://youtu.be/a', height: 500 } },
+      (r) => {
+        type(r, 'url', 'https://youtu.be/abc');
+        type(r, 'height', '');
+      }
+    );
+    assert.deepEqual(slots, { url: 'https://www.youtube-nocookie.com/embed/abc' });
+  });
+
+  it('accordion', async () => {
+    const slots = await run(
+      { type: 'accordion', slots: { items: [{ title: 'A', body: 'x' }] } },
+      (r) => type(r, 'title', 'B')
+    );
+    assert.deepEqual(slots, { items: [{ title: 'B', body: 'x' }] });
+  });
+
+  it('button drops size and arrow when reset', async () => {
+    const slots = await run(
+      {
+        type: 'button',
+        slots: { label: 'Go', href: '/', variant: 'primary', size: 'large', arrow: true }
+      },
+      (r) => {
+        type(r, 'size', 'normal');
+        const arrow = r.querySelector('[name="arrow"]') as FakeElement & { checked: boolean };
+        arrow.checked = false;
+        arrow.dispatchEvent(new FakeEvent('change'));
+      }
+    );
+    assert.deepEqual(slots, { label: 'Go', href: '/', variant: 'primary' });
+  });
+});

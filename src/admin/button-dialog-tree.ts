@@ -7,16 +7,24 @@ import type { BlockNode, Slots } from '../lib/blocks.ts';
 import { openEditorDialog } from './editor-dialog.ts';
 
 type Variant = 'primary' | 'secondary';
+type Size = 'normal' | 'large';
 
 export interface ButtonFields {
   label: string;
   href: string;
   variant: Variant;
+  size: Size;
+  arrow: boolean;
 }
 
 const VARIANTS: ReadonlyArray<readonly [Variant, string]> = [
   ['primary', 'Primary'],
   ['secondary', 'Secondary']
+];
+
+const SIZES: ReadonlyArray<readonly [Size, string]> = [
+  ['normal', 'Normal'],
+  ['large', 'Large']
 ];
 
 const LINK_REQUIRED = 'Enter a link for the button.';
@@ -30,7 +38,9 @@ export function readButtonFields(node: BlockNode): ButtonFields {
   return {
     label: text('label'),
     href: text('href'),
-    variant: text('variant') === 'secondary' ? 'secondary' : 'primary'
+    variant: text('variant') === 'secondary' ? 'secondary' : 'primary',
+    size: text('size') === 'large' ? 'large' : 'normal',
+    arrow: slots.arrow === true
   };
 }
 
@@ -39,11 +49,14 @@ export type ValidatedButtonFields = { ok: true; slots: Slots } | { ok: false; er
 export function validateButtonFields(values: ButtonFields): ValidatedButtonFields {
   const href = values.href.trim();
   if (href === '') return { ok: false, error: LINK_REQUIRED };
-  return { ok: true, slots: { label: values.label.trim(), href, variant: values.variant } };
+  const slots: Slots = { label: values.label.trim(), href, variant: values.variant };
+  if (values.size === 'large') slots.size = 'large';
+  if (values.arrow) slots.arrow = true;
+  return { ok: true, slots };
 }
 
 export interface ButtonDialog {
-  setField(name: keyof ButtonFields, value: string): void;
+  setField(name: keyof ButtonFields, value: string | boolean): void;
 }
 
 interface ButtonDialogOpts {
@@ -59,6 +72,7 @@ export function openButtonDialog(root: Element, opts: ButtonDialogOpts): ButtonD
   const doc = root.ownerDocument;
   const values: ButtonFields = { ...opts.initial };
   const inputs = new Map<keyof ButtonFields, HTMLInputElement | HTMLSelectElement>();
+  const asField = values as unknown as Record<string, string | boolean>;
 
   const form = doc.createElement('div');
   form.className = 'rkr-dialog-fields';
@@ -77,7 +91,10 @@ export function openButtonDialog(root: Element, opts: ButtonDialogOpts): ButtonD
     input.id = id;
     input.setAttribute('name', name);
     const sync = (): void => {
-      (values as unknown as Record<string, string>)[name] = input.value;
+      asField[name] =
+        input.getAttribute('type') === 'checkbox'
+          ? (input as HTMLInputElement).checked
+          : input.value;
     };
     input.addEventListener('input', sync);
     input.addEventListener('change', sync);
@@ -107,6 +124,22 @@ export function openButtonDialog(root: Element, opts: ButtonDialogOpts): ButtonD
   style.value = values.variant;
   addField('variant', 'Style', style);
 
+  const size = doc.createElement('select');
+  for (const [value, text] of SIZES) {
+    const option = doc.createElement('option');
+    option.value = value;
+    option.setAttribute('value', value);
+    option.textContent = text;
+    size.append(option);
+  }
+  size.value = values.size;
+  addField('size', 'Size', size);
+
+  const arrow = doc.createElement('input');
+  arrow.setAttribute('type', 'checkbox');
+  arrow.checked = values.arrow;
+  addField('arrow', 'Arrow', arrow);
+
   const dialog = openEditorDialog({
     root,
     title: 'Edit button',
@@ -133,9 +166,11 @@ export function openButtonDialog(root: Element, opts: ButtonDialogOpts): ButtonD
 
   return {
     setField(name, value) {
-      (values as unknown as Record<string, string>)[name] = value;
+      asField[name] = value;
       const input = inputs.get(name);
-      if (input) input.value = value;
+      if (!input) return;
+      if (typeof value === 'boolean') (input as HTMLInputElement).checked = value;
+      else input.value = value;
     }
   };
 }

@@ -4,12 +4,16 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
+import { openAccordionDialog, readAccordionFields } from './accordion-dialog-tree.ts';
 import { getAtPath, type Path, updateSlotsAtPath } from './block-tree-ops.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
 import { openButtonDialog, readButtonFields } from './button-dialog-tree.ts';
+import { openEmbedDialog, readEmbedFields } from './embed-dialog-tree.ts';
 import { type MediaDialogDeps, openMediaDialog } from './figure-dialog-tree.ts';
 import { applyGridSlots, openGridDialog, readGridFields } from './grid-dialog-tree.ts';
 import { openMacroDialog, readMacroFields } from './macro-dialog-tree.ts';
+import { openMarqueeDialog, readMarqueeFields } from './marquee-dialog-tree.ts';
+import { openProgressDialog, readProgressFields } from './progress-dialog-tree.ts';
 
 export interface ConfigureDeps {
   root: Element;
@@ -37,7 +41,21 @@ export interface Configurator {
 }
 
 /** Types `configure` opens a dialog for. */
-const CONFIGURABLE: ReadonlySet<string> = new Set(['figure', 'video', 'macro', 'button', 'grid']);
+const CONFIGURABLE: ReadonlySet<string> = new Set([
+  'figure',
+  'video',
+  'macro',
+  'button',
+  'grid',
+  'marquee',
+  'accordion',
+  'progress',
+  'embed'
+]);
+
+type SmallType = 'marquee' | 'accordion' | 'progress' | 'embed';
+const isSmall = (type: string): type is SmallType =>
+  type === 'marquee' || type === 'accordion' || type === 'progress' || type === 'embed';
 
 const NO_MEDIA: MediaDialogDeps = {
   pick: async () => [],
@@ -102,7 +120,10 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
       initial: readButtonFields(node),
       refuse,
       onCommit: (slots) => {
-        commitSlots(path, (current) => ({ ...current, ...slots }));
+        commitSlots(path, (current) => {
+          const { size: _size, arrow: _arrow, ...rest } = current;
+          return { ...rest, ...slots };
+        });
       }
     });
   };
@@ -120,6 +141,20 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
         commitSlots(path, (current) => applyGridSlots(current, slots));
       }
     });
+  };
+
+  const openSmallConfig = (path: Path, type: SmallType): void => {
+    const node = getAtPath(deps.getTree(), path);
+    if (node?.type !== type) return;
+    const onCommit = (slots: Slots): void => {
+      commitSlots(path, () => slots);
+    };
+    const opts = { refuse, onCommit };
+    if (type === 'marquee') openMarqueeDialog(root, { ...opts, initial: readMarqueeFields(node) });
+    else if (type === 'progress') {
+      openProgressDialog(root, { ...opts, initial: readProgressFields(node) });
+    } else if (type === 'embed') openEmbedDialog(root, { ...opts, initial: readEmbedFields(node) });
+    else openAccordionDialog(root, { ...opts, initial: readAccordionFields(node) });
   };
 
   const openMacroConfig = (path: Path): void => {
@@ -147,6 +182,7 @@ export function createConfigurator(deps: ConfigureDeps): Configurator {
       else if (type === 'macro') openMacroConfig(path);
       else if (type === 'button') openButtonConfig(path);
       else if (type === 'grid') openGridConfig(path);
+      else if (type && isSmall(type)) openSmallConfig(path, type);
     }
   };
 }

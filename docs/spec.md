@@ -553,8 +553,8 @@ the editing chrome. View and Edit are two modes of the same page.
   it, Ctrl/Cmd+D duplicates, Delete or Backspace deletes, Enter
   configures, Up/Down select the neighbour, Escape deselects. Escape in
   a text block leaves the text and selects the block.
-- **Palette** groups: Basics (Text, Button), Media (Image, Video),
-  Layout (Section, Row, Column), Sections (site macros). Drag an item
+- **Palette** groups: Basics (Text, Button, Marquee, Accordion, Progress),
+  Media (Image, Video, Embed), Layout (Section, Row, Column), Sections (site macros). Drag an item
   onto the page, or focus it and press Enter. Insert lands after the
   selected block. If the selected block is a grid, insert lands at
   the end of that grid; use Move to put a block after it. With
@@ -609,7 +609,12 @@ the editing chrome. View and Edit are two modes of the same page.
 - **Dialogs** use one modal. Figure: image list (add from this computer,
   Google Drive, OneDrive or Google Photos; reorder, remove, alt text,
   caption, edit image), layout. Video: one video from the same sources, with caption and layout.
-  Button: label, link, style. Macro: the fields above. Page settings:
+  Button: label, link, style, size (Normal or Large) and arrow. Marquee: text.
+  Accordion: rows of title and markdown body. Progress: source (Site
+  campaign, or This block with Goal and Raised). Embed: URL and height;
+  Save rewrites share links to embed URLs and refuses other services,
+  naming the supported ones. Macro: the fields above. A list field starts
+  from the macro's default rows until the instance saves its own. Page settings:
   title, subtitle, status, publish date (filled in when the status becomes published), tags,
   excerpt. Authors never see JSON, block ids or image ids.
 

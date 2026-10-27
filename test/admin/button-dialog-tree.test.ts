@@ -19,7 +19,26 @@ describe('button dialog fields', () => {
     assert.deepEqual(readButtonFields(NODE), {
       label: 'Join',
       href: '/join',
-      variant: 'secondary'
+      variant: 'secondary',
+      size: 'normal',
+      arrow: false
+    });
+  });
+
+  it('reads size and arrow', () => {
+    const fields = readButtonFields({
+      type: 'button',
+      slots: { label: 'Go', href: '/', size: 'large', arrow: true }
+    });
+    assert.equal(fields.size, 'large');
+    assert.equal(fields.arrow, true);
+  });
+
+  it('saves size and arrow only when set', () => {
+    const base = { label: 'Go', href: '/', variant: 'primary' as const };
+    assert.deepEqual(validateButtonFields({ ...base, size: 'large', arrow: true }), {
+      ok: true,
+      slots: { ...base, size: 'large', arrow: true }
     });
   });
 
@@ -27,7 +46,9 @@ describe('button dialog fields', () => {
     assert.deepEqual(readButtonFields({ type: 'button' }), {
       label: '',
       href: '',
-      variant: 'primary'
+      variant: 'primary',
+      size: 'normal',
+      arrow: false
     });
     const odd: BlockNode = { type: 'button', slots: { variant: 'huge' } };
     assert.equal(readButtonFields(odd).variant, 'primary');
@@ -42,12 +63,24 @@ describe('button dialog fields', () => {
   });
 
   it('requires a link', () => {
-    const result = validateButtonFields({ label: 'Go', href: '   ', variant: 'primary' });
+    const result = validateButtonFields({
+      label: 'Go',
+      href: '   ',
+      variant: 'primary',
+      size: 'normal',
+      arrow: false
+    });
     assert.equal(result.ok, false);
   });
 
   it('trims the link and label', () => {
-    const result = validateButtonFields({ label: ' Go ', href: ' /x ', variant: 'primary' });
+    const result = validateButtonFields({
+      label: ' Go ',
+      href: ' /x ',
+      variant: 'primary',
+      size: 'normal',
+      arrow: false
+    });
     assert.deepEqual(result, { ok: true, slots: { label: 'Go', href: '/x', variant: 'primary' } });
   });
 });
@@ -69,11 +102,11 @@ describe('button dialog', () => {
     return { root, dialog, commits };
   }
 
-  it('labels the fields Label, Link and Style', () => {
+  it('labels the fields Label, Link, Style, Size and Arrow', () => {
     const { root } = open();
     assert.deepEqual(
       root.querySelectorAll('label').map((l) => l.textContent),
-      ['Label', 'Link', 'Style']
+      ['Label', 'Link', 'Style', 'Size', 'Arrow']
     );
   });
 
@@ -85,6 +118,17 @@ describe('button dialog', () => {
     assert.equal(commits.length, 0);
     assert.ok(root.querySelector('[data-rkr-dialog]'));
     assert.match(root.querySelector('.rkr-dialog-error')?.textContent ?? '', /link/i);
+  });
+
+  it('commits size and arrow', async () => {
+    const { root, dialog, commits } = open();
+    dialog.setField('size', 'large');
+    dialog.setField('arrow', true);
+    (root.querySelector('.rkr-dialog-primary') as FakeElement).click();
+    await tick();
+    assert.deepEqual(commits, [
+      { label: 'Join', href: '/join', variant: 'secondary', size: 'large', arrow: true }
+    ]);
   });
 
   it('commits edited slots', async () => {

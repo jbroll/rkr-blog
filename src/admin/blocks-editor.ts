@@ -61,12 +61,36 @@ export const PALETTE_PRIMITIVES: PaletteMacro[] = [
     group: 'Basics',
     description: 'A link styled as a button'
   },
+  {
+    name: 'primitive:marquee',
+    label: 'Marquee',
+    group: 'Basics',
+    description: 'A line of scrolling text'
+  },
+  {
+    name: 'primitive:accordion',
+    label: 'Accordion',
+    group: 'Basics',
+    description: 'Titles that open to show text'
+  },
+  {
+    name: 'primitive:progress',
+    label: 'Progress',
+    group: 'Basics',
+    description: 'A bar toward a fundraising goal'
+  },
   { name: 'primitive:figure', label: 'Image', group: 'Media', description: 'Photos with captions' },
   {
     name: 'primitive:video',
     label: 'Video',
     group: 'Media',
     description: 'A video with a caption'
+  },
+  {
+    name: 'primitive:embed',
+    label: 'Embed',
+    group: 'Media',
+    description: 'A Google form, map or document, or a YouTube or Vimeo video'
   },
   {
     name: 'primitive:section',
@@ -89,6 +113,14 @@ export function primitiveNode(name: string): BlockNode {
       return { type: 'video', slots: { ids: '' } };
     case 'primitive:button':
       return { type: 'button', slots: { label: 'Button', href: '/', variant: 'primary' } };
+    case 'primitive:marquee':
+      return { type: 'marquee', slots: { text: '' } };
+    case 'primitive:accordion':
+      return { type: 'accordion', slots: { items: [] } };
+    case 'primitive:progress':
+      return { type: 'progress', slots: { source: 'site' } };
+    case 'primitive:embed':
+      return { type: 'embed', slots: { url: '' } };
     case 'primitive:row':
       return { type: 'grid', slots: { cols: 2 }, children: [] };
     case 'primitive:col':
