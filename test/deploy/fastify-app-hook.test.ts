@@ -3,14 +3,25 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 
 const REPO = path.resolve(import.meta.dirname, '..', '..');
 const HOOK = path.join(REPO, 'deploy/hooks/fastify_app.build.post.sh');
 
+const tempDirs: string[] = [];
+after(() => {
+  for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function makeTempDir(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
 /** A throwaway git repo so `git -C "$PROJECT_DIR" rev-parse HEAD` succeeds. */
 function makeGitProjectDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fastify-hook-project-'));
+  const dir = makeTempDir('fastify-hook-project-');
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
   execFileSync('git', ['config', 'user.name', 'test'], { cwd: dir });
@@ -35,7 +46,7 @@ function runHook(opts: {
   preSeedSecretsEnv?: boolean; // mimic node_app/build.sh having already copied it
   env?: Record<string, string>; // extra deploy vars, e.g. DEPLOY_IMAGE_EDITOR
 }): { tmp: string; projectDir: string; run: () => string } {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fastify-hook-'));
+  const tmp = makeTempDir('fastify-hook-');
   fs.mkdirSync(path.join(tmp, 'app'), { recursive: true });
   const projectDir = makeGitProjectDir();
 

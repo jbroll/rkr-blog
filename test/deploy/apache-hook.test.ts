@@ -3,10 +3,21 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 
 const REPO = path.resolve(import.meta.dirname, '..', '..');
 const HOOK = path.join(REPO, 'deploy/hooks/apache.build.post.sh');
+
+const tempDirs: string[] = [];
+after(() => {
+  for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function makeTempDir(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
 
 /**
  * Run the vhost hook the way a real deploy does: SITE_ROOT lives only in a
@@ -15,8 +26,8 @@ const HOOK = path.join(REPO, 'deploy/hooks/apache.build.post.sh');
  * file's SITE_ROOT line at all (the file exists but is empty).
  */
 function runHook(env: Record<string, string>, siteEnvContents: string): string {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vhost-'));
-  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vhost-project-'));
+  const tmp = makeTempDir('vhost-');
+  const projectDir = makeTempDir('vhost-project-');
   const siteEnvRelPath = 'deploy/sites/test-site.env';
   const siteEnvAbsPath = path.join(projectDir, siteEnvRelPath);
   fs.mkdirSync(path.dirname(siteEnvAbsPath), { recursive: true });
@@ -119,8 +130,8 @@ test('hook rejects a site env file with no SITE_ROOT line at all', () => {
 });
 
 test('hook reports a missing site env file honestly, not as "no SITE_ROOT= line"', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vhost-'));
-  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vhost-project-'));
+  const tmp = makeTempDir('vhost-');
+  const projectDir = makeTempDir('vhost-project-');
   const siteEnvRelPath = 'deploy/sites/does-not-exist.env';
   assert.throws(
     () =>
