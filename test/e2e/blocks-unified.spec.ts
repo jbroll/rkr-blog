@@ -778,6 +778,29 @@ test('sticky toolbar is compact at phone width', async ({ page }) => {
   expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(88);
 });
 
+test('an empty marquee and accordion can be clicked to select', async ({ page }) => {
+  await login(page);
+  const slug = `e2e-empty-select-${Date.now()}`;
+  await seedBlockPage(page, { slug, title: 'Empty select', markdown: 'Top.' });
+  await page.goto(`/admin/blocks/edit/${slug}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  for (const [label, type] of [
+    ['Marquee', 'marquee'],
+    ['Accordion', 'accordion']
+  ] as const) {
+    const done = saveResponse(page, slug);
+    await paletteItem(page, label).focus();
+    await page.keyboard.press('Enter');
+    await done;
+    await page.locator('#rkr-blocks-page-body p').first().click();
+    const stand = page.locator('.rkr-unified-empty', { hasText: `Empty ${type}` });
+    await expect(stand).toBeVisible();
+    await expect(stand).not.toHaveAttribute('data-rkr-selected', '');
+    await stand.click();
+    await expect(stand).toHaveAttribute('data-rkr-selected', '');
+  }
+});
+
 test('marquee, accordion, progress and embed insert from the palette and configure', async ({
   page
 }) => {

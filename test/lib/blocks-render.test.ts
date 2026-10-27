@@ -201,10 +201,19 @@ describe('blocks-render', () => {
     assert.equal(long.split('x'.repeat(300)).length - 1, 4);
   });
 
-  it('a blank marquee renders nothing publicly and an empty element when marked', async () => {
-    const tree: BlockTree = { version: 1, body: [{ type: 'marquee', slots: { text: ' ' } }] };
+  it('blank marquee and empty accordion render no element, only a marker when marked', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'marquee', slots: { text: ' ' } },
+        { type: 'accordion', slots: { items: [] } }
+      ]
+    };
     assert.equal(await renderBlockTree(tree, fakeCtx, emptyLib), '');
-    assert.match(await renderBlockTree(tree, fakeCtx, emptyLib, { mark }), /rkr-marquee/);
+    assert.equal(
+      await renderBlockTree(tree, fakeCtx, emptyLib, { mark }),
+      '<!--rkr:path=0--><!--rkr:path=1-->'
+    );
   });
 
   it('button size large and arrow', async () => {

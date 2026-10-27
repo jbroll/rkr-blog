@@ -141,8 +141,7 @@ async function renderNode(
 ): Promise<string> {
   const html = await renderNodeHtml(node, ctx, lib, stack, path, opts);
   if (!opts?.mark) return html;
-  // An empty macro still needs its marker: the editor plants a stand-in to select.
-  if (!html && node.type !== 'macro') return html;
+  // An empty node still needs its marker: the editor plants a stand-in to select.
   return `${opts.mark(path)}${html}`;
 }
 
@@ -174,7 +173,7 @@ async function renderNodeHtml(
     case 'button':
       return renderButton(node.slots, Boolean(opts?.mark));
     case 'marquee':
-      return renderMarquee(node.slots, Boolean(opts?.mark));
+      return renderMarquee(node.slots);
     case 'accordion':
       return renderAccordion(node.slots, ctx);
     case 'progress':

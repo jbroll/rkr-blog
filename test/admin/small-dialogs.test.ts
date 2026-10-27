@@ -161,6 +161,14 @@ describe('embed dialog', () => {
     assert.equal(validateEmbedFields({ url: 'https://youtu.be/a', height: 'tall' }).ok, false);
   });
 
+  it('asks for a link when the url is empty', () => {
+    assert.deepEqual(validateEmbedFields({ url: ' ', height: '' }), {
+      ok: false,
+      error: 'Enter a link to embed.',
+      field: 'url'
+    });
+  });
+
   it('refuses an unsupported service with the supported list', async () => {
     const root = newRoot();
     const commits: unknown[] = [];

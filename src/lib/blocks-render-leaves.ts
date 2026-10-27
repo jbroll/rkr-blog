@@ -34,9 +34,9 @@ export function renderButton(slots: Slots | undefined, marked: boolean): string 
   return `<a class="rkr-btn is-${variant}${large}" href="${escapeAttr(href)}">${escapeText(label)}${arrow}</a>\n`;
 }
 
-export function renderMarquee(slots: Slots | undefined, marked: boolean): string {
+export function renderMarquee(slots: Slots | undefined): string {
   const text = textOf(slots?.text).trim();
-  if (!text) return marked ? '<div class="rkr-marquee"></div>\n' : '';
+  if (!text) return '';
   const copies = Math.max(2, Math.ceil((MARQUEE_MIN_CHARS + 1) / (text.length + 1)));
   const half = escapeText(Array(copies).fill(text).join(' '));
   return `<div class="rkr-marquee"><span>${half}</span><span aria-hidden="true">${half}</span></div>\n`;
@@ -44,6 +44,7 @@ export function renderMarquee(slots: Slots | undefined, marked: boolean): string
 
 export async function renderAccordion(slots: Slots | undefined, ctx: RenderCtx): Promise<string> {
   const items = Array.isArray(slots?.items) ? slots.items : [];
+  if (items.length === 0) return '';
   const out = await Promise.all(
     items.map(async (it) => {
       const rec = (it ?? {}) as Record<string, unknown>;

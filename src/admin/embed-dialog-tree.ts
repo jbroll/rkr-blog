@@ -25,6 +25,9 @@ export function readEmbedFields(node: BlockNode): EmbedFields {
 }
 
 export function validateEmbedFields(values: EmbedFields): Validated {
+  if (values.url.trim() === '') {
+    return { ok: false, error: 'Enter a link to embed.', field: 'url' };
+  }
   const url = toEmbedUrl(values.url);
   if (!url) return { ok: false, error: UNSUPPORTED, field: 'url' };
   const raw = values.height.trim();
