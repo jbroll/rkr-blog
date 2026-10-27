@@ -43,6 +43,12 @@ Format: **item** — _revisit when:_ trigger.
 - **`selected` is not cleared during a pending render when `opts.select` is absent.** _Revisit when:_ a toolbar appears over a block that is about to be replaced.
 - **No test for an unparseable `<slug>.json` colliding with a new page's file name** (same code path as a mismatched slug). _Revisit when:_ touching the collision check in `admin-blocks.ts`.
 
+## Organization sites
+
+- **Seed macros fix their band theme, edge, figure mask and alignment**; an instance cannot pick them, so a theme gives each macro one look through `.rkr-macro-<name>` (the ECCG port's cards are purple on Home, where the original is green, and its card photos are not circles). _Revisit when:_ a site needs two looks of the same seed.
+- **Seed shapes the ECCG port lacked**: `hero` has one button (Home needs two), `marquee-band` has no background image, `cards` has no intro line under its heading. _Revisit when:_ a second org site hits the same section.
+- **`default.css` sets `main { padding: 1.25rem 1rem }` under 640px and ignores `--rkr-main-pad`**, so a theme repeats the rule to put a band flush under the header on phones. _Revisit when:_ next edit to the mobile block of `default.css`.
+
 ## Image pipeline
 
 - **`buildImageMapFromOpfs` blob: URLs are never revoked** — every URL it makes reaches the rendered document and must outlive it, and the preview renders once per page load, so there is nothing to revoke yet. _Revisit when:_ the preview starts re-rendering without a full page reload.

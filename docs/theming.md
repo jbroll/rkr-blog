@@ -247,6 +247,7 @@ should be added here at the same time.
   nav, link list and links.
 - `.rkr-menu-toggle`, `.rkr-menu-toggle-btn`, `.rkr-menu-toggle-bars` —
   the no-JS phone toggle (checkbox, its label, the three-bar glyph).
+- `.rkr-site-head-version` — the build hash in the menu header.
 - `.rkr-site-head-cta` — the header button (also `.rkr-btn`).
 - `.rkr-site-social` — the social icon list.
 - `.rkr-announce`, `.rkr-announce-text`, `.rkr-announce-close` — the
