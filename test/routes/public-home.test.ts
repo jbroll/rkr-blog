@@ -132,6 +132,16 @@ test('GET /about serves the about block page when published, else _about.md', as
   assert.doesNotMatch(res.body, /From markdown\./);
 });
 
+test('GET /about 301s to / when the about page is the home page', async (t) => {
+  const { app, page } = await setup(t, { homePage: 'about' });
+  page('about', 'From blocks.', { kind: 'page', title: 'About Us' });
+  const res = await app.inject({ method: 'GET', url: '/about' });
+  assert.equal(res.statusCode, 301);
+  assert.equal(res.headers.location, '/');
+  assert.ok(res.headers['content-security-policy']);
+  assert.match((await app.inject({ method: 'GET', url: '/' })).body, /From blocks\./);
+});
+
 test('GET /about is 404 with neither a block page nor _about.md', async (t) => {
   const { app } = await setup(t);
   assert.equal((await app.inject({ method: 'GET', url: '/about' })).statusCode, 404);

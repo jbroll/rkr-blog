@@ -7,7 +7,7 @@ import { type TestContext, test } from 'node:test';
 import sharp from 'sharp';
 
 import { parsePost } from '../../src/lib/content.ts';
-import { buildImageMap } from '../../src/lib/image-map-fs.ts';
+import { buildImageMap, imageSourceById } from '../../src/lib/image-map-fs.ts';
 import { bakePath, ingestStream } from '../../src/lib/originals.ts';
 import { read as sidecarRead, write as sidecarWrite } from '../../src/lib/sidecar.ts';
 
@@ -47,6 +47,16 @@ test('buildImageMap: full id resolves, dimensions come from disk', async (t) => 
   assert.equal(src.width, 800);
   assert.equal(src.height, 600);
   assert.equal(src.sidecar.original, id);
+});
+
+test('imageSourceById: a malformed id is null and never reaches the filesystem', async (t) => {
+  const root = freshSiteRoot(t);
+  const id = await seed(root);
+  fs.copyFileSync(path.join(root, 'sidecars', `${id}.json`), path.join(root, 'x.json'));
+  assert.equal(await imageSourceById(root, '../x'), null);
+  assert.equal(await imageSourceById(root, id.toUpperCase()), null);
+  assert.equal(await imageSourceById(root, id.slice(0, 63)), null);
+  assert.ok(await imageSourceById(root, id));
 });
 
 test('buildImageMap: a prefix reference is keyed by the prefix as written', async (t) => {

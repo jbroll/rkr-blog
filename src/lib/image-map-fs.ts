@@ -52,12 +52,13 @@ export async function buildImageMap(
 }
 
 /** One image by its full id, without listing the sidecars directory.
- * Null when the sidecar is missing. */
+ * Null when the id is malformed or the sidecar is missing. */
 export async function imageSourceById(
   siteRoot: string,
   id: string,
   opts: ImageMapOpts = {}
 ): Promise<ImageSource | null> {
+  if (!/^[0-9a-f]{64}$/.test(id)) return null;
   const sidecar = await sidecarRead(siteRoot, id);
   if (!sidecar) return null;
   if ((sidecar.ops ?? []).length === 0) {

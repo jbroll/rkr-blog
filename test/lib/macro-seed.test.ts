@@ -9,10 +9,12 @@ import { paths } from '../../src/lib/config.ts';
 import {
   diffSeedMacros,
   loadMacroLibrary,
+  removeRetiredPageMacro,
   seedMacrosDir,
   seedSiteMacros,
   updateSiteMacro
 } from '../../src/lib/macro-library.ts';
+import { RETIRED_PAGE_JSON } from '../helpers/retired-page-macro.ts';
 
 function withSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-macro-seed-'));
@@ -70,6 +72,21 @@ describe('macro seeding', () => {
     fs.writeFileSync(heroPath, '{"custom": true}\n');
     init();
     assert.equal(fs.readFileSync(heroPath, 'utf8'), '{"custom": true}\n');
+  });
+
+  it('init removes the retired page.json only when unedited', (t: TestContext) => {
+    const root = withSiteRoot(t);
+    fs.mkdirSync(path.join(root, 'macros'), { recursive: true });
+    const page = path.join(root, 'macros', 'page.json');
+    assert.equal(removeRetiredPageMacro(root), 'absent');
+    fs.writeFileSync(page, RETIRED_PAGE_JSON);
+    init();
+    assert.equal(fs.existsSync(page), false);
+    const edited = `${RETIRED_PAGE_JSON} `;
+    fs.writeFileSync(page, edited);
+    init();
+    assert.equal(fs.readFileSync(page, 'utf8'), edited);
+    assert.equal(removeRetiredPageMacro(root), 'edited');
   });
 
   it('diffSeedMacros lists a changed and a missing seed but not an identical one', (t: TestContext) => {

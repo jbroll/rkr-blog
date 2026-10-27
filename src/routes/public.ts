@@ -86,6 +86,10 @@ export default async function publicRoutes(
   // directly and renders without comments.
   fastify.get('/about', async (req, reply) => {
     const site = getSite();
+    if (homePageRow(db, site)?.slug === 'about') {
+      setPublicSecurityHeaders(reply);
+      return reply.redirect('/', 301);
+    }
     const isAdmin = !!req.user;
     const aboutRow = readIndexedPostBySlug(db, 'about');
     if (aboutRow && (aboutRow.status === 'published' || isAdmin)) {

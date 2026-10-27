@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 import { paths } from '../lib/config.ts';
 import { open } from '../lib/db.ts';
-import { seedSiteMacros } from '../lib/macro-library.ts';
+import { removeRetiredPageMacro, seedSiteMacros } from '../lib/macro-library.ts';
 import { migrate } from '../lib/migrate.ts';
 import { ensureSecretKey } from '../lib/secrets.ts';
 
@@ -31,6 +31,7 @@ export default function init(): void {
   }
 
   seedSiteMacros(p.root);
+  removeRetiredPageMacro(p.root);
 
   const generatedKey = ensureSecretKey(p.root);
 

@@ -3,6 +3,7 @@
 // instance is curried: it fixes some slots of another macro and leaves
 // the rest open.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,6 +89,21 @@ export function seedSiteMacros(siteRoot: string): string[] {
   }
   return copied;
 }
+
+// sha256 of macros/page.json as shipped before the page root macro was dropped.
+const RETIRED_PAGE_SEED_SHA256 = 'abbee0e3e0479ef818272aef1c4fc94607da545e692a42de2acaeb7025eec8eb';
+
+/** Delete `<site>/macros/page.json` when it is the retired seed byte for
+ * byte. An edited copy is the author's and stays. */
+export function removeRetiredPageMacro(siteRoot: string): 'removed' | 'edited' | 'absent' {
+  const file = path.join(siteRoot, 'macros', 'page.json');
+  if (!fs.existsSync(file)) return 'absent';
+  const hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  if (hash !== RETIRED_PAGE_SEED_SHA256) return 'edited';
+  fs.rmSync(file);
+  return 'removed';
+}
+
 function seedNames(): string[] {
   return fs
     .readdirSync(seedMacrosDir())

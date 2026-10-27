@@ -122,9 +122,8 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
 });
 
 test('GET /admin/posts → 301 redirect to /posts', async (t) => {
-  // The standalone admin posts page is gone — the homepage doubles as
-  // the admin posts list when authed. The legacy URL 301s so bookmarks
-  // and any pre-removal admin-strip clicks still land somewhere useful.
+  // The standalone admin posts page is gone; old bookmarks land on the
+  // post index.
   const root = freshSiteRoot(t);
   const app = await buildApp({ siteRoot: root });
   t.after(() => app.close());
@@ -138,8 +137,7 @@ test('GET /admin/posts → 301 redirect to /posts', async (t) => {
 // SITE_THEME, with the three-layer stylesheet chain (base + default +
 // active) in the expected cascade order. This catches a missing CSS
 // file, a typo in the theme name list, or a regression in the layout
-// helper. (Previously this checked /admin/posts; that page is now a
-// 301 to / and the cascade matters most on the public-facing index.)
+// helper.
 for (const theme of ['papermod', 'tufte', 'dracula', 'terminal', 'solarized', 'mvp', 'newsprint']) {
   test(`GET / honors SITE_THEME=${theme} (smoke)`, async (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-route-'));

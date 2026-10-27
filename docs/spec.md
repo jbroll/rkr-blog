@@ -602,9 +602,7 @@ the editing chrome. View and Edit are two modes of the same page.
   can be turned off), and with the band on, Background (the four
   built-in section themes, Light, Light bold, Dark and Dark bold, plus
   any the active theme declares), Background image (thumbnail with
-  Choose image and Remove; the page's `data-section-themes` carries the
-  theme names) and Bottom edge (Straight or
-  Wave). Alignment `start` and Panel off are not saved. Changing Columns so the
+  Choose image and Remove) and Bottom edge (Straight or Wave). Alignment `start` and Panel off are not saved. Changing Columns so the
   widths no longer match keeps the dialog open with the message.
 - **Image and Video** show the new block and open its picker. Nothing
   saves or drafts until the dialog saves with something picked; Cancel,
@@ -916,6 +914,8 @@ GET    /search                        full-text search page
 GET    /:slug                         rendered single post
 GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug (published only)
 GET    /pages/:slug                   old block-page URL → 301 /:slug (published only)
+GET    /site-theme/:file              a site theme stylesheet from <site>/themes/ (site-theme.ts)
+GET    /admin/site-theme/:file        the same file under /admin, for the editor (site-theme.ts)
 GET    /img/:filename                 derivative image, or animated GIF original (cache-miss handler)
 GET    /video/:filename               derivative mp4, Range/206-capable (cache-miss handler)
 GET    /video/poster/:filename        derivative jpeg poster (cache-miss handler)
@@ -953,7 +953,7 @@ GET    /admin/blocks/macros           palette entries for the site's macros
 GET    /admin/blocks/preview/:macro   one macro rendered with its defaults
 
 # Admin posts — admin-posts.ts
-GET    /admin/posts                   301 → / (old bookmarks)
+GET    /admin/posts                   301 → /posts (old bookmarks)
 
 # Admin image edit — admin-image-lookup.ts + admin-sidecar-edit.ts
 GET    /admin/preview/:id             302 to a derivative URL the editor uses as <img src>
@@ -1036,6 +1036,10 @@ user invite <email>     add to the allowlist (owner / editor role)
 user list / remove
 server [--port N]       run the application server
 ```
+
+`init` and `macros` (with or without `--update`) delete
+`<site>/macros/page.json` when its bytes equal the retired page seed;
+`macros` prints a one-line notice and keeps it when it was edited.
 
 `render` warms the cache (e.g. after a bulk ops change). `gc` walks
 every sidecar, builds the set of valid `<id>.<ophash>.<fmt>` filenames,
@@ -1194,7 +1198,7 @@ one shows again.
 `config/site.json#homePage` holds the slug of a published page of kind
 `page`. While it is set, `/` renders that page for everyone, signed in
 or not, the post index is served only at `/posts`, and `/<slug>` of the
-home page 301s to `/`. An unset slug, or one naming a missing, draft or
+home page, `/about` included, 301s to `/`. An unset slug, or one naming a missing, draft or
 post-kind entry, leaves `/` as the post index. The index links to its
 own path: tag pills, the sort toggle and the pager use `/posts` when the
 home page is set, and `Home` appears in the header on `/posts`. The

@@ -6,6 +6,7 @@ import { describe, it, type TestContext } from 'node:test';
 
 import macrosCmd from '../../src/cli/macros.ts';
 import { seedMacrosDir, seedSiteMacros } from '../../src/lib/macro-library.ts';
+import { RETIRED_PAGE_JSON } from '../helpers/retired-page-macro.ts';
 
 function withSiteRoot(t: TestContext): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-cli-macros-'));
@@ -63,6 +64,43 @@ describe('site-admin macros', () => {
     await assert.rejects(macrosCmd(['--update', 'nope']), /no seed macro named nope/);
     await assert.rejects(macrosCmd(['--update', '../hero']), /no seed macro/);
     assert.equal(fs.existsSync(path.join(root, 'macros', 'nope.json')), false);
+  });
+
+  it('removes an unedited retired page.json on a list run', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    const page = path.join(root, 'macros', 'page.json');
+    fs.writeFileSync(page, RETIRED_PAGE_JSON);
+    const lines = captureLog(t);
+    await macrosCmd([]);
+    assert.equal(fs.existsSync(page), false);
+    assert.deepEqual(lines, []);
+  });
+
+  it('removes an unedited retired page.json on an --update run', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    const page = path.join(root, 'macros', 'page.json');
+    fs.writeFileSync(page, RETIRED_PAGE_JSON);
+    captureLog(t);
+    await macrosCmd(['--update', 'hero']);
+    assert.equal(fs.existsSync(page), false);
+  });
+
+  it('keeps an edited page.json and prints one notice', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    const page = path.join(root, 'macros', 'page.json');
+    const edited = RETIRED_PAGE_JSON.replace('rkroll', 'mine');
+    fs.writeFileSync(page, edited);
+    const lines = captureLog(t);
+    await macrosCmd([]);
+    assert.equal(fs.readFileSync(page, 'utf8'), edited);
+    assert.deepEqual(lines, ['macros: page.json is no longer used; kept because it was edited']);
+    lines.length = 0;
+    await macrosCmd(['--update', 'hero']);
+    assert.equal(fs.readFileSync(page, 'utf8'), edited);
+    assert.deepEqual(lines, [
+      'macros: page.json is no longer used; kept because it was edited',
+      'macros: updated hero'
+    ]);
   });
 
   it('rejects other arguments with usage', async (t: TestContext) => {
