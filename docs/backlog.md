@@ -65,6 +65,8 @@ Build hygiene, security, video, the WordPress permalink redirect and the dump co
 - [x] **Flaky: `offline ops bake drains on reconnect`** — save-btn disabled races `ensureLocalState`. (`DEFERRED.md: Test coverage`)
 - [x] **Flaky: `rotate single image then save edits`** — 404 on `loadOriginal` races OPFS drain under CI load. (`DEFERRED.md: Test coverage`)
 - [x] **Flaky: `online-save 409 surfaces conflict`** — mtime-bump + 409 timing-sensitive under CI. (`DEFERRED.md: Test coverage`)
+- [ ] **Flaky: `blocks-unified` "conflict dialog on concurrent edit"** — failed 2 of 3 local runs during the org-site branch; not touched by that branch.
+- [ ] **Flaky: `about-page.spec.ts:46`** — timed out once. (`DEFERRED.md: Test coverage`)
 - [x] **PWA e2e smoke not in CI** — `apps/image-pwa` verified via workflow tests + manual smoke, no Playwright spec. (`DEFERRED.md: image-pwa`)
 - [ ] **Uncovered: perspective-rectify, Google OAuth callback, perspective-modal WebGL UI** — math unit-tested, shell uncovered. (`DEFERRED.md: Test coverage` — 2 items)
 
