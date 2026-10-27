@@ -114,24 +114,26 @@ function upsertBlockRow(
   const publishedAt = status === 'published' ? (typeof date === 'string' ? date : updatedAt) : null;
   const tags = Array.isArray(page.fields.tags) ? (page.fields.tags as string[]) : [];
   const relPath = path.posix.join('content', 'blocks', path.basename(fullPath));
+  const kind = page.fields.kind === 'page' ? 'page' : 'post';
 
   const existing = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
   if (existing) {
     if (mdStillOnDisk) {
       db.prepare(
-        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ? WHERE id = ?`
-      ).run(title, status, updatedAt, publishedAt, existing.id);
+        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, kind = ?
+         WHERE id = ?`
+      ).run(title, status, updatedAt, publishedAt, kind, existing.id);
     } else {
       db.prepare(
-        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, path = ?
+        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, path = ?, kind = ?
          WHERE id = ?`
-      ).run(title, status, updatedAt, publishedAt, relPath, existing.id);
+      ).run(title, status, updatedAt, publishedAt, relPath, kind, existing.id);
     }
   } else {
     db.prepare(
-      `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(slug, title, status, created, updatedAt, publishedAt, relPath);
+      `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path, kind)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(slug, title, status, created, updatedAt, publishedAt, relPath, kind);
   }
 
   db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(slug);

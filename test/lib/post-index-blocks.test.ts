@@ -44,6 +44,36 @@ function indexedTitle(root: string, slug: string): string | undefined {
   }
 }
 
+describe('post kind', () => {
+  it('a page file indexes with kind page; absent kind indexes as post', (t: TestContext) => {
+    const root = freshRoot(t);
+    const base = { title: 'T', status: 'published', date: '2026-01-15T12:00:00Z' };
+    writeJson(root, 'a.json', { ...base, slug: 'a', kind: 'page' });
+    writeJson(root, 'b.json', { ...base, slug: 'b' });
+    writeMd(root, 'c.md', 'c', 'C');
+    runReindex(root);
+    const db = open(path.join(root, 'data', 'site.db'));
+    try {
+      assert.equal(readIndexedPostBySlug(db, 'a')?.kind, 'page');
+      assert.equal(readIndexedPostBySlug(db, 'b')?.kind, 'post');
+      assert.equal(readIndexedPostBySlug(db, 'c')?.kind, 'post');
+      writeJson(root, 'a.json', { ...base, slug: 'a' });
+      runReindex(root);
+      assert.equal(readIndexedPostBySlug(db, 'a')?.kind, 'post');
+      writeMd(root, 'd.md', 'd', 'D');
+      writeJson(root, 'd.json', { ...base, slug: 'd', kind: 'page' });
+      runReindex(root);
+      assert.equal(readIndexedPostBySlug(db, 'd')?.kind, 'page');
+      writeJson(root, 'd.json', { ...base, slug: 'd', kind: 'page', title: 'D2' });
+      fs.rmSync(path.join(root, 'content', 'posts', 'd.md'));
+      runReindex(root);
+      assert.equal(readIndexedPostBySlug(db, 'd')?.kind, 'page');
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe('post index with JSON twins', () => {
   it('pairs a JSON twin with its markdown post by slug', (t: TestContext) => {
     const root = freshRoot(t);

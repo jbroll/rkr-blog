@@ -191,3 +191,19 @@ test('search propagates unexpected DB query errors (not silent empty)', async (t
     'global error handler sets security headers'
   );
 });
+
+test('search finds a published page', async (t) => {
+  const { app, root } = await setup(t);
+  fs.mkdirSync(path.join(root, 'content', 'blocks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', 'about-us.json'),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'text', markdown: 'zebracrossing details' }],
+      fields: { title: 'About Us', slug: 'about-us', status: 'published', kind: 'page' }
+    })
+  );
+  runReindex(root);
+  const res = await app.inject({ method: 'GET', url: '/search?q=zebracrossing' });
+  assert.match(res.body, /<a href="\/about-us">About Us<\/a>/);
+});

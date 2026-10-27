@@ -572,3 +572,61 @@ test('runReindex updates slug when file keeps name but frontmatter slug changes'
     db.close();
   }
 });
+
+test('readIndexedPosts and readTagCounts leave pages out by default', (t) => {
+  const root = freshSiteRoot(t);
+  fs.mkdirSync(path.join(root, 'content', 'blocks'), { recursive: true });
+  const page = (slug: string, fields: Record<string, unknown>) =>
+    fs.writeFileSync(
+      path.join(root, 'content', 'blocks', `${slug}.json`),
+      JSON.stringify({
+        version: 1,
+        body: [],
+        fields: { title: slug, slug, status: 'published', date: '2026-01-01T00:00:00Z', ...fields }
+      })
+    );
+  page('a', { kind: 'page', tags: ['x'] });
+  page('b', { tags: ['y'] });
+  runReindex(root);
+  const db = open(path.join(root, 'data', 'site.db'));
+  try {
+    assert.deepEqual(
+      readIndexedPosts(db, {}).map((r) => r.slug),
+      ['b']
+    );
+    assert.deepEqual(
+      readIndexedPosts(db, { kind: null })
+        .map((r) => r.slug)
+        .sort(),
+      ['a', 'b']
+    );
+    assert.deepEqual(
+      readIndexedPosts(db, { kind: 'page', status: null }).map((r) => r.slug),
+      ['a']
+    );
+    assert.deepEqual(
+      readTagCounts(db, { status: 'published' }).map((c) => c.name),
+      ['y']
+    );
+    assert.deepEqual(
+      readTagCounts(db, { status: null }).map((c) => c.name),
+      ['y']
+    );
+    assert.deepEqual(
+      readTagCounts(db, { status: 'published', kind: null })
+        .map((c) => c.name)
+        .sort(),
+      ['x', 'y']
+    );
+    assert.deepEqual(
+      readTagCounts(db, { status: null, kind: null })
+        .map((c) => c.name)
+        .sort(),
+      ['x', 'y']
+    );
+    assert.equal(readIndexedPostBySlug(db, 'a')?.kind, 'page');
+    assert.equal(readAllIndexedPosts(db).find((r) => r.slug === 'a')?.kind, 'page');
+  } finally {
+    db.close();
+  }
+});

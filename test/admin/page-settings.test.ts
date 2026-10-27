@@ -10,7 +10,13 @@ import {
 import { FakeDocument, type FakeElement } from './fake-dom.ts';
 
 const TODAY = '2026-10-25';
-const BASE: PageFields = { title: 'Spring Sale', status: 'draft', date: '', tags: [] };
+const BASE: PageFields = {
+  title: 'Spring Sale',
+  status: 'draft',
+  date: '',
+  tags: [],
+  kind: 'post'
+};
 
 describe('page settings fields', () => {
   it('reads stored fields with defaults', () => {
@@ -18,7 +24,8 @@ describe('page settings fields', () => {
       title: 'spring-sale',
       status: 'draft',
       date: '',
-      tags: []
+      tags: [],
+      kind: 'post'
     });
     assert.deepEqual(
       readPageFields(
@@ -38,9 +45,18 @@ describe('page settings fields', () => {
         date: '2026-05-06T14:00:00Z',
         tags: ['a'],
         excerpt: 'E',
-        subtitle: 'S'
+        subtitle: 'S',
+        kind: 'post'
       }
     );
+  });
+
+  it('Kind select round-trips page and defaults to post', () => {
+    assert.equal(readPageFields({}, 's').kind, 'post');
+    assert.equal(readPageFields({ kind: 'page' }, 's').kind, 'page');
+    assert.equal(readPageFields({ kind: 'weird' }, 's').kind, 'post');
+    const result = validatePageFields({ ...BASE, kind: 'page' }, TODAY);
+    assert.equal(result.ok && result.fields.kind, 'page');
   });
 
   it('requires a title', () => {
@@ -63,13 +79,20 @@ describe('page settings fields', () => {
         status: 'published',
         date: '2026-05-06T14:00:00Z',
         tags: [' a ', 'A', 'b'],
-        excerpt: '  '
+        excerpt: '  ',
+        kind: 'post'
       },
       TODAY
     );
     assert.deepEqual(result, {
       ok: true,
-      fields: { title: 'T', status: 'published', date: '2026-05-06T14:00:00Z', tags: ['a', 'b'] }
+      fields: {
+        title: 'T',
+        status: 'published',
+        date: '2026-05-06T14:00:00Z',
+        tags: ['a', 'b'],
+        kind: 'post'
+      }
     });
   });
 });
@@ -116,9 +139,18 @@ describe('page settings dialog', () => {
         status: 'published',
         date: '2026-10-25T00:00:00Z',
         tags: ['news', 'sale'],
-        excerpt: 'Big sale.'
+        excerpt: 'Big sale.',
+        kind: 'post'
       }
     ]);
+  });
+
+  it('commits the chosen kind', async () => {
+    const { root, dialog, commits } = open();
+    dialog.setField('kind', 'page');
+    save(root);
+    await tick();
+    assert.equal(commits[0]?.kind, 'page');
   });
 
   it('shows and edits the subtitle', async () => {

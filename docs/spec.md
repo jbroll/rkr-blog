@@ -306,8 +306,12 @@ One file per page under `content/blocks/`, pretty-printed:
 ```
 
 `fields` holds title, subtitle, slug, status (`draft` or `published`),
-date, tags and excerpt; other frontmatter keys from a migrated post are
-kept as they were. The URL slug is `fields.slug`, not the file name, so
+date, tags, excerpt and kind; other frontmatter keys from a migrated post
+are kept as they were. `kind` is `post` (the default when absent) or
+`page`. A page renders without the article header (title, date,
+copy-link, comment bubble), comments and comment form, and is left out
+of `/` and the tag rail. Its `<title>` is still set and it stays in
+search. Comment submissions to a page are 404. The URL slug is `fields.slug`, not the file name, so
 dated names from the WordPress importer and plain names from
 `blocks-migrate` both work. The slug resolves to the first file, in sorted name order,
 whose `fields.slug` matches and whose tree parses; read, save and create

@@ -22,6 +22,7 @@ export interface IndexedPost {
   updated_at: string;
   published_at: string | null;
   path: string;
+  kind: 'post' | 'page';
 }
 
 export interface TagCount {
@@ -312,6 +313,8 @@ export function readIndexedPosts(
     tags?: string[];
     /** 'desc' (default) = newest first; 'asc' = oldest first. */
     sort?: 'asc' | 'desc';
+    /** Absent = 'post'; null = both kinds. */
+    kind?: 'post' | 'page' | null;
   } = {}
 ): IndexedPost[] {
   const limit = opts.limit ?? 20;
@@ -329,6 +332,9 @@ export function readIndexedPosts(
        )`
     : '';
   const tagParams: string[] = tags ?? [];
+  const kind = opts.kind === undefined ? 'post' : opts.kind;
+  const kindFilter = kind === null ? '' : 'AND p.kind = ?';
+  const kindParams: string[] = kind === null ? [] : [kind];
 
   // status === null → no filter (admin view: drafts + published).
   // status === undefined → default to 'published' (anonymous view).
@@ -336,50 +342,56 @@ export function readIndexedPosts(
   if (opts.status === null) {
     return db
       .prepare<IndexedPost>(
-        `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
+        `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path, p.kind
            FROM posts p
-          WHERE 1=1 ${tagFilter}
+          WHERE 1=1 ${kindFilter} ${tagFilter}
           ORDER BY COALESCE(p.published_at, p.created_at) ${dir}, p.slug ASC
           LIMIT ? OFFSET ?`
       )
-      .all(...tagParams, limit, offset);
+      .all(...kindParams, ...tagParams, limit, offset);
   }
   const status = opts.status ?? 'published';
   return db
     .prepare<IndexedPost>(
-      `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path
+      `SELECT p.slug, p.title, p.status, p.created_at, p.updated_at, p.published_at, p.path, p.kind
          FROM posts p
-        WHERE p.status = ? ${tagFilter}
+        WHERE p.status = ? ${kindFilter} ${tagFilter}
         ORDER BY p.published_at ${dir}, p.slug ASC
         LIMIT ? OFFSET ?`
     )
-    .all(status, ...tagParams, limit, offset);
+    .all(status, ...kindParams, ...tagParams, limit, offset);
 }
 
 /** Tag counts for the sidebar.
- * status === null → count all posts; status === 'published' → published only. */
-export function readTagCounts(db: Db, opts: { status: 'published' | null }): TagCount[] {
-  if (opts.status === null) {
-    return db
-      .prepare<TagCount>(
-        `SELECT t.name, COUNT(*) AS count
-           FROM tags t
-           JOIN post_tags pt ON pt.tag_id = t.id
-          GROUP BY t.id
-          ORDER BY t.name DESC`
-      )
-      .all();
+ * status === null → count all posts; status === 'published' → published only.
+ * kind absent → posts only; null → both kinds. */
+export function readTagCounts(
+  db: Db,
+  opts: { status: 'published' | null; kind?: 'post' | 'page' | null }
+): TagCount[] {
+  const kind = opts.kind === undefined ? 'post' : opts.kind;
+  const conds: string[] = [];
+  const params: string[] = [];
+  if (opts.status !== null) {
+    conds.push('p.status = ?');
+    params.push(opts.status);
   }
+  if (kind !== null) {
+    conds.push('p.kind = ?');
+    params.push(kind);
+  }
+  const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
   return db
     .prepare<TagCount>(
       `SELECT t.name, COUNT(*) AS count
          FROM tags t
          JOIN post_tags pt ON pt.tag_id = t.id
-         JOIN posts p ON p.id = pt.post_id AND p.status = ?
+         JOIN posts p ON p.id = pt.post_id
+        ${where}
         GROUP BY t.id
         ORDER BY t.name DESC`
     )
-    .all(opts.status);
+    .all(...params);
 }
 
 /** All indexed posts (drafts + published), newest-updated first.
@@ -388,7 +400,7 @@ export function readTagCounts(db: Db, opts: { status: 'published' | null }): Tag
 export function readAllIndexedPosts(db: Db): IndexedPost[] {
   return db
     .prepare<IndexedPost>(
-      `SELECT slug, title, status, created_at, updated_at, published_at, path
+      `SELECT slug, title, status, created_at, updated_at, published_at, path, kind
          FROM posts
         ORDER BY updated_at DESC, slug ASC`
     )
@@ -398,7 +410,7 @@ export function readAllIndexedPosts(db: Db): IndexedPost[] {
 export function readIndexedPostBySlug(db: Db, slug: string): IndexedPost | undefined {
   return db
     .prepare<IndexedPost>(
-      `SELECT slug, title, status, created_at, updated_at, published_at, path
+      `SELECT slug, title, status, created_at, updated_at, published_at, path, kind
          FROM posts
         WHERE slug = ?`
     )

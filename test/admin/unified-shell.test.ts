@@ -2100,6 +2100,7 @@ describe('unified shell page settings', () => {
       tags: ['x'],
       status: 'draft',
       date: '',
+      kind: 'post',
       excerpt: '',
       subtitle: ''
     });

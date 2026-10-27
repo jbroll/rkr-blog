@@ -246,3 +246,19 @@ test('too-fast fill enqueues notify when level=queued, not when level=ham', asyn
   });
   assert.equal(notify(), 1); // unchanged — ham level skips queued notify
 });
+
+test('POST a comment to a page slug is 404 and stores nothing', async (t) => {
+  const { app, db } = await setup(t);
+  db.prepare(
+    `INSERT INTO posts (slug,title,status,created_at,updated_at,published_at,path,kind)
+     VALUES ('about','About','published','2026-01-01','2026-01-01','2026-01-01','content/blocks/about.json','page')`
+  ).run();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/about/comments',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: form({ name: 'Ann', email: 'ann@e.com', url: '', body: 'hi', website: '', t: '0' })
+  });
+  assert.equal(res.statusCode, 404);
+  assert.equal(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM comments').get()?.n, 0);
+});

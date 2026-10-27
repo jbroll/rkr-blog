@@ -175,3 +175,27 @@ test('one malformed macro file does not take down pages using a good macro', asy
     ['hero']
   );
 });
+
+test('GET /<page> renders no article header, date, copy-link, bubble or comment form', async (t) => {
+  const { app, page } = await setup(t);
+  page('a', [{ type: 'text', markdown: 'About us.' }], { kind: 'page', title: 'A' });
+  page('p', [{ type: 'text', markdown: 'Post.' }], { title: 'P' });
+  const res = await app.inject({ method: 'GET', url: '/a' });
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(res.body, /rkr-post-copylink|rkr-comment-bubble|id="respond"|<time|<h1/);
+  assert.match(res.body, /<title>A — /);
+  assert.match(res.body, /About us\./);
+  const post = await app.inject({ method: 'GET', url: '/p' });
+  assert.match(post.body, /rkr-post-copylink/);
+  assert.match(post.body, /id="respond"/);
+});
+
+test('GET / does not list a page', async (t) => {
+  const { app, page } = await setup(t);
+  page('a', [{ type: 'text', markdown: 'About us.' }], { kind: 'page', title: 'PageOnly' });
+  page('p', [{ type: 'text', markdown: 'Post.' }], { title: 'PostOne', tags: ['pagetag'] });
+  const res = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /PostOne/);
+  assert.doesNotMatch(res.body, /PageOnly/);
+});

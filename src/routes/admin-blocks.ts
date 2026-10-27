@@ -75,6 +75,9 @@ function checkFields(raw: unknown): Record<string, unknown> {
       throw new Error(`fields.${key} must be a string`);
     }
   }
+  if (fields.kind !== undefined && fields.kind !== 'post' && fields.kind !== 'page') {
+    throw new Error('fields.kind must be "post" or "page"');
+  }
   const tags = fields.tags;
   if (tags !== undefined && !(Array.isArray(tags) && tags.every((t) => typeof t === 'string'))) {
     throw new Error('fields.tags must be a list of strings');

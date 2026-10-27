@@ -38,6 +38,9 @@ export interface PostPageData extends SiteChrome {
   /** When false, render the page with no comment bubble, list, or
    * form (used by the static /about page). Default true. */
   showComments?: boolean;
+  /** When false, omit the article <header> (title, subtitle, date,
+   * copy-link, comment bubble). Used by pages. Default true. */
+  showHeader?: boolean;
   /** When false, omit the public-page <script> tags. The offline
    * preview renders a static document. Default true. */
   scripts?: boolean;
@@ -78,6 +81,14 @@ export function renderPostPage(post: PostPageData): string {
 
   const commentsBlock = `${renderCommentList(post.comments ?? [])}\n${renderCommentForm(post.slug, post.commentNotice ? { notice: post.commentNotice } : {})}`;
   const showComments = post.showComments !== false;
+  const showHeader = post.showHeader !== false;
+  const header = `<header>
+<h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>
+${subtitleBlock}
+${dateBlock}
+${showComments ? commentBubble : ''}
+</header>
+`;
   const a = post.assets;
   const v = bundleVersion(a);
   const head = siteHead(post.site, { isAdmin: post.isAdmin, buildHash: a.hash, assets: a });
@@ -111,13 +122,7 @@ ${scriptTags}
 <body>
 ${siteChrome}<main id="main" tabindex="-1">
 <article>
-<header>
-<h1>${escapeText(post.title)}<button type="button" class="rkr-post-copylink" title="Copy link" aria-label="Copy link">${icon('copy', 16)}</button></h1>
-${subtitleBlock}
-${dateBlock}
-${showComments ? commentBubble : ''}
-</header>
-${post.bodyHtml}
+${showHeader ? header : ''}${post.bodyHtml}
 </article>
 ${showComments ? commentsBlock : ''}
 </main>

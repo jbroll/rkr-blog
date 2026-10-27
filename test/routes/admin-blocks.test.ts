@@ -800,6 +800,25 @@ describe('admin blocks page fields', () => {
     assert.deepEqual(saved.fields, { title: 'Spring Sale', slug: 'spring-sale', status: 'draft' });
   });
 
+  it('save refuses fields.kind other than post or page', async (t) => {
+    const { app } = await setup(t);
+    for (const kind of ['article', 3]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/blocks/hello',
+        payload: { tree: { version: 1, body, fields: { title: 'A', kind } } }
+      });
+      assert.equal(res.statusCode, 400);
+      assert.match(res.body, /fields\.kind/);
+    }
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/admin/blocks/hello',
+      payload: { tree: { version: 1, body, fields: { title: 'A', kind: 'page' } } }
+    });
+    assert.equal(ok.statusCode, 200);
+  });
+
   it('edit page embeds the stored fields for the settings dialog', async (t) => {
     const { root, app } = await setup(t);
     fs.writeFileSync(

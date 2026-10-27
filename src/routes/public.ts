@@ -397,7 +397,8 @@ export default async function publicRoutes(
         }
       }
 
-      const postId = getPostIdBySlug(db, row.slug);
+      const isPage = row.kind === 'page';
+      const postId = isPage ? null : getPostIdBySlug(db, row.slug);
       const comments = postId === null ? [] : listPublishedThread(db, postId);
 
       const html = renderPostPage({
@@ -412,6 +413,7 @@ export default async function publicRoutes(
         ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
         isAdmin: !!req.user,
         comments,
+        ...(isPage ? { showHeader: false, showComments: false } : {}),
         ...(req.query.submitted === '1' ? { commentNotice: COMMENT_SUBMITTED_NOTICE } : {})
       });
 
@@ -457,13 +459,13 @@ function countPosts(db: Db, status: 'published' | null, tags: string[]): number 
          WHERE tg.name IN (${ph}) COLLATE NOCASE
          GROUP BY pt.post_id
          HAVING COUNT(DISTINCT pt.tag_id) = ${tags.length}
-       )${statusFilter}`;
+       ) AND p.kind = 'post'${statusFilter}`;
     const params = status === null ? tags : [...tags, status];
     return (db.prepare<{ n: number }>(sql).get(...params) ?? { n: 0 }).n;
   }
   const sql =
     status === null
-      ? 'SELECT COUNT(*) AS n FROM posts'
-      : "SELECT COUNT(*) AS n FROM posts WHERE status = 'published'";
+      ? "SELECT COUNT(*) AS n FROM posts WHERE kind = 'post'"
+      : "SELECT COUNT(*) AS n FROM posts WHERE kind = 'post' AND status = 'published'";
   return (db.prepare<{ n: number }>(sql).get() ?? { n: 0 }).n;
 }

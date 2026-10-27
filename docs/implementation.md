@@ -112,7 +112,7 @@ $SITE_ROOT/
 | Table | Purpose |
 |---|---|
 | `schema_migrations` | Tracks applied migration versions |
-| `posts` | Index over `content/posts/*.md` — rebuilt by `site-admin reindex`; not the source of truth |
+| `posts` | Index over `content/posts/*.md` and `content/blocks/*.json` — rebuilt by `site-admin reindex`; not the source of truth. `kind` (`post` or `page`, default `post`) comes from `fields.kind` of a block page; the index queries and the tag counts return posts only unless asked for pages |
 | `jobs` | Render job queue with atomic state transitions; deduped by cache key |
 | `users` | Author accounts with `owner` / `editor` roles |
 | `oauth_accounts` | OAuth provider + subject ID linked to a user |

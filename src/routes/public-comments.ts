@@ -11,6 +11,7 @@ import { getPostIdBySlug, insertWebComment, setCommentStatus } from '../lib/comm
 import { siteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { enqueue } from '../lib/jobs.ts';
+import { readIndexedPostBySlug } from '../lib/post-index.ts';
 import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
 
 // Both "accepted" outcomes (real success AND silent honeypot reject)
@@ -72,7 +73,7 @@ export function registerPublicCommentRoutes(
       }
 
       const postId = getPostIdBySlug(db, slug);
-      if (postId === null) {
+      if (postId === null || readIndexedPostBySlug(db, slug)?.kind === 'page') {
         return reply.code(404).send({ error: 'post not found' });
       }
 

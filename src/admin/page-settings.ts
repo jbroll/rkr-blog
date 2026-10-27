@@ -17,9 +17,10 @@ export interface PageFields {
   tags: string[];
   excerpt?: string;
   subtitle?: string;
+  kind: 'post' | 'page';
 }
 
-type FieldName = 'title' | 'subtitle' | 'status' | 'date' | 'tags' | 'excerpt';
+type FieldName = 'title' | 'subtitle' | 'status' | 'kind' | 'date' | 'tags' | 'excerpt';
 
 const TITLE_REQUIRED = 'Enter a title for the page.';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,7 +32,8 @@ export function readPageFields(raw: Record<string, unknown> | undefined, slug: s
     title: typeof f.title === 'string' && f.title !== '' ? f.title : slug,
     status: f.status === 'published' ? 'published' : 'draft',
     date: typeof f.date === 'string' ? f.date : '',
-    tags: Array.isArray(f.tags) ? f.tags.filter((t): t is string => typeof t === 'string') : []
+    tags: Array.isArray(f.tags) ? f.tags.filter((t): t is string => typeof t === 'string') : [],
+    kind: f.kind === 'page' ? 'page' : 'post'
   };
   if (typeof f.excerpt === 'string' && f.excerpt !== '') fields.excerpt = f.excerpt;
   if (typeof f.subtitle === 'string' && f.subtitle !== '') fields.subtitle = f.subtitle;
@@ -51,7 +53,8 @@ export function validatePageFields(values: PageFields, today: string): Validated
     title,
     status: values.status,
     date,
-    tags: deduplicateTags(values.tags.map((t) => t.trim()).filter((t) => t !== ''))
+    tags: deduplicateTags(values.tags.map((t) => t.trim()).filter((t) => t !== '')),
+    kind: values.kind
   };
   const excerpt = values.excerpt?.trim();
   if (excerpt) fields.excerpt = excerpt;
@@ -86,6 +89,7 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
     title: opts.fields.title,
     subtitle: opts.fields.subtitle ?? '',
     status: opts.fields.status,
+    kind: opts.fields.kind,
     date: original.slice(0, 10),
     tags: opts.fields.tags.join(', '),
     excerpt: opts.fields.excerpt ?? ''
@@ -147,6 +151,23 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
     status.append(option);
   }
   addField('status', 'Status', status, 'Drafts are visible only when you are signed in.');
+
+  const kind = doc.createElement('select');
+  for (const [value, text] of [
+    ['post', 'Post'],
+    ['page', 'Page']
+  ] as const) {
+    const option = doc.createElement('option');
+    option.setAttribute('value', value);
+    option.textContent = text;
+    kind.append(option);
+  }
+  addField(
+    'kind',
+    'Kind',
+    kind,
+    'A page has no title header, date or comments, and is not listed on the home page.'
+  );
 
   const date = doc.createElement('input');
   date.setAttribute('type', 'date');
@@ -221,6 +242,7 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
         {
           title: values.title,
           status: values.status === 'published' ? 'published' : 'draft',
+          kind: values.kind === 'page' ? 'page' : 'post',
           date: day === original.slice(0, 10) ? original : day,
           tags: parseTagInput(values.tags),
           excerpt: values.excerpt,
