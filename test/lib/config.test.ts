@@ -22,6 +22,7 @@ import {
   themeName,
   writePersistedSiteConfig
 } from '../../src/lib/config.ts';
+import { pickOrgFields } from '../../src/lib/site-org-settings.ts';
 
 // themeName() memoises within the process so the warning fires once;
 // reset between tests that probe the env-driven branches.
@@ -357,4 +358,20 @@ test('gphotosOAuthConfigured shares the Google client gate with gdrive', () => {
     gphotosOAuthConfigured({ GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' }),
     false
   );
+});
+
+test('pickOrgFields keeps a valid slug and drops a non-slug', () => {
+  assert.deepEqual(pickOrgFields({ homePage: 'welcome-2' }), { homePage: 'welcome-2' });
+  assert.deepEqual(pickOrgFields({ homePage: '' }), { homePage: '' });
+  assert.deepEqual(pickOrgFields({ homePage: 'Not A Slug' }), {});
+  assert.deepEqual(pickOrgFields({ homePage: 7 }), {});
+});
+
+test('homePage round-trips through site.json; siteConfig surfaces it only when set', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig({ homePage: 'welcome' }, env);
+  assert.equal(readPersistedSiteConfig(env).homePage, 'welcome');
+  assert.equal(siteConfig(env).homePage, 'welcome');
+  writePersistedSiteConfig({ homePage: '' }, env);
+  assert.equal(siteConfig(env).homePage, undefined);
 });

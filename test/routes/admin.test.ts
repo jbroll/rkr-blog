@@ -122,7 +122,7 @@ test('POST /admin/upload rejects non-image payloads', async (t) => {
   assert.match(res.json<ErrorBody>().error, /not a recognized image/);
 });
 
-test('GET /admin/posts → 301 redirect to /', async (t) => {
+test('GET /admin/posts → 301 redirect to /posts', async (t) => {
   // The standalone admin posts page is gone — the homepage doubles as
   // the admin posts list when authed. The legacy URL 301s so bookmarks
   // and any pre-removal admin-strip clicks still land somewhere useful.
@@ -132,7 +132,7 @@ test('GET /admin/posts → 301 redirect to /', async (t) => {
 
   const redirect = await app.inject({ method: 'GET', url: '/admin/posts' });
   assert.equal(redirect.statusCode, 301);
-  assert.equal(redirect.headers.location, '/');
+  assert.equal(redirect.headers.location, '/posts');
 });
 
 // One smoke test per theme: each must render the homepage under its

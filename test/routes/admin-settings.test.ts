@@ -7,6 +7,7 @@ import { type TestContext, test } from 'node:test';
 import { _resetThemeNameCache } from '../../src/lib/config.ts';
 import { open } from '../../src/lib/db.ts';
 import { migrate } from '../../src/lib/migrate.ts';
+import { runReindex } from '../../src/lib/post-index.ts';
 import { buildApp } from '../../src/server.ts';
 
 function freshSiteRoot(t: TestContext): string {
@@ -684,4 +685,57 @@ test('POST /admin/settings/gphotos/disconnect redirects to settings', async (t) 
   });
   assert.equal(res.statusCode, 303);
   assert.equal(res.headers.location, '/admin/settings');
+});
+
+function writeBlockPage(root: string, slug: string, fields: Record<string, unknown>): void {
+  fs.mkdirSync(path.join(root, 'content', 'blocks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'content', 'blocks', `${slug}.json`),
+    JSON.stringify({
+      version: 1,
+      body: [{ type: 'text', markdown: 'x' }],
+      fields: { title: `T ${slug}`, slug, status: 'published', ...fields }
+    })
+  );
+}
+
+const postHome = (app: Awaited<ReturnType<typeof setup>>['app'], homePage: string) =>
+  app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: `title=T&homePage=${encodeURIComponent(homePage)}`
+  });
+
+test('Home page select lists only published pages of kind page', async (t) => {
+  const { root, app } = await setup(t);
+  writeBlockPage(root, 'welcome', { kind: 'page' });
+  writeBlockPage(root, 'soon', { kind: 'page', status: 'draft' });
+  writeBlockPage(root, 'a-post', {});
+  runReindex(root);
+  fs.writeFileSync(path.join(root, 'config', 'site.json'), JSON.stringify({ homePage: 'welcome' }));
+  const res = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(res.body, /<option value="welcome" selected>/);
+  assert.doesNotMatch(res.body, /value="soon"/);
+  assert.doesNotMatch(res.body, /value="a-post"/);
+});
+
+test('POST /admin/settings saves homePage, refuses a non-page, and an empty choice clears it', async (t) => {
+  const { root, app } = await setup(t);
+  writeBlockPage(root, 'welcome', { kind: 'page' });
+  writeBlockPage(root, 'a-post', {});
+  runReindex(root);
+  const onDisk = () => JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+
+  assert.equal((await postHome(app, 'welcome')).headers.location, '/admin/settings?flash=saved');
+  assert.equal(onDisk().homePage, 'welcome');
+
+  const bad = await postHome(app, 'a-post');
+  assert.match(String(bad.headers.location), /err=/);
+  const missing = await postHome(app, 'nope');
+  assert.match(String(missing.headers.location), /err=/);
+  assert.equal(onDisk().homePage, 'welcome');
+
+  await postHome(app, '');
+  assert.equal(onDisk().homePage, '');
 });

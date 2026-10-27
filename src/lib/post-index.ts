@@ -180,6 +180,11 @@ function doReindex(
   });
   upsert();
 
+  if (db.prepare('SELECT 1 FROM posts WHERE slug = ?').get('posts')) {
+    // biome-ignore lint/suspicious/noConsole: surface the shadowed slug to reindex output
+    console.error('reindex: a post has slug "posts"; /posts serves the post index, not that post');
+  }
+
   // Handle simultaneous file-rename + slug-change: the upsert above inserted
   // a new row for the new file while the old row is now an orphan. Instead
   // of deleting the orphan (and CASCADE-deleting its comments), migrate the

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import { writeFileAtomicSync } from './atomic-write.ts';
+import { type OrgSiteFields, orgSiteConfig, pickOrgFields } from './site-org-settings.ts';
 
 /** Bounds for the teaser word-limit setting. 0 disables truncation;
  * the upper bound is a sanity cap (a lede longer than this is not a
@@ -47,7 +48,7 @@ export interface ServerConfig {
   logLevel: string;
 }
 
-export interface SiteConfig {
+export interface SiteConfig extends OrgSiteFields {
   title: string;
   tagline?: string;
   /** Sidecar ID of the site-wide banner image, if set. */
@@ -116,7 +117,7 @@ export const DEFAULT_VIDEO_CAPS = {
 /** Schema of `<siteRoot>/config/site.json`. All fields optional — a
  * missing field falls through to the env var, then to a hard-coded
  * default. The admin settings UI rewrites this file. */
-export interface PersistedSiteConfig {
+export interface PersistedSiteConfig extends OrgSiteFields {
   title?: string;
   tagline?: string;
   theme?: string;
@@ -163,7 +164,7 @@ export function readPersistedSiteConfig(env: Env = process.env): PersistedSiteCo
 function pickPersistedFields(raw: unknown): PersistedSiteConfig {
   if (!raw || typeof raw !== 'object') return {};
   const r = raw as Record<string, unknown>;
-  const out: PersistedSiteConfig = {};
+  const out: PersistedSiteConfig = { ...pickOrgFields(r) };
   if (typeof r.title === 'string') out.title = r.title;
   if (typeof r.tagline === 'string') out.tagline = r.tagline;
   if (typeof r.theme === 'string') out.theme = r.theme;
@@ -262,7 +263,7 @@ export function siteConfig(env: Env = process.env): SiteConfig {
   const persisted = readPersistedSiteConfig(env);
   const title = persisted.title || env.SITE_TITLE || 'rkroll';
   const tagline = persisted.tagline ?? env.SITE_TAGLINE;
-  const out: SiteConfig = { title };
+  const out: SiteConfig = { title, ...orgSiteConfig(persisted) };
   if (tagline) out.tagline = tagline;
   if (persisted.ingestResize) out.ingestResize = persisted.ingestResize;
   if (persisted.videoCaps) out.videoCaps = persisted.videoCaps;

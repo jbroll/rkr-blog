@@ -1,5 +1,5 @@
 // Public routes:
-//   GET /                — paginated index of published posts
+//   GET /, /posts        — paginated index of published posts (public-index.ts)
 //   GET /:slug           — rendered post page
 //   GET /img/:filename   — derivative image, on Apache cache-miss fall-through
 //
@@ -9,30 +9,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { Paragraph, Root, RootContent } from 'mdast';
-import type { LeafDirective } from 'mdast-util-directive';
-import { readIndexedBlockPage } from '../lib/block-pages.ts';
-import { renderBlockPost } from '../lib/block-post-render.ts';
-import { extractBlockTeaser } from '../lib/block-teaser.ts';
-import { getPostIdBySlug, listPublishedThread } from '../lib/comments.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
-import { parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
+import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
-import { readIndexedPostBySlug, readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
+import { readIndexedPostBySlug } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
-import { truncateParagraph } from '../lib/teaser-truncate.ts';
+import { homePageRow } from '../lib/site-org-settings.ts';
+import { extractPostBanner, renderStoredPage } from '../lib/stored-page-render.ts';
 import { buildVideoMap } from '../lib/video-map-fs.ts';
-import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
-import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
-import { type IndexTeaser, renderIndexPage } from '../templates/index.ts';
+import { WidgetRegistry } from '../lib/widgets.ts';
 import { renderNotFoundPage } from '../templates/not-found.ts';
 import { renderPostPage } from '../templates/post.ts';
 import figureWidget from '../widgets/figure.ts';
 import videoWidget from '../widgets/video.ts';
 import { registerPublicCommentRoutes } from './public-comments.ts';
 import { registerPublicImgRoutes } from './public-img.ts';
+import { registerIndexRoutes } from './public-index.ts';
 import { registerPublicSearchRoute } from './public-search.ts';
 import { registerPublicVideoRoutes } from './public-video.ts';
 
@@ -43,66 +37,6 @@ export interface PublicRoutesOpts {
   renderBudgetMs?: number;
   /** Override site branding (title/tagline). Default reads from env. */
   site?: SiteConfig;
-}
-
-/** Index of the post's hero figure: the first non-yaml node, when that
- * node is a ::figure leafDirective. -1 when it is anything else. */
-function heroFigureIndex(ast: Root): number {
-  for (let i = 0; i < ast.children.length; i++) {
-    const node = ast.children[i] as RootContent;
-    if (node.type === 'yaml') continue;
-    const dir = node as unknown as DirectiveNode;
-    return node.type === 'leafDirective' && dir.name === 'figure' ? i : -1;
-  }
-  return -1;
-}
-
-/** Splice the hero ::figure out of the AST and return its rendered
- * HTML. The directive's own attributes (justify, aspect, etc.) are
- * preserved verbatim so the author controls the banner appearance by
- * editing the markdown. Returns null when the post has no hero. */
-async function extractPostBanner(ast: Root, ctx: RenderCtx): Promise<string | null> {
-  const heroIdx = heroFigureIndex(ast);
-  if (heroIdx === -1) return null;
-  const dir = ast.children[heroIdx] as unknown as DirectiveNode;
-  const html = await ctx.widgets.dispatch('figure', dir, ctx);
-  ast.children.splice(heroIdx, 1);
-  return html;
-}
-
-/** Exactly what a teaser renders — the hero ::figure and the lede
- * paragraph after it. The index measures the images in these nodes
- * only; measuring the whole post would open (and self-heal a bake
- * for) every image in it, and one broken image anywhere would cost
- * the index its teaser. */
-function teaserNodes(ast: Root): RootContent[] {
-  const heroIdx = heroFigureIndex(ast);
-  if (heroIdx === -1) return [];
-  const hero = ast.children[heroIdx] as RootContent;
-  const lede = ast.children.slice(heroIdx + 1).find((n) => n.type === 'paragraph');
-  return lede ? [hero, lede] : [hero];
-}
-
-/** First remaining top-level paragraph rendered to inline HTML (links /
- * emphasis preserved). Call AFTER extractPostBanner has spliced the hero
- * figure out, so "first paragraph" is the lede. Null when none. When
- * `maxWords > 0` the paragraph is word-truncated at the mdast layer
- * (markup-preserving) before rendering. */
-async function extractFirstParagraph(
-  ast: Root,
-  ctx: RenderCtx,
-  maxWords: number
-): Promise<string | null> {
-  const para = ast.children.find((n) => n.type === 'paragraph');
-  if (!para) return null;
-  const trimmed = truncateParagraph(para as Paragraph, maxWords);
-  return renderPostHtml({ type: 'root', children: [trimmed] }, ctx);
-}
-
-/** True when an index row points at a JSON block page rather than a
- * markdown source (JSON-only pages, or posts archived after the cutover). */
-function isBlocksPagePath(relPath: string): boolean {
-  return path.posix.dirname(relPath) === 'content/blocks';
 }
 
 export default async function publicRoutes(
@@ -139,169 +73,32 @@ export default async function publicRoutes(
   registerPublicCommentRoutes(fastify, { db });
   registerPublicImgRoutes(fastify, { siteRoot, db, renderBudgetMs });
   registerPublicVideoRoutes(fastify, { siteRoot, db, renderBudgetMs });
-
-  // ---- index: GET / -----------------------------------------------------
-
-  fastify.get<{ Querystring: { page?: string; tag?: string | string[]; sort?: string } }>(
-    '/',
-    async (req, reply) => {
-      const site = getSite();
-      const isAdmin = !!req.user;
-      // Only one tag at a time (OR/replace logic). Fastify may deliver a
-      // string or string[] for repeated params; take the first non-empty value.
-      const rawTag = req.query.tag;
-      const firstTag = (Array.isArray(rawTag) ? rawTag[0] : rawTag)?.trim();
-      const activeTags = firstTag ? [firstTag] : [];
-      const sort: 'asc' | 'desc' = req.query.sort === 'asc' ? 'asc' : 'desc';
-      // Authed visitors see drafts + published (the homepage doubles as
-      // the admin posts list). Anonymous visitors keep the published-
-      // only filter so drafts stay invisible until promotion.
-      const status: 'published' | null = isAdmin ? null : 'published';
-
-      const total = countPosts(db, status, activeTags);
-
-      const rows = readIndexedPosts(db, {
-        limit: total,
-        offset: 0,
-        status,
-        tags: activeTags,
-        sort
-      });
-
-      // Tag rail: all posts for admin (drafts count too); published-only for anonymous.
-      const tagCounts = readTagCounts(db, { status: isAdmin ? null : 'published' });
-
-      let indexBannerHtml: string | undefined;
-
-      // Prefer _site-banner.md: find the first ::figure leafDirective and
-      // render it as the index banner. Falls back to bannerImageId if the
-      // file is absent or contains no ::figure.
-      const siteBannerPath = path.join(siteRoot, 'content', 'posts', '_site-banner.md');
-      let siteBannerFigureFound = false;
-      if (fs.existsSync(siteBannerPath)) {
-        try {
-          const { ast } = parsePost(await fs.promises.readFile(siteBannerPath, 'utf8'));
-          const figureNode = ast.children.find(
-            (n): n is LeafDirective =>
-              n.type === 'leafDirective' && (n as LeafDirective).name === 'figure'
-          ) as LeafDirective | undefined;
-          if (figureNode) {
-            siteBannerFigureFound = true;
-            const dir = figureNode as DirectiveNode;
-            indexBannerHtml = await widgets.dispatch('figure', dir, {
-              images: await buildImageMap(siteRoot, dir, { log: req.log }),
-              videos: new Map(),
-              widgets
-            });
-          }
-        } catch {
-          // Malformed _site-banner.md — fall through to bannerImageId.
-        }
-      }
-
-      if (!siteBannerFigureFound && site.bannerImageId) {
-        const bannerNode: DirectiveNode = {
-          type: 'leafDirective',
-          name: 'figure',
-          attributes: { ids: site.bannerImageId, justify: 'bleed' },
-          children: []
-        };
-        indexBannerHtml = await widgets.dispatch('figure', bannerNode, {
-          images: await buildImageMap(siteRoot, bannerNode, { log: req.log }),
-          videos: new Map(),
-          widgets
-        });
-      }
-
-      // Teaser: anonymous view only, behind the postTeaser toggle.
-      // Read the current top post and drop it from the list so it is not
-      // duplicated. Archived/JSON-only rows render the hero figure and
-      // lede from their block tree; unarchived rows keep reading the
-      // markdown source (path already includes content/posts/, so join
-      // directly onto siteRoot — same as the GET /:slug handler).
-      let teaser: IndexTeaser | undefined;
-      let listRows = rows;
-      const top = rows[0];
-      if (!isAdmin && site.postTeaser && top) {
-        try {
-          let parts: { bannerHtml: string; excerptHtml: string } | null = null;
-          if (isBlocksPagePath(top.path)) {
-            const twin = readIndexedBlockPage(siteRoot, top);
-            if (twin) {
-              parts = await extractBlockTeaser(
-                siteRoot,
-                twin.tree,
-                widgets,
-                site.teaserWords ?? 0,
-                req.log
-              );
-            }
-          } else {
-            const rawTop = await fs.promises.readFile(path.join(siteRoot, top.path), 'utf8');
-            const { ast } = parsePost(rawTop);
-            const ctx = {
-              images: await buildImageMap(siteRoot, teaserNodes(ast), { log: req.log }),
-              videos: await buildVideoMap(siteRoot),
-              widgets
-            };
-            const bannerHtml = await extractPostBanner(ast, ctx);
-            const excerptHtml = bannerHtml
-              ? await extractFirstParagraph(ast, ctx, site.teaserWords ?? 0)
-              : null;
-            if (bannerHtml && excerptHtml) parts = { bannerHtml, excerptHtml };
-          }
-          if (parts) {
-            teaser = {
-              slug: top.slug,
-              title: top.title,
-              ...(top.published_at ? { date: top.published_at } : {}),
-              ...parts
-            };
-            listRows = rows.slice(1);
-          }
-        } catch {
-          // Unreadable / malformed top post → no teaser, full list.
-        }
-      }
-
-      const html = renderIndexPage({
-        site,
-        assets: serverAssets(),
-        page: 1,
-        totalPages: 1,
-        posts: listRows.map((r) => ({
-          slug: r.slug,
-          title: r.title,
-          ...(r.published_at ? { date: r.published_at } : {}),
-          ...(isAdmin ? { status: r.status, updatedAt: r.updated_at } : {})
-        })),
-        ...(indexBannerHtml ? { bannerHtml: indexBannerHtml } : {}),
-        ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
-        ...(teaser ? { teaser } : {}),
-        isAdmin,
-        ...(tagCounts.length > 0 ? { tagCounts } : {}),
-        ...(activeTags.length > 0 ? { activeTags } : {}),
-        sort
-      });
-
-      setPublicSecurityHeaders(reply);
-      // Authed responses carry session-private chrome (admin strip,
-      // per-row controls). Mark them no-store so the SW + any HTTP
-      // intermediary skip caching — a post-action 303 redirect to /
-      // would otherwise serve the previously-cached pre-action body.
-      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-      return reply.type('text/html; charset=utf-8').send(html);
-    }
-  );
+  registerIndexRoutes(fastify, { siteRoot, db, getSite, widgets });
 
   // ---- about: GET /about -----------------------------------------------
 
-  // GET /about — the _about system post rendered as a standalone page.
-  // _-slugs are 404 via /:slug by design, so this reads the file
+  // GET /about — a published block page with slug `about` (any status for
+  // admins), else the _about system post rendered as a standalone page.
+  // _-slugs are 404 via /:slug by design, so the fallback reads the file
   // directly and renders without comments.
   fastify.get('/about', async (req, reply) => {
     const site = getSite();
     const isAdmin = !!req.user;
+    const aboutRow = readIndexedPostBySlug(db, 'about');
+    if (aboutRow && (aboutRow.status === 'published' || isAdmin)) {
+      const html = await renderStoredPage({
+        siteRoot,
+        db,
+        row: aboutRow,
+        site,
+        widgets,
+        isAdmin,
+        log: req.log
+      });
+      setPublicSecurityHeaders(reply);
+      if (isAdmin) reply.header('Cache-Control', 'private, no-store');
+      return reply.type('text/html; charset=utf-8').send(html);
+    }
     const filePath = path.join(siteRoot, 'content', 'posts', '_about.md');
     let parsed: ReturnType<typeof parsePost>;
     try {
@@ -348,73 +145,27 @@ export default async function publicRoutes(
       // never indexed and must never be directly accessible via the public
       // route — return 404 unconditionally, even for authenticated users.
       if (slug.startsWith('_')) return send404(req, reply);
+      // The home page lives at /. Only a published page redirects, since a
+      // 301 is cached permanently.
+      if (homePageRow(db, site)?.slug === slug) {
+        setPublicSecurityHeaders(reply);
+        return reply.redirect('/', 301);
+      }
       const row = readIndexedPostBySlug(db, slug);
       // Authed visitors see drafts (matches the index page, which links
       // drafts straight to /:slug from the admin table). Anonymous
       // visitors keep the published-only filter.
       if (!row || (row.status !== 'published' && !req.user)) return send404(req, reply);
 
-      // JSON-first: a stored twin renders the page body; the markdown
-      // file (when paired) still supplies nothing at render time — the
-      // index already carries its title, date, status, and tags.
-      const twin = readIndexedBlockPage(siteRoot, row);
-      const widgetsCtx = {
-        images: new Map(),
-        videos: await buildVideoMap(siteRoot),
-        widgets
-      };
-      let title: string;
-      let date: string | undefined;
-      let subtitle: string | undefined;
-      let bannerHtml: string | null = null;
-      let bodyHtml: string;
-      if (twin) {
-        const parts = await renderBlockPost(siteRoot, twin, {
-          widgets,
-          videos: widgetsCtx.videos,
-          log: req.log
-        });
-        bodyHtml = parts.bodyHtml;
-        bannerHtml = parts.bannerHtml;
-        subtitle = parts.subtitle;
-        title = twin.title;
-        date = row.published_at ?? undefined;
-      } else {
-        const fullPath = path.join(siteRoot, row.path);
-        const raw = await fs.promises.readFile(fullPath, 'utf8');
-        const parsed = parsePost(raw);
-        const ctx = {
-          images: await buildImageMap(siteRoot, parsed.ast, { log: req.log }),
-          videos: widgetsCtx.videos,
-          widgets
-        };
-        bannerHtml = await extractPostBanner(parsed.ast, ctx);
-        bodyHtml = await renderPostHtml(parsed.ast, ctx);
-        title = parsed.frontmatter.title;
-        date = parsed.frontmatter.date;
-        if (typeof parsed.frontmatter.subtitle === 'string' && parsed.frontmatter.subtitle.trim()) {
-          subtitle = parsed.frontmatter.subtitle;
-        }
-      }
-
-      const isPage = row.kind === 'page';
-      const postId = isPage ? null : getPostIdBySlug(db, row.slug);
-      const comments = postId === null ? [] : listPublishedThread(db, postId);
-
-      const html = renderPostPage({
+      const html = await renderStoredPage({
+        siteRoot,
+        db,
+        row,
         site,
-        assets: serverAssets(),
-        title,
-        ...(subtitle ? { subtitle } : {}),
-        slug: row.slug,
-        ...(date ? { date } : {}),
-        bodyHtml,
-        ...(bannerHtml ? { bannerHtml } : {}),
-        ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
+        widgets,
         isAdmin: !!req.user,
-        comments,
-        ...(isPage ? { showHeader: false, showComments: false } : {}),
-        ...(req.query.submitted === '1' ? { commentNotice: COMMENT_SUBMITTED_NOTICE } : {})
+        log: req.log,
+        submitted: req.query.submitted === '1'
       });
 
       setPublicSecurityHeaders(reply);
@@ -445,27 +196,4 @@ export default async function publicRoutes(
   };
   fastify.get('/:y/:m/:d/:slug', legacyPermalink);
   fastify.get('/:y/:m/:d/:slug/', legacyPermalink);
-}
-
-/** Count posts matching the given status + optional multi-tag AND filter. */
-function countPosts(db: Db, status: 'published' | null, tags: string[]): number {
-  if (tags.length > 0) {
-    const ph = tags.map(() => '?').join(', ');
-    const statusFilter = status === null ? '' : ' AND p.status = ?';
-    const sql = `SELECT COUNT(*) AS n FROM posts p
-       WHERE p.id IN (
-         SELECT pt.post_id FROM post_tags pt
-         JOIN tags tg ON tg.id = pt.tag_id
-         WHERE tg.name IN (${ph}) COLLATE NOCASE
-         GROUP BY pt.post_id
-         HAVING COUNT(DISTINCT pt.tag_id) = ${tags.length}
-       ) AND p.kind = 'post'${statusFilter}`;
-    const params = status === null ? tags : [...tags, status];
-    return (db.prepare<{ n: number }>(sql).get(...params) ?? { n: 0 }).n;
-  }
-  const sql =
-    status === null
-      ? "SELECT COUNT(*) AS n FROM posts WHERE kind = 'post'"
-      : "SELECT COUNT(*) AS n FROM posts WHERE kind = 'post' AND status = 'published'";
-  return (db.prepare<{ n: number }>(sql).get() ?? { n: 0 }).n;
 }

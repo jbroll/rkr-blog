@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { open } from '../../src/lib/db.ts';
 import { events } from '../../src/lib/jobs.ts';
 import { migrate } from '../../src/lib/migrate.ts';
-import { RESERVED_SLUGS } from '../../src/lib/reserved-slugs.ts';
+import { PAGE_ROUTE_SLUGS, RESERVED_SLUGS } from '../../src/lib/reserved-slugs.ts';
 import { buildApp } from '../../src/server.ts';
 
 /** Full paths from fastify's route tree printout (commonPrefix: false). */
@@ -27,7 +27,7 @@ function routePaths(tree: string): string[] {
   return out;
 }
 
-test('RESERVED_SLUGS matches the fixed routes that shadow a page URL', async (t) => {
+test('RESERVED_SLUGS and PAGE_ROUTE_SLUGS match the fixed routes that shadow a page URL', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rkr-reserved-'));
   fs.mkdirSync(path.join(root, 'data'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -60,5 +60,5 @@ test('RESERVED_SLUGS matches the fixed routes that shadow a page URL', async (t)
       /^\/admin\/blocks\/([a-z0-9-]+)$/.exec(route))?.[1];
     if (slug) shadowing.add(slug);
   }
-  assert.deepEqual([...shadowing].sort(), [...RESERVED_SLUGS].sort());
+  assert.deepEqual([...shadowing].sort(), [...RESERVED_SLUGS, ...PAGE_ROUTE_SLUGS].sort());
 });

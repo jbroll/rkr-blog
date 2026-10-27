@@ -36,6 +36,7 @@ export interface AdminSettingsPageData extends SiteChrome {
     teaserWords?: number;
     commentNotify?: 'off' | 'ham' | 'queued' | 'all';
     notifyEmail?: string;
+    homePage?: string;
     ingestResize?: {
       maxDim?: number;
       scalePct?: number;
@@ -74,6 +75,8 @@ export interface AdminSettingsPageData extends SiteChrome {
   hasBanner: boolean;
   /** Whether content/posts/_about.md exists on disk. */
   hasAbout: boolean;
+  /** Published pages of kind page: the choices for the Home page select. */
+  homePages?: { slug: string; title: string }[];
 }
 
 export function renderAdminSettingsPage(data: AdminSettingsPageData): string {
@@ -118,6 +121,12 @@ ${saveBtn}
   <label for="rkr-settings-theme">Theme</label>
   <select id="rkr-settings-theme" name="theme">
     ${renderThemeOptions(data.themes, data.persisted.theme)}
+  </select>
+
+  <label for="rkr-settings-home-page">Home page</label>
+  <select id="rkr-settings-home-page" name="homePage">
+    <option value="">Post index</option>
+    ${renderHomePageOptions(data.homePages ?? [], data.persisted.homePage)}
   </select>
 
   <h2 class="rkr-admin-settings-section">Banner</h2>
@@ -275,6 +284,18 @@ function renderFlash(flash: { kind: 'ok' | 'error' | 'info'; text: string }): st
  * full hash is in the title attribute for hover/copy. */
 function shortHash(hash: string): string {
   return hash === 'unknown' ? hash : hash.slice(0, 12);
+}
+
+function renderHomePageOptions(
+  pages: { slug: string; title: string }[],
+  selected: string | undefined
+): string {
+  return pages
+    .map((p) => {
+      const sel = p.slug === selected ? ' selected' : '';
+      return `<option value="${escapeAttr(p.slug)}"${sel}>${escapeText(p.title)}</option>`;
+    })
+    .join('\n    ');
 }
 
 function renderThemeOptions(themes: string[], selected: string | undefined): string {

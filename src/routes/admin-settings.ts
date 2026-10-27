@@ -30,7 +30,7 @@ import {
 } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
 import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
-import { runReindex } from '../lib/post-index.ts';
+import { readIndexedPosts, runReindex } from '../lib/post-index.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
@@ -76,6 +76,7 @@ export function registerAdminSettingsRoutes(
       }
       const hasBanner = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_site-banner.md'));
       const hasAbout = fs.existsSync(path.join(siteRoot, 'content', 'posts', '_about.md'));
+      const homePages = db ? listHomePageChoices(db) : [];
       return reply.type('text/html; charset=utf-8').send(
         renderAdminSettingsPage({
           site,
@@ -91,7 +92,8 @@ export function registerAdminSettingsRoutes(
           gphotosConnected,
           gphotosConfigured: gphotosOAuthConfigured(),
           hasBanner,
-          hasAbout
+          hasAbout,
+          homePages
         })
       );
     }
@@ -134,6 +136,7 @@ export function registerAdminSettingsRoutes(
       teaserWords?: unknown;
       commentNotify?: unknown;
       notifyEmail?: unknown;
+      homePage?: unknown;
     };
   }>('/admin/settings', { ...ownerGuard }, async (request, reply) => {
     const body = request.body ?? {};
@@ -207,6 +210,15 @@ export function registerAdminSettingsRoutes(
       );
     }
 
+    // Absent field leaves the stored choice alone; empty clears it.
+    const homePageRaw = typeof body.homePage === 'string' ? body.homePage.trim() : undefined;
+    if (homePageRaw && !(db && listHomePageChoices(db).some((p) => p.slug === homePageRaw))) {
+      return reply.redirect(
+        `/admin/settings?err=${encodeURIComponent('home page must be a published page')}`,
+        303
+      );
+    }
+
     // Persist the form values verbatim, empty strings included.
     // siteConfig() / themeName() each treat an empty-string persisted
     // field as falsy (the `||` chain falls through to SITE_TITLE /
@@ -222,6 +234,7 @@ export function registerAdminSettingsRoutes(
       bannerAboveHeader,
       teaserWords: teaserWords.value ?? 0,
       notifyEmail: notifyEmailRaw,
+      ...(homePageRaw !== undefined ? { homePage: homePageRaw } : {}),
       ...(commentNotify ? { commentNotify } : {}),
       ...(ingestResize ? { ingestResize } : {})
     });
@@ -308,6 +321,13 @@ export function registerAdminSettingsRoutes(
       return reply.send({ ok: true, bannerImageId: imageId });
     }
   );
+}
+
+function listHomePageChoices(db: Db): { slug: string; title: string }[] {
+  return readIndexedPosts(db, { kind: 'page', status: 'published', limit: 1000 }).map((p) => ({
+    slug: p.slug,
+    title: p.title
+  }));
 }
 
 /** Form-field parser for the three numeric ingest knobs. Returns

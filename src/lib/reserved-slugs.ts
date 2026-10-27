@@ -4,11 +4,14 @@
 // list from the registered routes and fails when a route is added.
 
 export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
-  'about',
   'admin',
   'health',
   'login',
   'macros',
   'new',
+  'posts',
   'search'
 ]);
+
+/** Fixed routes that serve a page of the same slug when one exists. */
+export const PAGE_ROUTE_SLUGS: ReadonlySet<string> = new Set(['about']);

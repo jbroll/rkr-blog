@@ -65,6 +65,9 @@ export interface IndexPageData extends SiteChrome {
   activeTags?: string[];
   /** Current sort direction. 'desc' (default) = newest first; 'asc' = oldest first. */
   sort?: 'asc' | 'desc';
+  /** The path this index is served at; tag, sort and pager links keep to
+   * it. '/posts' when a home page takes over '/'. Default '/'. */
+  basePath?: '/' | '/posts';
 }
 
 export function renderIndexPage(data: IndexPageData): string {
@@ -82,20 +85,26 @@ export function renderIndexPage(data: IndexPageData): string {
     ? `&amp;${activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')}`
     : '';
   const sortSuffix = isAsc ? '&amp;sort=asc' : '';
+  const basePath = data.basePath ?? '/';
   const pager =
     data.totalPages > 1
       ? `<nav aria-label="pagination">
   <span>page ${data.page} of ${data.totalPages}</span>
-  ${data.page > 1 ? `<a rel="prev" href="/?page=${data.page - 1}${tagSuffix}${sortSuffix}">prev</a>` : ''}
-  ${data.page < data.totalPages ? `<a rel="next" href="/?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
+  ${data.page > 1 ? `<a rel="prev" href="${basePath}?page=${data.page - 1}${tagSuffix}${sortSuffix}">prev</a>` : ''}
+  ${data.page < data.totalPages ? `<a rel="next" href="${basePath}?page=${data.page + 1}${tagSuffix}${sortSuffix}">next</a>` : ''}
 </nav>`
       : '';
-  const sortToggle = renderSortToggle(isAsc, activeTags);
-  const tagRail = renderTagRail(data.tagCounts, activeTags, `${sortToggle}${renderSearchForm()}`);
+  const sortToggle = renderSortToggle(basePath, isAsc, activeTags);
+  const tagRail = renderTagRail(
+    basePath,
+    data.tagCounts,
+    activeTags,
+    `${sortToggle}${renderSearchForm()}`
+  );
   const head = siteHead(data.site, {
     assets: a,
     isAdmin: data.isAdmin,
-    hideHomeLink: true,
+    hideHomeLink: basePath === '/',
     buildHash: a.hash
   });
   const banner = data.bannerHtml ?? '';
@@ -236,6 +245,7 @@ function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
  * even with no tags / on the admin view. `controls` is trusted HTML
  * (sort toggle + search form). */
 function renderTagRail(
+  basePath: string,
   tagCounts: { name: string; count: number }[] | undefined,
   activeTags: string[],
   controls: string
@@ -247,7 +257,7 @@ function renderTagRail(
             const isActive = activeTags.includes(t.name);
             // OR/replace: clicking the active tag clears the filter;
             // clicking any other tag switches to it exclusively.
-            const href = isActive ? '/' : `/?tag=${encodeURIComponent(t.name)}`;
+            const href = isActive ? basePath : `${basePath}?tag=${encodeURIComponent(t.name)}`;
             const current = isActive ? ' aria-current="page"' : '';
             return `  <a class="rkr-tag-pill" href="${escapeAttr(href)}"${current}>${escapeText(t.name)} (${t.count})</a>`;
           })
@@ -260,15 +270,15 @@ function renderTagRail(
 
 /** Sort toggle: a link that adds/removes ?sort=asc via server-side
  * requery, for admins and visitors alike. */
-function renderSortToggle(isAsc: boolean, activeTags: string[]): string {
+function renderSortToggle(basePath: string, isAsc: boolean, activeTags: string[]): string {
   const sortIcon = icon('arrowUpDown', 14);
   const tagQS = activeTags.length
     ? activeTags.map((t) => `tag=${encodeURIComponent(t)}`).join('&amp;')
     : '';
   if (isAsc) {
-    const href = tagQS ? `/?${tagQS}` : '/';
+    const href = tagQS ? `${basePath}?${tagQS}` : basePath;
     return `<a class="rkr-sort-toggle" href="${escapeAttr(href)}" title="Newest first" aria-label="Newest first">${sortIcon}</a>\n`;
   }
   const prefix = tagQS ? `${tagQS}&amp;` : '';
-  return `<a class="rkr-sort-toggle" href="/?${prefix}sort=asc" title="Oldest first" aria-label="Oldest first">${sortIcon}</a>\n`;
+  return `<a class="rkr-sort-toggle" href="${basePath}?${prefix}sort=asc" title="Oldest first" aria-label="Oldest first">${sortIcon}</a>\n`;
 }

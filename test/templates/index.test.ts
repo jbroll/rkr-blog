@@ -449,6 +449,36 @@ test('renderIndexPage: anonymous view uses sw-unregister.js, not sw-register.js'
   assert.doesNotMatch(html, /\/static\/site\/sw-register\.js/);
 });
 
+test('basePath /posts: pager, tag pills and sort toggle link to /posts', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    assets,
+    page: 2,
+    totalPages: 3,
+    posts: [],
+    basePath: '/posts',
+    tagCounts: [{ name: 'x', count: 1 }],
+    activeTags: ['y']
+  });
+  assert.match(html, /rel="prev" href="\/posts\?page=1&amp;tag=y"/);
+  assert.match(html, /rel="next" href="\/posts\?page=3&amp;tag=y"/);
+  assert.match(html, /href="\/posts\?tag=x"/);
+  assert.match(html, /href="\/posts\?tag=y&amp;sort=asc"/);
+  assert.doesNotMatch(html, /href="\/\?/);
+});
+
+test('basePath defaults to /', () => {
+  const html = renderIndexPage({
+    site: { title: 'rkroll' },
+    assets,
+    page: 1,
+    totalPages: 1,
+    posts: [],
+    tagCounts: [{ name: 'x', count: 1 }]
+  });
+  assert.match(html, /href="\/\?tag=x"/);
+});
+
 test('renderIndexPage: admin view also uses sw-unregister.js', () => {
   const html = renderIndexPage({
     site: { title: 'rkroll' },

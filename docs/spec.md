@@ -279,12 +279,14 @@ indexed, never listed, never searchable, and `GET /_<slug>` is always
 | slug | served as | comments |
 |---|---|---|
 | `_site-banner` | the header banner figure on every page | none |
-| `_about` | `GET /about`, a standalone page | none |
+| `_about` | `GET /about`, a standalone page, when no `about` block page is published | none |
 
 Both are created on demand from the settings page (`Create About` /
 `Create banner`), which writes a stub file and returns to settings. The
-block editor does not edit them (`DEFERRED.md`).
-`/about` with no `_about.md` on disk is a 404, as is a malformed one.
+block editor does not edit `_site-banner` (`DEFERRED.md`).
+`GET /about` serves the block page with slug `about` when one is
+published (an admin sees it in any status) and falls back to `_about.md`
+otherwise. With neither, or a malformed `_about.md`, it is a 404.
 `import-wp about` seeds `_about` from a WordPress page.
 
 ## 8a. Block pages and the editor
@@ -568,8 +570,9 @@ Every change saves the whole tree: `POST /admin/blocks/:slug` with
   gets `500`.
 - A save from an editor bundle older than the running server (its
   `X-Rkr-Build` differs) gets `426`; the editor asks for a reload.
-- New page refuses a slug that a fixed route answers (`about`, `search`,
-  `new` and the others in `src/lib/reserved-slugs.ts`) and a slug the
+- New page refuses a slug that a fixed route answers (`posts`, `search`,
+  `new` and the others in `src/lib/reserved-slugs.ts`; `about` is allowed
+  because `/about` serves that page) and a slug the
   index already holds, such as an unarchived markdown post's.
 - A save updates that page's index entry (row, tags, search text) and
   queues derivative renders for its media.
@@ -819,8 +822,9 @@ either mechanism, useful for scripted clients.
 
 ```
 # Public — public.ts
-GET    /                              rendered post index (paginated)
-GET    /about                         about page
+GET    /                              the page named by site.json#homePage, else the post index
+GET    /posts                         rendered post index (always)
+GET    /about                         `about` block page, else the _about system post
 GET    /search                        full-text search page
 GET    /:slug                         rendered single post
 GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug (published only)
@@ -1062,6 +1066,18 @@ One level only. A reply's `parent_id` must reference a `published` top-level com
 Every public page's header has the site title (linking to `/`), a
 nav of `Home` (omitted on the index itself), `About`, and `Login` or
 a `Logout` form.
+
+`config/site.json#homePage` holds the slug of a published page of kind
+`page`. While it is set, `/` renders that page for everyone, signed in
+or not, the post index is served only at `/posts`, and `/<slug>` of the
+home page 301s to `/`. An unset slug, or one naming a missing, draft or
+post-kind entry, leaves `/` as the post index. The index links to its
+own path: tag pills, the sort toggle and the pager use `/posts` when the
+home page is set, and `Home` appears in the header on `/posts`. The
+settings page has a Home page select that lists published pages and
+refuses any other slug; the empty choice clears it. `GET /admin/posts`
+301s to `/posts`. A post whose slug is `posts` is shadowed by the index;
+reindex logs a warning.
 
 The index page has a right-hand rail holding a sort toggle
 (newest/oldest first), a search box, and tag pills. The search page
