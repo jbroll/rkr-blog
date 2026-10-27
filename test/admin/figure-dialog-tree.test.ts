@@ -149,6 +149,42 @@ describe('figure dialog', () => {
     assert.deepEqual(d.commits, []);
   });
 
+  it('Mask and Link write their slots', async () => {
+    const d = open('figure', FIGURE);
+    const mask = d.root.querySelector('#rkr-media-mask') as unknown as { value: string };
+    const href = d.root.querySelector('#rkr-media-href') as unknown as { value: string };
+    mask.value = 'circle';
+    href.value = ' /about ';
+    d.find('Save figure')?.click();
+    await tick();
+    assert.equal(d.commits[0]?.mask, 'circle');
+    assert.equal(d.commits[0]?.href, '/about');
+  });
+
+  it('emptying Mask and Link clears slots that were set', async () => {
+    const d = open('figure', { ...FIGURE, mask: 'rounded', href: '/x' });
+    const mask = d.root.querySelector('#rkr-media-mask') as unknown as { value: string };
+    const href = d.root.querySelector('#rkr-media-href') as unknown as { value: string };
+    assert.equal(mask.value, 'rounded');
+    assert.equal(href.value, '/x');
+    mask.value = '';
+    href.value = '';
+    d.find('Save figure')?.click();
+    await tick();
+    assert.equal(d.commits[0]?.mask, '');
+    assert.equal(d.commits[0]?.href, '');
+  });
+
+  it('untouched Mask and Link add no slots; video has no such controls', async () => {
+    const d = open('figure', FIGURE);
+    d.find('Save figure')?.click();
+    await tick();
+    assert.equal('mask' in (d.commits[0] ?? {}), false);
+    assert.equal('href' in (d.commits[0] ?? {}), false);
+    const v = open('video', { ids: A });
+    assert.equal(v.root.querySelector('#rkr-media-mask'), null);
+  });
+
   it('bad ids are still rejected at commit time', () => {
     const r = validateFigureFields({ ids: 'not-hex!', alts: '', captions: '', justify: 'center' });
     assert.equal(r.ok, false);

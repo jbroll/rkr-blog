@@ -237,6 +237,13 @@ rules a theme should not touch.
 - Fit classes: `.rkr-fit-cover`, `.rkr-fit-contain`.
 - Justify classes: `.rkr-justify-center`, `.rkr-justify-left`,
   `.rkr-justify-right`, `.rkr-justify-full`, `.rkr-justify-bleed`.
+- Mask classes, set by the `mask` attribute on the figure and applied to
+  every cell: `.rkr-mask-circle` (square crop, 50% radius) and
+  `.rkr-mask-rounded`, whose corner radius is `--rkr-mask-radius`
+  (default `1.5rem`). A theme sets the variable to reshape rounded
+  images.
+- With `href` set, each cell's `<picture>` sits in a plain `<a>` and
+  carries no `data-pswp-*` attributes, so the lightbox ignores it.
 
 ### Video widget
 The `::video` widget is the self-hosted video element. It shares the

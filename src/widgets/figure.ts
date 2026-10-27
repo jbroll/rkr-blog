@@ -49,9 +49,12 @@ import { type MatrixFlow, type MatrixGrid, parseMatrix } from '../lib/matrix.ts'
 import {
   type Fit,
   type Justify,
+  type Mask,
   parseAspect,
   parseFit,
+  parseHref,
   parseJustify,
+  parseMask,
   parsePerImageCaptions,
   parseTimer,
   parseWidth
@@ -63,22 +66,26 @@ interface CellInput {
   src: ImageSource | null;
   alt: string;
   caption: string | null;
+  href: string | null;
 }
 
 function buildCells(node: DirectiveNode, ctx: WidgetCtx): CellInput[] {
+  const href = parseHref(node.attributes?.href);
   const idsAndAlts = extractImageIdsAndAlts(node.attributes?.ids, node.attributes?.alts);
   const captions = parsePerImageCaptions(node.attributes?.captions);
   return idsAndAlts.map((ia, i) => ({
     rawId: ia.id,
     src: ctx.images.get(ia.id) ?? null,
     alt: ia.alt,
-    caption: captions[i] ?? null
+    caption: captions[i] ?? null,
+    href
   }));
 }
 
 interface RenderShellArgs {
   justify: Justify;
   fit: Fit;
+  mask: Mask | null;
   widthCss: string | null;
   aspectCss: string | null;
   inner: string;
@@ -87,9 +94,18 @@ interface RenderShellArgs {
   tag?: 'figure' | 'span';
 }
 
+function maskClass(mask: Mask | null): string[] {
+  return mask ? [`rkr-mask-${mask}`] : [];
+}
+
 function renderShell(args: RenderShellArgs): string {
   const tag = args.tag ?? 'figure';
-  const cls = [`rkr-figure`, `rkr-justify-${args.justify}`, `rkr-fit-${args.fit}`].join(' ');
+  const cls = [
+    `rkr-figure`,
+    `rkr-justify-${args.justify}`,
+    `rkr-fit-${args.fit}`,
+    ...maskClass(args.mask)
+  ].join(' ');
   // inline mode: width / aspect-ratio don't apply.
   const styleParts: string[] = [];
   if (args.tag !== 'span') {
@@ -105,6 +121,10 @@ function renderShell(args: RenderShellArgs): string {
   return `<${tag} class="${cls}"${style}>\n${args.inner}${captionBlock}\n</${tag}>`;
 }
 
+function linkPicture(picture: string, href: string | null): string {
+  return href === null ? picture : `<a href="${escapeAttr(href)}">\n${picture}\n</a>`;
+}
+
 function renderCell(cell: CellInput): string {
   if (!cell.src) {
     return `<!-- figure: unresolved id ${escapeText(cell.rawId)} -->`;
@@ -115,17 +135,23 @@ function renderCell(cell: CellInput): string {
     variants,
     fallback,
     alt,
-    lightbox: true
+    lightbox: cell.href === null
   });
+  const linked = linkPicture(picture, cell.href);
   const cap = cell.caption ? `\n${escapeText(cell.caption)}` : '';
   // Each cell carries the image's native aspect as a CSS variable for
   // CLS-friendly layout reservation in flow modes; matrix mode uses
   // the figure-level --rkr-cell-aspect instead.
   const cellAspect = (cell.src.width / Math.max(1, cell.src.height)).toFixed(4);
-  return `<div class="rkr-figure-cell" style="--rkr-image-aspect: ${cellAspect}">\n${indent(picture, '  ')}${cap}\n</div>`;
+  return `<div class="rkr-figure-cell" style="--rkr-image-aspect: ${cellAspect}">\n${indent(linked, '  ')}${cap}\n</div>`;
 }
 
-function renderInlineFigure(cells: CellInput[], justify: Justify, fit: Fit): string {
+function renderInlineFigure(
+  cells: CellInput[],
+  justify: Justify,
+  fit: Fit,
+  mask: Mask | null
+): string {
   // Inline mode: only the first cell renders; the rest are dropped.
   // Caption / matrix / aspect / fit / width all ignored (spec).
   const first = cells[0];
@@ -141,9 +167,10 @@ function renderInlineFigure(cells: CellInput[], justify: Justify, fit: Fit): str
   return renderShell({
     justify,
     fit,
+    mask,
     widthCss: null,
     aspectCss: null,
-    inner: indent(picture, '  '),
+    inner: indent(linkPicture(picture, first.href), '  '),
     blockCaption: null,
     tag: 'span'
   });
@@ -168,6 +195,7 @@ function renderGrid(
   cells: CellInput[],
   justify: Justify,
   fit: Fit,
+  mask: Mask | null,
   widthCss: string | null,
   aspectCss: string | null,
   blockCaption: string | null
@@ -189,6 +217,7 @@ function renderGrid(
   return renderShell({
     justify,
     fit,
+    mask,
     widthCss,
     aspectCss: resolvedAspectCss,
     inner,
@@ -213,6 +242,7 @@ function renderCarousel(
   cells: CellInput[],
   justify: Justify,
   fit: Fit,
+  mask: Mask | null,
   widthCss: string | null,
   aspectCss: string | null,
   blockCaption: string | null,
@@ -272,7 +302,8 @@ function renderCarousel(
     'rkr-figure-carousel',
     'rkr-carousel',
     `rkr-justify-${justify}`,
-    `rkr-fit-${fit}`
+    `rkr-fit-${fit}`,
+    ...maskClass(mask)
   ].join(' ');
   const styleParts: string[] = [];
   if (widthCss) styleParts.push(`width: ${widthCss}`);
@@ -300,6 +331,7 @@ function renderFlow(
   matrix: MatrixFlow,
   cells: CellInput[],
   justify: Justify,
+  mask: Mask | null,
   widthCss: string | null,
   blockCaption: string | null
 ): string {
@@ -314,7 +346,12 @@ function renderFlow(
       ? `--rkr-row-height: ${matrix.param}px`
       : `--rkr-cols: ${matrix.param}`;
 
-  const cls = ['rkr-figure', `rkr-figure-${matrix.kind}`, `rkr-justify-${justify}`].join(' ');
+  const cls = [
+    'rkr-figure',
+    `rkr-figure-${matrix.kind}`,
+    `rkr-justify-${justify}`,
+    ...maskClass(mask)
+  ].join(' ');
   const styleParts: string[] = [algoVar];
   if (widthCss) styleParts.unshift(`width: ${widthCss}`);
   const style = ` style="${styleParts.join('; ')}"`;
@@ -346,9 +383,10 @@ function render(node: DirectiveNode, ctx: WidgetCtx): string {
   const aspectCss = parseAspect(node.attributes?.aspect);
   const blockCaption = extractDirectiveCaption(node);
   const timer = parseTimer(node.attributes?.timer);
+  const mask = parseMask(node.attributes?.mask);
 
   if (justify === 'inline') {
-    return renderInlineFigure(cells, justify, fit);
+    return renderInlineFigure(cells, justify, fit, mask);
   }
 
   // `width` only applies to left/right/center; full/bleed take their
@@ -365,17 +403,18 @@ function render(node: DirectiveNode, ctx: WidgetCtx): string {
         cells,
         justify,
         fit,
+        mask,
         effectiveWidth,
         aspectCss,
         blockCaption,
         timer
       );
     }
-    return renderGrid(matrix, cells, justify, fit, effectiveWidth, aspectCss, blockCaption);
+    return renderGrid(matrix, cells, justify, fit, mask, effectiveWidth, aspectCss, blockCaption);
   }
   // Flow modes — aspect / fit are ignored per spec; the layout is
   // intrinsically based on each image's native aspect.
-  return renderFlow(matrix, cells, justify, effectiveWidth, blockCaption);
+  return renderFlow(matrix, cells, justify, mask, effectiveWidth, blockCaption);
 }
 
 const widget: Widget = { name, variants, fallback, render };

@@ -643,7 +643,8 @@ for the transition strategy from the legacy directives.
 ```
 ::figure{ids="<id>[,<id>…]" [matrix=NxM|justified[:H]|masonry[:N]]
          [justify=J] [width=…] [aspect=W:H] [fit=cover|contain]
-         [alts="…,…"] [captions="…|…"] [caption="…"] [timer=N]}
+         [alts="…,…"] [captions="…|…"] [caption="…"] [timer=N]
+         [mask=circle|rounded] [href=URL]}
 ```
 
 `ids` is the only required attribute; all others have defaults.
@@ -662,6 +663,8 @@ for the transition strategy from the legacy directives.
 | `captions` | no | — | pipe-separated per-image captions (pipe avoids comma collisions in alts) |
 | `caption` | no | — | one caption for the whole `<figure>` |
 | `timer` | no | — | autoplay seconds when carousel mode kicks in (cap 60) |
+| `mask` | no | — | `circle` or `rounded`; adds `rkr-mask-<value>` to the figure and masks every cell, in every layout. Other values are ignored |
+| `href` | no | — | every cell links here (through `safeLinkUrl`) instead of opening the lightbox. Empty or unsafe values are ignored |
 
 Attributes that don't apply to the chosen `matrix` mode (e.g. `aspect`
 + `fit` under `justified` / `masonry`; `width` under `full` / `bleed`)

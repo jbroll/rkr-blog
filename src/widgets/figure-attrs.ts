@@ -6,6 +6,7 @@
 // Lives separately from the figure widget body so the widget stays
 // under the 500-line size cap.
 
+import { safeLinkUrl } from '../lib/safe-url.ts';
 import { clampAlt } from '../lib/widget-helpers.ts';
 
 // Matrix types + parser live in lib/matrix.ts (shared with the editor's
@@ -35,6 +36,21 @@ export function parseWidth(raw: unknown): string | null {
   const m = /^(\d+)(px|%)$/.exec(raw.trim());
   if (!m) return null;
   return `${m[1]}${m[2]}`;
+}
+
+export type Mask = 'circle' | 'rounded';
+
+export function parseMask(raw: unknown): Mask | null {
+  return raw === 'circle' || raw === 'rounded' ? raw : null;
+}
+
+/** The link target for every cell, or null when empty or unsafe. */
+export function parseHref(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  const safe = safeLinkUrl(trimmed);
+  return safe === '#' && trimmed !== '#' ? null : safe;
 }
 
 /** "W/H" string ready for the CSS `aspect-ratio` property. null → derive

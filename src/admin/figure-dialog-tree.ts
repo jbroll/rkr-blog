@@ -12,6 +12,7 @@
 
 import type { Slots } from '../lib/blocks.ts';
 import { openEditorDialog } from './editor-dialog.ts';
+import { appearanceFields } from './figure-dialog-extras.ts';
 import {
   type FigureImageRow,
   figureSlotsFromList,
@@ -286,6 +287,8 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
       }
     )
   );
+  const appearance = video ? null : appearanceFields(doc, opts.slots);
+  if (appearance) body.append(appearance.element);
   refresh();
 
   const pickInto = async (): Promise<void> => {
@@ -367,7 +370,11 @@ export function openMediaDialog(root: Element, opts: MediaDialogOpts): void {
       dialog.setError(refusal);
       return false;
     }
-    opts.onCommit({ ...slots, justify: text(checked.slots, 'justify') });
+    opts.onCommit({
+      ...slots,
+      ...appearance?.slots(),
+      justify: text(checked.slots, 'justify')
+    });
     return true;
   };
 

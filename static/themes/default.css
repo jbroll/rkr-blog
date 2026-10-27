@@ -786,6 +786,17 @@ body > .rkr-figure:first-child {
   border-radius: 0;
   box-shadow: none;
 }
+.rkr-mask-circle .rkr-figure-cell {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.rkr-mask-circle img {
+  border-radius: 50%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+.rkr-mask-rounded .rkr-figure-cell,
+.rkr-mask-rounded img { border-radius: var(--rkr-mask-radius, 1.5rem); }
 .rkr-fit-cover .rkr-figure-cell img { object-fit: cover; }
 .rkr-fit-contain .rkr-figure-cell img { object-fit: contain; }
 
