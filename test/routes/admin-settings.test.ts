@@ -738,3 +738,125 @@ test('POST /admin/settings saves homePage, refuses a non-page, and an empty choi
   await postHome(app, '');
   assert.equal(onDisk().homePage, '');
 });
+
+const LOGO = 'c'.repeat(64);
+
+function headerForm(fields: Record<string, string>): string {
+  return new URLSearchParams({ title: 'T', ...fields }).toString();
+}
+
+const postForm = (app: Awaited<ReturnType<typeof setup>>['app'], payload: string) =>
+  app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload
+  });
+
+test('POST /admin/settings round-trips the header fields', async (t) => {
+  const { root, app } = await setup(t);
+  const onDisk = () => JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  const res = await postForm(
+    app,
+    headerForm({
+      logo: LOGO,
+      'menu.0.label': 'About',
+      'menu.0.href': '/about-us',
+      'menu.1.label': '',
+      'menu.1.href': '',
+      'menu.2.label': 'Shop',
+      'menu.2.href': 'https://shop.example/',
+      ctaLabel: 'Join',
+      ctaHref: '/join',
+      'social.0.platform': 'facebook',
+      'social.0.url': 'https://facebook.com/club',
+      'social.1.platform': 'email',
+      'social.1.url': 'hi@example.org',
+      'social.2.platform': 'bluesky',
+      'social.2.url': '',
+      announcementText: 'Open day Saturday',
+      announcementHref: '/open-day',
+      announcementOn: 'on'
+    })
+  );
+  assert.equal(res.headers.location, '/admin/settings?flash=saved');
+  const saved = onDisk();
+  assert.equal(saved.logo, LOGO);
+  assert.deepEqual(saved.menu, [
+    { label: 'About', href: '/about-us' },
+    { label: 'Shop', href: 'https://shop.example/' }
+  ]);
+  assert.deepEqual(saved.cta, { label: 'Join', href: '/join' });
+  assert.deepEqual(saved.social, [
+    { platform: 'facebook', url: 'https://facebook.com/club' },
+    { platform: 'email', url: 'mailto:hi@example.org' }
+  ]);
+  assert.deepEqual(saved.announcement, {
+    text: 'Open day Saturday',
+    href: '/open-day',
+    on: true
+  });
+
+  const page = await app.inject({ method: 'GET', url: '/admin/settings' });
+  assert.match(page.body, /<input type="hidden" name="logo" value="c{64}"/);
+  assert.match(page.body, /src="\/admin\/preview\/c{64}"/);
+  assert.match(page.body, /name="menu\.0\.label"[^>]*value="About"/);
+  assert.match(page.body, /name="menu\.1\.href"[^>]*value="https:\/\/shop\.example\/"/);
+  assert.match(page.body, /name="menu\.4\.label"[^>]*value=""/);
+  assert.doesNotMatch(page.body, /name="menu\.5\.label"/);
+  assert.match(page.body, /name="ctaLabel"[^>]*value="Join"/);
+  assert.match(page.body, /<option value="email" selected>/);
+  assert.match(page.body, /name="social\.1\.url"[^>]*value="mailto:hi@example\.org"/);
+  assert.match(page.body, /name="announcementText"[^>]*value="Open day Saturday"/);
+  assert.match(page.body, /name="announcementOn" type="checkbox" checked/);
+
+  await postForm(
+    app,
+    headerForm({
+      logo: '',
+      'menu.0.label': '',
+      'menu.0.href': '',
+      ctaLabel: '',
+      ctaHref: '',
+      'social.0.platform': 'facebook',
+      'social.0.url': '',
+      announcementText: 'Open day Saturday',
+      announcementHref: ''
+    })
+  );
+  const cleared = onDisk();
+  assert.equal(cleared.logo, '');
+  assert.deepEqual(cleared.menu, []);
+  assert.deepEqual(cleared.cta, { label: '', href: '' });
+  assert.deepEqual(cleared.social, []);
+  assert.deepEqual(cleared.announcement, { text: 'Open day Saturday', on: false });
+});
+
+test('POST /admin/settings without header fields leaves them alone', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({ menu: [{ label: 'A', href: '/a' }], logo: LOGO })
+  );
+  await postForm(app, headerForm({}));
+  const saved = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.deepEqual(saved.menu, [{ label: 'A', href: '/a' }]);
+  assert.equal(saved.logo, LOGO);
+});
+
+test('public pages render the header menu and announcement from settings', async (t) => {
+  const { root, app } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'config', 'site.json'),
+    JSON.stringify({
+      menu: [{ label: 'Visit', href: '/visit' }],
+      announcement: { text: 'Hello', on: true }
+    })
+  );
+  for (const url of ['/', '/posts', '/search?q=x', '/no-such-page', '/_hidden', '/about', '/x/y']) {
+    const res = await app.inject({ method: 'GET', url });
+    assert.match(res.body, /class="rkr-site-menu-link" href="\/visit">Visit</, url);
+    assert.match(res.body, /class="rkr-announce"/, url);
+    assert.doesNotMatch(res.body, /href="\/login"/, url);
+  }
+});

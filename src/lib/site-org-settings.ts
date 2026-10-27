@@ -5,26 +5,125 @@
 import type { Db } from './db.ts';
 import { type IndexedPost, readIndexedPostBySlug } from './post-index.ts';
 
+export const SOCIAL_PLATFORMS = [
+  'facebook',
+  'instagram',
+  'youtube',
+  'mastodon',
+  'bluesky',
+  'email'
+] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+
+export interface NavLink {
+  label: string;
+  href: string;
+}
+
+export interface SocialLink {
+  platform: SocialPlatform;
+  /** An `email` entry holds a mailto: address. */
+  url: string;
+}
+
+export interface Announcement {
+  text: string;
+  href?: string;
+  on: boolean;
+}
+
 export interface OrgSiteFields {
   /** Slug of the page `/` renders instead of the post index. */
   homePage?: string;
+  /** Image id of the header logo. */
+  logo?: string;
+  /** Header links. While set, the header drops Home, About and Login. */
+  menu?: NavLink[];
+  cta?: NavLink;
+  social?: SocialLink[];
+  announcement?: Announcement;
 }
 
 const VALID_SLUG = /^[a-z0-9-]*$/;
+const IMAGE_ID = /^(?:[0-9a-f]{64})?$/;
+export const MAX_MENU_ITEMS = 12;
+export const MAX_LABEL = 60;
+const MAX_URL = 2048;
+export const MAX_ANNOUNCEMENT = 300;
 
-/** Empty string is kept so a cleared choice overwrites the stored one;
- * orgSiteConfig drops it when the runtime config is built. */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+const str = (v: unknown, max: number): string | null =>
+  typeof v === 'string' && v.trim().length <= max ? v.trim() : null;
+
+function pickLink(raw: unknown): NavLink | null {
+  if (!isRecord(raw)) return null;
+  const label = str(raw.label, MAX_LABEL);
+  const href = str(raw.href, MAX_URL);
+  return label && href ? { label, href } : null;
+}
+
+function pickSocial(raw: unknown): SocialLink | null {
+  if (!isRecord(raw)) return null;
+  const platform = SOCIAL_PLATFORMS.find((p) => p === raw.platform);
+  const url = str(raw.url, MAX_URL);
+  if (!platform || !url) return null;
+  if (platform === 'email' && !/^mailto:/i.test(url)) return null;
+  return { platform, url };
+}
+
+function pickList<T>(raw: unknown, pick: (v: unknown) => T | null): T[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw
+    .map(pick)
+    .filter((v): v is T => v !== null)
+    .slice(0, MAX_MENU_ITEMS);
+}
+
+function pickCta(raw: unknown): NavLink | undefined {
+  if (isRecord(raw) && raw.label === '' && raw.href === '') return { label: '', href: '' };
+  return pickLink(raw) ?? undefined;
+}
+
+function pickAnnouncement(raw: unknown): Announcement | undefined {
+  if (!isRecord(raw) || typeof raw.on !== 'boolean') return undefined;
+  const text = str(raw.text, MAX_ANNOUNCEMENT);
+  if (text === null) return undefined;
+  const href = str(raw.href, MAX_URL);
+  return href ? { text, href, on: raw.on } : { text, on: raw.on };
+}
+
+/** Cleared values (empty string, empty list, empty CTA pair, announcement
+ * switched off) are kept so a clear overwrites the stored one;
+ * orgSiteConfig drops them when the runtime config is built. */
 export function pickOrgFields(raw: Record<string, unknown>): OrgSiteFields {
   const out: OrgSiteFields = {};
   if (typeof raw.homePage === 'string' && VALID_SLUG.test(raw.homePage)) {
     out.homePage = raw.homePage;
   }
+  if (typeof raw.logo === 'string' && IMAGE_ID.test(raw.logo)) out.logo = raw.logo;
+  const menu = pickList(raw.menu, pickLink);
+  if (menu) out.menu = menu;
+  const cta = pickCta(raw.cta);
+  if (cta) out.cta = cta;
+  const social = pickList(raw.social, pickSocial);
+  if (social) out.social = social;
+  const announcement = pickAnnouncement(raw.announcement);
+  if (announcement) out.announcement = announcement;
   return out;
 }
 
 export function orgSiteConfig(persisted: OrgSiteFields): OrgSiteFields {
   const out: OrgSiteFields = {};
   if (persisted.homePage) out.homePage = persisted.homePage;
+  if (persisted.logo) out.logo = persisted.logo;
+  if (persisted.menu?.length) out.menu = persisted.menu;
+  if (persisted.cta?.label) out.cta = persisted.cta;
+  if (persisted.social?.length) out.social = persisted.social;
+  if (persisted.announcement?.on && persisted.announcement.text) {
+    out.announcement = persisted.announcement;
+  }
   return out;
 }
 

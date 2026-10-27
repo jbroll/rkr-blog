@@ -36,7 +36,7 @@ ${buildMetaTag(a.hash)}
 <script type="module" src="${a.base}/site/version-check.js${v}" defer></script>
 </head>
 <body>
-${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash, assets: a })}
+${siteHead(data.site, { isAdmin: data.isAdmin, buildHash: a.hash, assets: a, ...(data.chrome ? { chrome: data.chrome } : {}) })}
 <main id="main" tabindex="-1" class="rkr-notfound">
 <h1>Page not found</h1>
 <p>The page you’re looking for isn’t here.</p>

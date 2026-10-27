@@ -105,7 +105,8 @@ export function renderIndexPage(data: IndexPageData): string {
     assets: a,
     isAdmin: data.isAdmin,
     hideHomeLink: basePath === '/',
-    buildHash: a.hash
+    buildHash: a.hash,
+    ...(data.chrome ? { chrome: data.chrome } : {})
   });
   const banner = data.bannerHtml ?? '';
   const siteChrome = data.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;

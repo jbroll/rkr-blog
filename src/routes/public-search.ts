@@ -9,6 +9,7 @@ import type { Db } from '../lib/db.ts';
 import { buildFtsMatch } from '../lib/search-query.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { loadChrome } from '../lib/site-chrome.ts';
 import { renderSearchPage, type SearchHit } from '../templates/search.ts';
 
 // snippet() wraps matches in sentinel chars (from the SQL char(1) /
@@ -22,6 +23,7 @@ function highlightSnippet(snip: string): string {
 }
 
 export interface PublicSearchRouteOpts {
+  siteRoot: string;
   db: Db;
   getSite: () => SiteConfig;
 }
@@ -30,7 +32,7 @@ export function registerPublicSearchRoute(
   fastify: FastifyInstance,
   opts: PublicSearchRouteOpts
 ): void {
-  const { db, getSite } = opts;
+  const { siteRoot, db, getSite } = opts;
 
   // Probe once at registration time: is the FTS table present?
   // If migration 006 has not run, posts_fts doesn't exist and the probe
@@ -94,10 +96,11 @@ export function registerPublicSearchRoute(
       }));
     }
 
+    const chrome = await loadChrome(siteRoot, site, req.log);
     setPublicSecurityHeaders(reply);
     if (isAdmin) reply.header('Cache-Control', 'private, no-store');
     return reply
       .type('text/html; charset=utf-8')
-      .send(renderSearchPage({ site, assets: serverAssets(), q, results, isAdmin }));
+      .send(renderSearchPage({ site, assets: serverAssets(), chrome, q, results, isAdmin }));
   });
 }

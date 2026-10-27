@@ -16,6 +16,7 @@ import { buildImageMap } from '../lib/image-map-fs.ts';
 import { readIndexedPostBySlug } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { loadChrome } from '../lib/site-chrome.ts';
 import { homePageRow } from '../lib/site-org-settings.ts';
 import { extractPostBanner, renderStoredPage } from '../lib/stored-page-render.ts';
 import { buildVideoMap } from '../lib/video-map-fs.ts';
@@ -52,14 +53,16 @@ export default async function publicRoutes(
   const { siteRoot, db, renderBudgetMs = 8_000 } = opts;
   const getSite = (): SiteConfig => opts.site ?? siteConfig();
 
-  const send404 = (req: FastifyRequest, reply: FastifyReply) => {
+  const send404 = async (req: FastifyRequest, reply: FastifyReply) => {
     const isAdmin = !!req.user;
+    const site = getSite();
+    const chrome = await loadChrome(siteRoot, site, req.log);
     setPublicSecurityHeaders(reply);
     if (isAdmin) reply.header('Cache-Control', 'private, no-store');
     return reply
       .code(404)
       .type('text/html; charset=utf-8')
-      .send(renderNotFoundPage({ site: getSite(), isAdmin, assets: serverAssets() }));
+      .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets(), chrome }));
   };
 
   const widgets = new WidgetRegistry();
@@ -119,6 +122,7 @@ export default async function publicRoutes(
       renderPostPage({
         site,
         assets: serverAssets(),
+        chrome: await loadChrome(siteRoot, site, req.log),
         title: parsed.frontmatter.title,
         slug: '_about',
         bodyHtml,
@@ -132,7 +136,7 @@ export default async function publicRoutes(
 
   // ---- search: GET /search ---------------------------------------------
 
-  registerPublicSearchRoute(fastify, { db, getSite });
+  registerPublicSearchRoute(fastify, { siteRoot, db, getSite });
 
   // ---- post: GET /:slug -------------------------------------------------
 

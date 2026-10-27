@@ -1105,6 +1105,37 @@ Every public page's header has the site title (linking to `/`), a
 nav of `Home` (omitted on the index itself), `About`, and `Login` or
 a `Logout` form.
 
+The settings page's Header section fills `config/site.json`:
+
+- `menu`: up to 12 `{ label, href }` links, label at most 60 characters.
+  The form shows the saved rows plus three blank ones; blank rows are
+  dropped.
+- `logo`: an image id. The form uploads the file to `POST /admin/upload`
+  and keeps the returned id in a hidden field, with a thumbnail and a
+  Remove button. It renders as a `<picture>` through `/img`.
+- `cta`: one `{ label, href }` rendered as a `.rkr-btn`.
+- `social`: `{ platform, url }` rows, platform one of `facebook`,
+  `instagram`, `youtube`, `mastodon`, `bluesky`, `email`, each drawn as
+  a bundled SVG icon. An `email` url is a `mailto:` address; the form
+  adds `mailto:` to a bare address.
+- `announcement`: `{ text, href?, on }`, at most 300 characters.
+
+Invalid entries are dropped when the file is read. Every href passes
+through `safeLinkUrl` when rendered, so a `javascript:` link becomes `#`.
+
+While `menu` has at least one link, the header shows the logo (or the
+title when there is none), the menu, the CTA, the social icons and, for
+a signed-in admin, the Logout form. It has no Home, About or Login link;
+`/login` still works. Under 48rem the menu folds behind a checkbox
+toggle that opens it without JavaScript. Without a menu the header is
+the one above and the logo, CTA and social settings are not shown.
+
+While `announcement.on` is set and the text is not empty, a bar sits
+above the header on every public page. Its close button appears only
+with JavaScript; closing it stores a hash of the text in `localStorage`
+under `rkr-announce-dismissed`, so the same text stays hidden and a new
+one shows again.
+
 `config/site.json#homePage` holds the slug of a published page of kind
 `page`. While it is set, `/` renders that page for everyone, signed in
 or not, the post index is served only at `/posts`, and `/<slug>` of the

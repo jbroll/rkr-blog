@@ -12,6 +12,8 @@
 import { DEFAULT_INGEST_RESIZE, INGEST_RESIZE_BOUNDS } from '@rkr/image-edit';
 import { TEASER_WORDS_BOUNDS } from '../lib/config.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
+import type { OrgSiteFields } from '../lib/site-org-settings.ts';
+import { HEADER_SETTINGS_CSS, renderHeaderSettings } from './admin-settings-header.ts';
 import { icon } from './icons.ts';
 import {
   bundleVersion,
@@ -27,7 +29,7 @@ export interface AdminSettingsPageData extends SiteChrome {
    * are deliberately NOT pre-filled — overwriting an unset persisted
    * field with the env default would make the env override sticky
    * even after the operator clears it. */
-  persisted: {
+  persisted: OrgSiteFields & {
     title?: string;
     tagline?: string;
     theme?: string;
@@ -36,7 +38,6 @@ export interface AdminSettingsPageData extends SiteChrome {
     teaserWords?: number;
     commentNotify?: 'off' | 'ham' | 'queued' | 'all';
     notifyEmail?: string;
-    homePage?: string;
     ingestResize?: {
       maxDim?: number;
       scalePct?: number;
@@ -101,6 +102,7 @@ ${headIcons(a)}
 .rkr-admin-settings-integration-label{flex:1;font-weight:500}
 .rkr-admin-settings-integration-status{color:var(--rkr-muted,#888);font-size:.875em}
 .rkr-admin-settings-integration-status.is-connected{color:var(--rkr-ok,#2a2)}
+${HEADER_SETTINGS_CSS}
 </style>
 </head>
 <body>
@@ -128,6 +130,8 @@ ${saveBtn}
     <option value="">Post index</option>
     ${renderHomePageOptions(data.homePages ?? [], data.persisted.homePage)}
   </select>
+
+  ${renderHeaderSettings(data.persisted)}
 
   <h2 class="rkr-admin-settings-section">Banner</h2>
   <div class="rkr-admin-settings-banner" style="grid-column:1/-1">

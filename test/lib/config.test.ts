@@ -321,3 +321,108 @@ test('homePage round-trips through site.json; siteConfig surfaces it only when s
   writePersistedSiteConfig({ homePage: '' }, env);
   assert.equal(siteConfig(env).homePage, undefined);
 });
+
+const LOGO = 'a'.repeat(64);
+
+test('pickOrgFields: logo keeps a 64-hex id or the cleared empty string', () => {
+  assert.deepEqual(pickOrgFields({ logo: LOGO }), { logo: LOGO });
+  assert.deepEqual(pickOrgFields({ logo: '' }), { logo: '' });
+  assert.deepEqual(pickOrgFields({ logo: 'abc' }), {});
+  assert.deepEqual(pickOrgFields({ logo: 7 }), {});
+});
+
+test('pickOrgFields: menu keeps valid items in order, drops bad ones and the 13th', () => {
+  const items = Array.from({ length: 13 }, (_, i) => ({ label: `L${i}`, href: `/p${i}` }));
+  const raw = [
+    { label: '', href: '/x' },
+    { label: 'x'.repeat(61), href: '/x' },
+    { label: 'No href', href: '' },
+    'junk',
+    { label: 'Evil', href: 'javascript:alert(1)' },
+    ...items
+  ];
+  const menu = pickOrgFields({ menu: raw }).menu ?? [];
+  assert.equal(menu.length, 12);
+  assert.deepEqual(menu[0], { label: 'Evil', href: 'javascript:alert(1)' });
+  assert.deepEqual(menu[1], { label: 'L0', href: '/p0' });
+  assert.deepEqual(menu[11], { label: 'L10', href: '/p10' });
+  assert.deepEqual(pickOrgFields({ menu: [] }), { menu: [] });
+  assert.deepEqual(pickOrgFields({ menu: 'nope' }), {});
+});
+
+test('pickOrgFields: cta keeps a full pair or the cleared pair, drops a half pair', () => {
+  assert.deepEqual(pickOrgFields({ cta: { label: 'Join', href: '/join' } }), {
+    cta: { label: 'Join', href: '/join' }
+  });
+  assert.deepEqual(pickOrgFields({ cta: { label: '', href: '' } }), {
+    cta: { label: '', href: '' }
+  });
+  assert.deepEqual(pickOrgFields({ cta: { label: 'Join', href: '' } }), {});
+  assert.deepEqual(pickOrgFields({ cta: 'Join' }), {});
+});
+
+test('pickOrgFields: social drops a bad platform, an empty url and a non-mailto email', () => {
+  const social = pickOrgFields({
+    social: [
+      { platform: 'facebook', url: 'https://facebook.com/x' },
+      { platform: 'myspace', url: 'https://myspace.com/x' },
+      { platform: 'youtube', url: '' },
+      { platform: 'email', url: 'hi@example.org' },
+      { platform: 'email', url: 'mailto:hi@example.org' },
+      null
+    ]
+  }).social;
+  assert.deepEqual(social, [
+    { platform: 'facebook', url: 'https://facebook.com/x' },
+    { platform: 'email', url: 'mailto:hi@example.org' }
+  ]);
+  assert.deepEqual(pickOrgFields({ social: {} }), {});
+});
+
+test('pickOrgFields: announcement keeps text, optional href and the on flag', () => {
+  assert.deepEqual(pickOrgFields({ announcement: { text: 'Hi', href: '/news', on: true } }), {
+    announcement: { text: 'Hi', href: '/news', on: true }
+  });
+  assert.deepEqual(pickOrgFields({ announcement: { text: 'Hi', href: '', on: false } }), {
+    announcement: { text: 'Hi', on: false }
+  });
+  assert.deepEqual(pickOrgFields({ announcement: { text: 'Hi', on: 'yes' } }), {});
+  assert.deepEqual(pickOrgFields({ announcement: { text: 'x'.repeat(301), on: true } }), {});
+  assert.deepEqual(pickOrgFields({ announcement: 'Hi' }), {});
+});
+
+test('header fields round-trip; siteConfig drops cleared and switched-off values', (t) => {
+  const { env } = freshRoot(t);
+  writePersistedSiteConfig(
+    {
+      logo: LOGO,
+      menu: [{ label: 'About', href: '/about' }],
+      cta: { label: 'Join', href: '/join' },
+      social: [{ platform: 'bluesky', url: 'https://bsky.app/x' }],
+      announcement: { text: 'Hi', on: true }
+    },
+    env
+  );
+  const site = siteConfig(env);
+  assert.equal(site.logo, LOGO);
+  assert.deepEqual(site.menu, [{ label: 'About', href: '/about' }]);
+  assert.deepEqual(site.cta, { label: 'Join', href: '/join' });
+  assert.deepEqual(site.social, [{ platform: 'bluesky', url: 'https://bsky.app/x' }]);
+  assert.deepEqual(site.announcement, { text: 'Hi', on: true });
+
+  writePersistedSiteConfig(
+    {
+      logo: '',
+      menu: [],
+      cta: { label: '', href: '' },
+      social: [],
+      announcement: { text: 'Hi', on: false }
+    },
+    env
+  );
+  const cleared = siteConfig(env);
+  for (const k of ['logo', 'menu', 'cta', 'social', 'announcement'] as const) {
+    assert.equal(cleared[k], undefined, k);
+  }
+  assert.deepEqual(readPersistedSiteConfig(env).announcement, { text: 'Hi', on: false });
+});

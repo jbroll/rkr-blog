@@ -39,6 +39,7 @@ import { workQueue } from './lib/jobs.ts';
 import { migrate } from './lib/migrate.ts';
 import { setPublicSecurityHeaders } from './lib/security-headers.ts';
 import { serverAssets } from './lib/site-assets.ts';
+import { loadChrome } from './lib/site-chrome.ts';
 import adminRoutes from './routes/admin.ts';
 import { registerAdminBlockRoutes } from './routes/admin-blocks.ts';
 import type { UrlFetcher } from './routes/admin-import-url.ts';
@@ -203,12 +204,14 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
 <p><a href="/">← Back home</a></p></main></body></html>
 `;
 
-  app.setNotFoundHandler((_request, reply) => {
+  app.setNotFoundHandler(async (request, reply) => {
+    const site = getSite();
+    const chrome = await loadChrome(siteRoot, site, request.log);
     setPublicSecurityHeaders(reply);
-    reply
+    return reply
       .code(404)
       .type('text/html; charset=utf-8')
-      .send(renderNotFoundPage({ site: getSite(), assets: serverAssets() }));
+      .send(renderNotFoundPage({ site, assets: serverAssets(), chrome }));
   });
 
   app.setErrorHandler((err: FastifyError, request: FastifyRequest, reply: FastifyReply) => {

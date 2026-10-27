@@ -16,6 +16,7 @@ import type { Db } from './db.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import type { IndexedPost } from './post-index.ts';
 import { serverAssets } from './site-assets.ts';
+import { loadChrome } from './site-chrome.ts';
 import { buildVideoMap } from './video-map-fs.ts';
 import type { DirectiveNode, WidgetRegistry } from './widgets.ts';
 
@@ -98,6 +99,7 @@ export async function renderStoredPage(opts: StoredPageOpts): Promise<string> {
   return renderPostPage({
     site,
     assets: serverAssets(),
+    chrome: await loadChrome(siteRoot, site, log),
     title,
     ...(subtitle ? { subtitle } : {}),
     slug: row.slug,

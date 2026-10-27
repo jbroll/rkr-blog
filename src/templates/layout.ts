@@ -11,6 +11,7 @@
 
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { icon } from './icons.ts';
+import { renderAnnouncement, renderMenuHeader, type SiteNavChrome } from './site-nav.ts';
 
 /** Everything a template needs to build an asset URL: the active
  * theme, the build hash used as the ?v= cache-buster, and the URL
@@ -73,6 +74,8 @@ export interface SiteChrome {
   /** Resolved site config — owner-side branding only; never per-request. */
   site: { title: string; tagline?: string };
   assets: AssetCtx;
+  /** Header settings (menu, logo, CTA, social, announcement). */
+  chrome?: SiteNavChrome;
 }
 
 export interface HeadOpts {
@@ -86,12 +89,18 @@ export interface HeadOpts {
   /** Where the sign-out script loads from; admin pages pass the
    * /admin/static base so it stays inside the worker's scope. */
   assets?: AssetCtx;
+  /** With a menu set, the header is built by site-nav.ts. */
+  chrome?: SiteNavChrome;
 }
 
 /** No-JS site search form for the header nav (post-listing pages).
  * GET so it works without JavaScript; the focus-expand is pure CSS. */
 export function renderSearchForm(q = ''): string {
   return `<form class="rkr-site-search" method="get" action="/search" role="search"><input type="search" name="q" value="${escapeAttr(q)}" placeholder="Search…" aria-label="Search posts"/></form>`;
+}
+
+function siteScript(a: AssetCtx | undefined, name: string): string {
+  return a ? `${a.base}/site/${name}${bundleVersion(a)}` : `/static/site/${name}`;
 }
 
 export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string {
@@ -106,9 +115,19 @@ export function siteHead(site: SiteChrome['site'], opts: HeadOpts = {}): string 
     ? `<form method="post" action="/admin/logout" class="rkr-site-head-auth-form">
     <button type="submit" class="rkr-site-head-auth-btn">Logout</button>
   </form>
-  <script type="module" src="${opts.assets ? `${opts.assets.base}/site/signout.js${bundleVersion(opts.assets)}` : '/static/site/signout.js'}"></script>`
+  <script type="module" src="${siteScript(opts.assets, 'signout.js')}"></script>`
     : `<a class="rkr-site-head-auth-btn" href="/login" rel="nofollow">Login</a>`;
-  return `<a class="rkr-skip" href="#main">Skip to content</a>
+  const chrome = opts.chrome;
+  const bar = renderAnnouncement(chrome?.announcement, siteScript(opts.assets, 'announcement.js'));
+  if (chrome?.menu?.length) {
+    return `${bar}${renderMenuHeader(chrome, {
+      title: site.title,
+      ...(site.tagline ? { tagline: site.tagline } : {}),
+      versionHtml: versionSpan,
+      authHtml: opts.isAdmin ? auth : ''
+    })}`;
+  }
+  return `${bar}<a class="rkr-skip" href="#main">Skip to content</a>
 <header class="rkr-site-head">
   <div class="rkr-site-head-inner">
     <div class="rkr-site-head-brand">

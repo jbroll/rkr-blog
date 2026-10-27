@@ -91,7 +91,12 @@ ${showComments ? commentBubble : ''}
 `;
   const a = post.assets;
   const v = bundleVersion(a);
-  const head = siteHead(post.site, { isAdmin: post.isAdmin, buildHash: a.hash, assets: a });
+  const head = siteHead(post.site, {
+    isAdmin: post.isAdmin,
+    buildHash: a.hash,
+    assets: a,
+    ...(post.chrome ? { chrome: post.chrome } : {})
+  });
   const banner = post.bannerHtml ?? '';
   const siteChrome = post.bannerAboveHeader ? `${banner}${head}` : `${head}\n${banner}`;
   const scriptTags =

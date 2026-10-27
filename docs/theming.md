@@ -85,6 +85,41 @@ Themes can assume this structure on every public page:
 </footer>
 ```
 
+When `site.json#menu` is set, the header is built from the settings
+instead (see `docs/spec.md` §14a), with the announcement bar above it
+when one is on:
+
+```html
+<div class="rkr-announce" data-rkr-announce="…">
+  <p class="rkr-announce-text">…</p>                  <!-- text or a link -->
+  <button class="rkr-announce-close" hidden>×</button> <!-- shown by JS -->
+</div>
+<a class="rkr-skip" href="#main">…</a>
+<header class="rkr-site-head has-menu">
+  <div class="rkr-site-head-inner">
+    <div class="rkr-site-head-brand">
+      <p class="rkr-site-title"><a href="/">…</a></p>  <!-- logo <picture> or title -->
+    </div>
+    <input type="checkbox" id="rkr-menu-toggle" class="rkr-menu-toggle"/>
+    <label for="rkr-menu-toggle" class="rkr-menu-toggle-btn">…Menu</label>
+    <nav class="rkr-site-head-nav rkr-site-menu" aria-label="Site">
+      <ul class="rkr-site-menu-list"><li><a class="rkr-site-menu-link">…</a></li></ul>
+      <a class="rkr-btn rkr-site-head-cta">…</a>        <!-- optional -->
+      <ul class="rkr-site-social"><li><a aria-label="…"><svg/></a></li></ul>
+      <div class="rkr-site-head-auth">…Logout…</div>  <!-- signed-in admin -->
+    </nav>
+  </div>
+</header>
+```
+
+The menu folds at `48rem`. Under it the toggle label shows and
+`.rkr-site-menu` is hidden until the checkbox is checked. To fold at
+another width, a theme writes its own `@media` rules for the same
+classes. A wider fold repeats the rules of default.css's
+`@media (max-width: 48rem)` block under the new width; a narrower one
+also restores the open menu, and hides the toggle, between the new
+width and `48rem`.
+
 Per surface:
 
 - **Index** (`/`): `<main>` contains `<h1 class="rkr-index-heading">`
@@ -148,6 +183,7 @@ these over writing `.rkr-site-head { text-align: center }` in theme CSS.
 | `--rkr-header-direction`  | `row`                         | `flex-direction` on `.rkr-site-head-inner`.         |
 | `--rkr-header-text-align` | `left`                        | `text-align` on `.rkr-site-head`.                   |
 | `--rkr-foot-border`       | `1px solid var(--rkr-rule)`   | `border-top` on `.rkr-site-foot`.                   |
+| `--rkr-logo-height`       | `3rem`                        | Height of the header logo image.                    |
 | `--rkr-title-size`        | `1.45rem`                     | Site title font size.                               |
 | `--rkr-title-weight`      | `700`                         | Site title font weight.                             |
 | `--rkr-title-style`       | `normal`                      | Site title font style.                              |
@@ -183,6 +219,15 @@ should be added here at the same time.
 - `.rkr-site-head-auth-btn` — every clickable in the nav (anchor or button).
 - `.rkr-site-head-auth`, `.rkr-site-head-auth-form` — login/logout slot
   and the logout POST form.
+- `.rkr-site-head.has-menu` — the header built from `site.json#menu`.
+- `.rkr-site-menu`, `.rkr-site-menu-list`, `.rkr-site-menu-link` — its
+  nav, link list and links.
+- `.rkr-menu-toggle`, `.rkr-menu-toggle-btn`, `.rkr-menu-toggle-bars` —
+  the no-JS phone toggle (checkbox, its label, the three-bar glyph).
+- `.rkr-site-head-cta` — the header button (also `.rkr-btn`).
+- `.rkr-site-social` — the social icon list.
+- `.rkr-announce`, `.rkr-announce-text`, `.rkr-announce-close` — the
+  announcement bar above the header.
 - `.rkr-fab` — the admin floating action buttons (edit, new post,
   settings, comments) shown bottom-right when logged in.
 - `.rkr-site-foot`, `.rkr-site-foot-sep`, `.rkr-site-foot-admin` — footer + dot separator + small admin link.

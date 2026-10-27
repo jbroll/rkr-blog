@@ -15,6 +15,7 @@ import { buildImageMap } from '../lib/image-map-fs.ts';
 import { expandMacro, loadMacroLibrary } from '../lib/macro-library.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { loadChrome } from '../lib/site-chrome.ts';
 import { buildVideoMap } from '../lib/video-map-fs.ts';
 import { type DirectiveNode, WidgetRegistry } from '../lib/widgets.ts';
 import { renderBlocksPage } from '../templates/blocks.ts';
@@ -98,6 +99,7 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
         renderBlocksPage({
           site,
           assets: serverAssets(),
+          chrome: await loadChrome(siteRoot, site, req.log),
           title: `Preview: ${macro}`,
           bodyHtml,
           isAdmin: true

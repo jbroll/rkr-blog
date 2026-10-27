@@ -16,6 +16,7 @@ import { buildImageMap } from '../lib/image-map-fs.ts';
 import { readIndexedPosts, readTagCounts } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { loadChrome } from '../lib/site-chrome.ts';
 import { homePageRow } from '../lib/site-org-settings.ts';
 import { extractPostBanner, heroFigureIndex, renderStoredPage } from '../lib/stored-page-render.ts';
 import { truncateParagraph } from '../lib/teaser-truncate.ts';
@@ -214,6 +215,7 @@ export function registerIndexRoutes(fastify: FastifyInstance, opts: IndexRoutesO
     const html = renderIndexPage({
       site,
       assets: serverAssets(),
+      chrome: await loadChrome(siteRoot, site, req.log),
       page: 1,
       totalPages: 1,
       basePath,

@@ -38,6 +38,7 @@
   --rkr-header-direction: row;       /* flex-direction on .rkr-site-head-inner */
   --rkr-header-text-align: left;     /* text-align on .rkr-site-head */
   --rkr-foot-border: 1px solid var(--rkr-rule);
+  --rkr-logo-height: 3rem;           /* height of the header logo image */
   --rkr-title-size: 1.45rem;
   --rkr-title-weight: 700;
   --rkr-title-style: normal;
@@ -149,6 +150,62 @@ body {
   background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;
 }
 .rkr-site-head-auth-btn:hover { color: var(--rkr-link); text-decoration: underline; }
+
+/* Header built from site.json#menu. Below 48rem the menu folds behind a
+   checkbox toggle, so it opens without JavaScript. A theme moves the
+   fold by writing its own @media rules for these classes. */
+.rkr-announce {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--rkr-link);
+  color: var(--rkr-bg);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.rkr-announce[hidden], .rkr-announce-close[hidden] { display: none; }
+.rkr-announce-text { margin: 0; }
+.rkr-announce a { color: inherit; text-decoration: underline; }
+.rkr-announce-close {
+  background: none; border: 0; padding: 0 0.25rem; cursor: pointer;
+  color: inherit; font: inherit; font-size: 1.25rem; line-height: 1;
+}
+.rkr-site-title picture img { display: block; height: var(--rkr-logo-height); width: auto; }
+.rkr-site-menu-list, .rkr-site-social {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 1rem;
+  list-style: none; margin: 0; padding: 0;
+}
+.rkr-site-social { gap: 0.6rem; }
+.rkr-site-menu-link { color: var(--rkr-text); text-decoration: none; }
+.rkr-site-menu-link:hover { color: var(--rkr-link); text-decoration: underline; }
+.rkr-site-social a { display: flex; color: var(--rkr-muted); }
+.rkr-site-social a:hover { color: var(--rkr-link); }
+.rkr-site-head.has-menu .rkr-site-menu { flex-wrap: wrap; }
+.rkr-menu-toggle, .rkr-menu-toggle-btn { display: none; }
+.rkr-menu-toggle-bars, .rkr-menu-toggle-bars::before, .rkr-menu-toggle-bars::after {
+  display: block; width: 1.1rem; height: 2px; background: currentColor; border-radius: 1px;
+}
+.rkr-menu-toggle-bars { position: relative; }
+.rkr-menu-toggle-bars::before, .rkr-menu-toggle-bars::after { content: ""; position: absolute; left: 0; }
+.rkr-menu-toggle-bars::before { top: -6px; }
+.rkr-menu-toggle-bars::after { top: 6px; }
+@media (max-width: 48rem) {
+  .rkr-menu-toggle {
+    display: block; position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+  }
+  .rkr-menu-toggle-btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    cursor: pointer; font-size: 0.9rem; padding: 0.25rem 0;
+  }
+  .rkr-menu-toggle:focus-visible + .rkr-menu-toggle-btn { outline: 2px solid var(--rkr-link); outline-offset: 2px; }
+  .rkr-site-head.has-menu .rkr-site-menu {
+    display: none; flex-basis: 100%; flex-direction: column; align-items: flex-start; gap: 0.75rem;
+  }
+  .rkr-site-head .rkr-menu-toggle:checked ~ .rkr-site-menu { display: flex; }
+  .rkr-site-menu-list { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+}
 
 /* Posts-list rail controls: sort toggle + search at the top of the
    tag rail, side by side. Pure CSS; the form is a no-JS GET form. */

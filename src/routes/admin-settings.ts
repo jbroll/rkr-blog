@@ -32,6 +32,7 @@ import { deleteToken, readToken } from '../lib/oauth-tokens.ts';
 import { readIndexedPosts, runReindex } from '../lib/post-index.ts';
 import { readSecretKey } from '../lib/secrets.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import { parseHeaderForm } from '../lib/site-header-form.ts';
 import { listAvailableThemes } from '../lib/themes.ts';
 import { renderAdminSettingsPage } from '../templates/admin-settings.ts';
 
@@ -235,6 +236,7 @@ export function registerAdminSettingsRoutes(
       teaserWords: teaserWords.value ?? 0,
       notifyEmail: notifyEmailRaw,
       ...(homePageRaw !== undefined ? { homePage: homePageRaw } : {}),
+      ...parseHeaderForm(body as Record<string, unknown>),
       ...(commentNotify ? { commentNotify } : {}),
       ...(ingestResize ? { ingestResize } : {})
     });

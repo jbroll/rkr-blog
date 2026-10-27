@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-
+import { renderBlocksPage } from '../../src/templates/blocks.ts';
+import { renderIndexPage } from '../../src/templates/index.ts';
 import {
   bundleVersion,
   indexAdminFabs,
@@ -11,6 +12,8 @@ import {
   stylesheetLinks
 } from '../../src/templates/layout.ts';
 import { renderNotFoundPage } from '../../src/templates/not-found.ts';
+import { renderPostPage } from '../../src/templates/post.ts';
+import { renderSearchPage } from '../../src/templates/search.ts';
 
 const assets = { theme: 'default', hash: 'abcdef012345', base: '/static' };
 
@@ -120,6 +123,108 @@ test('siteHead: hideHomeLink omits the Home link but keeps About', () => {
   const html = siteHead({ title: 'S' }, { hideHomeLink: true });
   assert.doesNotMatch(html, /href="\/"[^>]*>Home</);
   assert.match(html, /href="\/about"[^>]*>About</);
+});
+
+const MENU = [
+  { label: 'About us', href: '/about-us' },
+  { label: 'Evil', href: 'javascript:alert(1)' },
+  { label: 'Shop & <b>', href: 'https://shop.example/' }
+];
+
+test('siteHead without menu is unchanged by the rest of the header settings', () => {
+  const site = { title: 'S', tagline: 't' };
+  const plain = siteHead(site, { buildHash: 'abc', assets });
+  const chrome = {
+    logoHtml: '<picture>logo</picture>',
+    cta: { label: 'Join', href: '/join' },
+    social: [{ platform: 'facebook' as const, url: 'https://facebook.com/x' }]
+  };
+  assert.equal(siteHead(site, { buildHash: 'abc', assets, chrome }), plain);
+  assert.equal(siteHead(site, { buildHash: 'abc', assets, chrome: {} }), plain);
+});
+
+test('siteHead with menu: items in order, no Home/About/Login, unsafe href neutralized', () => {
+  const html = siteHead({ title: 'S' }, { chrome: { menu: MENU } });
+  assert.doesNotMatch(html, /href="\/login"/);
+  assert.doesNotMatch(html, />Home</);
+  assert.doesNotMatch(html, /href="\/about"/);
+  assert.doesNotMatch(html, /javascript:/);
+  const hrefs = [...html.matchAll(/class="rkr-site-menu-link" href="([^"]*)">([^<]*)</g)].map(
+    (m) => [m[1], m[2]]
+  );
+  assert.deepEqual(hrefs, [
+    ['/about-us', 'About us'],
+    ['#', 'Evil'],
+    ['https://shop.example/', 'Shop &amp; &lt;b&gt;']
+  ]);
+  assert.match(html, /<input [^>]*type="checkbox"[^>]*id="rkr-menu-toggle"/);
+  assert.match(html, /<label [^>]*for="rkr-menu-toggle"/);
+  assert.match(html, /<p class="rkr-site-title"><a href="\/">S<\/a><\/p>/);
+});
+
+test('siteHead with menu: signed-in admin still gets the Logout form', () => {
+  const html = siteHead({ title: 'S' }, { isAdmin: true, assets, chrome: { menu: MENU } });
+  assert.match(html, /<form [^>]*method="post" [^>]*action="\/admin\/logout"/);
+  assert.match(html, /\/static\/site\/signout\.js/);
+  assert.doesNotMatch(html, /href="\/login"/);
+});
+
+test('siteHead with menu: logo, CTA button and social icons with safe hrefs', () => {
+  const html = siteHead(
+    { title: 'Club <1>' },
+    {
+      chrome: {
+        menu: MENU,
+        logoHtml: '<picture><img src="/img/x" alt=""/></picture>',
+        cta: { label: 'Donate', href: 'javascript:void(0)' },
+        social: [
+          { platform: 'instagram', url: 'https://instagram.com/x' },
+          { platform: 'email', url: 'mailto:hi@example.org' }
+        ]
+      }
+    }
+  );
+  assert.match(html, /<a href="\/" aria-label="Club &lt;1&gt;"><picture>/);
+  assert.match(html, /<a class="rkr-btn rkr-site-head-cta" href="#">Donate<\/a>/);
+  assert.match(html, /href="https:\/\/instagram\.com\/x" aria-label="Instagram"[^>]*><svg/);
+  assert.match(html, /href="mailto:hi@example\.org" aria-label="Email"[^>]*><svg/);
+});
+
+test('announcement: off or empty renders nothing; on renders a bar above the header', () => {
+  const plain = siteHead({ title: 'S' }, { assets });
+  const off = siteHead(
+    { title: 'S' },
+    { assets, chrome: { announcement: { text: 'Hi', on: false } } }
+  );
+  assert.equal(off, plain);
+  const on = siteHead(
+    { title: 'S' },
+    { assets, chrome: { announcement: { text: 'Big <news>', href: '/news', on: true } } }
+  );
+  assert.ok(on.indexOf('rkr-announce') < on.indexOf('<header'), 'bar sits above the header');
+  assert.match(on, /<div class="rkr-announce" data-rkr-announce="[0-9a-f]{16}">/);
+  assert.match(on, /<a href="\/news">Big &lt;news&gt;<\/a>/);
+  assert.match(on, /<button type="button" class="rkr-announce-close"[^>]*hidden/);
+  assert.match(on, /\/static\/site\/announcement\.js\?v=abcdef012345/);
+  const other = siteHead(
+    { title: 'S' },
+    { assets, chrome: { announcement: { text: 'Other', on: true } } }
+  );
+  const key = (h: string) => h.match(/data-rkr-announce="([^"]*)"/)?.[1];
+  assert.notEqual(key(on), key(other), 'a new text gets a new key');
+  assert.match(other, /<p class="rkr-announce-text">Other<\/p>/);
+});
+
+test('every public template passes chrome through to the header', () => {
+  const base = { site: { title: 'rkroll' }, assets, chrome: { menu: MENU } };
+  const pages = [
+    renderNotFoundPage(base),
+    renderPostPage({ ...base, title: 'T', slug: 't', bodyHtml: '' }),
+    renderIndexPage({ ...base, posts: [], page: 1, totalPages: 1 }),
+    renderSearchPage({ ...base, q: '', results: [] }),
+    renderBlocksPage({ ...base, title: 'T', bodyHtml: '' })
+  ];
+  for (const html of pages) assert.match(html, /rkr-site-menu-link/);
 });
 
 test('renderNotFoundPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
