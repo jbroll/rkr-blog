@@ -54,12 +54,17 @@ export async function renderAccordion(slots: Slots | undefined, ctx: RenderCtx):
   return `<div class="rkr-accordion">\n${out.join('\n')}\n</div>\n`;
 }
 
+const count = (v: unknown): number => {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
 const figure = (n: number): string => n.toLocaleString('en-US');
 
 export function renderProgress(slots: Slots | undefined, campaign: Campaign | undefined): string {
   const fromSite = slots?.source === 'site';
-  const goal = fromSite ? (campaign?.goal ?? 0) : Number(slots?.goal ?? 0);
-  const raised = fromSite ? (campaign?.raised ?? 0) : Number(slots?.raised ?? 0);
+  const goal = count(fromSite ? campaign?.goal : slots?.goal);
+  const raised = count(fromSite ? campaign?.raised : slots?.raised);
   const pct = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
   const bar = `<div class="rkr-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="rkr-progress-bar" style="width: ${pct}%"></div></div>\n`;
   if (!(goal > 0)) return bar;

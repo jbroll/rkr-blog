@@ -150,6 +150,22 @@ describe('blocks-render', () => {
     assert.doesNotMatch(none, /12,000/);
   });
 
+  it('progress treats a non-numeric or negative figure as zero', async () => {
+    const html = await renderBlockTree(
+      {
+        version: 1,
+        body: [
+          { type: 'progress', slots: { goal: 'lots', raised: -5 } },
+          { type: 'progress', slots: { goal: 10, raised: 'x' } }
+        ]
+      },
+      fakeCtx,
+      emptyLib
+    );
+    assert.doesNotMatch(html, /NaN|-5/);
+    assert.match(html, /aria-valuenow="0"/);
+  });
+
   it('progress inside a macro still gets the site campaign', async () => {
     const lib: RenderMacroLib = {
       get: (n) =>

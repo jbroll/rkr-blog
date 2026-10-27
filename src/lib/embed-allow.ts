@@ -4,7 +4,7 @@
 const MAPS_EMBED_PATH = '/maps/embed';
 
 export const EMBED_FRAME_SRC =
-  'https://docs.google.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com/maps/embed/';
+  'https://docs.google.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com/maps/embed https://www.google.com/maps/embed/';
 
 function parseHttps(url: string): URL | null {
   try {
@@ -17,7 +17,7 @@ function parseHttps(url: string): URL | null {
 
 export function embedAllowed(url: string): boolean {
   const u = parseHttps(url);
-  if (!u || u.username || u.password) return false;
+  if (!u || u.username || u.password || u.port) return false;
   switch (u.hostname) {
     case 'docs.google.com':
     case 'www.youtube-nocookie.com':

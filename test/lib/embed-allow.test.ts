@@ -17,6 +17,38 @@ test('embedAllowed: maps embed yes, google search no, youtube.com watch no', () 
   assert.equal(embedAllowed('not a url'), false);
 });
 
+test('embedAllowed refuses lookalike hosts and ports', () => {
+  assert.equal(embedAllowed('https://docs.google.com@evil.test/'), false);
+  assert.equal(embedAllowed('https://evil.test/?docs.google.com'), false);
+  assert.equal(embedAllowed('https://docs.google.com:8443/'), false);
+  assert.equal(embedAllowed('https://docs.google.com:443/'), true);
+});
+
+function cspMatches(source: string, url: string): boolean {
+  const u = new URL(url);
+  const s = new URL(source);
+  if (u.protocol !== s.protocol || u.host !== s.host) return false;
+  if (s.pathname === '/') return true;
+  return s.pathname.endsWith('/') ? u.pathname.startsWith(s.pathname) : u.pathname === s.pathname;
+}
+
+test('every URL embedAllowed accepts matches a frame-src source', () => {
+  const urls = [
+    'https://docs.google.com/forms/d/e/X/viewform?embedded=true',
+    'https://www.youtube-nocookie.com/embed/abc',
+    'https://player.vimeo.com/video/1',
+    'https://www.google.com/maps/embed?pb=1',
+    'https://www.google.com/maps/embed/v1/place?key=k'
+  ];
+  for (const url of urls) {
+    assert.equal(embedAllowed(url), true, url);
+    assert.ok(
+      EMBED_FRAME_SRC.split(' ').some((s) => cspMatches(s, url)),
+      `no frame-src source matches ${url}`
+    );
+  }
+});
+
 test('toEmbedUrl rewrites youtube, youtu.be, vimeo and Google Form share links', () => {
   assert.equal(toEmbedUrl('https://youtu.be/abc'), 'https://www.youtube-nocookie.com/embed/abc');
   assert.equal(
@@ -47,6 +79,6 @@ test('toEmbedUrl rewrites youtube, youtu.be, vimeo and Google Form share links',
   );
 });
 
-test('frame-src source list names the four allowed origins', () => {
-  assert.equal(EMBED_FRAME_SRC.split(' ').length, 4);
+test('frame-src source list lists the allowed origins', () => {
+  assert.equal(EMBED_FRAME_SRC.split(' ').length, 5);
 });

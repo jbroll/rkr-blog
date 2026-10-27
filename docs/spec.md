@@ -358,7 +358,7 @@ names of §9 and §10a (`ids`, `alts`, `captions`, `justify`, `matrix`,
 - `button` takes `size` (`normal`, `large`) and `arrow` (true appends →).
 - `embed` (`url`, `height` clamped to 150 to 2000 px) frames only
   `docs.google.com`, `www.youtube-nocookie.com`, `player.vimeo.com` and
-  `www.google.com/maps/embed/`. `lib/embed-allow.ts` is the one list
+  `www.google.com/maps/embed` (and paths under it). `lib/embed-allow.ts` is the one list
   for the renderer and the CSP `frame-src`. Any other URL renders as a
   link. Nothing in the editor, `blocks-migrate` or the WordPress
   importer creates an embed yet.
