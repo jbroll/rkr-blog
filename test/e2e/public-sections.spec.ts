@@ -8,6 +8,7 @@ import { seedBlockPage } from './seed-blocks.ts';
 const ADMIN_TOKEN = 'e2e-test-token-do-not-use-in-prod';
 const THEMES = ['light', 'light-bold', 'dark', 'dark-bold'];
 const SLUG = 'e2e-sections';
+const HERO_SLUG = 'e2e-hero-no-image';
 
 function band(theme: string, edge: 'straight' | 'wave' = 'straight'): Record<string, unknown> {
   return {
@@ -41,6 +42,12 @@ test.beforeAll(async ({ browser }) => {
       },
       band('dark', 'wave')
     ]
+  });
+  await seedBlockPage(page, {
+    slug: HERO_SLUG,
+    title: 'Hero',
+    kind: 'page',
+    body: [{ type: 'macro', macro: 'hero', slots: {} }]
   });
   await page.close();
 });
@@ -119,3 +126,18 @@ for (const size of [
     ).toBe(true);
   });
 }
+
+test('a hero with no image gives its text the band inner width', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/${HERO_SLUG}`);
+  const m = await page.evaluate(() => {
+    const band = document.querySelector('section.rkr-macro-hero') as Element;
+    const inner = band.querySelector(':scope > .rkr-section-inner') as Element;
+    const grid = band.querySelector('.rkr-grid[data-widths]') as Element;
+    const cells = grid.querySelectorAll(':scope > .rkr-grid-cell');
+    const width = (el: Element) => el.getBoundingClientRect().width;
+    return { inner: width(inner), cells: cells.length, text: width(cells[0] as Element) };
+  });
+  expect(m.cells).toBe(1);
+  expect(m.text).toBeGreaterThan(m.inner - 1);
+});

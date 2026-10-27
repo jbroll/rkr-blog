@@ -1413,11 +1413,6 @@ body[data-mode="figure"] .rkr-meta {
   max-width: var(--rkr-content);
   margin-inline: auto;
 }
-.rkr-section-inner {
-  display: flex;
-  flex-direction: column;
-  gap: var(--rkr-gap);
-}
 .rkr-theme-light {
   --rkr-band-bg: var(--rkr-section-light-bg);
   --rkr-band-fg: var(--rkr-section-light-fg);
@@ -1506,6 +1501,10 @@ body[data-mode="figure"] .rkr-meta {
 }
 .rkr-grid[data-widths] {
   grid-template-columns: var(--rkr-grid-widths);
+}
+/* A cell that renders nothing (an empty image) leaves no cell, so the one left takes the row. */
+.rkr-grid[data-widths]:has(> .rkr-grid-cell:only-child) {
+  grid-template-columns: 1fr;
 }
 /* Visual order only: the DOM keeps the first child first, so readers and the one-column collapse still lead with it. */
 .rkr-grid-reverse {
