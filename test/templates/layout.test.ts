@@ -105,6 +105,16 @@ test('stylesheetLinks: default theme loads base + default only, prefixed by colo
   assert.match(html, /<meta name="color-scheme" content="light dark"[^>]*>[\s\S]*<link/);
 });
 
+test('stylesheetLinks: themeHref replaces the bundled theme path', () => {
+  const html = stylesheetLinks({
+    ...assets,
+    theme: 'club',
+    themeHref: '/site-theme/club.css'
+  });
+  assert.match(html, /href="\/site-theme\/club\.css\?v=abcdef012345"/);
+  assert.doesNotMatch(html, /themes\/club\.css/);
+});
+
 test('stylesheetLinks: alternate theme layers on top of default', () => {
   const html = stylesheetLinks({ ...assets, theme: 'papermod' });
   assert.match(html, /\/static\/base\.css/);

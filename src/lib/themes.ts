@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readPersistedSiteConfig, siteConfigWrites } from './config.ts';
+import { paths, readPersistedSiteConfig, siteConfigWrites } from './config.ts';
 import { THEME } from './grid.ts';
 
 const VALID_THEME_NAME = /^[a-z][a-z0-9-]*$/;
@@ -16,10 +16,19 @@ function repoThemesDir(): string {
   return path.resolve(here, '..', '..', 'static', 'themes');
 }
 
-/** The CSS file for a theme name, or null when the name is unsafe or
- * no such theme ships. */
-export function themeFile(name: string): string | null {
+/** The CSS file in `<site>/themes/` for a theme name, or null. */
+export function siteThemeFile(name: string, env: NodeJS.ProcessEnv = process.env): string | null {
   if (!VALID_THEME_NAME.test(name)) return null;
+  const file = path.join(paths(env).themes, `${name}.css`);
+  return fs.existsSync(file) ? file : null;
+}
+
+/** The CSS file for a theme name, or null when the name is unsafe or
+ * no such theme exists. A site theme wins over a bundled one. */
+export function themeFile(name: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (!VALID_THEME_NAME.test(name)) return null;
+  const site = siteThemeFile(name, env);
+  if (site) return site;
   const file = path.join(repoThemesDir(), `${name}.css`);
   return fs.existsSync(file) ? file : null;
 }
@@ -34,9 +43,9 @@ function resolveThemeName(env: NodeJS.ProcessEnv): string {
     );
     return 'default';
   }
-  if (!themeFile(requested)) {
+  if (!themeFile(requested, env)) {
     process.stderr.write(
-      `[rkroll] theme="${requested}" not found in ${repoThemesDir()}; using default\n`
+      `[rkroll] theme="${requested}" not found in ${repoThemesDir()} or ${paths(env).themes}; using default\n`
     );
     return 'default';
   }
@@ -52,18 +61,20 @@ export function themeName(env: NodeJS.ProcessEnv = process.env): string {
   return resolved.name;
 }
 
-/** Bundled themes, `default` first and the rest sorted. */
-export function listAvailableThemes(): string[] {
-  const dir = repoThemesDir();
-  /* c8 ignore start -- defensive: repo always ships at least default.css */
-  if (!fs.existsSync(dir)) return ['default'];
-  /* c8 ignore stop */
-  const names = fs
+function cssNames(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs
     .readdirSync(dir)
     .filter((f) => f.endsWith('.css'))
     .map((f) => f.slice(0, -'.css'.length))
     .filter((n) => VALID_THEME_NAME.test(n));
-  return ['default', ...names.filter((n) => n !== 'default').sort()];
+}
+
+/** Bundled and site themes, `default` first and the rest sorted. */
+export function listAvailableThemes(env: NodeJS.ProcessEnv = process.env): string[] {
+  const names = new Set([...cssNames(repoThemesDir()), ...cssNames(paths(env).themes)]);
+  names.delete('default');
+  return ['default', ...[...names].sort()];
 }
 
 /** Reset the memoised theme. Tests only. */
@@ -84,7 +95,7 @@ export function sectionThemeNames(css: string): string[] {
 /** Section themes a band can use with the active theme: the four
  * built-ins, then the theme's declared names. */
 export function activeSectionThemes(env: NodeJS.ProcessEnv = process.env): string[] {
-  const file = themeFile(themeName(env));
+  const file = themeFile(themeName(env), env);
   /* c8 ignore next -- themeName only returns names whose file exists */
   const extra = file ? sectionThemeNames(fs.readFileSync(file, 'utf8')) : [];
   return [...new Set([...BUILT_IN_SECTION_THEMES, ...extra])];

@@ -4,8 +4,13 @@
 
 import type { AssetCtx } from '../templates/layout.ts';
 import { shortGitHash } from './build-info.ts';
-import { themeName } from './themes.ts';
+import { siteThemeFile, themeName } from './themes.ts';
 
 export function serverAssets(base = '/static'): AssetCtx {
-  return { theme: themeName(), hash: shortGitHash(), base };
+  const theme = themeName();
+  const ctx: AssetCtx = { theme, hash: shortGitHash(), base };
+  if (siteThemeFile(theme)) {
+    ctx.themeHref = `${base === '/static' ? '' : '/admin'}/site-theme/${theme}.css`;
+  }
+  return ctx;
 }

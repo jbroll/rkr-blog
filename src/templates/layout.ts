@@ -19,6 +19,9 @@ import { renderAnnouncement, renderMenuHeader, type SiteNavChrome } from './site
  * '/admin/static' inside the admin service worker's scope). */
 export interface AssetCtx {
   theme: string;
+  /** Stylesheet URL for a theme served from the site root; unset means
+   * the bundled `${base}/themes/<theme>.css`. */
+  themeHref?: string;
   hash: string;
   base: string;
 }
@@ -67,7 +70,7 @@ export function stylesheetLinks(a: AssetCtx): string {
 <link rel="stylesheet" href="${a.base}/themes/default.css${v}"/>`;
   if (a.theme === 'default') return base;
   return `${base}
-<link rel="stylesheet" href="${a.base}/themes/${a.theme}.css${v}"/>`;
+<link rel="stylesheet" href="${a.themeHref ?? `${a.base}/themes/${a.theme}.css`}${v}"/>`;
 }
 
 export interface SiteChrome {

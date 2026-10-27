@@ -38,6 +38,21 @@ be small: redefine the custom-property surface, plus any rules that
 need to differ. An unknown theme name falls back to `default` with a
 one-shot stderr warning.
 
+### Site themes
+
+A site can carry its own themes in `<siteRoot>/themes/<name>.css`
+(`init` creates the directory). They appear in the settings picker
+beside the bundled ones and layer on `default.css` the same way. When
+a site theme and a bundled theme share a name, the site copy wins.
+Names match `^[a-z][a-z0-9-]*$`. A `rkr-section-themes` comment in a
+site theme is read like one in a bundled theme.
+
+Site themes are served by the app at `/site-theme/<name>.css` (and
+`/admin/site-theme/<name>.css` in the editor), not from `/static`.
+Production Apache serves `/static/*` straight from the repo, so the
+separate path is what lets these requests reach Node. The admin
+service worker caches the editor's copy network-first.
+
 ### Bundled themes
 
 The repo seeds the picker with eight themes. Each is a single CSS

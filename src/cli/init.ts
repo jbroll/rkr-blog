@@ -22,6 +22,7 @@ export default function init(): void {
     p.blocks,
     p.data,
     p.macros,
+    p.themes,
     p.static
   ];
 

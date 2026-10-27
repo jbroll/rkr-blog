@@ -56,12 +56,17 @@ function isNetworkFirst(url: URL, req: Request): boolean {
 }
 
 /** Network-first, keyed by path; offline, any query falls back to it. */
-async function networkFirst(env: SwEnv, req: Request, key: string): Promise<Response> {
+async function networkFirst(
+  env: SwEnv,
+  req: Request,
+  key: string,
+  cacheQuery = false
+): Promise<Response> {
   try {
     const res = await env.fetch(req);
     // A query render (a filtered pages list) must not replace the full copy.
     // Awaited so respondWith keeps the worker alive until the write lands.
-    if (res.ok && !new URL(req.url).search) {
+    if (res.ok && (cacheQuery || !new URL(req.url).search)) {
       await putCurrent(env, key, res.clone()).catch(() => {});
     }
     return res;
@@ -97,6 +102,11 @@ export function handleFetch(env: SwEnv, req: Request): Promise<Response> | null 
   if (req.method !== 'GET') return null;
 
   if (isNetworkFirst(url, req)) return networkFirst(env, req, url.origin + url.pathname);
+
+  // Site themes are not in the precache; the ?v= query is only a cache-buster.
+  if (url.pathname.startsWith('/admin/site-theme/')) {
+    return networkFirst(env, req, url.origin + url.pathname, true);
+  }
 
   if (url.pathname.startsWith('/admin/static/')) {
     // Immutable for a given hash, so a hit is always correct.

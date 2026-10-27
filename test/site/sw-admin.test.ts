@@ -201,6 +201,15 @@ test('macro list: network-first with a cached fallback, whatever the request mod
   assert.equal(await (res as Response).text(), 'network:https://x.test/admin/blocks/macros');
 });
 
+test('site theme: network-first, cached despite the ?v= query, served offline', async () => {
+  const e = env(okPrecache);
+  await precacheInstall(e);
+  const url = 'https://x.test/admin/site-theme/club.css?v=abc';
+  await handleFetch(e, new Request(url));
+  const res = await handleFetch(offline(e), new Request(url));
+  assert.equal(await (res as Response).text(), `network:${url}`);
+});
+
 test('refreshCachedPage: replaces the cached render of a saved editor page', async () => {
   let n = 0;
   const e = env(async (input, init) => {

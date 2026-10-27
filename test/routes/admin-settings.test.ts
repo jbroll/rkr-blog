@@ -113,6 +113,22 @@ test('POST /admin/settings: 303 with err= on invalid theme name', async (t) => {
   assert.match(res.headers.location as string, /\/admin\/settings\?err=/);
 });
 
+test('POST /admin/settings: accepts a theme installed under the site root', async (t) => {
+  const { root, app } = await setup(t);
+  fs.mkdirSync(path.join(root, 'themes'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'themes', 'club.css'), 'body{}');
+  const res = await app.inject({
+    method: 'POST',
+    url: '/admin/settings',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    payload: 'title=ok&tagline=&theme=club'
+  });
+  assert.equal(res.statusCode, 303);
+  assert.doesNotMatch(res.headers.location as string, /err=/);
+  const onDisk = JSON.parse(fs.readFileSync(path.join(root, 'config', 'site.json'), 'utf8'));
+  assert.equal(onDisk.theme, 'club');
+});
+
 test('POST /admin/settings: 303 with err= on theme that is not installed', async (t) => {
   const { app } = await setup(t);
   const res = await app.inject({

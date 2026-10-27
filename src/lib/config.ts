@@ -34,6 +34,8 @@ export interface Paths {
   data: string;
   db: string;
   static: string;
+  /** Site-owned theme stylesheets; a name here wins over the repo's. */
+  themes: string;
   /** Per-site mutable config dir. Currently holds site.json (title /
    * tagline / theme). The admin UI's settings page writes here. */
   config: string;
@@ -307,6 +309,7 @@ export function paths(env: Env = process.env): Paths {
     data: path.join(root, 'data'),
     db: path.join(root, 'data', 'site.db'),
     static: path.join(root, 'static'),
+    themes: path.join(root, 'themes'),
     config: path.join(root, 'config'),
     siteConfigFile: path.join(root, 'config', 'site.json')
   };

@@ -10,6 +10,7 @@ import {
   activeSectionThemes,
   listAvailableThemes,
   sectionThemeNames,
+  siteThemeFile,
   themeFile,
   themeName
 } from '../../src/lib/themes.ts';
@@ -25,6 +26,47 @@ function freshRoot(t: TestContext): { root: string; env: NodeJS.ProcessEnv } {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return { root, env: { SITE_ROOT: root } };
 }
+
+function siteTheme(root: string, name: string, css = 'body{}'): void {
+  fs.mkdirSync(path.join(root, 'themes'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'themes', `${name}.css`), css);
+}
+
+test('site themes: listed after default, merged with bundled, selectable', (t) => {
+  const { root, env } = freshRoot(t);
+  siteTheme(root, 'club');
+  siteTheme(root, 'default');
+  const list = listAvailableThemes(env);
+  assert.equal(list[0], 'default');
+  assert.ok(list.includes('club'));
+  assert.equal(new Set(list).size, list.length);
+  assert.equal(themeName({ ...env, SITE_THEME: 'club' }), 'club');
+});
+
+test('site themes: a site copy wins a name clash', (t) => {
+  const { root, env } = freshRoot(t);
+  siteTheme(root, 'default');
+  assert.equal(themeFile('default', env), path.join(root, 'themes', 'default.css'));
+  assert.notEqual(themeFile('default', {}), path.join(root, 'themes', 'default.css'));
+});
+
+test('site themes: activeSectionThemes reads the site copy', (t) => {
+  const { root, env } = freshRoot(t);
+  siteTheme(root, 'club', '/* rkr-section-themes: forest */');
+  assert.deepEqual(activeSectionThemes({ ...env, SITE_THEME: 'club' }), [
+    'light',
+    'light-bold',
+    'dark',
+    'dark-bold',
+    'forest'
+  ]);
+});
+
+test('site themes: unsafe or missing names never resolve', (t) => {
+  const { env } = freshRoot(t);
+  assert.equal(siteThemeFile('../x', env), null);
+  assert.equal(siteThemeFile('nope', env), null);
+});
 
 test('themeName: defaults to "default"', () => {
   assert.equal(themeName({}), 'default');

@@ -53,6 +53,7 @@ import integrationsOnedriveRoutes, {
   type OneDriveTokenExchange
 } from './routes/integrations-onedrive.ts';
 import publicRoutes from './routes/public.ts';
+import { registerSiteThemeRoutes } from './routes/site-theme.ts';
 import { renderNotFoundPage } from './templates/not-found.ts';
 
 const UPLOAD_LIMIT_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB hard ceiling; per-route caps enforce the real limit
@@ -288,6 +289,8 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
       });
     }
   }
+
+  await app.register(registerSiteThemeRoutes, { siteRoot });
 
   await app.register(adminRoutes, {
     siteRoot,
