@@ -39,7 +39,7 @@ export async function renderEditBody(
   };
   // Same image prepass as the public route (routes/public.ts), walking
   // macro expansions so a figure inside a macro resolves on both.
-  const synthetic = collectBlockFigureIds(tree, (n) => lib.get(n)?.tree).map((ids) => ({
+  const synthetic = collectBlockFigureIds(tree, macroLib).map((ids) => ({
     type: 'leafDirective',
     name: 'figure',
     attributes: { ids },

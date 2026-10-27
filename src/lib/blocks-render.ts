@@ -64,6 +64,18 @@ function fillPlaceholders<T>(value: T, slots: Slots): T {
   return value;
 }
 
+/** A macro instance's tree with its slots filled in. Tree slots (theme,
+ * edge) plus explicit overrides survive; defaults feed placeholders only. */
+function expandInstance(
+  node: Extract<BlockNode, { type: 'macro' }>,
+  def: { defaults: Slots; tree: BlockNode }
+): BlockNode {
+  const overrides = node.slots ?? {};
+  const merged = resolveSlots({ defaults: def.defaults }, overrides).slots;
+  const filled = fillPlaceholders(def.tree, merged);
+  return { ...filled, slots: { ...(filled.slots ?? {}), ...overrides } } as BlockNode;
+}
+
 function leafDirective(name: string, attrs: Record<string, string>): DirectiveNode {
   const attributes: Record<string, string | null | undefined> = { ...attrs };
   return { type: 'leafDirective', name, attributes, children: [] };
@@ -211,17 +223,9 @@ async function renderNodeHtml(
       if (detectCycle(adjacencyFrom(lib, node.macro), node.macro)) {
         return `<!-- macro cycle: ${escapeText(node.macro)} -->`;
       }
-      const overrides = node.slots ?? {};
-      const merged = resolveSlots({ defaults: def.defaults }, overrides).slots;
-      const filled = fillPlaceholders(def.tree, merged);
-      // Tree slots (theme, edge) plus explicit overrides; defaults feed placeholders only.
-      const tree = {
-        ...filled,
-        slots: { ...(filled.slots ?? {}), ...overrides }
-      } as BlockNode;
       // The instance is one editable unit: mark the instance path once,
       // render the expansion internals unmarked.
-      return renderNodeHtml(tree, ctx, lib, [...stack, node.macro], path);
+      return renderNodeHtml(expandInstance(node, def), ctx, lib, [...stack, node.macro], path);
     }
     default: {
       // Page trees are validated on save and macros on load; this guards
@@ -233,30 +237,24 @@ async function renderNodeHtml(
   }
 }
 
-/** Raw figure `ids` strings in a tree, following macro references one
- * level deep per name (cycle-guarded). Callers feed these to the
- * image-map prepass, which splits comma lists itself. */
-export function collectBlockFigureIds(
-  tree: BlockTree,
-  getMacroTree?: (name: string) => BlockNode | undefined
-): string[] {
+/** Raw figure `ids` strings in a tree, expanding each macro instance
+ * with its own slots as the renderer does (cycle-guarded). Callers feed
+ * these to the image-map prepass, which splits comma lists itself. */
+export function collectBlockFigureIds(tree: BlockTree, lib?: RenderMacroLib): string[] {
   const out: string[] = [];
-  const seen = new Set<string>();
-  const walk = (node: BlockNode): void => {
+  const walk = (node: BlockNode, stack: string[]): void => {
     if (node.type === 'figure' && typeof node.slots?.ids === 'string' && node.slots.ids) {
       out.push(node.slots.ids);
       return;
     }
     if (node.type === 'macro') {
-      if (!getMacroTree || seen.has(node.macro)) return;
-      seen.add(node.macro);
-      const def = getMacroTree(node.macro);
-      if (def) walk(def);
+      const def = stack.includes(node.macro) ? undefined : lib?.get(node.macro);
+      if (def) walk(expandInstance(node, def), [...stack, node.macro]);
       return;
     }
-    if (node.type === 'grid') for (const k of node.children) walk(k);
+    if (node.type === 'grid') for (const k of node.children) walk(k, stack);
   };
-  for (const n of tree.body) walk(n);
+  for (const n of tree.body) walk(n, []);
   return out;
 }
 

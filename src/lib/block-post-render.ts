@@ -26,7 +26,13 @@ export async function renderBlockPost(
   deps: { widgets: WidgetRegistry; videos: VideoMapView; log: Logger }
 ): Promise<BlockPostParts> {
   const lib = loadMacroLibrary(path.join(siteRoot, 'macros'), deps.log);
-  const synthetic = collectBlockFigureIds(page.tree, (n) => lib.get(n)?.tree).map((ids) => ({
+  const macroLib = {
+    get: (n: string) => {
+      const d = lib.get(n);
+      return d ? { defaults: d.defaults, tree: d.tree } : undefined;
+    }
+  };
+  const synthetic = collectBlockFigureIds(page.tree, macroLib).map((ids) => ({
     type: 'leafDirective',
     name: 'figure',
     attributes: { ids },
@@ -43,12 +49,7 @@ export async function renderBlockPost(
   const bannerHtml = hero
     ? await deps.widgets.dispatch('figure', figureDirective(hero), ctx)
     : null;
-  const bodyHtml = await renderBlockTree(rest, ctx, {
-    get: (n: string) => {
-      const d = lib.get(n);
-      return d ? { defaults: d.defaults, tree: d.tree } : undefined;
-    }
-  });
+  const bodyHtml = await renderBlockTree(rest, ctx, macroLib);
   const sub = page.fields.subtitle;
   return {
     bodyHtml,

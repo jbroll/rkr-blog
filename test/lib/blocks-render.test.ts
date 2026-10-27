@@ -236,19 +236,43 @@ describe('blocks-render', () => {
     };
     assert.deepEqual(collectBlockFigureIds(tree), ['aa11, bb22']);
     assert.deepEqual(
-      collectBlockFigureIds(tree, (n) =>
-        n === 'wall' ? { type: 'figure', slots: { ids: 'cc33' } } : undefined
-      ),
+      collectBlockFigureIds(tree, {
+        get: (n) =>
+          n === 'wall'
+            ? { defaults: {}, tree: { type: 'figure', slots: { ids: 'cc33' } } }
+            : undefined
+      }),
       ['aa11, bb22', 'cc33']
     );
     // Cycles terminate.
     assert.deepEqual(
-      collectBlockFigureIds({ version: 1, body: [{ type: 'macro', macro: 'loop' }] }, () => ({
-        type: 'macro',
-        macro: 'loop'
-      })),
+      collectBlockFigureIds(
+        { version: 1, body: [{ type: 'macro', macro: 'loop' }] },
+        { get: () => ({ defaults: {}, tree: { type: 'macro', macro: 'loop' } }) }
+      ),
       []
     );
+  });
+
+  it('collects the ids each macro instance fills into an image placeholder', () => {
+    const lib: RenderMacroLib = {
+      get: (n) =>
+        n === 'split'
+          ? {
+              defaults: { image: 'dd44' },
+              tree: { type: 'grid', children: [{ type: 'figure', slots: { ids: '{{image}}' } }] }
+            }
+          : undefined
+    };
+    const tree: BlockTree = {
+      version: 1,
+      body: [
+        { type: 'macro', macro: 'split', slots: { image: 'aa11' } },
+        { type: 'macro', macro: 'split', slots: { image: 'bb22' } },
+        { type: 'macro', macro: 'split' }
+      ]
+    };
+    assert.deepEqual(collectBlockFigureIds(tree, lib), ['aa11', 'bb22', 'dd44']);
   });
 
   describe('seeded macros', () => {
