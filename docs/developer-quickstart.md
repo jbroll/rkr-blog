@@ -166,7 +166,8 @@ staged files and re-stages any auto-fix.
 - Each test file is independently runnable; uses fresh fixtures (no
   shared mutable state).
 - Tests that need a temporary directory create one under
-  `os.tmpdir()` and clean up in a `t.after()` hook.
+  `os.tmpdir()` and remove it in a `t.after()` or file-level `after()`
+  hook.
 - Tests that hit the DB use `:memory:` SQLite, run all migrations on
   setup.
 - Fixture images live in `test/fixtures/images/` (small JPEGs and
@@ -197,8 +198,8 @@ back to `src/admin/*.ts` and `src/site/*.ts` so the report is in
 source-file space.
 
 `test:e2e` boots the server via `test/e2e/server-runner.ts` against a
-freshly-mkdtemp'd SITE_ROOT, runs the spec files in `test/e2e/`, and
-tears down. The chromium binary it drives was installed by
+freshly-mkdtemp'd SITE_ROOT, runs the spec files in `test/e2e/`, then
+stops the server and removes the SITE_ROOT. The chromium binary it drives was installed by
 `npm run setup`; if `playwright install` was skipped (or the cache
 was cleared), re-run `npx playwright install chromium`.
 

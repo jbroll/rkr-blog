@@ -21,8 +21,8 @@ Practical guidelines for the e2e suite. Two layers:
 | `test/e2e/coverage-fixtures.ts` | Custom `test` fixture that wraps Playwright's `baseTest` to capture V8 coverage per spec. **Always import `test` + `expect` from here, not `@playwright/test`** — otherwise no coverage data is collected for the spec. |
 | `test/e2e/server-runner.ts` | Boots a fresh `buildApp()` against a tmp `SITE_ROOT` for the duration of a run. Single shared instance across all specs. |
 | `test/e2e/coverage-config.ts` | The monocart options both of the above construct a `CoverageReport` from: entry/source filters, source-map resolver, and the bundle-URL → repo-path mapping. mcr applies the filters at both `add()` and `generate()` time, so the two call sites must not disagree. |
-| `test/e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes. |
-| `test/playwright.config.ts` | Wires the webServer + global teardown. `testDir: './e2e'` is relative to `test/`. `workers: 1` (the suite shares one server). |
+| `test/e2e/global-teardown.ts` | Generates the lcov + HTML report after the suite completes, then removes the run's `SITE_ROOT`. |
+| `test/playwright.config.ts` | Wires the webServer + global teardown. Creates the run's tmp `SITE_ROOT` once and shares it with workers through `RKR_E2E_SITE_ROOT`, since Playwright loads the config in every process. `testDir: './e2e'` is relative to `test/`. `workers: 1` (the suite shares one server). |
 | `test/site/` | Unit tests for browser-only code that Playwright can't reach (e.g. `sw-admin.test.ts` and `sw-admin-entry.test.ts` for the service worker). These run under c8, not Playwright; see §10. |
 
 Run:
