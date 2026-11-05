@@ -348,6 +348,28 @@ dated names from the WordPress importer and plain names from
 whose `fields.slug` matches and whose tree parses; read, save and create
 all use that one rule. Corrupt files are skipped.
 
+### Collections
+
+Tag `T` is a collection when a published `kind: page` row exists whose
+slug equals `T` lowercased, and that slug is not one of the
+non-collection slugs. A tag that is not a valid slug can never be one. A
+page's collection is the first tag in its own `fields.tags` order that is
+a collection, other than its own slug. A draft page has a collection by
+the same rule; only the collection page must be published. Membership is
+computed at request time and never stored (`src/lib/collections.ts`).
+
+Non-collection slugs are `RESERVED_SLUGS` plus `img`, `video`,
+`site-theme` and `pages`, each of which already has a two-segment route.
+A page with one of those slugs stays legal; its tag never nests
+anything. `about` is not on the list.
+
+A member's canonical URL is `/<collection>/<slug>` (routes in §11). It
+renders "Back to <collection page title>" and previous and next links
+after the body, over the published members ordered by `order` (absent
+last), then title, with no wraparound. A draft member, shown to an
+admin, gets the links to its published neighbours by its own position.
+An unpublished collection page makes its members flat again.
+
 ### Blocks
 
 | Kind | Types |
@@ -931,9 +953,10 @@ GET    /                              the page named by site.json#homePage, else
 GET    /posts                         rendered post index (always)
 GET    /about                         `about` block page, else the _about system post
 GET    /search                        full-text search page
-GET    /:slug                         rendered single post
-GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug (published only)
-GET    /pages/:slug                   old block-page URL → 301 /:slug (published only)
+GET    /:slug                         rendered single post; a collection member → 302 /:collection/:slug, query kept
+GET    /:collection/:slug             a collection member (§8a), drafts for admins only; any other pair → 404
+GET    /:y/:m/:d/:slug                legacy WordPress permalink → 301 /:slug, 302 /:collection/:slug for a member (published only)
+GET    /pages/:slug                   old block-page URL → 301 /:slug, 302 /:collection/:slug for a member (published only)
 GET    /site-theme/:file              a site theme stylesheet from <site>/themes/ (site-theme.ts)
 GET    /admin/site-theme/:file        the same file under /admin, for the editor (site-theme.ts)
 GET    /img/:filename                 derivative image, or animated GIF original (cache-miss handler)
@@ -1020,6 +1043,13 @@ GET    /admin/integrations/onedrive/thumbnail      proxy a OneDrive item thumbna
 ```
 
 (`<p>` ∈ {`gdrive`, `onedrive`})
+
+A collection member's redirects are 302, not 301, because membership
+changes when tags or the collection page change. The home page rule
+(301 to `/`) runs before the member redirect. Static prefixes
+(`/pages/`, `/img/`, `/video/`, `/site-theme/`, `/admin/`) outrank
+`/:collection/:slug`; the non-collection slugs (§8a) keep a canonical
+URL from landing under one of them.
 
 ## 12. Operator commands
 

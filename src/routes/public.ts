@@ -1,6 +1,7 @@
 // Public routes:
 //   GET /, /posts        — paginated index of published posts (public-index.ts)
-//   GET /:slug           — rendered post page
+//   GET /:slug           — rendered post page; 302 to the nested URL for a collection member
+//   GET /:collection/:slug — rendered collection member
 //   GET /img/:filename   — derivative image, on Apache cache-miss fall-through
 //
 // Apache rewrites /img/* directly to the cache file when present
@@ -9,11 +10,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { collectionOf, pagePath } from '../lib/collections.ts';
 import { type SiteConfig, siteConfig } from '../lib/config.ts';
 import { parsePost, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
-import { readIndexedPostBySlug } from '../lib/post-index.ts';
+import { type IndexedPost, readIndexedPostBySlug } from '../lib/post-index.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
 import { loadChrome } from '../lib/site-chrome.ts';
@@ -63,6 +65,26 @@ export default async function publicRoutes(
       .code(404)
       .type('text/html; charset=utf-8')
       .send(renderNotFoundPage({ site, isAdmin, assets: serverAssets(), chrome }));
+  };
+
+  const sendStoredPage = async (
+    req: FastifyRequest<{ Querystring: { submitted?: string } }>,
+    reply: FastifyReply,
+    row: IndexedPost
+  ) => {
+    const html = await renderStoredPage({
+      siteRoot,
+      db,
+      row,
+      site: getSite(),
+      widgets,
+      isAdmin: !!req.user,
+      log: req.log,
+      submitted: req.query.submitted === '1'
+    });
+    setPublicSecurityHeaders(reply);
+    if (req.user) reply.header('Cache-Control', 'private, no-store');
+    return reply.type('text/html; charset=utf-8').send(html);
   };
 
   const widgets = new WidgetRegistry();
@@ -164,23 +186,29 @@ export default async function publicRoutes(
       // drafts straight to /:slug from the admin table). Anonymous
       // visitors keep the published-only filter.
       if (!row || (row.status !== 'published' && !req.user)) return send404(req, reply);
-
-      const html = await renderStoredPage({
-        siteRoot,
-        db,
-        row,
-        site,
-        widgets,
-        isAdmin: !!req.user,
-        log: req.log,
-        submitted: req.query.submitted === '1'
-      });
-
-      setPublicSecurityHeaders(reply);
-      if (req.user) reply.header('Cache-Control', 'private, no-store');
-      return reply.type('text/html; charset=utf-8').send(html);
+      const canonical = pagePath(db, slug);
+      if (canonical !== `/${encodeURIComponent(slug)}`) {
+        // 302, not 301: membership changes when tags or the collection page do.
+        const q = req.url.indexOf('?');
+        setPublicSecurityHeaders(reply);
+        return reply.redirect(canonical + (q === -1 ? '' : req.url.slice(q)), 302);
+      }
+      return sendStoredPage(req, reply, row);
     }
   );
+
+  // ---- collection member: GET /:collection/:slug -------------------------
+
+  fastify.get<{
+    Params: { collection: string; slug: string };
+    Querystring: { submitted?: string };
+  }>('/:collection/:slug', async (req, reply) => {
+    const { collection, slug } = req.params;
+    if (collectionOf(db, slug)?.slug !== collection) return send404(req, reply);
+    const row = readIndexedPostBySlug(db, slug);
+    if (!row || (row.status !== 'published' && !req.user)) return send404(req, reply);
+    return sendStoredPage(req, reply, row);
+  });
 
   // ---- legacy WordPress permalinks: GET /:y/:m/:d/:slug ------------------
 
@@ -200,7 +228,8 @@ export default async function publicRoutes(
     const row = readIndexedPostBySlug(db, slug);
     if (!row || row.status !== 'published' || slug.startsWith('_')) return send404(req, reply);
     setPublicSecurityHeaders(reply);
-    return reply.redirect(`/${encodeURIComponent(slug)}`, 301);
+    const target = pagePath(db, slug);
+    return reply.redirect(target, target === `/${encodeURIComponent(slug)}` ? 301 : 302);
   };
   fastify.get('/:y/:m/:d/:slug', legacyPermalink);
   fastify.get('/:y/:m/:d/:slug/', legacyPermalink);

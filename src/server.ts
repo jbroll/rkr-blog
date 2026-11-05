@@ -312,6 +312,7 @@ export async function buildApp(opts: BuildAppOpts = {}): Promise<FastifyInstance
     // render plus an editor preview; no existing URLs change.
     await app.register(blockRoutes, {
       siteRoot,
+      db: opts.db,
       getSite: () => opts.site ?? siteConfig(),
       requireAuth: !!(opts.db && opts.auth && !opts.auth.skipGate)
     });

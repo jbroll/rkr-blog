@@ -9,6 +9,7 @@ import { COMMENT_SUBMITTED_NOTICE } from '../templates/comments.ts';
 import { renderPostPage } from '../templates/post.ts';
 import { readIndexedBlockPage } from './block-pages.ts';
 import { renderBlockPost } from './block-post-render.ts';
+import { collectionNav } from './collections.ts';
 import { getPostIdBySlug, listPublishedThread } from './comments.ts';
 import type { SiteConfig } from './config.ts';
 import { parsePost, type RenderCtx, renderPostHtml } from './content.ts';
@@ -100,6 +101,7 @@ export async function renderStoredPage(opts: StoredPageOpts): Promise<string> {
   const isPage = row.kind === 'page';
   const postId = isPage ? null : getPostIdBySlug(db, row.slug);
   const comments = postId === null ? [] : listPublishedThread(db, postId);
+  const nav = collectionNav(db, row.slug);
 
   return renderPostPage({
     site,
@@ -110,6 +112,7 @@ export async function renderStoredPage(opts: StoredPageOpts): Promise<string> {
     slug: row.slug,
     ...(date ? { date } : {}),
     bodyHtml,
+    ...(nav ? { collectionNav: nav } : {}),
     ...(bannerHtml ? { bannerHtml } : {}),
     ...(site.bannerAboveHeader ? { bannerAboveHeader: true } : {}),
     isAdmin,

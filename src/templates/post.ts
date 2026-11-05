@@ -1,5 +1,6 @@
 // Post page template. Plain template-literal HTML (spec.md §8 content model).
 
+import type { CollectionNav, PageLink } from '../lib/collections.ts';
 import { countThread, type ThreadComment } from '../lib/comment-types.ts';
 import { escapeAttr, escapeText } from '../lib/content.ts';
 import { renderCommentForm, renderCommentList } from './comments.ts';
@@ -23,6 +24,7 @@ export interface PostPageData extends SiteChrome {
   slug: string;
   date?: string;
   bodyHtml: string;
+  collectionNav?: CollectionNav;
   /** Full-bleed banner rendered between the site header and <main>.
    * Populated when the post's first element is a ::figure directive. */
   bannerHtml?: string;
@@ -59,6 +61,16 @@ function formatPostDate(iso: string): string {
     day: 'numeric',
     timeZone: 'UTC'
   });
+}
+
+function renderCollectionNav(nav: CollectionNav | undefined): string {
+  if (!nav) return '';
+  const a = (attrs: string, link: PageLink, text: string) =>
+    `<a ${attrs} href="${escapeAttr(link.path)}">${escapeText(text)}</a>`;
+  const { back, prev, next } = nav;
+  return `<nav class="rkr-collection-nav">${a('class="rkr-collection-back"', back, `Back to ${back.title}`)}${
+    prev ? a('class="rkr-collection-prev" rel="prev"', prev, prev.title) : ''
+  }${next ? a('class="rkr-collection-next" rel="next"', next, next.title) : ''}</nav>\n`;
 }
 
 export function renderPostPage(post: PostPageData): string {
@@ -129,7 +141,7 @@ ${scriptTags}
 ${siteChrome}<main id="main" tabindex="-1">
 <article>
 ${showHeader ? header : ''}${post.bodyHtml}
-</article>
+${renderCollectionNav(post.collectionNav)}</article>
 ${showComments ? commentsBlock : ''}
 </main>
 ${siteFoot(post.site, { isAdmin: post.isAdmin, ...footerOpt(post.chrome) })}

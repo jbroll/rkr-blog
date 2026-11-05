@@ -764,6 +764,17 @@ article a {
 }
 article a:hover { color: var(--rkr-link-hover); }
 
+.rkr-collection-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+  margin: 2.4em 0 0;
+  font-family: var(--rkr-display-font);
+}
+.rkr-collection-back { flex-basis: 100%; }
+/* Keeps next on the right when there is no prev. */
+.rkr-collection-next { margin-left: auto; }
+
 article blockquote {
   border-left: var(--rkr-blockquote-border);
   padding-left: 1rem;

@@ -374,6 +374,11 @@ Block pages (spec §8a) render through these classes.
 - `.rkr-embed` — embedded iframe. With a `height` slot it carries an
   inline `height` and the aspect ratio no longer applies.
 - `.rkr-macro-<name>` — see Macros below.
+- `.rkr-collection-nav` — after the body of a collection member, inside
+  `<article>`. Holds `.rkr-collection-back` ("Back to <collection>"),
+  then `.rkr-collection-prev` (`rel="prev"`) and `.rkr-collection-next`
+  (`rel="next"`). A missing end has no element. The default theme puts
+  back on its own line and prev and next at opposite ends.
 
 | Token | Default | Used for |
 | --- | --- | --- |

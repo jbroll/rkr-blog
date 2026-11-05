@@ -1,5 +1,6 @@
 // JSON-blocks routes outside the editor:
-//   GET /pages/:slug                 — 301 to /:slug for a published page, else 404
+//   GET /pages/:slug                 — 301 to /:slug for a published page (302 to
+//                                      /:collection/:slug for a member), else 404
 //   GET /admin/blocks/preview/:macro — macro preview for signed-in editors
 //
 // Pages render publicly only through GET /:slug, which reads the index
@@ -10,7 +11,9 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { requireUser } from '../lib/auth-middleware.ts';
 import { readBlockPage } from '../lib/block-pages.ts';
 import { collectBlockFigureIds, renderBlockTree } from '../lib/blocks-render.ts';
+import { pagePath } from '../lib/collections.ts';
 import type { SiteConfig } from '../lib/config.ts';
+import type { Db } from '../lib/db.ts';
 import { buildImageMap } from '../lib/image-map-fs.ts';
 import { expandMacro, loadMacroLibrary } from '../lib/macro-library.ts';
 import { setPublicSecurityHeaders } from '../lib/security-headers.ts';
@@ -30,6 +33,7 @@ export interface BlockRoutesOpts {
   getSite: () => SiteConfig;
   /** When true, the preview route requires a signed-in admin. */
   requireAuth: boolean;
+  db?: Db;
 }
 
 function sendPages404(reply: FastifyReply) {
@@ -41,7 +45,7 @@ function sendPages404(reply: FastifyReply) {
 }
 
 export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesOpts): void {
-  const { siteRoot, getSite } = opts;
+  const { siteRoot, getSite, db } = opts;
   const widgets = new WidgetRegistry();
   widgets.register(figureWidget);
   widgets.register(videoWidget);
@@ -83,7 +87,8 @@ export function registerBlockRoutes(fastify: FastifyInstance, opts: BlockRoutesO
     const page = readBlockPage(siteRoot, slug);
     if (page?.fields.status !== 'published') return sendPages404(reply);
     setPublicSecurityHeaders(reply);
-    return reply.redirect(`/${slug}`, 301);
+    const target = db ? pagePath(db, slug) : `/${slug}`;
+    return reply.redirect(target, target === `/${slug}` ? 301 : 302);
   });
 
   fastify.get<{ Params: { macro: string } }>(
