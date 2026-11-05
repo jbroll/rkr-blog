@@ -45,14 +45,18 @@ export function readPageFields(raw: Record<string, unknown> | undefined, slug: s
   return fields;
 }
 
-export type ValidatedPageFields = { ok: true; fields: PageFields } | { ok: false; error: string };
+export type ValidatedPageFields =
+  | { ok: true; fields: PageFields }
+  | { ok: false; error: string; field: 'title' | 'order' };
 
 /** `today` is `YYYY-MM-DD`; a published page without a date gets it. */
 export function validatePageFields(values: PageFieldInput, today: string): ValidatedPageFields {
   const title = values.title.trim();
-  if (title === '') return { ok: false, error: TITLE_REQUIRED };
+  if (title === '') return { ok: false, error: TITLE_REQUIRED, field: 'title' };
   const orderText = String(values.order ?? '').trim();
-  if (orderText !== '' && !/^-?\d+$/.test(orderText)) return { ok: false, error: ORDER_INVALID };
+  if (orderText !== '' && !/^-?\d+$/.test(orderText)) {
+    return { ok: false, error: ORDER_INVALID, field: 'order' };
+  }
   let date = values.date.trim();
   if (date === '' && values.status === 'published') date = today;
   if (DAY.test(date)) date = `${date}T00:00:00Z`;
@@ -266,9 +270,10 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
         today
       );
       if (!result.ok) {
-        title.setAttribute('aria-invalid', 'true');
+        const bad = result.field === 'order' ? order : title;
+        bad.setAttribute('aria-invalid', 'true');
         dialog.setError(result.error);
-        title.focus?.();
+        bad.focus?.();
         return false;
       }
       const refusal = opts.refuse?.();

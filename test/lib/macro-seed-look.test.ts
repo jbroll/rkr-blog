@@ -45,6 +45,23 @@ describe('seed macro look selects', () => {
     assert.match(html, /Body only/);
   });
 
+  it('cards with no title render no heading', async () => {
+    const html = await render('cards', {
+      cols: '4',
+      box: '',
+      button: '',
+      cards: [{ image: '', href: '/x' }]
+    });
+    assert.doesNotMatch(html, /<h3/);
+  });
+
+  it('a text block drops an empty heading and keeps a real one', async () => {
+    const run = (markdown: string) =>
+      renderBlockTree({ version: 1, body: [{ type: 'text', markdown }] }, ctx, renderLib);
+    assert.doesNotMatch(await run('### '), /<h3/);
+    assert.match(await run('### Hi'), /<h3>Hi<\/h3>/);
+  });
+
   it('defaults keep the shipped look', async () => {
     const hero = await render('hero', { image: IMG });
     assert.match(hero, /rkr-section rkr-theme-dark/);

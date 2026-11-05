@@ -128,6 +128,12 @@ an unregistered one 404s for everyone. So:
 $(git rev-parse HEAD)` to confirm the just-pushed commit is what's
 serving.
 
+**Upgrading across a migration.** A release that adds a database
+migration (such as 010, which adds `posts.excerpt`, `posts.sort_order`,
+`posts.image` and `post_tags.position`) leaves existing rows empty in
+the new columns. After deploying it, run `bin/site-admin reindex` so
+listings get excerpts, images, order and tag order.
+
 ### JSON page cutover (first deploy of the block editor)
 
 The first deploy that serves posts from JSON block pages converts every

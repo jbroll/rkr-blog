@@ -136,6 +136,17 @@ describe('page settings dialog', () => {
     assert.match(root.querySelector('.rkr-dialog-error')?.textContent ?? '', /title/i);
   });
 
+  it('an invalid order marks the Order input, not Title', async () => {
+    const { root, dialog, commits } = open();
+    dialog.setField('order', '1.5');
+    save(root);
+    await tick();
+    assert.equal(commits.length, 0);
+    const field = (name: string) => root.querySelector(`[name="${name}"]`) as FakeElement;
+    assert.equal(field('order').getAttribute('aria-invalid'), 'true');
+    assert.equal(field('title').getAttribute('aria-invalid'), null);
+  });
+
   it('commits status, tags and excerpt', async () => {
     const { root, dialog, commits } = open();
     dialog.setField('status', 'published');

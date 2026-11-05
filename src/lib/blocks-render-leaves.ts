@@ -16,8 +16,25 @@ export function textOf(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : fallback;
 }
 
+interface MdNode {
+  type: string;
+  value?: string;
+  children?: MdNode[];
+}
+
+const hasContent = (n: MdNode): boolean =>
+  n.type === 'image' || Boolean(n.value?.trim()) || Boolean(n.children?.some(hasContent));
+
+/** Macro templates like `### {{title}}` leave an empty heading when the slot is blank. */
+function dropEmptyHeadings(node: MdNode): void {
+  if (!node.children) return;
+  node.children = node.children.filter((c) => c.type !== 'heading' || hasContent(c));
+  for (const c of node.children) dropEmptyHeadings(c);
+}
+
 export function renderMarkdown(md: string, ctx: RenderCtx): Promise<string> {
   const ast = remark().use(remarkDirective).parse(md);
+  dropEmptyHeadings(ast as MdNode);
   return renderPostHtml(ast as Parameters<typeof renderPostHtml>[0], ctx);
 }
 

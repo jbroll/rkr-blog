@@ -383,7 +383,8 @@ its canonical URL.
 | Macro instance | `{ "type": "macro", "macro": "hero", "slots": { ... } }` |
 
 `text` markdown allows inline formatting, links, lists, headings and
-code. It never carries image or widget syntax; images beside prose are
+code. A heading with no text renders nothing. It never carries image or
+widget syntax; images beside prose are
 sibling `figure` blocks. Readers see nothing for blank text or a
 `button` with an empty label; the editor keeps an element for each so it
 can be selected. `figure` and `video` slots keep the attribute
@@ -582,7 +583,7 @@ keeps the first n. Each row has the keys `title`, `text` (the page's
 `excerpt`), `href` (its canonical path), `image` (the id of its first
 figure) and `date`. `text` and `image` are empty strings when the page has
 none. `date` is the page's published date: `fields.date`, or when absent
-the time the page was first indexed as published. A tag
+the file's modification time as of the latest reindex. A tag
 source inside a macro definition is not resolved and renders an empty
 list. Save refuses a malformed tag source; reading one that is
 malformed treats it as an empty list.
