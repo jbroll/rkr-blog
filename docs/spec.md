@@ -370,6 +370,10 @@ last), then title, with no wraparound. A draft member, shown to an
 admin, gets the links to its published neighbours by its own position.
 An unpublished collection page makes its members flat again.
 
+Members stay off `/`, `/posts` and the tag rail counts, and stay in
+search. Every generated link to a member on the index and in search goes to
+its canonical URL.
+
 ### Blocks
 
 | Kind | Types |

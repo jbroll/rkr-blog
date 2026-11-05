@@ -12,6 +12,7 @@ const assets = { theme: 'default', hash: 'abcdef012345', base: '/static' };
 
 test('rail-controls hold the sort toggle + search form; rail renders even with no tags', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -35,6 +36,7 @@ test('rail-controls hold the sort toggle + search form; rail renders even with n
 
 test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -58,6 +60,7 @@ test('renderIndexPage: anonymous view is a plain <ul.post-list>', () => {
 
 test('renderIndexPage: admin view renders the posts table with blocks-editor links', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -113,6 +116,7 @@ test('renderIndexPage: admin view renders the posts table with blocks-editor lin
 
 test('renderIndexPage: admin view, empty state', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -132,6 +136,7 @@ test('renderIndexPage: dates show date-only when one post per day, date+time whe
   // entries gain a HH:MM disambiguator; the lone 2026-04-01 entry
   // stays date-only.
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -157,6 +162,7 @@ test('renderIndexPage: admin date column shows publication date over updatedAt f
   // The date column should show `date` so published posts display their
   // real publication date, not the import/deploy timestamp.
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -187,6 +193,7 @@ test('renderIndexPage: admin date column shows publication date over updatedAt f
 
 test('renderIndexPage: admin Updated column also disambiguates same-day rows', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -220,6 +227,7 @@ test('renderIndexPage: admin Updated column also disambiguates same-day rows', (
 
 test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -244,6 +252,7 @@ test('renderIndexPage: admin row title + slug are URL/HTML-escaped', () => {
 
 test('renderIndexPage: tag rail renders when tagCounts provided', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -264,6 +273,7 @@ test('renderIndexPage: tag rail renders when tagCounts provided', () => {
 
 test('renderIndexPage: rail (with controls) renders but no tag pills when tagCounts is empty', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -279,6 +289,7 @@ test('renderIndexPage: rail (with controls) renders but no tag pills when tagCou
 
 test('renderIndexPage: rail (with controls) renders but no tag pills when tagCounts is absent', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -292,6 +303,7 @@ test('renderIndexPage: rail (with controls) renders but no tag pills when tagCou
 
 test('renderIndexPage: active tag gets aria-current and toggles off on click', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -313,6 +325,7 @@ test('renderIndexPage: active tag gets aria-current and toggles off on click', (
 
 test('renderIndexPage: pager preserves ?tag= when active', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -326,6 +339,7 @@ test('renderIndexPage: pager preserves ?tag= when active', () => {
 
 test('renderIndexPage: clicking inactive tag replaces active tag (OR/replace, not AND)', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -344,6 +358,7 @@ test('renderIndexPage: clicking inactive tag replaces active tag (OR/replace, no
 
 test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)', () => {
   const descHtml = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -358,6 +373,7 @@ test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)',
   assert.doesNotMatch(descHtml, /oldest first|newest first/);
 
   const ascHtml = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -373,6 +389,7 @@ test('renderIndexPage: sort toggle renders asc/desc links (icon only, no text)',
 
 test('renderIndexPage: sort toggle preserves ?tag= param', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -388,6 +405,7 @@ test('renderIndexPage: sort toggle preserves ?tag= param', () => {
 
 test('renderIndexPage: admin sort toggle is the same ?sort= link visitors get', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -402,6 +420,7 @@ test('renderIndexPage: admin sort toggle is the same ?sort= link visitors get', 
 
 test('renderIndexPage: pager preserves ?sort= when asc', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -414,6 +433,7 @@ test('renderIndexPage: pager preserves ?sort= when asc', () => {
 
 test('renderIndexPage: bannerHtml renders below the site header by default', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -426,6 +446,7 @@ test('renderIndexPage: bannerHtml renders below the site header by default', () 
 
 test('renderIndexPage: bannerAboveHeader moves the banner above the site header', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -439,6 +460,7 @@ test('renderIndexPage: bannerAboveHeader moves the banner above the site header'
 
 test('renderIndexPage: anonymous view uses sw-unregister.js, not sw-register.js', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -451,6 +473,7 @@ test('renderIndexPage: anonymous view uses sw-unregister.js, not sw-register.js'
 
 test('basePath /posts: pager, tag pills and sort toggle link to /posts', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 2,
@@ -469,6 +492,7 @@ test('basePath /posts: pager, tag pills and sort toggle link to /posts', () => {
 
 test('basePath defaults to /', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,
@@ -481,6 +505,7 @@ test('basePath defaults to /', () => {
 
 test('renderIndexPage: admin view also uses sw-unregister.js', () => {
   const html = renderIndexPage({
+    hrefOf: (s) => `/${s}`,
     site: { title: 'rkroll' },
     assets,
     page: 1,

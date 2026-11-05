@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Root } from 'mdast';
+import { memberExclusionSql } from './collections.ts';
 import { type PostFrontmatter, parsePost } from './content.ts';
 import { type Db, open } from './db.ts';
 import { migrate } from './migrate.ts';
@@ -338,7 +339,10 @@ export function readIndexedPosts(
     : '';
   const tagParams: string[] = tags ?? [];
   const kind = opts.kind === undefined ? 'post' : opts.kind;
-  const kindFilter = kind === null ? '' : 'AND p.kind = ?';
+  const kindFilter =
+    kind === null
+      ? ''
+      : `AND p.kind = ? ${kind === 'post' ? `AND ${memberExclusionSql('p')}` : ''}`;
   const kindParams: string[] = kind === null ? [] : [kind];
 
   // status === null → no filter (admin view: drafts + published).
@@ -384,6 +388,7 @@ export function readTagCounts(
   if (kind !== null) {
     conds.push('p.kind = ?');
     params.push(kind);
+    if (kind === 'post') conds.push(memberExclusionSql('p'));
   }
   const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
   return db

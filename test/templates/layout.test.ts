@@ -240,8 +240,8 @@ test('every public template passes chrome through to the header', () => {
   const pages = [
     renderNotFoundPage(base),
     renderPostPage({ ...base, title: 'T', slug: 't', bodyHtml: '' }),
-    renderIndexPage({ ...base, posts: [], page: 1, totalPages: 1 }),
-    renderSearchPage({ ...base, q: '', results: [] }),
+    renderIndexPage({ hrefOf: (s) => `/${s}`, ...base, posts: [], page: 1, totalPages: 1 }),
+    renderSearchPage({ hrefOf: (s) => `/${s}`, ...base, q: '', results: [] }),
     renderBlocksPage({ ...base, title: 'T', bodyHtml: '' })
   ];
   for (const html of pages) assert.match(html, /rkr-site-menu-link/);

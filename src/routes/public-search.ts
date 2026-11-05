@@ -3,6 +3,7 @@
 
 import type { FastifyInstance } from 'fastify';
 
+import { pagePath } from '../lib/collections.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import { escapeText } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -99,8 +100,16 @@ export function registerPublicSearchRoute(
     const chrome = await loadChrome(siteRoot, site, req.log);
     setPublicSecurityHeaders(reply);
     if (isAdmin) reply.header('Cache-Control', 'private, no-store');
-    return reply
-      .type('text/html; charset=utf-8')
-      .send(renderSearchPage({ site, assets: serverAssets(), chrome, q, results, isAdmin }));
+    return reply.type('text/html; charset=utf-8').send(
+      renderSearchPage({
+        site,
+        assets: serverAssets(),
+        chrome,
+        q,
+        results,
+        isAdmin,
+        hrefOf: (s) => pagePath(db, s)
+      })
+    );
   });
 }

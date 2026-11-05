@@ -176,3 +176,40 @@ test('the nav renders prev and next with rel and escaped titles', async (t) => {
     /<nav class="rkr-collection-nav"><a class="rkr-collection-back" href="\/board">Back to Board &amp; Co<\/a><a class="rkr-collection-prev" rel="prev" href="\/board\/a">A &lt;one&gt;<\/a><a class="rkr-collection-next" rel="next" href="\/board\/c">C<\/a><\/nav>\s*<\/article>/
   );
 });
+
+test('a post in a collection is absent from / and /posts and from the tag rail counts', async (t) => {
+  const { page, get } = await setup(t);
+  page('board');
+  page('alice', { kind: 'post', tags: ['board'], title: 'Member Alice' });
+  page('bob', { kind: 'post', tags: ['misc'], title: 'Plain Bob' });
+  for (const url of ['/', '/posts']) {
+    const body = (await get(url)).body;
+    assert.doesNotMatch(body, /Member Alice/);
+    assert.match(body, /Plain Bob/);
+    assert.doesNotMatch(body, /tag=board/);
+    assert.match(body, /tag=misc/);
+  }
+});
+
+test('the same post is in search results with href /board/<slug>', async (t) => {
+  const { page, get } = await setup(t);
+  page('board');
+  page('alice', { kind: 'post', tags: ['board'], title: 'Zebrafish Alice' });
+  const res = await get('/search?q=Zebrafish');
+  assert.match(res.body, /href="\/board\/alice"/);
+});
+
+test('a non-member post on / links to /<slug>', async (t) => {
+  const { page, get } = await setup(t);
+  page('bob', { kind: 'post', title: 'Plain Bob' });
+  assert.match((await get('/')).body, /href="\/bob"/);
+});
+
+test('the index pager ignores members', async (t) => {
+  const { page, get } = await setup(t);
+  page('board');
+  page('alice', { kind: 'post', tags: ['board'] });
+  const res = await get('/?tag=board');
+  assert.doesNotMatch(res.body, /Title alice/);
+  assert.doesNotMatch(res.body, /page \d of/);
+});

@@ -22,6 +22,8 @@ import {
 } from './layout.ts';
 import { buildMetaTag } from './version-tag.ts';
 
+type HrefOf = (slug: string) => string;
+
 interface IndexEntry {
   slug: string;
   title: string;
@@ -43,6 +45,7 @@ export interface IndexTeaser {
 }
 
 export interface IndexPageData extends SiteChrome {
+  hrefOf: HrefOf;
   posts: IndexEntry[];
   page: number;
   totalPages: number;
@@ -74,8 +77,10 @@ export interface IndexPageData extends SiteChrome {
 export function renderIndexPage(data: IndexPageData): string {
   const a = data.assets;
   const v = bundleVersion(a);
-  const body = data.isAdmin ? renderAdminTable(data.posts) : renderAnonymousList(data.posts);
-  const teaserHtml = !data.isAdmin && data.teaser ? renderTeaser(data.teaser) : '';
+  const body = data.isAdmin
+    ? renderAdminTable(data.posts, data.hrefOf)
+    : renderAnonymousList(data.posts, data.hrefOf);
+  const teaserHtml = !data.isAdmin && data.teaser ? renderTeaser(data.teaser, data.hrefOf) : '';
   const blocksLink = data.isAdmin
     ? `<p class="rkr-admin-blocks-link"><a href="/admin/blocks">Blocks pages →</a> <span>JSON pages in the new editor</span></p>\n`
     : '';
@@ -143,14 +148,14 @@ ${data.isAdmin ? indexAdminFabs() : ''}
 `;
 }
 
-function renderAnonymousList(posts: IndexEntry[]): string {
+function renderAnonymousList(posts: IndexEntry[], hrefOf: HrefOf): string {
   const dayCounts = countByDay(posts, (p) => p.date);
   const items = posts
     .map((p) => {
       const dateBlock = p.date
         ? `<time datetime="${escapeAttr(p.date)}">${escapeText(formatListDate(p.date, dayCounts.get(p.date.slice(0, 10)) ?? 0))}</time>`
         : /* c8 ignore next -- runReindex always supplies published_at on listed posts */ '';
-      return `  <li><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a>${dateBlock}</li>`;
+      return `  <li><a href="${escapeAttr(hrefOf(p.slug))}">${escapeText(p.title)}</a>${dateBlock}</li>`;
     })
     .join('\n');
   return `<ul class="post-list">
@@ -158,16 +163,16 @@ ${items}
 </ul>`;
 }
 
-function renderTeaser(t: IndexTeaser): string {
+function renderTeaser(t: IndexTeaser, hrefOf: HrefOf): string {
   const dateBlock = t.date
     ? `<time datetime="${escapeAttr(t.date)}">${escapeText(t.date.slice(0, 10))}</time>`
     : '';
   return `<article class="rkr-teaser">
 ${t.bannerHtml}<div class="rkr-teaser-body">
-<h2 class="rkr-teaser-title"><a href="/${escapeAttr(t.slug)}">${escapeText(t.title)}</a></h2>
+<h2 class="rkr-teaser-title"><a href="${escapeAttr(hrefOf(t.slug))}">${escapeText(t.title)}</a></h2>
 ${dateBlock}
 <div class="rkr-teaser-excerpt">${t.excerptHtml}</div>
-<a class="rkr-teaser-more" href="/${escapeAttr(t.slug)}">Read the full post &rarr;</a>
+<a class="rkr-teaser-more" href="${escapeAttr(hrefOf(t.slug))}">Read the full post &rarr;</a>
 </div>
 </article>
 `;
@@ -201,7 +206,7 @@ function formatListDate(iso: string, sameDayCount: number): string {
   return time ? `${day} ${time}` : day;
 }
 
-function renderAdminTable(posts: IndexEntry[]): string {
+function renderAdminTable(posts: IndexEntry[], hrefOf: HrefOf): string {
   // The table is wider than the viewport on a phone. Wrap it in a
   // .rkr-admin-posts-scroll container so the overflow scrolls inside
   // the wrapper instead of expanding the body — when the body widens
@@ -221,17 +226,17 @@ function renderAdminTable(posts: IndexEntry[]): string {
   // control's aria-label carries the accessible name for screen readers.
   return `<div class="rkr-admin-posts-scroll"><table class="rkr-admin-posts">
   <tbody>
-${posts.map((p) => renderAdminRow(p, dayCounts)).join('\n')}
+${posts.map((p) => renderAdminRow(p, dayCounts, hrefOf)).join('\n')}
   </tbody>
 </table></div>`;
 }
 
-function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>): string {
+function renderAdminRow(p: IndexEntry, dayCounts: Map<string, number>, hrefOf: HrefOf): string {
   const iso = p.date ?? p.updatedAt ?? '';
   const label = iso ? formatListDate(iso, dayCounts.get(iso.slice(0, 10)) ?? 0) : '';
   const slugUri = encodeURIComponent(p.slug);
   return `  <tr data-slug="${escapeAttr(p.slug)}">
-    <td><a href="/${escapeAttr(p.slug)}">${escapeText(p.title)}</a></td>
+    <td><a href="${escapeAttr(hrefOf(p.slug))}">${escapeText(p.title)}</a></td>
     <td>${iso ? `<time datetime="${escapeAttr(iso)}">${escapeText(label)}</time>` : ''}</td>
     <td class="rkr-admin-posts-action">
       <a class="rkr-admin-posts-edit" href="/admin/blocks/edit/${slugUri}" aria-label="Edit ${escapeAttr(p.title)}" title="Edit">${icon('pencil', 18)}</a>

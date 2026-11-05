@@ -26,6 +26,7 @@ export interface SearchHit {
 export interface SearchPageData extends SiteChrome {
   q: string;
   results: SearchHit[];
+  hrefOf: (slug: string) => string;
   isAdmin?: boolean;
 }
 
@@ -51,7 +52,7 @@ export function renderSearchPage(data: SearchPageData): string {
         const dateBlock = r.date
           ? `<time datetime="${escapeAttr(r.date)}">${escapeText(r.date)}</time>`
           : '';
-        return `  <li><a href="/${escapeAttr(r.slug)}">${escapeText(r.title)}</a>${dateBlock}<p class="rkr-search-snippet">${r.snippetHtml}</p></li>`;
+        return `  <li><a href="${escapeAttr(data.hrefOf(r.slug))}">${escapeText(r.title)}</a>${dateBlock}<p class="rkr-search-snippet">${r.snippetHtml}</p></li>`;
       })
       .join('\n');
     bodyHtml = `<ul class="post-list rkr-search-results">\n${items}\n</ul>`;

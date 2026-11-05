@@ -9,6 +9,7 @@ import type { Paragraph, Root, RootContent } from 'mdast';
 import type { LeafDirective } from 'mdast-util-directive';
 import { readIndexedBlockPage } from '../lib/block-pages.ts';
 import { extractBlockTeaser } from '../lib/block-teaser.ts';
+import { memberExclusionSql, pagePath } from '../lib/collections.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import { parsePost, type RenderCtx, renderPostHtml } from '../lib/content.ts';
 import type { Db } from '../lib/db.ts';
@@ -219,6 +220,7 @@ export function registerIndexRoutes(fastify: FastifyInstance, opts: IndexRoutesO
       page: 1,
       totalPages: 1,
       basePath,
+      hrefOf: (s) => pagePath(db, s),
       posts: listRows.map((r) => ({
         slug: r.slug,
         title: r.title,
@@ -258,13 +260,14 @@ function countPosts(db: Db, status: 'published' | null, tags: string[]): number 
          WHERE tg.name IN (${ph}) COLLATE NOCASE
          GROUP BY pt.post_id
          HAVING COUNT(DISTINCT pt.tag_id) = ${tags.length}
-       ) AND p.kind = 'post'${statusFilter}`;
+       ) AND p.kind = 'post' AND ${memberExclusionSql('p')}${statusFilter}`;
     const params = status === null ? tags : [...tags, status];
     return (db.prepare<{ n: number }>(sql).get(...params) ?? { n: 0 }).n;
   }
   const sql =
     status === null
-      ? "SELECT COUNT(*) AS n FROM posts WHERE kind = 'post'"
-      : "SELECT COUNT(*) AS n FROM posts WHERE kind = 'post' AND status = 'published'";
+      ? `SELECT COUNT(*) AS n FROM posts p WHERE p.kind = 'post' AND ${memberExclusionSql('p')}`
+      : `SELECT COUNT(*) AS n FROM posts p
+         WHERE p.kind = 'post' AND p.status = 'published' AND ${memberExclusionSql('p')}`;
   return (db.prepare<{ n: number }>(sql).get() ?? { n: 0 }).n;
 }
