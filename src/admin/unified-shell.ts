@@ -253,6 +253,7 @@ export function mountUnifiedShell(root: Element, deps: UnifiedShellDeps): Unifie
             subtitle: fields.subtitle ?? ''
           }
         };
+        if (fields.order === undefined) delete next.fields.order;
         const titleEl = toolbar.querySelector('.rkr-unified-title');
         if (titleEl) titleEl.textContent = fields.title;
         // The body does not show the fields, so it stays valid for `next`.

@@ -2,6 +2,7 @@
 //
 // Browser-safe: no node:* imports.
 
+import type { TagSource } from '../lib/tag-source.ts';
 import type { PaletteFieldSpec } from './blocks-editor.ts';
 import type { MediaPicker } from './media-source.ts';
 
@@ -14,8 +15,14 @@ export interface MacroField {
   options?: PaletteFieldSpec['options'];
   /** The slot holds an image id: shown as a thumbnail, never as text. */
   image: boolean;
-  /** Set for `list` fields: the item field specs and the saved rows. */
-  list?: { item: Record<string, PaletteFieldSpec>; items: Record<string, string>[] };
+  /** Set for `list` fields: the item field specs and the saved rows, or the
+   * saved tag source. `rowsOnly` hides the Fill from choice. */
+  list?: {
+    item: Record<string, PaletteFieldSpec>;
+    items: Record<string, string>[];
+    source?: TagSource;
+    rowsOnly?: boolean;
+  };
 }
 
 export type ValueControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;

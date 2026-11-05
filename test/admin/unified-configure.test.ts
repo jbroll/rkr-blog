@@ -151,6 +151,21 @@ describe('configure a macro with a list field', () => {
     });
     assert.deepEqual(cleared, { title: 'T' });
   });
+
+  it('mergeMacroFields keeps a tag source', async () => {
+    const filled = await run({ title: 'T' }, (root) => {
+      const pick = root.querySelector('[name="source"]') as unknown as {
+        value: string;
+        dispatchEvent(e: FakeEvent): void;
+      };
+      pick.value = 'tag';
+      pick.dispatchEvent(new FakeEvent('change'));
+      const tag = root.querySelector('[name="tag"]') as unknown as typeof pick;
+      tag.value = 'board';
+      tag.dispatchEvent(new FakeEvent('input'));
+    });
+    assert.deepEqual(filled, { title: 'T', people: { tag: 'board' } });
+  });
 });
 
 describe('configure the small blocks', () => {

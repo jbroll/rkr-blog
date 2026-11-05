@@ -59,13 +59,13 @@ export function openAccordionDialog(root: Element, opts: AccordionDialogOpts): v
     placeholder: '',
     multiline: false,
     image: false,
-    list: { item: ITEM_SPECS, items }
+    list: { item: ITEM_SPECS, items, rowsOnly: true }
   };
   const form = doc.createElement('div');
   form.className = 'rkr-dialog-fields';
   form.append(
     openListField(doc, field, undefined, (next) => {
-      items = next;
+      if (Array.isArray(next)) items = next;
     })
   );
 

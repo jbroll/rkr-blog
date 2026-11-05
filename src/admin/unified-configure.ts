@@ -4,6 +4,7 @@
 // Browser-safe: no node:* imports (bundled into the admin entry).
 
 import type { BlockNode, BlockTree, Slots } from '../lib/blocks.ts';
+import { isTagSource } from '../lib/tag-source.ts';
 import { openAccordionDialog, readAccordionFields } from './accordion-dialog-tree.ts';
 import { getAtPath, type Path, updateSlotsAtPath } from './block-tree-ops.ts';
 import type { PaletteMacro } from './blocks-editor.ts';
@@ -67,7 +68,7 @@ const NO_MEDIA: MediaDialogDeps = {
 function mergeMacroFields(slots: Slots, touched: Record<string, unknown>): Slots {
   const merged = { ...slots };
   for (const [key, value] of Object.entries(touched)) {
-    if (Array.isArray(value) && value.length > 0) merged[key] = value;
+    if ((Array.isArray(value) && value.length > 0) || isTagSource(value)) merged[key] = value;
     else if (typeof value !== 'string' || value === '') delete merged[key];
     else merged[key] = value;
   }

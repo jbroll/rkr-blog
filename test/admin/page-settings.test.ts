@@ -72,6 +72,16 @@ describe('page settings fields', () => {
     });
   });
 
+  it('order: empty is absent, a whole number is kept as a number', () => {
+    const run = (order: string) => {
+      const r = validatePageFields({ ...BASE, order }, TODAY);
+      return r.ok ? r.fields.order : 'invalid';
+    };
+    assert.equal(run(''), undefined);
+    assert.equal(run('2'), 2);
+    assert.equal(run('1.5'), 'invalid');
+  });
+
   it('keeps a stored timestamp and cleans tags and excerpt', () => {
     const result = validatePageFields(
       {

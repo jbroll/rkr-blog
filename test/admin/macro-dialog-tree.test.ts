@@ -311,7 +311,7 @@ describe('macro dialog list fields', () => {
     return { root, dialog, committed };
   };
   const names = (root: FakeElement) =>
-    root.querySelectorAll('input').map((i) => (i as unknown as { value: string }).value);
+    root.querySelectorAll('[name="name"]').map((i) => (i as unknown as { value: string }).value);
 
   it('renders one row per item with the item field specs', () => {
     const { root } = open();
@@ -319,7 +319,9 @@ describe('macro dialog list fields', () => {
     assert.equal(root.querySelectorAll('.rkr-list-row').length, 2);
     assert.deepEqual(names(root), ['Ann', 'Bo']);
     assert.equal(root.querySelectorAll('.rkr-image-field').length, 2);
-    const labels = root.querySelectorAll('label').map((l) => l.textContent);
+    const labels = root
+      .querySelectorAll('.rkr-list-row')
+      .flatMap((row) => row.querySelectorAll('label').map((l) => l.textContent));
     assert.deepEqual(labels, ['Name', 'Photo', 'Name', 'Photo']);
   });
 
@@ -347,7 +349,9 @@ describe('macro dialog list fields', () => {
 
   it('typing into a row field and the row buttons both commit', () => {
     const { root, committed } = open();
-    const first = root.querySelectorAll('input')[0] as unknown as { value: string } & FakeElement;
+    const first = root.querySelectorAll('[name="name"]')[0] as unknown as {
+      value: string;
+    } & FakeElement;
     first.value = 'Ada';
     first.dispatchEvent(new FakeEvent('input'));
     root.querySelector('[aria-label="Move row 1 down"]')?.click();

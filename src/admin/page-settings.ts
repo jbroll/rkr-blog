@@ -18,11 +18,15 @@ export interface PageFields {
   excerpt?: string;
   subtitle?: string;
   kind: 'post' | 'page';
+  order?: number;
 }
 
-type FieldName = 'title' | 'subtitle' | 'status' | 'kind' | 'date' | 'tags' | 'excerpt';
+type PageFieldInput = Omit<PageFields, 'order'> & { order?: string | number };
+
+type FieldName = 'title' | 'subtitle' | 'status' | 'kind' | 'date' | 'tags' | 'excerpt' | 'order';
 
 const TITLE_REQUIRED = 'Enter a title for the page.';
+const ORDER_INVALID = 'Order must be a whole number.';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Stored fields with defaults filled in; unknown keys are ignored. */
@@ -37,15 +41,18 @@ export function readPageFields(raw: Record<string, unknown> | undefined, slug: s
   };
   if (typeof f.excerpt === 'string' && f.excerpt !== '') fields.excerpt = f.excerpt;
   if (typeof f.subtitle === 'string' && f.subtitle !== '') fields.subtitle = f.subtitle;
+  if (typeof f.order === 'number' && Number.isInteger(f.order)) fields.order = f.order;
   return fields;
 }
 
 export type ValidatedPageFields = { ok: true; fields: PageFields } | { ok: false; error: string };
 
 /** `today` is `YYYY-MM-DD`; a published page without a date gets it. */
-export function validatePageFields(values: PageFields, today: string): ValidatedPageFields {
+export function validatePageFields(values: PageFieldInput, today: string): ValidatedPageFields {
   const title = values.title.trim();
   if (title === '') return { ok: false, error: TITLE_REQUIRED };
+  const orderText = String(values.order ?? '').trim();
+  if (orderText !== '' && !/^-?\d+$/.test(orderText)) return { ok: false, error: ORDER_INVALID };
   let date = values.date.trim();
   if (date === '' && values.status === 'published') date = today;
   if (DAY.test(date)) date = `${date}T00:00:00Z`;
@@ -60,6 +67,7 @@ export function validatePageFields(values: PageFields, today: string): Validated
   if (excerpt) fields.excerpt = excerpt;
   const subtitle = values.subtitle?.trim();
   if (subtitle) fields.subtitle = subtitle;
+  if (orderText !== '') fields.order = Number(orderText);
   return { ok: true, fields };
 }
 
@@ -92,7 +100,8 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
     kind: opts.fields.kind,
     date: original.slice(0, 10),
     tags: opts.fields.tags.join(', '),
-    excerpt: opts.fields.excerpt ?? ''
+    excerpt: opts.fields.excerpt ?? '',
+    order: opts.fields.order === undefined ? '' : String(opts.fields.order)
   };
   const inputs = new Map<FieldName, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
 
@@ -182,6 +191,11 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
   excerpt.setAttribute('rows', '3');
   addField('excerpt', 'Excerpt', excerpt, 'Optional. Shown in lists and search results.');
 
+  const order = doc.createElement('input');
+  order.setAttribute('type', 'number');
+  order.setAttribute('step', '1');
+  addField('order', 'Order', order, 'Optional. Lower numbers list first.');
+
   const url = doc.createElement('p');
   url.className = 'rkr-field-hint';
   const link = doc.createElement('a');
@@ -246,7 +260,8 @@ export function openPageSettings(root: Element, opts: PageSettingsOpts): PageSet
           date: day === original.slice(0, 10) ? original : day,
           tags: parseTagInput(values.tags),
           excerpt: values.excerpt,
-          subtitle: values.subtitle
+          subtitle: values.subtitle,
+          order: values.order
         },
         today
       );

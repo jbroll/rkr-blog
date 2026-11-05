@@ -18,6 +18,7 @@ export interface BlockSeed {
   tags?: string[];
   date?: string;
   kind?: 'page' | 'post';
+  order?: number;
 }
 
 /** Figure leaf. `ids` may be a comma-separated list (carousel/matrix). */
@@ -37,9 +38,10 @@ export function videoBlock(
 }
 
 export async function seedBlockPage(page: Page, seed: BlockSeed): Promise<void> {
-  const { slug, title, markdown = '', body, status = 'published', tags, date, kind } = seed;
+  const { slug, title, markdown = '', body, status = 'published', tags, date, kind, order } = seed;
   const fields: Record<string, unknown> = { title, slug, status };
   if (kind) fields.kind = kind;
+  if (order !== undefined) fields.order = order;
   if (tags) fields.tags = tags;
   if (date) fields.date = date;
 

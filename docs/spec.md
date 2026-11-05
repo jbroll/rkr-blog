@@ -609,7 +609,7 @@ the type:
 | `markdown` | multi-line input |
 | `select` | dropdown of `options`, first entry "Default (label)". An option is a string, or `{ "value": "reverse", "label": "Image on the right" }` to show different text than the stored value |
 | `image` | thumbnail with Choose image and Remove, via the media picker |
-| `list` | a group of item rows with add, remove and move up/down; each row has one control per `item` field spec, so an `image` item opens the media picker. An empty list clears the override |
+| `list` | a group of item rows with add, remove and move up/down; each row has one control per `item` field spec, so an `image` item opens the media picker. An empty list clears the override. "Fill from" switches between Rows and Tag; Tag shows Tag, Sort (Order or Date) and Limit inputs and hides the rows, and switching back restores the rows the dialog opened with |
 | none | single-line input; multi-line when the value or default has a newline |
 
 Each field starts empty with the default as its placeholder. Typing sets
@@ -696,7 +696,7 @@ the editing chrome. View and Edit are two modes of the same page.
   naming the supported ones. Macro: the fields above. A list field starts
   from the macro's default rows until the instance saves its own. Page settings:
   title, subtitle, status, publish date (filled in when the status becomes published), tags,
-  excerpt. Authors never see JSON, block ids or image ids.
+  excerpt, order (a whole number; empty removes it). Authors never see JSON, block ids or image ids.
 
 ### Saving
 

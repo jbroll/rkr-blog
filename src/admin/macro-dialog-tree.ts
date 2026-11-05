@@ -13,6 +13,7 @@
 // fake DOM root.
 
 import type { BlockNode, Slots } from '../lib/blocks.ts';
+import { isTagSource } from '../lib/tag-source.ts';
 import type { PaletteFieldSpec } from './blocks-editor.ts';
 import { openEditorDialog } from './editor-dialog.ts';
 import { control, imageControl, type MacroField, type ValueControl } from './macro-controls.ts';
@@ -63,7 +64,11 @@ export function readMacroFields(
       image: spec?.type === 'image',
       list:
         spec?.type === 'list'
-          ? { item: spec.item ?? {}, items: savedItems(Array.isArray(raw) ? raw : hint) }
+          ? {
+              item: spec.item ?? {},
+              items: savedItems(Array.isArray(raw) ? raw : hint),
+              ...(isTagSource(raw) ? { source: raw } : {})
+            }
           : undefined
     };
   });
@@ -112,8 +117,8 @@ export function openMacroDialog(root: Element, opts: MacroDialogOpts): MacroDial
     const row = doc.createElement('div');
     row.className = 'rkr-field';
     if (f.list) {
-      const fieldset = openListField(doc, f, opts.media, (items) => {
-        values.set(f.name, items);
+      const fieldset = openListField(doc, f, opts.media, (value) => {
+        values.set(f.name, value);
         touched.add(f.name);
       });
       lists.set(f.name, fieldset);
