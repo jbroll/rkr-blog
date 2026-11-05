@@ -70,12 +70,28 @@ function fillPlaceholders<T>(value: T, slots: Slots): T {
 
 const isRecord = (v: unknown): v is Slots => !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** A placeholder fills as a string, but the grid reads numbers and booleans.
+ * Only slots that were placeholders in the definition are coerced. */
+function coerceGridSlots(filled: Slots, raw: Slots): Slots {
+  const out = { ...filled };
+  const isPlaceholder = (k: string) => typeof raw[k] === 'string' && /\{\{/.test(raw[k] as string);
+  if (isPlaceholder('cols') && typeof out.cols === 'string' && /^\d+$/.test(out.cols)) {
+    out.cols = Number(out.cols);
+  }
+  for (const k of ['box', 'band']) {
+    if (!isPlaceholder(k)) continue;
+    if (out[k] === 'true') out[k] = true;
+    else if (out[k] === '') out[k] = false;
+  }
+  return out;
+}
+
 /** Fill placeholders through a macro tree. A grid whose `each` slot names
  * a list repeats its children once per item, item values shadowing `slots`. */
 function fillTree(node: BlockNode, slots: Slots): BlockNode {
   if (node.type !== 'grid') return fillPlaceholders(node, slots);
   const { each, ...own } = node.slots ?? {};
-  const filledSlots = fillPlaceholders(own, slots);
+  const filledSlots = coerceGridSlots(fillPlaceholders(own, slots), own);
   const gridSlots = node.slots ? { slots: filledSlots } : {};
   if (each === undefined) {
     return { ...node, ...gridSlots, children: node.children.map((k) => fillTree(k, slots)) };

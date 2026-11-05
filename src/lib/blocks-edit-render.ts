@@ -13,6 +13,7 @@ import { collectBlockFigureIds, renderBlockTree } from './blocks-render.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import { loadMacroLibrary } from './macro-library.ts';
 import type { Campaign } from './site-org-settings.ts';
+import { resolveTagSources, type TagLookup } from './tag-source.ts';
 import { buildVideoMap } from './video-map-fs.ts';
 import { type DirectiveNode, WidgetRegistry } from './widgets.ts';
 
@@ -28,10 +29,13 @@ function editWidgets(): WidgetRegistry {
 
 export async function renderEditBody(
   siteRoot: string,
-  tree: BlockTree,
+  source: BlockTree,
   log: FastifyBaseLogger,
-  campaign?: Campaign
+  campaign?: Campaign,
+  lookup?: TagLookup,
+  selfSlug?: string
 ): Promise<string> {
+  const tree = lookup ? resolveTagSources(source, lookup, selfSlug) : source;
   const lib = loadMacroLibrary(path.join(siteRoot, 'macros'), log);
   const macroLib = {
     get: (name: string) => {

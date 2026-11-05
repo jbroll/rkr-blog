@@ -589,6 +589,71 @@ describe('macro list slots, quiet buttons, class hook', () => {
     }
   });
 
+  describe('slot coercion on filled macro output', () => {
+    it('placeholder cols "4" renders 4 columns', async () => {
+      const grid = await renderBlockTree(
+        one({ type: 'macro', macro: 'g' }),
+        fakeCtx,
+        lib(
+          'g',
+          { type: 'grid', slots: { cols: '{{n}}' }, children: [{ type: 'text', markdown: 'a' }] },
+          { n: '4' }
+        )
+      );
+      const numeric = await renderBlockTree(
+        one({ type: 'macro', macro: 'g' }),
+        fakeCtx,
+        lib('g', { type: 'grid', slots: { cols: 4 }, children: [{ type: 'text', markdown: 'a' }] })
+      );
+      assert.equal(grid, numeric);
+    });
+
+    it('placeholder box "true" renders a panel; "" none', async () => {
+      const mk = (box: string) =>
+        renderBlockTree(
+          one({ type: 'macro', macro: 'g' }),
+          fakeCtx,
+          lib(
+            'g',
+            { type: 'grid', slots: { box: '{{b}}' }, children: [{ type: 'text', markdown: 'a' }] },
+            { b: box }
+          )
+        );
+      const on = await mk('true');
+      const off = await mk('');
+      const real = await renderBlockTree(
+        one({ type: 'macro', macro: 'g' }),
+        fakeCtx,
+        lib('g', {
+          type: 'grid',
+          slots: { box: true },
+          children: [{ type: 'text', markdown: 'a' }]
+        })
+      );
+      assert.equal(on, real);
+      assert.notEqual(on, off);
+    });
+  });
+
+  it('top-level button slot shows on rows without a button key', async () => {
+    const tree = {
+      type: 'grid',
+      slots: { each: 'cards' },
+      children: [{ type: 'button', slots: { label: '{{button}}', href: '/x' } }]
+    };
+    const html = await renderBlockTree(
+      one({
+        type: 'macro',
+        macro: 'c',
+        slots: { cards: [{ title: 'A' }, { title: 'B', button: 'Own' }] }
+      }),
+      fakeCtx,
+      lib('c', tree, { button: 'Read' })
+    );
+    assert.match(html, /Read/);
+    assert.match(html, /Own/);
+  });
+
   it('collectBlockFigureIds returns image ids from list items', () => {
     const tree = {
       type: 'grid',

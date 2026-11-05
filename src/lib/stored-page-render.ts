@@ -15,6 +15,7 @@ import type { SiteConfig } from './config.ts';
 import { parsePost, type RenderCtx, renderPostHtml } from './content.ts';
 import type { Db } from './db.ts';
 import { buildImageMap } from './image-map-fs.ts';
+import { listTaggedRows } from './listings.ts';
 import type { IndexedPost } from './post-index.ts';
 import { serverAssets } from './site-assets.ts';
 import { loadChrome } from './site-chrome.ts';
@@ -74,7 +75,9 @@ export async function renderStoredPage(opts: StoredPageOpts): Promise<string> {
       widgets,
       videos,
       log,
-      campaign: site.campaign
+      campaign: site.campaign,
+      lookup: (src, self) => listTaggedRows(db, src, self),
+      selfSlug: row.slug
     });
     bodyHtml = parts.bodyHtml;
     bannerHtml = parts.bannerHtml;

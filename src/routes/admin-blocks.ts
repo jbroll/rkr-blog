@@ -25,6 +25,7 @@ import { BUILD_HEADER, STALE_CLIENT_STATUS } from '../lib/build-contract.ts';
 import { staleClientRejection } from '../lib/client-build.ts';
 import type { SiteConfig } from '../lib/config.ts';
 import type { Db } from '../lib/db.ts';
+import { listTaggedRows } from '../lib/listings.ts';
 import { loadMacroLibrary, type MacroLib } from '../lib/macro-library.ts';
 import { readAllIndexedPosts, readIndexedPostBySlug, runReindex } from '../lib/post-index.ts';
 import { dropIndexedPost, reindexBlockPage } from '../lib/post-index-blocks.ts';
@@ -35,6 +36,7 @@ import {
   setPublicSecurityHeaders
 } from '../lib/security-headers.ts';
 import { serverAssets } from '../lib/site-assets.ts';
+import type { TagLookup } from '../lib/tag-source.ts';
 import { activeSectionThemes } from '../lib/themes.ts';
 import { renderBlocksEditPage } from '../templates/admin-blocks-edit.ts';
 import { renderBlocksNewPage } from '../templates/admin-blocks-new.ts';
@@ -124,6 +126,10 @@ export function registerAdminBlockRoutes(
 ): void {
   const { siteRoot, getSite } = opts;
   const guard = opts.requireAuth ? { preHandler: requireUser } : {};
+  const { db: siteDb } = opts;
+  const tagLookup: TagLookup | undefined = siteDb
+    ? (src, self) => listTaggedRows(siteDb, src, self)
+    : undefined;
 
   fastify.get('/admin/blocks/macros', { ...guard }, async (req, _reply) => {
     const lib = loadMacroLibrary(`${siteRoot}/macros`, req.log);
@@ -247,7 +253,14 @@ export function registerAdminBlockRoutes(
       const page = isEditableSlug(slug) ? readBlockPage(siteRoot, slug) : null;
       if (!page) return reply.code(404).send({ error: 'not found' });
 
-      const bodyHtml = await renderEditBody(siteRoot, page.tree, req.log, getSite().campaign);
+      const bodyHtml = await renderEditBody(
+        siteRoot,
+        page.tree,
+        req.log,
+        getSite().campaign,
+        tagLookup,
+        slug
+      );
 
       setAdminEditorSecurityHeaders(reply);
       const assets = serverAssets('/admin/static');
@@ -278,7 +291,8 @@ export function registerAdminBlockRoutes(
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
-    return { html: await renderEditBody(siteRoot, tree, req.log, getSite().campaign) };
+    const html = await renderEditBody(siteRoot, tree, req.log, getSite().campaign, tagLookup);
+    return { html };
   });
 
   // The editor's Delete page. Another file claiming the slug, or a

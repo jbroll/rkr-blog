@@ -3,6 +3,7 @@
 // the value language inside `text` widgets (`text.markdown`).
 
 import { expandShorthand, gridSlotProblem, MAX_GRID_LEVELS } from './grid.ts';
+import { isTagSource, tagSourceProblem } from './tag-source.ts';
 
 export type Slots = Record<string, unknown>;
 
@@ -209,6 +210,11 @@ function listSlotProblem(
   for (const [key, spec] of Object.entries(schema)) {
     const value = slots?.[key];
     if (spec.type !== 'list' || value === undefined) continue;
+    if (isTagSource(value)) {
+      const problem = tagSourceProblem(spec.label, value);
+      if (problem) return problem;
+      continue;
+    }
     if (!Array.isArray(value) || !value.every(isRecord)) {
       return `${spec.label} must be a list of items.`;
     }

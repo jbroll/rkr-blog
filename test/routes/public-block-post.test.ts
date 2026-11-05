@@ -233,3 +233,27 @@ test('GET / does not list a page', async (t) => {
   assert.match(res.body, /PostOne/);
   assert.doesNotMatch(res.body, /PageOnly/);
 });
+
+test('a public page fills a tag-source list slot and leaves itself out', async (t) => {
+  const { root, app, page } = await setup(t);
+  fs.writeFileSync(
+    path.join(root, 'macros', 'cards.json'),
+    JSON.stringify({
+      defaults: {},
+      tree: {
+        type: 'grid',
+        slots: { each: 'cards' },
+        children: [{ type: 'text', markdown: '{{title}}' }]
+      }
+    })
+  );
+  page('alice', [], { title: 'Alice Smith', tags: ['team'] });
+  page('home', [{ type: 'macro', macro: 'cards', slots: { cards: { tag: 'team' } } }], {
+    title: 'Home',
+    tags: ['team']
+  });
+  const res = await app.inject({ method: 'GET', url: '/home' });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Alice Smith/);
+  assert.equal((res.body.match(/rkr-grid-cell/g) ?? []).length, 1);
+});

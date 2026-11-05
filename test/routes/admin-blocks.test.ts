@@ -687,6 +687,72 @@ describe('admin blocks save', () => {
     assert.doesNotMatch(pub.body, /figure: no ids resolved/);
   });
 
+  describe('tag sources', () => {
+    const tagged = async (t: TestContext) => {
+      const ctx = await setup(t);
+      const id = await ingestImage(ctx.root);
+      fs.writeFileSync(
+        path.join(ctx.root, 'macros', 'cards.json'),
+        JSON.stringify({
+          defaults: {},
+          fieldSchema: {
+            cards: {
+              label: 'Cards',
+              type: 'list',
+              item: { title: { label: 'Title', type: 'text' } }
+            }
+          },
+          tree: {
+            type: 'grid',
+            slots: { each: 'cards' },
+            children: [
+              { type: 'text', markdown: '{{title}}' },
+              { type: 'figure', slots: { ids: '{{image}}' } }
+            ]
+          }
+        })
+      );
+      fs.writeFileSync(
+        path.join(ctx.root, 'content', 'blocks', 'alice.json'),
+        JSON.stringify({
+          version: 1,
+          body: [{ type: 'figure', slots: { ids: id } }],
+          fields: { title: 'Alice Smith', slug: 'alice', status: 'published', tags: ['team'] }
+        })
+      );
+      runReindex(ctx.root);
+      return ctx;
+    };
+    const source = (tag: string) => ({
+      version: 1,
+      body: [{ type: 'macro', macro: 'cards', slots: { cards: { tag } } }]
+    });
+
+    it('_render fills a tag source with the tagged page, image included', async (t) => {
+      const { app } = await tagged(t);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/blocks/_render',
+        payload: { tree: source('team') }
+      });
+      const { html } = JSON.parse(res.body) as { html: string };
+      assert.match(html, /Alice Smith/);
+      assert.match(html, /<picture>/);
+      assert.doesNotMatch(html, /missing image/);
+    });
+
+    it('an unknown tag renders nothing but keeps the instance marker', async (t) => {
+      const { app } = await tagged(t);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/blocks/_render',
+        payload: { tree: source('nobody') }
+      });
+      const { html } = JSON.parse(res.body) as { html: string };
+      assert.equal(html, '<!--rkr:path=0-->');
+    });
+  });
+
   it('POST /admin/blocks/_render returns marked html and writes nothing', async (t) => {
     const { root, app } = await setup(t);
     const blocksDir = path.join(root, 'content', 'blocks');

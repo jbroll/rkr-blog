@@ -9,6 +9,7 @@ import { collectBlockFigureIds, renderBlockTree } from './blocks-render.ts';
 import { buildImageMap } from './image-map-fs.ts';
 import { loadMacroLibrary } from './macro-library.ts';
 import type { Campaign } from './site-org-settings.ts';
+import { resolveTagSources, type TagLookup } from './tag-source.ts';
 import type { DirectiveNode, VideoMapView, WidgetRegistry } from './widgets.ts';
 
 interface Logger {
@@ -26,10 +27,18 @@ type BlockRenderDeps = {
   videos: VideoMapView;
   log: Logger;
   campaign?: Campaign;
+  lookup?: TagLookup;
+  selfSlug?: string;
 };
 
-/** The render context and macro lookup a tree needs, with its figures resolved. */
-export async function prepareBlockRender(siteRoot: string, tree: BlockTree, deps: BlockRenderDeps) {
+/** The render context and macro lookup a tree needs, with its tag sources
+ * and figures resolved. `tree` is the resolved tree to render. */
+export async function prepareBlockRender(
+  siteRoot: string,
+  source: BlockTree,
+  deps: BlockRenderDeps
+) {
+  const tree = deps.lookup ? resolveTagSources(source, deps.lookup, deps.selfSlug) : source;
   const lib = loadMacroLibrary(path.join(siteRoot, 'macros'), deps.log);
   const macroLib = {
     get: (n: string) => {
@@ -50,7 +59,7 @@ export async function prepareBlockRender(siteRoot: string, tree: BlockTree, deps
     videos: deps.videos,
     widgets: deps.widgets
   };
-  return { ctx, macroLib };
+  return { ctx, macroLib, tree };
 }
 
 export async function renderBlockPost(
@@ -58,8 +67,8 @@ export async function renderBlockPost(
   page: { tree: BlockTree; fields: Record<string, unknown> },
   deps: BlockRenderDeps
 ): Promise<BlockPostParts> {
-  const { ctx, macroLib } = await prepareBlockRender(siteRoot, page.tree, deps);
-  const { hero, rest } = splitHero(page.tree);
+  const { ctx, macroLib, tree } = await prepareBlockRender(siteRoot, page.tree, deps);
+  const { hero, rest } = splitHero(tree);
   const bannerHtml = hero
     ? await deps.widgets.dispatch('figure', figureDirective(hero), ctx)
     : null;

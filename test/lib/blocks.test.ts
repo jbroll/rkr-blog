@@ -185,6 +185,13 @@ describe('validateForSave', () => {
       assert.equal(check({ title: 'x' }), null);
     });
 
+    it('accepts a tag source and refuses a bad one with its message', () => {
+      assert.equal(check({ people: { tag: 'board', sort: 'date', limit: 3 } }), null);
+      const problem = check({ people: { tag: 'board', limit: 0 } });
+      assert.deepEqual(problem?.path, [0, 0]);
+      assert.equal(problem?.message, 'Board members: limit must be a positive whole number.');
+    });
+
     it('validateForSave refuses a list value that is not an array of records', () => {
       for (const people of ['Ann', [{ name: 'Ann' }, 'Bo'], [[]], { name: 'Ann' }]) {
         const problem = check({ people });

@@ -504,6 +504,12 @@ throws rather than return a partial one, so nothing invalid reaches disk.
   Edit mode turns the breakout off so bands stay beside the palette.
   `src/lib/themes.ts` lists section themes: the four built-ins plus the
   names in the active theme's `rkr-section-themes` comment.
+- **Tag sources.** `resolveTagSources` (`src/lib/tag-source.ts`) swaps
+  page-level tag-source slot values for rows from `listTaggedRows`
+  (`src/lib/listings.ts`) before the figure prepass, so the prepass sees
+  the row `image` ids. `prepareBlockRender` and `renderEditBody` take the
+  lookup; the footer and macro preview pass none. `tag-source.ts` has no
+  db import because the admin client imports it too.
 - **Two validation levels.** `parseBlockTree` checks structure and clamps
   slots at render, so a file on disk always opens. `validateForSave`
   (`blocks.ts`) applies the placement rules and runs only in the save

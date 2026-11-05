@@ -466,8 +466,11 @@ these (see Saving); the editor never builds a tree that breaks them.
    own grids count inside its definition.
 6. Grid slots hold the values in the table above.
 7. A macro instance's `list` slot (see List slots) is an array of
-   records whose keys appear in the field's `item`. An unknown key is
-   refused with its item number, counted from 1.
+   records whose keys appear in the field's `item`, or a tag source. An
+   unknown key is refused with its item number, counted from 1. A tag
+   source with an empty `tag`, a `sort` other than `order` or `date`, a
+   `limit` that is not a positive whole number, or any other key is
+   refused with a message naming the slot.
 
 Guidance, not errors: a band grid is offered only at page level, and a
 one-column grid directly inside another one-column grid is never offered.
@@ -562,6 +565,22 @@ from the rendered grid, and the grid counts as one grid level. A missing
 or empty list renders the grid with no cells, which readers do not see.
 Image ids in items reach the image prepass the same way, so a `figure`
 with `ids: "{{photo}}"` inside an `each` grid resolves.
+
+Instead of an array, a page-level instance may give the slot a tag
+source, `{ "tag": "board", "sort": "date", "limit": 3 }`. Only `tag` is
+required. It lists the published pages and posts carrying that tag
+(case-insensitive), leaving out the page being rendered. `sort: "order"`
+(default) follows each page's `order` field, pages without one last,
+then title. `sort: "date"` puts the newest first, then title. `limit`
+keeps the first n. Each row has the keys `title`, `text` (the page's
+`excerpt`), `href` (its canonical path), `image` (the id of its first
+figure) and `date`, each an empty string when the page has none. A tag
+source inside a macro definition is not resolved and renders an empty
+list. Save refuses a malformed tag source; reading one that is
+malformed treats it as an empty list.
+
+A placeholder in a grid's `cols`, `box` or `band` slot is filled as
+text, then read as a number (`"4"`) or a flag (`"true"` on, `""` off).
 
 #### Class hook
 
