@@ -152,6 +152,16 @@ test('nav orders by order then title, no wraparound, ends null', (t) => {
   assert.equal(collectionNav(db, 'board'), null);
 });
 
+test('back links to the collection page canonical URL when it is itself a member', (t) => {
+  const { db, page, reindex } = setup(t);
+  page('org');
+  page('board', { tags: ['org'] });
+  page('alice', { tags: ['board'] });
+  reindex();
+  assert.equal(collectionNav(db, 'alice')?.back.path, '/org/board');
+  assert.equal(pagePath(db, 'alice'), '/board/alice');
+});
+
 test('nav skips draft siblings', (t) => {
   const { db, page, reindex } = setup(t);
   page('board');

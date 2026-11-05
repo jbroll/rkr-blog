@@ -688,6 +688,21 @@ markdown and are never converted.
   `/<slug>` or `/admin/blocks/<slug>`. `--all` warns on them; a test
   derives the list from the registered routes.
 
+### Collections
+
+`src/lib/collections.ts` computes membership from the index on each
+request. `collectionOf` returns a row's collection: the first of its tags,
+by `post_tags.position`, whose lowercased name is the slug of a published
+`kind: page` row, other than the row's own slug and outside
+`NON_COLLECTION_SLUGS` (`RESERVED_SLUGS` plus `img`, `video`,
+`site-theme`, `pages`). `pagePath` turns a slug into its canonical URL,
+`/<collection>/<slug>` or `/<slug>`, and every generated public link to a
+page goes through it. `collectionNav` builds the "Back to", previous and
+next links for `renderStoredPage`, over the published members ordered by
+`sort_order` (nulls last), then title. `memberExclusionSql(alias)` is the
+same rule as a SQL condition, true when the aliased `posts` row is not a
+member, for queries that keep members off `/`, `/posts` and the tag rail.
+
 ### Editor page headers
 
 Public pages keep `frame-ancestors 'none'` and their tight CSP. Only the

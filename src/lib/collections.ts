@@ -70,7 +70,7 @@ export function collectionNav(db: Db, slug: string): CollectionNav | null {
   const link = (m: { slug: string; title: string } | undefined): PageLink | null =>
     m ? { path: `/${c.slug}/${encodeURIComponent(m.slug)}`, title: m.title } : null;
   return {
-    back: { path: `/${c.slug}`, title: c.title },
+    back: { path: pagePath(db, c.slug), title: c.title },
     prev: link(members[i - 1]),
     next: link(members[i + 1])
   };
