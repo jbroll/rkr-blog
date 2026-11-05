@@ -65,7 +65,7 @@ keys, the item field names of the `cards` macro:
 | `text` | `fields.excerpt`, or empty |
 | `href` | the page's canonical URL (see Collections) |
 | `image` | the page's first image id (below), or empty |
-| `date` | `fields.date`, or empty |
+| `date` | `fields.date`, or when absent the time the page was first indexed as published |
 
 The first image id is the `ids` value of the first `figure` in the page
 body in reading order, including figures in grids. Figures inside macro

@@ -92,4 +92,5 @@ test('a row carries title, text, href, image and date', (t) => {
   const bob = rows.find((r) => r.title === 'Bob');
   assert.equal(bob?.text, '');
   assert.equal(bob?.image, '');
+  assert.notEqual(bob?.date, '');
 });

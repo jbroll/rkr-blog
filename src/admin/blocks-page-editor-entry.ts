@@ -214,7 +214,7 @@ if (root && slug && tree) {
     const res = await fetch('/admin/blocks/_render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tree: next })
+      body: JSON.stringify({ tree: next, slug })
     });
     if (!res.ok) throw new Error(`render page ${res.status}`);
     return ((await res.json()) as { html: string }).html;

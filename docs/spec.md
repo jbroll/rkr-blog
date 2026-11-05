@@ -574,7 +574,9 @@ required. It lists the published pages and posts carrying that tag
 then title. `sort: "date"` puts the newest first, then title. `limit`
 keeps the first n. Each row has the keys `title`, `text` (the page's
 `excerpt`), `href` (its canonical path), `image` (the id of its first
-figure) and `date`, each an empty string when the page has none. A tag
+figure) and `date`. `text` and `image` are empty strings when the page has
+none. `date` is the page's published date: `fields.date`, or when absent
+the time the page was first indexed as published. A tag
 source inside a macro definition is not resolved and renders an empty
 list. Save refuses a malformed tag source; reading one that is
 malformed treats it as an empty list.

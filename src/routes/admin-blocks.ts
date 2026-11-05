@@ -291,7 +291,15 @@ export function registerAdminBlockRoutes(
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
-    const html = await renderEditBody(siteRoot, tree, req.log, getSite().campaign, tagLookup);
+    const self = (req.body as { slug?: unknown }).slug;
+    const html = await renderEditBody(
+      siteRoot,
+      tree,
+      req.log,
+      getSite().campaign,
+      tagLookup,
+      typeof self === 'string' ? self : undefined
+    );
     return { html };
   });
 

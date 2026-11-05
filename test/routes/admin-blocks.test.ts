@@ -741,6 +741,32 @@ describe('admin blocks save', () => {
       assert.doesNotMatch(html, /missing image/);
     });
 
+    it('_render leaves the posted slug out of its own listing', async (t) => {
+      const { root, app } = await tagged(t);
+      fs.writeFileSync(
+        path.join(root, 'content', 'blocks', 'board.json'),
+        JSON.stringify({
+          version: 1,
+          body: [],
+          fields: { title: 'Board Page', slug: 'board', status: 'published', tags: ['team'] }
+        })
+      );
+      runReindex(root);
+      const render = async (extra: object) => {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/admin/blocks/_render',
+          payload: { tree: source('team'), ...extra }
+        });
+        return (JSON.parse(res.body) as { html: string }).html;
+      };
+      assert.match(await render({}), /Board Page/);
+      const html = await render({ slug: 'board' });
+      assert.doesNotMatch(html, /Board Page/);
+      assert.match(html, /Alice Smith/);
+      assert.match(await render({ slug: 7 }), /Board Page/);
+    });
+
     it('an unknown tag renders nothing but keeps the instance marker', async (t) => {
       const { app } = await tagged(t);
       const res = await app.inject({
