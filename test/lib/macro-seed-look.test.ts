@@ -51,60 +51,60 @@ describe('seed macro look selects', () => {
     assert.match(hero, /rkr-section-wave/);
     assert.match(hero, /rkr-mask-rounded/);
     assert.match(hero, /rkr-align-center/);
-    const people = await render('people-grid', { people: [{ photo: IMG, name: 'Ann' }] });
-    assert.match(people, /rkr-theme-light/);
-    assert.doesNotMatch(people, /rkr-section-wave/);
-    assert.match(people, /rkr-mask-circle/);
-    assert.equal(count(people, /rkr-align-center/g), 1);
+    const cards = await render('cards', { cards: [{ image: IMG, title: 'Ann' }] });
+    assert.match(cards, /rkr-theme-light/);
+    assert.doesNotMatch(cards, /rkr-section-wave|rkr-mask|rkr-align-center/);
+    assert.match(cards, /--rkr-grid-cols:3;/);
+    assert.equal(count(cards, /rkr-box/g), 1);
+    assert.equal(count(await render('cards', {}), /class="rkr-btn/g), 3);
     assert.match(await render('marquee-band'), /rkr-theme-dark-bold/);
-    assert.doesNotMatch(await render('cards', { cards: [{ image: IMG }] }), /rkr-mask/);
+  });
+
+  it('cards settings reproduce the people and logo looks', async () => {
+    const people = await render('cards', {
+      cols: '4',
+      box: '',
+      mask: 'circle',
+      button: '',
+      contentAlign: 'center',
+      cards: [{ image: IMG, title: 'Ann' }]
+    });
+    assert.match(people, /--rkr-grid-cols:4;/);
+    assert.match(people, /rkr-mask-circle/);
+    assert.doesNotMatch(people, /rkr-box|rkr-btn/);
+    assert.equal(count(people, /rkr-align-center/g), 1);
+    const logos = await render('cards', { cols: '4', box: '', button: '' });
+    assert.equal(count(logos, /--rkr-grid-cols:4;/g), 1);
+    assert.doesNotMatch(logos, /rkr-box|rkr-btn/);
   });
 
   it('non-default theme, edge, mask and alignment reach the output', async () => {
-    const html = await render('people-grid', {
+    const html = await render('cards', {
       theme: 'dark-bold',
       edge: 'wave',
       mask: 'rounded',
-      contentAlign: 'start',
-      people: [{ photo: IMG, name: 'Ann' }]
+      contentAlign: 'center',
+      cards: [{ image: IMG, title: 'Ann' }]
     });
     assert.match(html, /rkr-section rkr-theme-dark-bold/);
     assert.match(html, /rkr-section-wave/);
     assert.match(html, /rkr-mask-rounded/);
-    assert.doesNotMatch(html, /rkr-mask-circle|rkr-align-center/);
-    const square = await render('people-grid', { mask: 'none', people: [{ photo: IMG }] });
-    assert.doesNotMatch(square, /rkr-mask/);
+    assert.match(html, /rkr-align-center/);
     const callout = await render('photo-callout', { contentAlign: 'start' });
     assert.doesNotMatch(callout, /rkr-align-center/);
   });
 
   it('every band seed offers theme and edge, every figure seed a mask', () => {
-    const bands = [
-      'hero',
-      'photo-callout',
-      'marquee-band',
-      'cards',
-      'people-grid',
-      'icon-grid',
-      'logo-wall',
-      'split'
-    ];
+    const bands = ['hero', 'photo-callout', 'marquee-band', 'cards', 'split'];
     for (const name of bands) {
       const schema = lib.get(name)?.fieldSchema ?? {};
       assert.equal(schema.theme?.type, 'select', `${name} theme`);
       assert.equal(schema.edge?.type, 'select', `${name} edge`);
     }
-    for (const name of ['people-grid', 'cards', 'icon-grid', 'split', 'hero']) {
+    for (const name of ['cards', 'split', 'hero']) {
       assert.equal(lib.get(name)?.fieldSchema?.mask?.type, 'select', `${name} mask`);
     }
-    for (const name of [
-      'hero',
-      'photo-callout',
-      'people-grid',
-      'icon-grid',
-      'logo-wall',
-      'split'
-    ]) {
+    for (const name of ['hero', 'photo-callout', 'cards', 'split']) {
       assert.equal(lib.get(name)?.fieldSchema?.contentAlign?.type, 'select', `${name} align`);
     }
   });

@@ -31,18 +31,12 @@ function withSiteRoot(t: TestContext): string {
 describe('macro seeding', () => {
   it('ships the section seeds, loads them without warnings, and has no page root macro', () => {
     const dir = seedMacrosDir();
-    const names = [
-      'hero',
-      'cards',
-      'logo-wall',
-      'split',
-      'photo-callout',
-      'people-grid',
-      'icon-grid',
-      'marquee-band'
-    ];
+    const names = ['cards', 'hero', 'marquee-band', 'photo-callout', 'split'];
     for (const name of names) {
       assert.ok(fs.existsSync(path.join(dir, `${name}.json`)), `missing seed ${name}`);
+    }
+    for (const name of ['people-grid', 'icon-grid', 'logo-wall']) {
+      assert.equal(fs.existsSync(path.join(dir, `${name}.json`)), false, `${name} retired`);
     }
     assert.equal(fs.existsSync(path.join(dir, 'cards-3.json')), false);
     assert.equal(fs.existsSync(path.join(dir, 'page.json')), false);

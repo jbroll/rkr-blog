@@ -4,13 +4,17 @@
     "heading": "Latest",
     "intro": "",
     "cards": [
-      { "image": "", "title": "Card one", "text": "A line about the first card.", "href": "/", "button": "Read more" },
-      { "image": "", "title": "Card two", "text": "A line about the second card.", "href": "/", "button": "Read more" },
-      { "image": "", "title": "Card three", "text": "A line about the third card.", "href": "/", "button": "Read more" }
+      { "image": "", "title": "Card one", "text": "A line about the first card.", "href": "/" },
+      { "image": "", "title": "Card two", "text": "A line about the second card.", "href": "/" },
+      { "image": "", "title": "Card three", "text": "A line about the third card.", "href": "/" }
     ],
+    "button": "Read more",
+    "cols": "3",
+    "box": "true",
     "theme": "light",
     "edge": "straight",
-    "mask": "none"
+    "mask": "none",
+    "contentAlign": "start"
   },
   "fieldSchema": {
     "heading": { "label": "Heading", "type": "text" },
@@ -25,6 +29,26 @@
         "href": { "label": "Link", "type": "link" },
         "button": { "label": "Button text", "type": "text" }
       }
+    },
+    "button": { "label": "Button text", "type": "text" },
+    "cols": {
+      "label": "Columns",
+      "type": "select",
+      "options": [
+        { "value": "2", "label": "2" },
+        { "value": "3", "label": "3" },
+        { "value": "4", "label": "4" },
+        { "value": "5", "label": "5" },
+        { "value": "6", "label": "6" }
+      ]
+    },
+    "box": {
+      "label": "Card style",
+      "type": "select",
+      "options": [
+        { "value": "true", "label": "Panel" },
+        { "value": "", "label": "None" }
+      ]
     },
     "theme": {
       "label": "Background",
@@ -52,6 +76,14 @@
         { "value": "circle", "label": "Circle" },
         { "value": "rounded", "label": "Rounded" }
       ]
+    },
+    "contentAlign": {
+      "label": "Alignment",
+      "type": "select",
+      "options": [
+        { "value": "start", "label": "Left" },
+        { "value": "center", "label": "Center" }
+      ]
     }
   },
   "tree": {
@@ -61,11 +93,11 @@
       { "type": "text", "markdown": "## {{heading}}\n\n{{intro}}" },
       {
         "type": "grid",
-        "slots": { "cols": 3, "each": "cards" },
+        "slots": { "cols": "{{cols}}", "min": "narrow", "align": "{{contentAlign}}", "each": "cards" },
         "children": [
           {
             "type": "grid",
-            "slots": { "cols": 1, "box": true },
+            "slots": { "cols": 1, "box": "{{box}}" },
             "children": [
               { "type": "figure", "slots": { "ids": "{{image}}", "href": "{{href}}", "mask": "{{mask}}" } },
               { "type": "text", "markdown": "### {{title}}\n\n{{text}}" },

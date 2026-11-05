@@ -508,20 +508,26 @@ only the slots it overrides.
   use the other macros render; an instance of the skipped one renders a
   comment.
 - Seeds in the repo's `macros/`: `hero`, `split`, `photo-callout`,
-  `people-grid`, `icon-grid`, `logo-wall`, `cards` and `marquee-band`.
+  `cards` and `marquee-band`.
   Their defaults are generic placeholder text with empty image fields; an
   empty image renders nothing. `split` sets its `side` select into the
   grid's `order` slot.
 - Every seed is a band with `theme` (Light, Light bold, Dark, Dark bold)
   and `edge` (Straight, Wave) selects. Seeds with figures (`hero`,
-  `split`, `cards`, `people-grid`, `icon-grid`) have a `mask` select
+  `split`, `cards`) have a `mask` select
   (Square, Circle, Rounded; Square stores `none`, which adds no mask);
   inside a list it applies to every item. Seeds that center their
-  content (`hero`, `split`, `photo-callout`, `people-grid`, `icon-grid`,
-  `logo-wall`) have a `contentAlign` select (Left, Center). The defaults
-  match the look each seed shipped with: `hero` dark with a wave and a
-  rounded image, `photo-callout` dark, `marquee-band` dark bold,
-  `people-grid` circle photos, the rest light and straight.
+  content (`hero`, `split`, `photo-callout`, `cards`) have a
+  `contentAlign` select (Left, Center). The defaults match the look each
+  seed shipped with: `hero` dark with a wave and a rounded image,
+  `photo-callout` dark, `marquee-band` dark bold, the rest light and
+  straight.
+- `cards` also has `cols` (2 to 6, default 3), `box` (Panel or None,
+  default Panel) and a top-level `button` label (default `Read more`).
+  A card row with its own `button` overrides the label; an empty label
+  renders no button. The former `people-grid`, `icon-grid` and
+  `logo-wall` are `cards` with `cols` 4 and `box` None; `people-grid`
+  also sets `mask` Circle, `contentAlign` Center and an empty `button`.
 - `hero` has a second button (`cta2Label`, `cta2Href`), empty by
   default so it renders nothing. `marquee-band` has an optional `image`
   used as the band background. `cards` has a `heading` and an optional

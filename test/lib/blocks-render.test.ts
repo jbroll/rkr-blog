@@ -456,7 +456,7 @@ describe('blocks-render', () => {
     });
 
     it('every seed renders its defaults with no placeholder or unresolved id left', async () => {
-      assert.ok(lib.size >= 8);
+      assert.ok(lib.size >= 5);
       for (const name of lib.keys()) {
         const html = await render(name, {});
         assert.doesNotMatch(html, /\{\{/, name);
@@ -466,8 +466,8 @@ describe('blocks-render', () => {
     });
 
     it('list seeds repeat per item and an empty image renders no picture', async () => {
-      const html = await render('people-grid', {});
-      assert.equal((html.match(/Person (one|two|three|four)/g) ?? []).length, 4);
+      const html = await render('cards', {});
+      assert.equal((html.match(/Card (one|two|three)/g) ?? []).length, 3);
       assert.doesNotMatch(html, /<img|<picture/);
     });
 
@@ -475,6 +475,7 @@ describe('blocks-render', () => {
       assert.doesNotMatch(await render('split', {}), /rkr-grid-reverse/);
       assert.match(await render('split', { side: 'reverse' }), /rkr-grid-reverse/);
       const html = await render('cards', {
+        button: '',
         cards: [{ title: 'A', button: 'Go' }, { title: 'B' }]
       } as never);
       assert.equal((html.match(/rkr-btn/g) ?? []).length, 1);

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseBlockTree } from '../../src/lib/blocks.ts';
 import { renderBlockTree } from '../../src/lib/blocks-render.ts';
 import type { ImageMap } from '../../src/lib/image-map.ts';
+import { loadMacroLibrary, seedMacrosDir } from '../../src/lib/macro-library.ts';
 import type { VideoMapView } from '../../src/lib/widgets.ts';
 import { WidgetRegistry } from '../../src/lib/widgets.ts';
 
@@ -42,8 +43,13 @@ describe('block fixtures', () => {
     assert.match(html, /rkr-section-wave/);
   });
 
-  it('logo-wall fixture renders four columns', async () => {
-    const html = await renderFixture('logo-wall');
+  it('cards seed renders four columns when cols is 4', async () => {
+    const lib = loadMacroLibrary(seedMacrosDir());
+    const html = await renderBlockTree(
+      { version: 1, body: [{ type: 'macro', macro: 'cards', slots: { cols: '4' } }] },
+      fakeCtx,
+      { get: (n) => lib.get(n) }
+    );
     assert.match(html, /--rkr-grid-cols:4;/);
   });
 });

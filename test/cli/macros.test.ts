@@ -44,6 +44,19 @@ describe('site-admin macros', () => {
     assert.deepEqual(lines, ['hero\tdiffers', 'split\tmissing']);
   });
 
+  it('lists cards as differing when the site copy is the old file', async (t: TestContext) => {
+    const root = withSiteRoot(t);
+    const old = {
+      description: 'old',
+      defaults: { heading: 'Latest', cards: [] },
+      tree: { type: 'text', markdown: 'x' }
+    };
+    fs.writeFileSync(path.join(root, 'macros', 'cards.json'), `${JSON.stringify(old)}\n`);
+    const lines = captureLog(t);
+    await macrosCmd([]);
+    assert.deepEqual(lines, ['cards\tdiffers']);
+  });
+
   it('--update replaces exactly the named file', async (t: TestContext) => {
     const root = withSiteRoot(t);
     const hero = path.join(root, 'macros', 'hero.json');
