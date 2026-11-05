@@ -336,9 +336,10 @@ One file per page under `content/blocks/`, pretty-printed:
 ```
 
 `fields` holds title, subtitle, slug, status (`draft` or `published`),
-date, tags, excerpt and kind; other frontmatter keys from a migrated post
+date, tags, excerpt, kind and order; other frontmatter keys from a migrated post
 are kept as they were. `kind` is `post` (the default when absent) or
-`page`. A page renders without the article header (title, date,
+`page`. `order` is an optional integer: listings and previous/next sort by
+it, absent after present, then by title. A page renders without the article header (title, date,
 copy-link, comment bubble), comments and comment form, and is left out
 of `/` and the tag rail. Its `<title>` is still set and it stays in
 search. Comment submissions to a page are 404. The URL slug is `fields.slug`, not the file name, so

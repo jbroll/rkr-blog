@@ -112,7 +112,7 @@ $SITE_ROOT/
 | Table | Purpose |
 |---|---|
 | `schema_migrations` | Tracks applied migration versions |
-| `posts` | Index over `content/posts/*.md` and `content/blocks/*.json` — rebuilt by `site-admin reindex`; not the source of truth. `kind` (`post` or `page`, default `post`) comes from `fields.kind` of a block page; the index queries and the tag counts return posts only unless asked for pages |
+| `posts` | Index over `content/posts/*.md` and `content/blocks/*.json` — rebuilt by `site-admin reindex`; not the source of truth. `kind` (`post` or `page`, default `post`) comes from `fields.kind` of a block page; the index queries and the tag counts return posts only unless asked for pages. `excerpt`, `sort_order` (`fields.order`) and `image` (first id of the first figure outside macro instances) are nullable and filled for block pages only |
 | `jobs` | Render job queue with atomic state transitions; deduped by cache key |
 | `users` | Author accounts with `owner` / `editor` roles |
 | `oauth_accounts` | OAuth provider + subject ID linked to a user |
@@ -121,7 +121,7 @@ $SITE_ROOT/
 | `oauth_tokens` | Encrypted Drive / OneDrive picker tokens per user |
 | `comments` | Reader comments with `pending` / `published` / `rejected` / `queued` status |
 | `tags` | Normalised tag names (`COLLATE NOCASE`); first writer wins on casing |
-| `post_tags` | Many-to-many join between `posts` and `tags`; cascades on post delete |
+| `post_tags` | Many-to-many join between `posts` and `tags`; cascades on post delete; `position` is the tag's index in `fields.tags` |
 | `posts_fts` | FTS5 virtual table (`porter unicode61`) over title, tags, and body; populated by `reindex` in the same pass that upserts `posts`; joined back to `posts` on slug for status/date scoping |
 
 See `src/migrations/` for the full schema. `site-admin migrate` applies any unapplied file numerically, each in its own transaction. No down-migrations in v1; rollback by restore from backup.

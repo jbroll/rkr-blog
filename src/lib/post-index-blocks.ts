@@ -13,10 +13,12 @@ import { findBlockFile } from './block-pages.ts';
 import { type BlockNode, type BlockTree, parseBlockTree } from './blocks.ts';
 import type { Db } from './db.ts';
 import { extractPlainText } from './post-text.ts';
+import { firstFigureId } from './tag-source.ts';
 
 /** Replace the full tag set for one post. */
 export function syncPostTags(db: Db, postId: number, rawTags: string[]): void {
   db.prepare('DELETE FROM post_tags WHERE post_id = ?').run(postId);
+  const seen = new Set<number>();
   for (const raw of rawTags) {
     const name = String(raw).trim();
     if (!name) continue;
@@ -24,11 +26,13 @@ export function syncPostTags(db: Db, postId: number, rawTags: string[]): void {
     const tag = db
       .prepare<{ id: number }>('SELECT id FROM tags WHERE name = ? COLLATE NOCASE')
       .get(name);
-    if (tag) {
-      db.prepare('INSERT OR IGNORE INTO post_tags(post_id, tag_id) VALUES (?, ?)').run(
+    if (tag && !seen.has(tag.id)) {
+      db.prepare('INSERT INTO post_tags(post_id, tag_id, position) VALUES (?, ?, ?)').run(
         postId,
-        tag.id
+        tag.id,
+        seen.size
       );
+      seen.add(tag.id);
     }
   }
 }
@@ -124,25 +128,55 @@ function upsertBlockRow(
   const tags = Array.isArray(page.fields.tags) ? (page.fields.tags as string[]) : [];
   const relPath = path.posix.join('content', 'blocks', path.basename(fullPath));
   const kind = page.fields.kind === 'page' ? 'page' : 'post';
+  const excerpt = typeof page.fields.excerpt === 'string' ? page.fields.excerpt : null;
+  const order = page.fields.order;
+  const sortOrder = Number.isInteger(order) ? (order as number) : null;
+  const image = firstFigureId(page.tree);
 
   const existing = db.prepare<{ id: number }>('SELECT id FROM posts WHERE slug = ?').get(slug);
   if (existing) {
     if (mdStillOnDisk) {
       db.prepare(
-        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, kind = ?
+        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, kind = ?,
+           excerpt = ?, sort_order = ?, image = ?
          WHERE id = ?`
-      ).run(title, status, updatedAt, publishedAt, kind, existing.id);
+      ).run(title, status, updatedAt, publishedAt, kind, excerpt, sortOrder, image, existing.id);
     } else {
       db.prepare(
-        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, path = ?, kind = ?
+        `UPDATE posts SET title = ?, status = ?, updated_at = ?, published_at = ?, path = ?, kind = ?,
+           excerpt = ?, sort_order = ?, image = ?
          WHERE id = ?`
-      ).run(title, status, updatedAt, publishedAt, relPath, kind, existing.id);
+      ).run(
+        title,
+        status,
+        updatedAt,
+        publishedAt,
+        relPath,
+        kind,
+        excerpt,
+        sortOrder,
+        image,
+        existing.id
+      );
     }
   } else {
     db.prepare(
-      `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path, kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(slug, title, status, created, updatedAt, publishedAt, relPath, kind);
+      `INSERT INTO posts (slug, title, status, created_at, updated_at, published_at, path, kind,
+         excerpt, sort_order, image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      slug,
+      title,
+      status,
+      created,
+      updatedAt,
+      publishedAt,
+      relPath,
+      kind,
+      excerpt,
+      sortOrder,
+      image
+    );
   }
 
   db.prepare('DELETE FROM posts_fts WHERE slug = ?').run(slug);

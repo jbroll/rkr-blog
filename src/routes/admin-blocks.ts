@@ -80,6 +80,9 @@ function checkFields(raw: unknown): Record<string, unknown> {
   if (fields.kind !== undefined && fields.kind !== 'post' && fields.kind !== 'page') {
     throw new Error('fields.kind must be "post" or "page"');
   }
+  if (fields.order !== undefined && !Number.isInteger(fields.order)) {
+    throw new Error('fields.order must be a whole number');
+  }
   const tags = fields.tags;
   if (tags !== undefined && !(Array.isArray(tags) && tags.every((t) => typeof t === 'string'))) {
     throw new Error('fields.tags must be a list of strings');
