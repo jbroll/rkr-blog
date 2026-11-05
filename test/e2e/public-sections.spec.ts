@@ -74,7 +74,6 @@ for (const size of [
       const cell = (nestedEl.closest('.rkr-grid-cell') as Element).getBoundingClientRect();
       const nr = nestedEl.getBoundingClientRect();
       const nested = { left: nr.left, right: nr.right, cellLeft: cell.left, cellRight: cell.right };
-      const main = (document.querySelector('main') as Element).getBoundingClientRect();
       const bands = all
         .filter((s) => s !== nestedEl)
         .map((s) => {
@@ -89,7 +88,6 @@ for (const size of [
             wave: wave
               ? {
                   height: wave.getBoundingClientRect().height,
-                  bottom: wave.getBoundingClientRect().bottom,
                   bg: bg(wave)
                 }
               : null
@@ -100,8 +98,7 @@ for (const size of [
         pageBg,
         clientWidth: document.documentElement.clientWidth,
         bands,
-        nested,
-        mainBottom: main.bottom
+        nested
       };
     });
 
@@ -115,7 +112,6 @@ for (const size of [
     const waved = m.bands[THEMES.length];
     expect(waved?.wave?.height).toBeGreaterThan(0);
     expect(waved?.wave?.bg).toBe(waved?.bg);
-    expect(waved?.wave?.bottom).toBeLessThanOrEqual(m.mainBottom + 0.5);
     expect(m.nested.left).toBeGreaterThanOrEqual(m.nested.cellLeft - 0.5);
     expect(m.nested.right).toBeLessThanOrEqual(m.nested.cellRight + 0.5);
     expect(new Set(themed.map((b) => b.bg)).size).toBe(THEMES.length);
@@ -126,6 +122,33 @@ for (const size of [
     ).toBe(true);
   });
 }
+
+test('a final waved band meets a flush footer and its wave draws over it', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/${SLUG}`);
+  await page.addStyleTag({
+    content:
+      'main { padding: 0 1.5rem } .rkr-site-foot { margin-top: 0; background: rgb(80, 0, 120) }'
+  });
+  const m = await page.evaluate(() => {
+    const bands = document.querySelectorAll('main > article > section.rkr-section');
+    const last = bands[bands.length - 1] as Element;
+    const waveEl = last.querySelector(':scope > .rkr-section-wave') as Element;
+    waveEl.scrollIntoView({ block: 'center' });
+    const wave = waveEl.getBoundingClientRect();
+    const foot = (document.querySelector('.rkr-site-foot') as Element).getBoundingClientRect();
+    const hit = document.elementFromPoint(wave.left + 5, wave.top + 2);
+    return {
+      bandBottom: last.getBoundingClientRect().bottom,
+      footTop: foot.top,
+      waveBottom: wave.bottom,
+      hitIsWave: hit?.classList.contains('rkr-section-wave') ?? false
+    };
+  });
+  expect(Math.abs(m.bandBottom - m.footTop)).toBeLessThanOrEqual(0.5);
+  expect(m.waveBottom).toBeGreaterThan(m.footTop);
+  expect(m.hitIsWave).toBe(true);
+});
 
 test('a hero with no image gives its text the band inner width', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

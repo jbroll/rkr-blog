@@ -1465,9 +1465,6 @@ body[data-mode="figure"] .rkr-meta {
 .rkr-section:has(> .rkr-section-wave) + :not(.rkr-section) {
   margin-top: calc(var(--rkr-section-wave-height) + var(--rkr-gap));
 }
-.rkr-section:has(> .rkr-section-wave):last-child {
-  margin-bottom: var(--rkr-section-wave-height);
-}
 .rkr-box {
   box-sizing: border-box;
   padding: var(--rkr-box-pad);
