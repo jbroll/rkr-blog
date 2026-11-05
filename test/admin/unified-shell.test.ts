@@ -2106,6 +2106,33 @@ describe('unified shell page settings', () => {
     });
   });
 
+  it('clearing Order removes fields.order from the saved tree', async () => {
+    const tree: BlockTree = {
+      version: 1,
+      body: [{ type: 'text', markdown: 'One' }],
+      fields: { title: 'T', slug: 'saved', order: 3 }
+    };
+    const f = fixture((doc) => [marker(doc, '0'), para(doc, 'One')]);
+    const saved: BlockTree[] = [];
+    mount(f, tree, async (t) => {
+      saved.push(t);
+    });
+    f.toolbar.querySelector('.rkr-unified-settings')?.click();
+    const input = f.root
+      .querySelector('[data-rkr-dialog]')
+      ?.querySelectorAll('input')
+      .find((i) => i.getAttribute('name') === 'order');
+    assert.ok(input);
+    assert.equal((input as unknown as { value: string }).value, '3');
+    (input as unknown as { value: string }).value = '';
+    input.dispatchEvent(new FakeEvent('input', { bubbles: true }));
+    f.root.querySelector('.rkr-dialog-primary')?.click();
+    await tick();
+    await tick();
+    assert.equal(saved.length, 1);
+    assert.equal('order' in (saved[0]?.fields ?? {}), false);
+  });
+
   const mountWithDelete = (onDelete: () => Promise<void>) => {
     const tree: BlockTree = {
       version: 1,

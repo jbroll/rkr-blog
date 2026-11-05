@@ -171,6 +171,11 @@ export function openListField(
     const limit = doc.createElement('input');
     limit.setAttribute('type', 'number');
     limit.setAttribute('min', '1');
+    limit.setAttribute('step', '1');
+    const tagHint = doc.createElement('p');
+    tagHint.className = 'rkr-field-hint';
+    tagHint.textContent = 'Enter a tag.';
+    tagHint.hidden = true;
     from.value = saved ? 'tag' : 'rows';
     tag.value = saved?.tag ?? '';
     sort.value = saved?.sort ?? 'order';
@@ -181,7 +186,10 @@ export function openListField(
         changed();
         return;
       }
-      const source: TagSource = { tag: tag.value };
+      const name = tag.value.trim();
+      tagHint.hidden = name !== '';
+      if (name === '') return;
+      const source: TagSource = { tag: name };
       if (sort.value === 'date') source.sort = 'date';
       if (limit.value !== '') source.limit = Number(limit.value);
       set(source);
@@ -200,11 +208,9 @@ export function openListField(
     }
     rows.hidden = add.hidden = !!saved;
 
-    box.append(
-      labelled('Tag', 'tag', tag),
-      labelled('Sort', 'sort', sort),
-      labelled('Limit', 'limit', limit)
-    );
+    const tagField = labelled('Tag', 'tag', tag);
+    tagField.append(tagHint);
+    box.append(tagField, labelled('Sort', 'sort', sort), labelled('Limit', 'limit', limit));
     const wrap = doc.createElement('div');
     wrap.append(labelled('Fill from', 'source', from), box);
     return wrap;

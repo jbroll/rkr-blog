@@ -42,6 +42,19 @@ describe('list field Fill from', () => {
     assert.deepEqual(calls.at(-1), { tag: 'board' });
   });
 
+  it('a blank tag does not call set and shows a hint', () => {
+    const { root, calls, enter } = open();
+    enter('source', 'tag');
+    enter('tag', '   ');
+    assert.deepEqual(calls, []);
+    const hint = root.querySelector('.rkr-field-hint') as FakeElement;
+    assert.equal(hint.textContent, 'Enter a tag.');
+    assert.equal(hint.hidden, false);
+    enter('tag', ' board ');
+    assert.deepEqual(calls, [{ tag: 'board' }]);
+    assert.equal(hint.hidden, true);
+  });
+
   it('sort date and limit 3 are included', () => {
     const { calls, enter } = open();
     enter('source', 'tag');
