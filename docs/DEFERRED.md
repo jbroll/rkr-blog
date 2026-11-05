@@ -42,6 +42,10 @@ Format: **item** — _revisit when:_ trigger.
 - **Unit tests for the shell wait with fixed tick loops** instead of awaiting `applyTree`. _Revisit when:_ one turns flaky.
 - **`selected` is not cleared during a pending render when `opts.select` is absent.** _Revisit when:_ a toolbar appears over a block that is about to be replaced.
 - **No test for an unparseable `<slug>.json` colliding with a new page's file name** (same code path as a mismatched slug). _Revisit when:_ touching the collision check in `admin-blocks.ts`.
+- **No feed per collection tag** (no feed exists). _Revisit when:_ a site wants RSS for a collection.
+- **No carousel layout for listings.** _Revisit when:_ a site needs the home carousel back.
+- **Tag sources inside macro definitions are not resolved**; only page instances fill from a tag. _Revisit when:_ a seed needs a built-in listing.
+- **Choosing Tag in a list's Fill from with a blank tag keeps the previous rows on save**; only the inline hint warns. _Revisit when:_ an author saves rows they meant to replace.
 
 ## Organization sites
 

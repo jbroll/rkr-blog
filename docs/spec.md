@@ -539,6 +539,7 @@ only the slots it overrides.
 - `site-admin macros` lists the seeds whose site copy is missing or
   differs from the shipped file. `site-admin macros --update <name>`
   overwrites that one site file from its seed. Init and re-init never do.
+- The retired seeds `people-grid`, `icon-grid` and `logo-wall` stay on sites that already have a copy, and those pages keep rendering. `site-admin macros` no longer lists them, and a fresh init does not create them.
 - The editor does not edit macro definitions; change the JSON file.
   There is no macro history or diff UI; git holds it.
 - A definition holds at most three container levels. The editor refuses
